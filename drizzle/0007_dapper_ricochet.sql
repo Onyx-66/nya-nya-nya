@@ -1,0 +1,1 @@
+CREATE INDEX `discussion_comments_feed_idx` ON `discussion_comments` (`moderation_status`,`created_at`);

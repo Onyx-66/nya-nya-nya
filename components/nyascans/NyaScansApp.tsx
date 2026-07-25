@@ -1,0 +1,8613 @@
+"use client";
+/* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
+
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpRight,
+  ArrowsOut,
+  Bell,
+  BookmarkSimple,
+  Books,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  ChartLineUp,
+  ChatCircle,
+  Check,
+  CheckCircle,
+  Clock,
+  CloudArrowUp,
+  Coins,
+  Compass,
+  CreditCard,
+  CrownSimple,
+  DotsThree,
+  DownloadSimple,
+  Eye,
+  FileText,
+  GearSix,
+  Gift,
+  Heart,
+  House,
+  Image as ImageIcon,
+  Key,
+  List,
+  LockSimple,
+  MagnifyingGlass,
+  Moon,
+  Play,
+  Plus,
+  Pulse,
+  ShieldCheck,
+  SignIn,
+  SignOut,
+  SlidersHorizontal,
+  SpinnerGap,
+  SquaresFour,
+  Star,
+  Storefront,
+  Sun,
+  Trash,
+  TrendUp,
+  UploadSimple,
+  UserCircle,
+  UsersThree,
+  Wallet,
+  WarningCircle,
+  X,
+  type Icon as PhosphorIcon,
+} from "@phosphor-icons/react";
+import {
+  useCallback,
+  useEffect,
+  lazy,
+  useMemo,
+  useRef,
+  useState,
+  Suspense,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
+import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
+import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
+import { NotificationsView } from "@/components/nyascans/NotificationsView";
+import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
+import {
+  NewSeriesSection,
+  PublishingTeamsCarousel,
+} from "@/components/nyascans/PublicDiscoverySections";
+import { PublicProfileView } from "@/components/nyascans/PublicProfileView";
+import { PublicTeamView } from "@/components/nyascans/PublicTeamView";
+import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
+import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { ReactionLibraryPanel } from "@/components/nyascans/admin/ReactionLibraryPanel";
+import {
+  defaultReaderSettings,
+  ReaderSettingsPanel,
+  type ReaderSettings,
+} from "@/components/nyascans/ReaderSettingsPanel";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
+import { useSiteConfiguration } from "@/components/nyascans/useSiteConfiguration";
+import {
+  coinLabel,
+  formatMoney,
+  type CommercialSettings,
+} from "@/lib/commercial-settings";
+import {
+  demoSeries,
+  type SeriesCard,
+} from "@/lib/catalog";
+
+const OperationsControlPanel = lazy(() =>
+  import("@/components/nyascans/OperationsControlPanel").then((module) => ({
+    default: module.OperationsControlPanel,
+  })),
+);
+
+export type AppView =
+  | "home"
+  | "browse"
+  | "library"
+  | "store"
+  | "account"
+  | "profile"
+  | "login"
+  | "signup"
+  | "title"
+  | "reader"
+  | "wallet"
+  | "notifications"
+  | "latest"
+  | "rankings"
+  | "orders"
+  | "team"
+  | "status"
+  | "support"
+  | "legal"
+  | "generic"
+  | "error"
+  | "dashboard"
+  | "admin"
+  | "access";
+
+type Actor = {
+  displayName: string;
+  email: string;
+  role: string;
+  canUseUploadCenter?: boolean;
+  canUpload?: boolean;
+  canRequestSeries?: boolean;
+  canManageTeam?: boolean;
+};
+
+type AppProps = {
+  view: AppView;
+  actor: Actor | null;
+  authenticatedIdentity?: Pick<Actor, "displayName" | "email"> | null;
+  accountBlocked?: boolean;
+  authReturnTo?: string;
+  resourceSlug?: string;
+  chapterSlug?: string;
+  uploadMode?: "SINGLE" | "BATCH";
+  path?: string;
+  signInPath?: string;
+  adminGate?: boolean;
+  operationPath?: string[];
+};
+
+function authEntryPath(
+  intent: "login" | "signup",
+  returnTo: string,
+): string {
+  return `/${intent}?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+type AnalyticsEventType =
+  | "HOME_VIEW"
+  | "LATEST_VIEW"
+  | "BROWSE_VIEW"
+  | "SERIES_VIEW"
+  | "CHAPTER_START"
+  | "CHAPTER_COMPLETE";
+
+let memoryAnalyticsSession = "";
+
+function clientRandomId() {
+  const browserCrypto =
+    typeof globalThis === "undefined" ? undefined : globalThis.crypto;
+  if (typeof browserCrypto?.randomUUID === "function") {
+    return browserCrypto.randomUUID();
+  }
+  if (typeof browserCrypto?.getRandomValues === "function") {
+    const bytes = browserCrypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function analyticsSessionId() {
+  if (memoryAnalyticsSession) return memoryAnalyticsSession;
+  try {
+    const stored = window.sessionStorage.getItem("nyascans-analytics-session");
+    if (stored) {
+      memoryAnalyticsSession = stored;
+      return stored;
+    }
+    memoryAnalyticsSession = clientRandomId();
+    window.sessionStorage.setItem(
+      "nyascans-analytics-session",
+      memoryAnalyticsSession,
+    );
+    return memoryAnalyticsSession;
+  } catch {
+    memoryAnalyticsSession = clientRandomId();
+    return memoryAnalyticsSession;
+  }
+}
+
+function recordAnalyticsEvent(
+  eventType: AnalyticsEventType,
+  scope: { seriesSlug?: string; chapterSlug?: string } = {},
+) {
+  const payload = {
+    eventId: clientRandomId(),
+    sessionId: analyticsSessionId(),
+    eventType,
+    ...scope,
+  };
+  void fetch("/api/v1/analytics-events", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {
+    // Operational analytics never blocks the reader experience.
+  });
+}
+
+function ResilientCoverImage({
+  src,
+  alt,
+  width,
+  height,
+  loading = "lazy",
+  className,
+  decorative = false,
+}: {
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+  loading?: "eager" | "lazy";
+  className?: string;
+  decorative?: boolean;
+}) {
+  const [failedSource, setFailedSource] = useState("");
+  const fallback = "/art/series-cover-placeholder.svg";
+  const effectiveSource = failedSource === src ? fallback : src;
+
+  return (
+    <img
+      className={className}
+      src={effectiveSource}
+      alt={decorative ? "" : alt}
+      aria-hidden={decorative ? "true" : undefined}
+      width={width}
+      height={height}
+      loading={loading}
+      decoding="async"
+      onError={() => {
+        if (effectiveSource !== fallback) setFailedSource(src);
+      }}
+    />
+  );
+}
+
+const navItems = [
+  { label: "Home", href: "/", icon: House },
+  { label: "Latest Updates", href: "/latest", icon: Pulse },
+  { label: "Completed", href: "/browse?status=completed", icon: CheckCircle },
+  { label: "Browse", href: "/browse", icon: Compass },
+  { label: "Library", href: "/library", icon: Books },
+  { label: "Store", href: "/store", icon: Storefront },
+];
+
+function elevatedDestination(actor: Actor | null) {
+  if (actor && ["OWNER", "ADMINISTRATOR"].includes(actor.role)) {
+    return {
+      href: "/onyx/admin/access",
+      label: "Admin",
+      title: "Open Admin Panel",
+      kind: "admin",
+    };
+  }
+  if (
+    actor &&
+    (actor.canUseUploadCenter ||
+      actor.canUpload ||
+      actor.canRequestSeries ||
+      actor.canManageTeam)
+  ) {
+    return {
+      href: "/dashboard",
+      label: "Workspace",
+      title: "Open Team Workspace",
+      kind: "workspace",
+    };
+  }
+  return null;
+}
+
+function roleLabel(role: string) {
+  if (role === "OWNER") return "Owner";
+  if (role === "ADMINISTRATOR") return "Administrator";
+  if (role === "MODERATOR") return "Moderator";
+  if (role === "TEAM_LEADER") return "Team leader";
+  if (role === "UPLOADER") return "Uploader";
+  return "Reader";
+}
+
+function activeNav(view: AppView, label: string) {
+  if (label === "Home") return view === "home";
+  if (label === "Latest Updates") return view === "latest";
+  if (label === "Completed") return false;
+  if (label === "Browse") return view === "browse";
+  if (label === "Library") return view === "library";
+  if (label === "Store") return view === "store" || view === "wallet";
+  return false;
+}
+
+type SearchResult = {
+  id: string;
+  slug: string;
+  title: string;
+  nativeTitle: string | null;
+  alternativeTitle: string | null;
+  aliases: string[];
+  type: "MANGA" | "MANHWA" | "MANHUA";
+  cover: string | null;
+  latestChapter: {
+    number: string;
+    title: string;
+    slug: string | null;
+  } | null;
+};
+
+function highlightMatch(value: string, query: string) {
+  const needle = query.trim();
+  if (!needle) return value;
+  const index = value.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase());
+  if (index < 0) return value;
+  return (
+    <>
+      {value.slice(0, index)}
+      <mark>{value.slice(index, index + needle.length)}</mark>
+      {value.slice(index + needle.length)}
+    </>
+  );
+}
+
+function SearchResultCard({
+  item,
+  query,
+  onChoose,
+}: {
+  item: SearchResult;
+  query: string;
+  onChoose: () => void;
+}) {
+  return (
+    <a
+      className="search-result search-preview-card"
+      href={`/title/${item.slug}`}
+      onClick={onChoose}
+    >
+      {item.cover ? (
+        <ResilientCoverImage
+          src={item.cover}
+          alt={`Cover art for ${item.title}`}
+          width={60}
+          height={90}
+          decorative
+        />
+      ) : (
+        <span className="search-cover-placeholder" aria-hidden="true">
+          <Books size={22} />
+        </span>
+      )}
+      <span className="search-preview-copy">
+        <SeriesTypeBadge type={item.type} />
+        <strong>{highlightMatch(item.title, query)}</strong>
+        {item.alternativeTitle ? (
+          <small>{highlightMatch(item.alternativeTitle, query)}</small>
+        ) : null}
+        <em>
+          {item.latestChapter
+            ? `Latest · Chapter ${item.latestChapter.number}${item.latestChapter.title ? ` · ${item.latestChapter.title}` : ""}`
+            : "No published chapters yet"}
+        </em>
+      </span>
+      <ArrowRight size={18} />
+    </a>
+  );
+}
+
+function SearchOverlay({ onClose }: { onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [trending, setTrending] = useState<SearchResult[]>([]);
+  const [popular, setPopular] = useState<SearchResult[]>([]);
+  const [recent, setRecent] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = JSON.parse(
+        window.localStorage.getItem("nyascans:recent-searches") ?? "[]",
+      );
+      return Array.isArray(stored)
+        ? stored
+            .filter((entry): entry is string => typeof entry === "string")
+            .slice(0, 6)
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetch(
+          `/api/v1/search?q=${encodeURIComponent(query.trim())}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        const payload = (await response.json()) as {
+          data?: SearchResult[];
+          trending?: SearchResult[];
+          popular?: SearchResult[];
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(payload.error?.message ?? "Search is unavailable.");
+        }
+        setResults(payload.data ?? []);
+        setTrending(payload.trending ?? []);
+        setPopular(payload.popular ?? []);
+      } catch (loadError) {
+        if (!controller.signal.aborted) {
+          setError(
+            loadError instanceof Error ? loadError.message : "Search is unavailable.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, query.trim() ? 120 : 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [query]);
+
+  function rememberSearch(item: SearchResult) {
+    const term = query.trim() || item.title;
+    const next = [term, ...recent.filter((entry) => entry !== term)].slice(0, 6);
+    setRecent(next);
+    window.localStorage.setItem(
+      "nyascans:recent-searches",
+      JSON.stringify(next),
+    );
+  }
+
+  return (
+    <div className="search-overlay" role="dialog" aria-modal="true">
+      <button
+        className="search-backdrop"
+        type="button"
+        onClick={onClose}
+        aria-label="Close search"
+      />
+      <section className="search-panel">
+        <div className="search-panel-input">
+          <MagnifyingGlass size={22} />
+          <label className="sr-only" htmlFor="global-search">
+            Search main titles, alternative titles, and aliases
+          </label>
+          <input
+            autoFocus
+            id="global-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search titles and aliases"
+          />
+          <button type="button" onClick={onClose} aria-label="Close search">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="search-panel-body">
+          {query.trim() ? (
+            <p className="panel-label">
+              {loading ? "Searching…" : `${results.length} matches`}
+            </p>
+          ) : null}
+          {error ? (
+            <div className="search-inline-error" role="alert">
+              <WarningCircle size={18} /> {error}
+            </div>
+          ) : query.trim() && results.length ? (
+            <div className="search-results">
+              {results.map((item) => (
+                <SearchResultCard
+                  item={item}
+                  query={query}
+                  key={item.id}
+                  onChoose={() => rememberSearch(item)}
+                />
+              ))}
+            </div>
+          ) : query.trim() && !loading ? (
+            <EmptyState
+              title="No stories found"
+              body="Try a shorter title, an alternative spelling, or a known alias."
+              compact
+            />
+          ) : (
+            <div className="search-discovery">
+              {recent.length ? (
+                <section>
+                  <div className="search-discovery-head">
+                    <p className="panel-label">Recent searches</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecent([]);
+                        window.localStorage.removeItem(
+                          "nyascans:recent-searches",
+                        );
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="recent-searches">
+                    {recent.map((term) => (
+                      <button
+                        type="button"
+                        key={term}
+                        onClick={() => setQuery(term)}
+                      >
+                        <Clock size={14} /> {term}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+              <section>
+                <p className="panel-label">Trending series</p>
+                <div className="search-results search-results-compact">
+                  {trending.map((item) => (
+                    <SearchResultCard
+                      item={item}
+                      query=""
+                      key={`trending-${item.id}`}
+                      onChoose={() => rememberSearch(item)}
+                    />
+                  ))}
+                </div>
+              </section>
+              <section>
+                <p className="panel-label">Popular titles</p>
+                <div className="search-results search-results-compact">
+                  {popular.map((item) => (
+                    <SearchResultCard
+                      item={item}
+                      query=""
+                      key={`popular-${item.id}`}
+                      onChoose={() => rememberSearch(item)}
+                    />
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Logo() {
+  const { settings } = useSiteConfiguration();
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const logoUrl =
+    settings.brand.logo.enabled && settings.brand.logo.key
+      ? `/api/v1/site-media?slot=logo&v=${settings.brand.logo.revision}`
+      : null;
+  const compactLogoUrl =
+    settings.brand.compactLogo.enabled && settings.brand.compactLogo.key
+      ? `/api/v1/site-media?slot=compactLogo&v=${settings.brand.compactLogo.revision}`
+      : null;
+  const displayLogoUrl = logoUrl ?? compactLogoUrl;
+  return (
+    <a
+      className="brand"
+      href="/"
+      aria-label={`${settings.brand.siteName} home`}
+    >
+      {displayLogoUrl && failedLogoUrl !== displayLogoUrl ? (
+        <picture>
+          {compactLogoUrl && failedLogoUrl !== compactLogoUrl ? (
+            <source
+              media="(max-width: 720px)"
+              srcSet={compactLogoUrl}
+            />
+          ) : null}
+          <img
+            className="brand-logo-image"
+            src={displayLogoUrl}
+            alt={settings.brand.logoAlt}
+            width={29}
+            height={29}
+            onError={(event) =>
+              setFailedLogoUrl(event.currentTarget.currentSrc || displayLogoUrl)
+            }
+          />
+        </picture>
+      ) : (
+        <span className="brand-mark" aria-hidden="true">
+          <span />
+        </span>
+      )}
+      <span>{settings.brand.siteName}</span>
+    </a>
+  );
+}
+
+function SiteHeader({
+  view,
+  actor,
+  theme,
+  onTheme,
+  onSearch,
+}: {
+  view: AppView;
+  actor: Actor | null;
+  theme: "dark" | "light";
+  onTheme: () => void;
+  onSearch: () => void;
+}) {
+  const elevated = elevatedDestination(actor);
+  const canUpload = Boolean(actor?.canUseUploadCenter);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function closeOutside(event: PointerEvent) {
+      if (
+        menuRef.current &&
+        event.target instanceof Node &&
+        !menuRef.current.contains(event.target)
+      ) {
+        setMenuOpen(false);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!actor) return;
+    const controller = new AbortController();
+    async function loadUnread() {
+      try {
+        const response = await fetch(
+          "/api/v1/notifications?state=UNREAD&page=1&pageSize=1",
+          { cache: "no-store", signal: controller.signal },
+        );
+        const payload = (await response.json()) as {
+          summary?: { unreadCount?: number };
+        };
+        if (response.ok) {
+          setUnreadCount(Number(payload.summary?.unreadCount ?? 0));
+        }
+      } catch {
+        // The bell remains available even while its unread count recovers.
+      }
+    }
+    void loadUnread();
+    const refresh = () => void loadUnread();
+    window.addEventListener("nyascans:notifications-changed", refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener("nyascans:notifications-changed", refresh);
+    };
+  }, [actor]);
+
+  function focusMenuItem(position: "first" | "last") {
+    window.requestAnimationFrame(() => {
+      const items = Array.from(
+        menuRef.current?.querySelectorAll<HTMLElement>(
+          '.header-overflow-menu [role="menuitem"]',
+        ) ?? [],
+      );
+      const item = position === "first" ? items[0] : items.at(-1);
+      item?.focus();
+    });
+  }
+
+  function handleMenuKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!menuOpen) return;
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+    );
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      items[(current + 1 + items.length) % items.length]?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      items[(current - 1 + items.length) % items.length]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items.at(-1)?.focus();
+    }
+  }
+
+  return (
+    <header className="site-header">
+      <div className="site-header-inner">
+        <Logo />
+        <nav className="desktop-nav" aria-label="Primary navigation">
+          {navItems.map((item) => (
+            <a
+              key={item.label}
+              href={item.href}
+              aria-current={activeNav(view, item.label) ? "page" : undefined}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+        <div className="header-actions">
+          <button
+            className="header-search"
+            type="button"
+            onClick={onSearch}
+            aria-label="Open search"
+          >
+            <MagnifyingGlass size={18} />
+            <span>Search</span>
+            <kbd>/</kbd>
+          </button>
+          {actor ? (
+            <>
+              <a
+                className="header-notifications"
+                href="/notifications"
+                aria-label={
+                  unreadCount
+                    ? `Notifications, ${unreadCount} unread`
+                    : "Notifications"
+                }
+                aria-current={view === "notifications" ? "page" : undefined}
+                title="Notifications"
+              >
+                <Bell size={20} weight={view === "notifications" ? "fill" : "regular"} />
+                {unreadCount ? (
+                  <span aria-hidden="true">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
+              </a>
+              <div
+                className="header-overflow"
+                ref={menuRef}
+                onKeyDown={handleMenuKeys}
+              >
+                <button
+                  className="header-profile-trigger"
+                  ref={menuButtonRef}
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label="Open profile and account menu"
+                  onClick={() => setMenuOpen((value) => !value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      if (!menuOpen) setMenuOpen(true);
+                      focusMenuItem("first");
+                    } else if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      if (!menuOpen) setMenuOpen(true);
+                      focusMenuItem("last");
+                    }
+                  }}
+                >
+                  <span className="header-avatar" aria-hidden="true">
+                    {actor.displayName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="header-profile-copy">
+                    <small>Welcome</small>
+                    <strong>{actor.displayName.split(" ")[0]}</strong>
+                  </span>
+                  <CaretDown size={14} />
+                </button>
+                {menuOpen ? (
+                  <div className="header-overflow-menu" role="menu">
+                    <div className="header-menu-profile">
+                      <span aria-hidden="true">
+                        {actor.displayName.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div>
+                        <strong>{actor.displayName}</strong>
+                        <small>{actor.email}</small>
+                        <em>{roleLabel(actor.role)}</em>
+                      </div>
+                    </div>
+                    <a
+                      role="menuitem"
+                      href="/account"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <UserCircle size={18} /> Profile
+                    </a>
+                    <a
+                      role="menuitem"
+                      href="/library"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <Books size={18} /> Library
+                    </a>
+                    <a
+                      role="menuitem"
+                      href="/store"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <Storefront size={18} /> Store
+                    </a>
+                    {canUpload ? (
+                      <a
+                        role="menuitem"
+                        href="/upload-chapter"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <CloudArrowUp size={18} /> Upload Center
+                      </a>
+                    ) : null}
+                    {elevated ? (
+                      <a
+                        role="menuitem"
+                        href={elevated.href}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        {elevated.kind === "admin" ? (
+                          <ShieldCheck size={18} />
+                        ) : (
+                          <SquaresFour size={18} />
+                        )}
+                        {elevated.title}
+                      </a>
+                    ) : null}
+                    <a
+                      role="menuitem"
+                      href="/support"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <ChatCircle size={18} /> Support
+                    </a>
+                    <a
+                      role="menuitem"
+                      href="/account?tab=preferences"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <GearSix size={18} /> Preferences &amp; language
+                    </a>
+                    <button
+                      role="menuitem"
+                      type="button"
+                      onClick={() => {
+                        onTheme();
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                      Use {theme === "dark" ? "light" : "dark"} theme
+                    </button>
+                    <a
+                      className="is-danger"
+                      role="menuitem"
+                      href="/signout-with-chatgpt?return_to=%2F"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <SignOut size={18} /> Logout
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <a className="account-link" href={authEntryPath("login", "/account")}>
+                <span>Login</span>
+                <UserCircle size={22} />
+              </a>
+              <div className="header-overflow" ref={menuRef}>
+                <button
+                  className="icon-button"
+                  ref={menuButtonRef}
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label="Open site menu"
+                  title="More actions"
+                  onClick={() => setMenuOpen((value) => !value)}
+                >
+                  <DotsThree size={21} weight="bold" />
+                </button>
+                {menuOpen ? (
+                  <div className="header-overflow-menu" role="menu">
+                    <button
+                      role="menuitem"
+                      type="button"
+                      onClick={() => {
+                        onTheme();
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                      Use {theme === "dark" ? "light" : "dark"} theme
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function MobileNav({ view, actor }: { view: AppView; actor: Actor | null }) {
+  const accountHref = actor
+    ? "/account"
+    : authEntryPath("login", "/account");
+  const byLabel = new Map(navItems.map((item) => [item.label, item]));
+  const mobileItems = ["Browse", "Library", "Home", "Store"]
+    .map((label) => byLabel.get(label))
+    .filter((item): item is (typeof navItems)[number] => Boolean(item));
+  return (
+    <nav className="mobile-nav" aria-label="Mobile navigation">
+      {mobileItems.map((item) => {
+        const Icon = item.icon;
+        return (
+          <a
+            key={item.label}
+            href={item.href}
+            className={item.label === "Home" ? "mobile-home" : undefined}
+            aria-current={activeNav(view, item.label) ? "page" : undefined}
+            aria-label={item.label}
+          >
+            <Icon size={21} weight={activeNav(view, item.label) ? "fill" : "regular"} />
+            <span>{item.label}</span>
+          </a>
+        );
+      })}
+      <a href={accountHref} aria-current={view === "account" ? "page" : undefined}>
+        <UserCircle size={21} weight={view === "account" ? "fill" : "regular"} />
+        <span>{actor ? "Account" : "Login"}</span>
+      </a>
+    </nav>
+  );
+}
+
+function SeriesTypeBadge({ type }: { type: SeriesCard["type"] | string }) {
+  const normalized =
+    type.toUpperCase() === "MANHWA"
+      ? "Manhwa"
+      : type.toUpperCase() === "MANHUA"
+        ? "Manhua"
+        : "Manga";
+  return (
+    <span className={`series-type-badge type-${normalized.toLowerCase()}`}>
+      {normalized}
+    </span>
+  );
+}
+
+function ChapterAccessBadge({
+  accessType,
+  unlocked = false,
+}: {
+  accessType: string;
+  unlocked?: boolean;
+}) {
+  const normalized = accessType === "FREE" || unlocked ? "free" : "paid";
+  const label = normalized === "free" ? "Free" : "Paid";
+  const icon =
+    normalized === "free" ? <Check size={12} /> : <LockSimple size={12} />;
+  return (
+    <span className={`chapter-status-badge chapter-status-${normalized}`}>
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+function SeriesCardView({
+  item,
+  wide = false,
+}: {
+  item: SeriesCard;
+  wide?: boolean;
+}) {
+  return (
+    <article className={`series-card ${wide ? "series-card-wide" : ""}`}>
+      <a className="cover-link" href={`/title/${item.slug}`}>
+        <ResilientCoverImage
+          src={item.cover}
+          alt={`Cover art for ${item.title}`}
+          width={360}
+          height={540}
+        />
+        <span className="cover-shade" />
+        <SeriesTypeBadge type={item.type} />
+        <span className="quick-read">
+          <Play size={14} weight="fill" />
+          Read
+        </span>
+      </a>
+      <div className="series-card-copy">
+        <a href={`/title/${item.slug}`}>
+          <h3>{item.title}</h3>
+        </a>
+        <p>{item.subtitle}</p>
+        <div className="series-meta">
+          <span>
+            <Star size={14} weight="fill" /> {item.rating}
+          </span>
+          <span>{item.chapter}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function SeriesRecommendations({ item }: { item: SeriesCard }) {
+  const recommendations = demoSeries
+    .filter((candidate) => candidate.id !== item.id)
+    .map((candidate) => {
+      const sharedGenres = candidate.genres.filter((genre) =>
+        item.genres.includes(genre),
+      );
+      const score =
+        sharedGenres.length * 100 +
+        (candidate.type === item.type ? 12 : 0) +
+        (candidate.direction === item.direction ? 5 : 0) +
+        candidate.rating;
+      return { candidate, sharedGenres, score };
+    })
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.candidate.rating - left.candidate.rating,
+    )
+    .slice(0, 4);
+
+  return (
+    <section
+      className="series-recommendations"
+      aria-labelledby={`recommendations-${item.slug}`}
+    >
+      <SectionHeading
+        title="Series recommendations"
+        body={`More ${item.genres.slice(0, 2).join(" and ")} stories selected by shared genres.`}
+      />
+      <div className="recommend-grid">
+        {recommendations.map(({ candidate, sharedGenres }) => (
+          <div
+            className="recommend-item"
+            key={candidate.id}
+            data-shared-genres={sharedGenres.join(",")}
+          >
+            <SeriesCardView item={candidate} />
+            <span>
+              {sharedGenres.length
+                ? `${sharedGenres.slice(0, 2).join(" · ")} match`
+                : `${candidate.type} readers also follow`}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type SeriesReview = {
+  id: string;
+  rating: number;
+  body: string;
+  spoiler: boolean;
+  createdAt: string;
+  updatedAt: string;
+  displayName: string;
+  role: string;
+  ownedByViewer: boolean;
+};
+
+type ReviewSummary = {
+  average: number;
+  total: number;
+  distribution: Record<1 | 2 | 3 | 4 | 5, number>;
+};
+
+function ReviewStars({
+  value,
+  interactive = false,
+  onChange,
+}: {
+  value: number;
+  interactive?: boolean;
+  onChange?: (value: number) => void;
+}) {
+  return (
+    <span className="review-stars" aria-label={`${value} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((star) =>
+        interactive ? (
+          <button
+            type="button"
+            key={star}
+            aria-label={`Rate ${star} out of 5`}
+            aria-pressed={star <= value}
+            onClick={() => onChange?.(star)}
+          >
+            <Star size={22} weight={star <= value ? "fill" : "regular"} />
+          </button>
+        ) : (
+          <Star
+            size={15}
+            key={star}
+            weight={star <= Math.round(value) ? "fill" : "regular"}
+          />
+        ),
+      )}
+    </span>
+  );
+}
+
+function SeriesReviews({
+  actor,
+  seriesSlug,
+  showToast,
+}: {
+  actor: Actor | null;
+  seriesSlug: string;
+  showToast: (text: string) => void;
+}) {
+  const emptySummary: ReviewSummary = {
+    average: 0,
+    total: 0,
+    distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  };
+  const [reviews, setReviews] = useState<SeriesReview[]>([]);
+  const [summary, setSummary] = useState<ReviewSummary>(emptySummary);
+  const [viewerReview, setViewerReview] = useState<SeriesReview | null>(null);
+  const [sort, setSort] = useState<"newest" | "oldest" | "highest">(
+    "newest",
+  );
+  const [rating, setRating] = useState(5);
+  const [body, setBody] = useState("");
+  const [spoiler, setSpoiler] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  async function loadReviews() {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `/api/v1/reviews?series=${encodeURIComponent(seriesSlug)}&sort=${sort}`,
+      );
+      const payload = (await response.json()) as {
+        data?: SeriesReview[];
+        aggregate?: ReviewSummary;
+        viewerReview?: SeriesReview | null;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "Reviews could not be loaded.",
+        );
+      }
+      setReviews(payload.data ?? []);
+      setSummary(payload.aggregate ?? emptySummary);
+      const own = payload.viewerReview ?? null;
+      setViewerReview(own);
+      if (own) {
+        setRating(own.rating);
+        setBody(own.body);
+        setSpoiler(own.spoiler);
+      }
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Reviews could not be loaded.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void loadReviews(), 0);
+    // seriesSlug and sort are the complete server query key.
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesSlug, sort]);
+
+  async function saveReview(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!actor) {
+      window.location.assign(
+        authEntryPath("login", `/title/${seriesSlug}#reviews`),
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/v1/reviews", {
+        method: viewerReview ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...(viewerReview ? { reviewId: viewerReview.id } : {}),
+          seriesSlug,
+          rating,
+          body,
+          spoiler,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Review could not be saved.");
+      }
+      showToast(viewerReview ? "Review updated." : "Review published.");
+      await loadReviews();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Review could not be saved.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeReview() {
+    if (!viewerReview || busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `/api/v1/reviews?id=${encodeURIComponent(viewerReview.id)}`,
+        { method: "DELETE" },
+      );
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "Review could not be deleted.",
+        );
+      }
+      setViewerReview(null);
+      setRating(5);
+      setBody("");
+      setSpoiler(false);
+      showToast("Review deleted.");
+      await loadReviews();
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Review could not be deleted.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="series-reviews" id="reviews" aria-labelledby="reviews-title">
+      <div className="review-heading">
+        <div>
+          <p className="eyebrow">Reader ratings</p>
+          <h2 id="reviews-title">Ratings & Reviews</h2>
+        </div>
+        <label>
+          <span className="sr-only">Sort reviews</span>
+          <select
+            value={sort}
+            onChange={(event) =>
+              setSort(
+                event.target.value as "newest" | "oldest" | "highest",
+              )
+            }
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="highest">Highest rated</option>
+          </select>
+          <CaretDown size={15} />
+        </label>
+      </div>
+      <div className="review-summary-grid">
+        <div className="review-score">
+          <strong>{summary.average.toFixed(1)}</strong>
+          <ReviewStars value={summary.average} />
+          <span>
+            {summary.total.toLocaleString("en-US")} rating
+            {summary.total === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="review-distribution">
+          {[5, 4, 3, 2, 1].map((value) => {
+            const count =
+              summary.distribution[value as 1 | 2 | 3 | 4 | 5] ?? 0;
+            const percentage = summary.total
+              ? Math.round((count / summary.total) * 100)
+              : 0;
+            return (
+              <div key={value}>
+                <span>{value}</span>
+                <Star size={13} weight="fill" />
+                <i>
+                  <b style={{ width: `${percentage}%` }} />
+                </i>
+                <small>{count}</small>
+              </div>
+            );
+          })}
+        </div>
+        <form className="review-composer" onSubmit={saveReview}>
+          <div>
+            <strong>
+              {viewerReview ? "Update your review" : "Rate this series"}
+            </strong>
+            <ReviewStars
+              value={rating}
+              interactive
+              onChange={setRating}
+            />
+          </div>
+          <textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            maxLength={4000}
+            rows={4}
+            placeholder="Share what worked for you. A written review is optional."
+          />
+          <div>
+            <label>
+              <input
+                type="checkbox"
+                checked={spoiler}
+                onChange={(event) => setSpoiler(event.target.checked)}
+              />
+              Contains spoilers
+            </label>
+            {viewerReview ? (
+              <button type="button" onClick={removeReview} disabled={busy}>
+                <Trash size={16} /> Delete
+              </button>
+            ) : null}
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={busy}
+            >
+              {busy
+                ? "Saving..."
+                : viewerReview
+                  ? "Save review"
+                  : "Publish review"}
+            </button>
+          </div>
+        </form>
+      </div>
+      <div className="review-list" aria-live="polite">
+        {loading ? (
+          <div className="review-empty">Loading reader reviews...</div>
+        ) : reviews.length ? (
+          reviews.map((review) => (
+            <article key={review.id}>
+              <header>
+                <span>
+                  {review.displayName.slice(0, 1).toUpperCase()}
+                </span>
+                <div>
+                  <strong>{review.displayName}</strong>
+                  <small>
+                    {new Intl.DateTimeFormat("en", {
+                      dateStyle: "medium",
+                    }).format(new Date(review.createdAt))}
+                  </small>
+                </div>
+                <ReviewStars value={review.rating} />
+              </header>
+              {review.body ? (
+                review.spoiler ? (
+                  <details>
+                    <summary>Spoiler review. Reveal</summary>
+                    <p>{review.body}</p>
+                  </details>
+                ) : (
+                  <p>{review.body}</p>
+                )
+              ) : (
+                <p className="review-rating-only">Rating only</p>
+              )}
+            </article>
+          ))
+        ) : (
+          <div className="review-empty">
+            <Star size={24} />
+            <strong>No ratings yet</strong>
+            <span>Be the first reader to rate this series.</span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SectionHeading({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body?: string;
+  action?: { label: string; href: string };
+}) {
+  return (
+    <div className="section-heading">
+      <div>
+        <h2>{title}</h2>
+        {body ? <p>{body}</p> : null}
+      </div>
+      {action ? (
+        <a href={action.href}>
+          {action.label}
+          <ArrowRight size={17} />
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  body,
+  compact = false,
+}: {
+  title: string;
+  body: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`empty-state ${compact ? "empty-state-compact" : ""}`}>
+      <span className="empty-cat" aria-hidden="true">
+        <span />
+      </span>
+      <h3>{title}</h3>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+type LatestRelease = {
+  id: string;
+  slug: string;
+  title: string;
+  type: "MANGA" | "MANHWA" | "MANHUA";
+  cover: string | null;
+  ratingTenths: number;
+  latestPublishedAt: string;
+  chapters: Array<{
+    slug: string;
+    chapterNumber: string;
+    title: string;
+    language: string;
+    version: number;
+    accessType: string;
+    effectiveAccessType: string;
+    priceOnyx: number;
+    publishedAt: string;
+    teamName: string | null;
+  }>;
+};
+
+function releaseTime(value: string) {
+  const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60_000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hr`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function LatestUpdatesGrid({
+  heading = true,
+  pagination = false,
+  period = "all",
+  pageSize = 6,
+}: {
+  heading?: boolean;
+  pagination?: boolean;
+  period?: "today" | "week" | "month" | "all";
+  pageSize?: 6 | 20;
+}) {
+  const [page, setPage] = useState(1);
+  const [records, setRecords] = useState<LatestRelease[]>([]);
+  const [pageCount, setPageCount] = useState(1);
+  const [hasPrevious, setHasPrevious] = useState(false);
+  const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    async function load(showLoading: boolean) {
+      if (showLoading) setLoading(true);
+      setError("");
+      try {
+        const response = await fetch(
+          `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${period}`,
+          { signal: controller.signal, cache: "no-store" },
+        );
+        const payload = (await response.json()) as {
+          data?: LatestRelease[];
+          pagination?: CatalogPagination;
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "Latest releases could not be loaded.",
+          );
+        }
+        if (active) {
+          setRecords(payload.data ?? []);
+          setPageCount(payload.pagination?.pageCount ?? 1);
+          setHasPrevious(Boolean(payload.pagination?.hasPrevious));
+          setHasNext(Boolean(payload.pagination?.hasNext));
+        }
+      } catch (loadError) {
+        if (active && !controller.signal.aborted) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Latest releases could not be loaded.",
+          );
+        }
+      } finally {
+        if (active && !controller.signal.aborted && showLoading) setLoading(false);
+      }
+    }
+    void load(true);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(false);
+    }, 12_000);
+    function refreshVisible() {
+      if (document.visibilityState === "visible") void load(false);
+    }
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("focus", refreshVisible);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("focus", refreshVisible);
+      controller.abort();
+    };
+  }, [page, pageSize, period, revision]);
+
+  const pageNumbers = useMemo(() => {
+    const start = Math.max(1, Math.min(page - 2, pageCount - 4));
+    return Array.from(
+      { length: Math.min(5, pageCount) },
+      (_, index) => start + index,
+    );
+  }, [page, pageCount]);
+
+  return (
+    <section className="latest-updates-block">
+      {heading ? (
+        <SectionHeading
+          title="Latest Updates"
+          action={{ label: "View All", href: "/latest" }}
+        />
+      ) : null}
+      {loading ? (
+        <div className="latest-grid latest-loading-grid" aria-busy="true">
+          {Array.from({ length: 6 }, (_, index) => (
+            <span key={index}>
+              <i />
+              <b />
+              <small />
+            </span>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="catalog-error" role="alert">
+          <WarningCircle size={26} />
+          <div>
+            <strong>Latest releases unavailable</strong>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            Try again
+          </button>
+        </div>
+      ) : records.length ? (
+        <div className="latest-grid">
+          {records.map((update) => (
+              <article className="latest-card" key={update.slug}>
+                <a className="latest-cover" href={`/title/${update.slug}`}>
+                  {update.cover ? (
+                    <ResilientCoverImage
+                      src={update.cover}
+                      alt={`Cover art for ${update.title}`}
+                      width={240}
+                      height={360}
+                    />
+                  ) : (
+                    <span className="catalog-cover-placeholder">
+                      <Books size={30} />
+                      <small>Cover pending</small>
+                    </span>
+                  )}
+                </a>
+                <div className="latest-card-copy">
+                  <div className="latest-card-head">
+                    <div>
+                      <SeriesTypeBadge type={update.type} />
+                      <a href={`/title/${update.slug}`}>
+                        <h3>{update.title}</h3>
+                      </a>
+                    </div>
+                    <span>
+                      <Star size={13} weight="fill" />{" "}
+                      {(Number(update.ratingTenths) / 10).toFixed(1)}
+                    </span>
+                  </div>
+                  <ul className="latest-chapters">
+                    {update.chapters.map((chapter) => (
+                      <li key={chapter.slug}>
+                        <a
+                          href={`/title/${update.slug}/chapter/${chapter.slug}`}
+                        >
+                          Chapter {chapter.chapterNumber}
+                        </a>
+                        <ChapterAccessBadge
+                          accessType={
+                            chapter.effectiveAccessType ?? chapter.accessType
+                          }
+                        />
+                        <time dateTime={chapter.publishedAt}>
+                          {releaseTime(chapter.publishedAt)} ago
+                        </time>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="No published releases yet"
+          body="Verified chapter releases will appear here after publication."
+          compact
+        />
+      )}
+      {pagination && !loading && !error && records.length ? (
+        <nav className="latest-pagination" aria-label="Latest updates pages">
+          <button
+            type="button"
+            disabled={!hasPrevious}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            <CaretLeft size={15} /> Previous
+          </button>
+          <span>{page} / {pageCount}</span>
+          {pageNumbers.map((pageNumber) => (
+            <button
+              type="button"
+              key={pageNumber}
+              aria-current={page === pageNumber ? "page" : undefined}
+              onClick={() => setPage(pageNumber)}
+            >
+              {pageNumber}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={!hasNext}
+            onClick={() =>
+              setPage((current) => Math.min(pageCount, current + 1))
+            }
+          >
+            Next <CaretRight size={15} />
+          </button>
+        </nav>
+      ) : null}
+    </section>
+  );
+}
+
+function LatestUpdatesView() {
+  const [period, setPeriod] = useState<
+    "today" | "week" | "month" | "all"
+  >("all");
+  return (
+    <main className="page-main latest-page">
+      <header className="latest-hero page-wrap">
+        <p className="eyebrow">Fresh chapters</p>
+        <h1>Latest Updates</h1>
+        <p>
+          Paid and free chapter releases, sorted newest first in one
+          easy-to-scan feed.
+        </p>
+        <div
+          className="latest-periods"
+          role="tablist"
+          aria-label="Latest updates period"
+        >
+          {(
+            [
+              ["today", "Today"],
+              ["week", "This week"],
+              ["month", "This month"],
+              ["all", "All time"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              type="button"
+              role="tab"
+              key={value}
+              aria-selected={period === value}
+              onClick={() => setPeriod(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </header>
+      <div className="page-wrap">
+        <LatestUpdatesGrid
+          key={period}
+          heading={false}
+          pagination
+          pageSize={20}
+          period={period}
+        />
+      </div>
+    </main>
+  );
+}
+
+function TrendingShowcase({
+  ordered,
+}: {
+  ordered: SeriesCard[];
+}) {
+  const railRef = useRef<HTMLDivElement | null>(null);
+
+  function moveRail(direction: -1 | 1) {
+    const rail = railRef.current;
+    if (!rail) return;
+    const distance = Math.max(240, Math.round(rail.clientWidth * 0.78));
+    rail.scrollBy({ left: distance * direction, behavior: "smooth" });
+  }
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (root.dataset.sliderAutoplay !== "true") return;
+    if (root.dataset.sliderStyle === "clean-grid") return;
+    const seconds = Math.min(
+      15,
+      Math.max(3, Number(root.dataset.sliderInterval ?? 7)),
+    );
+    const timer = window.setInterval(() => {
+      const rail = railRef.current;
+      if (!rail || document.visibilityState !== "visible") return;
+      const atEnd =
+        rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 12;
+      if (atEnd) {
+        rail.scrollTo({ left: 0, behavior: "smooth" });
+      } else {
+        moveRail(1);
+      }
+    }, seconds * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <section className="content-section page-wrap trending-section">
+      <div className="section-tabs trending-heading">
+        <div className="trending-title">
+          <p className="eyebrow">Reader pulse</p>
+          <h2>Trending</h2>
+        </div>
+        <div className="trending-actions">
+          <div aria-label="Move Trending slider">
+            <button
+              type="button"
+              onClick={() => moveRail(-1)}
+              aria-label="Previous Trending titles"
+            >
+              <CaretLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => moveRail(1)}
+              aria-label="Next Trending titles"
+            >
+              <CaretRight size={18} />
+            </button>
+          </div>
+          <a href="/rankings">
+            Full ranking <ArrowRight size={17} />
+          </a>
+        </div>
+      </div>
+      <div className="trending-viewport">
+        <div
+          className="series-rail trending-rail"
+          ref={railRef}
+          aria-live="polite"
+          aria-label="Trending series"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              moveRail(-1);
+            } else if (event.key === "ArrowRight") {
+              event.preventDefault();
+              moveRail(1);
+            }
+          }}
+        >
+          {ordered.map((item, index) => (
+            <div className="ranked-card" key={item.id}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <SeriesCardView item={item} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type CommunityHighlight = {
+  id: string;
+  seriesSlug: string;
+  chapterSlug: string;
+  seriesTitle: string;
+  chapterNumber: string;
+  chapterTitle: string;
+  body: string;
+  displayName: string;
+  voteScore: number;
+  replyCount: number;
+  createdAt: string;
+  cover: string | null;
+};
+
+function CommunityHighlights() {
+  const [items, setItems] = useState<CommunityHighlight[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function load(background = false) {
+      if (!background) setLoading(true);
+      try {
+        const response = await fetch("/api/v1/community-highlights");
+        const payload = (await response.json()) as {
+          data?: CommunityHighlight[];
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ??
+              "Community highlights could not be loaded.",
+          );
+        }
+        if (!active) return;
+        setItems(payload.data ?? []);
+        setError("");
+      } catch (loadError) {
+        if (!active || background) return;
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Community highlights could not be loaded.",
+        );
+      } finally {
+        if (active && !background) setLoading(false);
+      }
+    }
+    void load();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, 20_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  return (
+    <section className="content-section page-wrap community-highlights">
+      <SectionHeading
+        title="Latest Top Comments"
+        body="The strongest spoiler-safe chapter discussions from the last eight hours."
+      />
+      {loading ? (
+        <div className="community-highlight-loading" role="status">
+          Loading community activity…
+        </div>
+      ) : error ? (
+        <div className="community-highlight-loading" role="alert">
+          {error}
+        </div>
+      ) : items.length ? (
+        <div className="community-highlight-grid">
+          {items.map((item) => (
+            <a
+              href={`/title/${item.seriesSlug}/chapter/${item.chapterSlug}#comment-${item.id}`}
+              className="community-highlight-card"
+              key={item.id}
+            >
+              <span className="community-highlight-avatar" aria-hidden="true">
+                {item.displayName.trim().slice(0, 1).toUpperCase() || "N"}
+              </span>
+              <span className="community-highlight-copy">
+                <span className="community-highlight-source">
+                  <strong>{item.seriesTitle}</strong>
+                  {item.chapterNumber ? (
+                    <em>Chapter {item.chapterNumber}</em>
+                  ) : null}
+                </span>
+                <q>{item.body}</q>
+                <span className="community-highlight-meta">
+                  <strong>{item.displayName}</strong>
+                  <span><ArrowUp size={13} /> {item.voteScore}</span>
+                  <span><ChatCircle size={13} /> {item.replyCount}</span>
+                </span>
+              </span>
+              <span className="community-highlight-cover">
+                {item.cover ? (
+                  <ResilientCoverImage
+                    src={item.cover}
+                    alt={`Cover art for ${item.seriesTitle}`}
+                    width={120}
+                    height={180}
+                    decorative
+                  />
+                ) : (
+                  <Books size={24} />
+                )}
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="No community highlights yet"
+          body="Spoiler-safe chapter comments will appear here as readers vote and reply."
+        />
+      )}
+    </section>
+  );
+}
+
+function announcementIsActive(
+  settings: CommercialSettings["announcement"],
+) {
+  if (!settings.enabled) return false;
+  const now = Date.now();
+  const startsAt = settings.startsAt
+    ? new Date(settings.startsAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const endsAt = settings.endsAt
+    ? new Date(settings.endsAt).getTime()
+    : Number.POSITIVE_INFINITY;
+  return now >= startsAt && now < endsAt;
+}
+
+function AnnouncementBanner({
+  settings,
+}: {
+  settings: CommercialSettings["announcement"];
+}) {
+  const storageKey = `nyascans:announcement:${settings.id}:${settings.resetKey}`;
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDismissed(window.localStorage.getItem(storageKey) === "dismissed");
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [storageKey]);
+
+  if (dismissed !== false || !announcementIsActive(settings)) return null;
+
+  return (
+    <aside className="announcement" role="status">
+      <div className="announcement-inner">
+        {settings.label ? <span>{settings.label}</span> : null}
+        <p>{settings.text}</p>
+        <a href={settings.destinationUrl}>{settings.buttonLabel}</a>
+        <button
+          type="button"
+          aria-label="Dismiss announcement"
+          title="Dismiss announcement"
+          onClick={() => {
+            window.localStorage.setItem(storageKey, "dismissed");
+            setDismissed(true);
+          }}
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+type EditorPick = {
+  id: string;
+  seriesId: string;
+  slug: string;
+  title: string;
+  nativeTitle: string | null;
+  type: string;
+  status: string;
+  synopsis: string;
+  shortDescription: string;
+  categoryLabel: string;
+  cover: string | null;
+  ratingTenths: number;
+  latestChapterSlug: string | null;
+  genres: string[];
+};
+
+function FeaturedSeriesSlider() {
+  const [picks, setPicks] = useState<EditorPick[]>([]);
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const swipeStart = useRef<number | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/editor-picks", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { data?: EditorPick[] };
+        if (response.ok) setPicks(payload.data ?? []);
+      })
+      .catch(() => {
+        // A branded static fallback remains usable while editorial data recovers.
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (picks.length < 2 || paused) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const seconds = Math.min(
+      15,
+      Math.max(
+        4,
+        Number(document.documentElement.dataset.sliderInterval ?? 7),
+      ),
+    );
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setActive((current) => (current + 1) % picks.length);
+      }
+    }, seconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [paused, picks.length]);
+
+  if (!picks.length) {
+    return (
+      <section className="featured-slider featured-slider-fallback">
+        <img
+          className="featured-slider-backdrop"
+          src="/art/hero-onyx-archive.png"
+          alt=""
+          aria-hidden="true"
+          width={1600}
+          height={1000}
+          fetchPriority="high"
+        />
+        <div className="featured-slider-fallback-copy page-wrap">
+          <p className="eyebrow">Featured</p>
+          <h1>Stories worth losing the night to.</h1>
+          <p>
+            Read original manga and webtoons in a fast, calm reader built for
+            every screen.
+          </p>
+          <a className="button button-primary" href="/browse">
+            Browse series <ArrowRight size={17} />
+          </a>
+        </div>
+      </section>
+    );
+  }
+
+  const safeActive = active < picks.length ? active : 0;
+  const item = picks[safeActive]!;
+  const previousIndex = (safeActive - 1 + picks.length) % picks.length;
+  const nextIndex = (safeActive + 1) % picks.length;
+  const previousItem = picks[previousIndex]!;
+  const nextItem = picks[nextIndex]!;
+  const move = (direction: -1 | 1) =>
+    setActive(
+      (current) => (current + direction + picks.length) % picks.length,
+    );
+
+  return (
+    <section
+      className="featured-slider"
+      aria-roledescription="carousel"
+      aria-label="Featured series"
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+      onPointerDown={(event) => {
+        swipeStart.current = event.clientX;
+      }}
+      onPointerUp={(event) => {
+        const start = swipeStart.current;
+        swipeStart.current = null;
+        if (start === null || Math.abs(event.clientX - start) < 48) return;
+        move(event.clientX < start ? 1 : -1);
+      }}
+    >
+      {item.cover ? (
+        <ResilientCoverImage
+          className="featured-slider-backdrop"
+          src={item.cover}
+          alt=""
+          decorative
+          loading="eager"
+        />
+      ) : null}
+      <div className="featured-slider-shade" />
+      <div className="featured-slider-inner page-wrap">
+        <div className="featured-slider-stage">
+          {picks.length > 1 ? (
+            <button
+              className="featured-side-card featured-side-card-left"
+              type="button"
+              aria-label={`Show ${previousItem.title}`}
+              onClick={() => setActive(previousIndex)}
+            >
+              {previousItem.cover ? (
+                <ResilientCoverImage
+                  src={previousItem.cover}
+                  alt=""
+                  decorative
+                />
+              ) : (
+                <Books size={30} />
+              )}
+            </button>
+          ) : null}
+          <a
+            className="featured-main-card"
+            href={`/title/${item.slug}`}
+            key={item.id}
+          >
+            {item.cover ? (
+              <ResilientCoverImage
+                src={item.cover}
+                alt={`Cover art for ${item.title}`}
+                width={420}
+                height={630}
+                loading="eager"
+              />
+            ) : (
+              <Books size={42} />
+            )}
+            <span>
+              <Star size={13} weight="fill" />
+              {(item.ratingTenths / 10).toFixed(1)}
+            </span>
+          </a>
+          {picks.length > 1 ? (
+            <button
+              className="featured-side-card featured-side-card-right"
+              type="button"
+              aria-label={`Show ${nextItem.title}`}
+              onClick={() => setActive(nextIndex)}
+            >
+              {nextItem.cover ? (
+                <ResilientCoverImage src={nextItem.cover} alt="" decorative />
+              ) : (
+                <Books size={30} />
+              )}
+            </button>
+          ) : null}
+          {picks.length > 1 ? (
+            <div className="featured-slider-arrows">
+              <button
+                type="button"
+                onClick={() => move(-1)}
+                aria-label="Previous featured series"
+              >
+                <CaretLeft size={21} />
+              </button>
+              <button
+                type="button"
+                onClick={() => move(1)}
+                aria-label="Next featured series"
+              >
+                <CaretRight size={21} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="featured-slider-copy" key={`featured-${item.id}`}>
+          <div>
+            <SeriesTypeBadge type={item.type} />
+            <span>{item.categoryLabel}</span>
+          </div>
+          <h1>{item.title}</h1>
+          <p>{item.shortDescription || item.synopsis}</p>
+          <div className="featured-slider-actions">
+            <a
+              className="button button-primary"
+              href={
+                item.latestChapterSlug
+                  ? `/title/${item.slug}/chapter/${item.latestChapterSlug}`
+                  : `/title/${item.slug}`
+              }
+            >
+              <Play size={17} weight="fill" /> Read now
+            </a>
+            <a className="button button-secondary" href={`/title/${item.slug}`}>
+              Series details <ArrowRight size={16} />
+            </a>
+          </div>
+          {picks.length > 1 ? (
+            <div
+              className="featured-slider-dots"
+              aria-label="Choose featured series"
+            >
+              {picks.map((pick, index) => (
+                <button
+                  type="button"
+                  key={pick.id}
+                  aria-label={`Show ${pick.title}`}
+                  aria-pressed={index === safeActive}
+                  onClick={() => setActive(index)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EditorsPickSection({
+  actor,
+  showToast,
+}: {
+  actor: Actor | null;
+  showToast: (text: string) => void;
+}) {
+  const [picks, setPicks] = useState<EditorPick[]>([]);
+  const [active, setActive] = useState(0);
+  const [error, setError] = useState("");
+  const [librarySeries, setLibrarySeries] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [libraryBusy, setLibraryBusy] = useState("");
+  const swipeStart = useRef<number | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/editor-picks", {
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as {
+          data?: EditorPick[];
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "Editor's Picks could not be loaded.",
+          );
+        }
+        setPicks(payload.data ?? []);
+        setActive(0);
+      } catch (loadError) {
+        if (!controller.signal.aborted) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Editor's Picks could not be loaded.",
+          );
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!actor) return;
+    const controller = new AbortController();
+    void fetch("/api/v1/library", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: Array<{ series_id?: string; seriesId?: string }>;
+        };
+        if (!response.ok) return;
+        setLibrarySeries(
+          new Set(
+            (payload.data ?? [])
+              .map((entry) => entry.seriesId ?? entry.series_id ?? "")
+              .filter(Boolean),
+          ),
+        );
+      })
+      .catch(() => {
+        // The Add to Library action remains available while the snapshot retries.
+      });
+    return () => controller.abort();
+  }, [actor]);
+
+  if (error || picks.length === 0) return null;
+  const safeActive = active < picks.length ? active : 0;
+  const item = picks[safeActive];
+  const previousItem = picks[(safeActive - 1 + picks.length) % picks.length];
+  const nextItem = picks[(safeActive + 1) % picks.length];
+
+  function move(direction: -1 | 1) {
+    setActive(
+      (current) => (current + direction + picks.length) % picks.length,
+    );
+  }
+
+  async function addToLibrary() {
+    if (!actor) {
+      window.location.href = authEntryPath("login", "/");
+      return;
+    }
+    if (librarySeries.has(item.seriesId)) {
+      window.location.href = "/library";
+      return;
+    }
+    setLibraryBusy(item.seriesId);
+    try {
+      const response = await fetch("/api/v1/library", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          seriesId: item.seriesId,
+          listType: "PLANNING",
+          favorite: false,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "This title could not be added.",
+        );
+      }
+      setLibrarySeries((current) => new Set(current).add(item.seriesId));
+      showToast(`${item.title} added to your Library.`);
+    } catch (libraryError) {
+      showToast(
+        libraryError instanceof Error
+          ? libraryError.message
+          : "This title could not be added.",
+      );
+    } finally {
+      setLibraryBusy("");
+    }
+  }
+
+  return (
+    <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
+      <div className="editors-pick-heading">
+        <div>
+          <p className="eyebrow">Curated by NyaScans</p>
+          <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
+          <span>Only the best, chosen for you.</span>
+        </div>
+      </div>
+      <article
+        className="editors-pick-card"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            move(-1);
+          } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            move(1);
+          }
+        }}
+      >
+        <div className="editors-pick-visual">
+          <div
+            className="editors-pick-cover-stage"
+            onPointerDown={(event) => {
+              swipeStart.current = event.clientX;
+            }}
+            onPointerUp={(event) => {
+              const start = swipeStart.current;
+              swipeStart.current = null;
+              if (start === null || Math.abs(event.clientX - start) < 42) return;
+              move(event.clientX < start ? 1 : -1);
+            }}
+          >
+            {picks.length > 1 && previousItem.cover ? (
+              <ResilientCoverImage
+                className="editors-pick-cover-back editors-pick-cover-back-left"
+                src={previousItem.cover}
+                alt=""
+                decorative
+              />
+            ) : null}
+            {picks.length > 1 && nextItem.cover ? (
+              <ResilientCoverImage
+                className="editors-pick-cover-back editors-pick-cover-back-right"
+                src={nextItem.cover}
+                alt=""
+                decorative
+              />
+            ) : null}
+            <div className="editors-pick-cover" key={item.id}>
+              {item.cover ? (
+                <ResilientCoverImage
+                  src={item.cover}
+                  alt={`Cover art for ${item.title}`}
+                  width={380}
+                  height={570}
+                  loading="eager"
+                />
+              ) : (
+                <span><Books size={38} /></span>
+              )}
+            </div>
+            {picks.length > 1 ? (
+              <div className="editors-pick-controls" aria-label="Editor’s Pick navigation">
+                <button
+                  type="button"
+                  aria-label="Previous Editor’s Pick"
+                  onClick={() => move(-1)}
+                >
+                  <CaretLeft size={20} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next Editor’s Pick"
+                  onClick={() => move(1)}
+                >
+                  <CaretRight size={20} />
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {picks.length > 1 ? (
+            <div className="editors-pick-dots" aria-label="Choose Editor’s Pick">
+              {picks.map((pick, index) => (
+                <button
+                  type="button"
+                  key={pick.id}
+                  aria-pressed={index === safeActive}
+                  aria-label={`Show ${pick.title}`}
+                  onClick={() => setActive(index)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="editors-pick-copy" key={`copy-${item.id}`}>
+          <div className="editors-pick-chips">
+            <SeriesTypeBadge type={item.type} />
+            <span>{item.categoryLabel}</span>
+            {item.genres.slice(0, 3).map((genre) => (
+              <span key={genre}>{genre}</span>
+            ))}
+          </div>
+          <h3>{item.title}</h3>
+          {item.nativeTitle ? <small>{item.nativeTitle}</small> : null}
+          <p className="editors-pick-teaser">{item.shortDescription}</p>
+          <div className="editors-pick-state">
+            <span>{catalogLabel(item.type)}</span>
+            <em>{catalogLabel(item.status)}</em>
+          </div>
+          <p>{item.synopsis || item.shortDescription}</p>
+          <div className="editors-pick-meta">
+            <span><Star size={15} weight="fill" /> {(item.ratingTenths / 10).toFixed(1)}</span>
+            <span>Curated feature</span>
+          </div>
+          <div className="editors-pick-actions">
+            <a
+              className="button button-primary"
+              href={
+                item.latestChapterSlug
+                  ? `/title/${item.slug}/chapter/${item.latestChapterSlug}`
+                  : `/title/${item.slug}`
+              }
+            >
+              <Play size={18} weight="fill" /> Read now
+            </a>
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={libraryBusy === item.seriesId}
+              onClick={() => void addToLibrary()}
+            >
+              {librarySeries.has(item.seriesId) ? (
+                <Check size={18} />
+              ) : (
+                <BookmarkSimple size={18} />
+              )}
+              {libraryBusy === item.seriesId
+                ? "Adding…"
+                : librarySeries.has(item.seriesId)
+                  ? "Open Library"
+                  : "Add to Library"}
+            </button>
+          </div>
+        </div>
+      </article>
+    </section>
+  );
+}
+
+function HomeView({
+  actor,
+  showToast,
+}: {
+  actor: Actor | null;
+  showToast: (text: string) => void;
+}) {
+  const { settings: commercial } = useCommercialSettings();
+
+  return (
+    <>
+      <AnnouncementBanner
+        key={`${commercial.announcement.id}:${commercial.announcement.resetKey}`}
+        settings={commercial.announcement}
+      />
+
+      <FeaturedSeriesSlider />
+
+      <main>
+        <section className="home-continue page-wrap">
+          {actor ? (
+            <a className="continue-card" href="/title/the-glass-orchard/chapter/episode-30">
+              <img
+                src="/art/cover-glass-orchard.png"
+                alt=""
+                width={96}
+                height={144}
+              />
+              <div>
+                <span>Continue reading</span>
+                <h2>The Glass Orchard</h2>
+                <p>Episode 30 • Page 42 of 68</p>
+                <div className="mini-progress" aria-label="62 percent complete">
+                  <i style={{ width: "62%" }} />
+                </div>
+              </div>
+              <span className="continue-play">
+                <Play size={20} weight="fill" />
+              </span>
+            </a>
+          ) : (
+            <div className="continue-guest">
+              <div>
+                <BookmarkSimple size={22} />
+                <span>
+                  <strong>Keep every chapter in sync.</strong>
+                  Sign in to resume from the exact page on any device.
+                </span>
+              </div>
+              <a className="button button-quiet" href={authEntryPath("login", "/")}>
+                Sign in
+              </a>
+            </div>
+          )}
+        </section>
+
+        <TrendingShowcase ordered={demoSeries} />
+
+        <section className="updates-section">
+          <div className="page-wrap">
+            <LatestUpdatesGrid />
+          </div>
+        </section>
+
+        <EditorsPickSection actor={actor} showToast={showToast} />
+
+        <NewSeriesSection />
+
+        <PublishingTeamsCarousel />
+
+        <CommunityHighlights />
+
+        <section className="notification-cta">
+          <div className="page-wrap notification-cta-inner">
+            <div>
+              <Bell size={24} />
+              <span>
+                <strong>Control chapter alerts from your profile.</strong>
+                Choose followed titles, teams, unlock reminders, and security
+                notices in one place.
+              </span>
+            </div>
+            <a
+              className="button button-secondary"
+              href="/account?tab=notifications"
+            >
+              Notification settings <ArrowRight size={17} />
+            </a>
+          </div>
+        </section>
+      </main>
+    </>
+  );
+}
+
+type CatalogResult = {
+  id: string;
+  slug: string;
+  title: string;
+  nativeTitle: string | null;
+  synopsis: string;
+  type: "MANHWA" | "MANGA" | "MANHUA";
+  status: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  accessType: "FREE" | "PAID";
+  cover: string | null;
+  ratingTenths: number;
+  followerCount: number;
+  viewCount: number;
+  latestPublishedAt: string | null;
+  latestChapterNumber: string | null;
+  chapterCount: number;
+};
+
+type CatalogPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+};
+
+function catalogLabel(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function CatalogCover({
+  item,
+  compact = false,
+}: {
+  item: CatalogResult;
+  compact?: boolean;
+}) {
+  return item.cover ? (
+    <ResilientCoverImage
+      src={item.cover}
+      alt={`Cover art for ${item.title}`}
+      width={compact ? 76 : 360}
+      height={compact ? 114 : 540}
+    />
+  ) : (
+    <span className="catalog-cover-placeholder" aria-hidden="true">
+      <Books size={compact ? 22 : 34} />
+      <small>Cover pending</small>
+    </span>
+  );
+}
+
+function BrowseView({ showToast }: { showToast: (text: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("All");
+  const [access, setAccess] = useState("All");
+  const [status, setStatus] = useState("All");
+  const [mode, setMode] = useState<"grid" | "list">("grid");
+  const [sort, setSort] = useState("latest");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(24);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [items, setItems] = useState<CatalogResult[]>([]);
+  const [pagination, setPagination] = useState<CatalogPagination>({
+    page: 1,
+    pageSize: 24,
+    total: 0,
+    pageCount: 1,
+    hasPrevious: false,
+    hasNext: false,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [catalogRevision, setCatalogRevision] = useState(0);
+
+  useEffect(() => {
+    function applyLocation() {
+      const params = new URLSearchParams(window.location.search);
+      const nextType = params.get("type")?.toUpperCase() ?? "ALL";
+      const nextAccess = params.get("access")?.toUpperCase() ?? "ALL";
+      const nextStatus = params.get("status")?.toUpperCase() ?? "ALL";
+      const nextSort = params.get("sort") ?? "latest";
+      const nextPage = Number(params.get("page") ?? 1);
+      const nextPageSize = Number(params.get("pageSize") ?? 24);
+      setQuery(params.get("q") ?? "");
+      setType(
+        ["MANHWA", "MANGA", "MANHUA"].includes(nextType)
+          ? nextType
+          : "All",
+      );
+      setAccess(
+        ["FREE", "PAID"].includes(nextAccess)
+          ? nextAccess
+          : "All",
+      );
+      setStatus(
+        ["ONGOING", "COMPLETED", "HIATUS", "UPCOMING"].includes(nextStatus)
+          ? nextStatus
+          : "All",
+      );
+      setSort(
+        ["latest", "added", "viewed", "followed", "rated", "title"].includes(
+          nextSort,
+        )
+          ? nextSort
+          : "latest",
+      );
+      setPage(Number.isInteger(nextPage) && nextPage > 0 ? nextPage : 1);
+      setPageSize([12, 24, 36, 48].includes(nextPageSize) ? nextPageSize : 24);
+      setMoreOpen(nextStatus !== "ALL");
+    }
+    const timeout = window.setTimeout(() => {
+      applyLocation();
+      setHydrated(true);
+    }, 0);
+    window.addEventListener("popstate", applyLocation);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("popstate", applyLocation);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLoading(true);
+      setError("");
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        sort,
+      });
+      if (query.trim()) params.set("q", query.trim());
+      if (type !== "All") params.set("type", type);
+      if (access !== "All") params.set("access", access);
+      if (status !== "All") params.set("status", status);
+      try {
+        const response = await fetch(`/api/v1/catalog?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as {
+          data?: CatalogResult[];
+          pagination?: CatalogPagination;
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "The catalog could not be loaded.",
+          );
+        }
+        setItems(payload.data ?? []);
+        setPagination(
+          payload.pagination ?? {
+            page,
+            pageSize,
+            total: 0,
+            pageCount: 1,
+            hasPrevious: false,
+            hasNext: false,
+          },
+        );
+      } catch (loadError) {
+        if (!controller.signal.aborted) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "The catalog could not be loaded.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, query ? 220 : 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    access,
+    catalogRevision,
+    hydrated,
+    page,
+    pageSize,
+    query,
+    sort,
+    status,
+    type,
+  ]);
+
+  function navigate(
+    updates: Partial<{
+      query: string;
+      type: string;
+      access: string;
+      status: string;
+      sort: string;
+      page: number;
+      pageSize: number;
+    }>,
+    replace = false,
+  ) {
+    const next = {
+      query,
+      type,
+      access,
+      status,
+      sort,
+      page,
+      pageSize,
+      ...updates,
+    };
+    const params = new URLSearchParams();
+    if (next.query.trim()) params.set("q", next.query.trim());
+    if (next.type !== "All") params.set("type", next.type.toLowerCase());
+    if (next.access !== "All") {
+      params.set("access", next.access.toLowerCase());
+    }
+    if (next.status !== "All") {
+      params.set("status", next.status.toLowerCase());
+    }
+    if (next.sort !== "latest") params.set("sort", next.sort);
+    if (next.page > 1) params.set("page", String(next.page));
+    if (next.pageSize !== 24) params.set("pageSize", String(next.pageSize));
+    const nextUrl = `/browse${params.size ? `?${params.toString()}` : ""}`;
+    window.history[replace ? "replaceState" : "pushState"]({}, "", nextUrl);
+    setQuery(next.query);
+    setType(next.type);
+    setAccess(next.access);
+    setStatus(next.status);
+    setSort(next.sort);
+    setPage(next.page);
+    setPageSize(next.pageSize);
+  }
+
+  const visiblePages = useMemo(() => {
+    const start = Math.max(
+      1,
+      Math.min(pagination.page - 2, pagination.pageCount - 4),
+    );
+    return Array.from(
+      { length: Math.min(5, pagination.pageCount) },
+      (_, index) => start + index,
+    );
+  }, [pagination.page, pagination.pageCount]);
+
+  return (
+    <main className="page-main page-wrap">
+      <section className="browse-intro">
+        <p className="eyebrow">Catalog</p>
+        <h1>Find the story that keeps you awake.</h1>
+        <p>
+          Search original titles, filter by reading format, and keep mature
+          content behind your account settings.
+        </p>
+      </section>
+
+      <section className="catalog-toolbar" aria-label="Catalog filters">
+        <div className="catalog-search">
+          <MagnifyingGlass size={19} />
+          <label className="sr-only" htmlFor="catalog-query">
+            Search catalog
+          </label>
+          <input
+            id="catalog-query"
+            value={query}
+            onChange={(event) =>
+              navigate({ query: event.target.value, page: 1 }, true)
+            }
+            placeholder="Search title, genre, creator, or team"
+          />
+        </div>
+        <label>
+          <span>Format</span>
+          <select
+            value={type}
+            onChange={(event) =>
+              navigate({ type: event.target.value, page: 1 })
+            }
+          >
+            <option value="All">All formats</option>
+            <option value="MANHWA">Manhwa</option>
+            <option value="MANGA">Manga</option>
+            <option value="MANHUA">Manhua</option>
+          </select>
+          <CaretDown size={15} />
+        </label>
+        <label>
+          <span>Access</span>
+          <select
+            value={access}
+            onChange={(event) =>
+              navigate({ access: event.target.value, page: 1 })
+            }
+          >
+            <option value="All">All access</option>
+            <option value="FREE">Free</option>
+            <option value="PAID">Paid</option>
+          </select>
+          <CaretDown size={15} />
+        </label>
+        <button
+          className="filter-button"
+          type="button"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((value) => !value)}
+        >
+          <SlidersHorizontal size={18} />
+          More filters
+        </button>
+      </section>
+
+      <div className="catalog-summary">
+        <p>
+          <strong>{pagination.total.toLocaleString("en-US")}</strong> titles
+        </p>
+        <div>
+          <label>
+            Sort
+            <select
+              aria-label="Sort catalog"
+              value={sort}
+              onChange={(event) =>
+                navigate({ sort: event.target.value, page: 1 })
+              }
+            >
+              <option value="latest">Latest Update</option>
+              <option value="added">Recently Added</option>
+              <option value="viewed">Most Viewed</option>
+              <option value="followed">Most Followed</option>
+              <option value="rated">Highest Rated</option>
+              <option value="title">Alphabetical</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setMode("grid")}
+            aria-pressed={mode === "grid"}
+            aria-label="Grid view"
+          >
+            <SquaresFour size={19} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("list")}
+            aria-pressed={mode === "list"}
+            aria-label="List view"
+          >
+            <List size={19} />
+          </button>
+        </div>
+      </div>
+      {moreOpen ? (
+        <div className="advanced-filter-bar">
+          {[
+            ["ONGOING", "Ongoing"],
+            ["COMPLETED", "Completed"],
+            ["HIATUS", "Hiatus"],
+            ["UPCOMING", "Upcoming"],
+          ].map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={status === value}
+              onClick={() =>
+                navigate({
+                  status: status === value ? "All" : value,
+                  page: 1,
+                })
+              }
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              navigate({
+                query: "",
+                type: "All",
+                access: "All",
+                status: "All",
+                sort: "latest",
+                page: 1,
+                pageSize: 24,
+              });
+              setMoreOpen(false);
+              showToast("Filters cleared.");
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <section
+          className="catalog-skeleton-grid"
+          aria-label="Loading catalog"
+          aria-busy="true"
+        >
+          {Array.from({ length: Math.min(pageSize, 12) }, (_, index) => (
+            <span key={index}>
+              <i />
+              <b />
+              <small />
+            </span>
+          ))}
+        </section>
+      ) : error ? (
+        <div className="catalog-error" role="alert">
+          <WarningCircle size={26} />
+          <div>
+            <strong>Catalog unavailable</strong>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCatalogRevision((value) => value + 1)}
+          >
+            Try again
+          </button>
+        </div>
+      ) : items.length ? (
+        <section className={`catalog-results catalog-${mode}`}>
+          {items.map((item) =>
+            mode === "grid" ? (
+              <article className="series-card catalog-series-card" key={item.id}>
+                <a className="cover-link" href={`/title/${item.slug}`}>
+                  <CatalogCover item={item} />
+                  <span className="cover-shade" />
+                  <SeriesTypeBadge type={item.type} />
+                  <span className="quick-read">
+                    <Play size={14} weight="fill" /> Read
+                  </span>
+                </a>
+                <div className="series-card-copy">
+                  <a href={`/title/${item.slug}`}>
+                    <h3>{item.title}</h3>
+                  </a>
+                  <p>
+                    {catalogLabel(item.type)} · {catalogLabel(item.status)}
+                  </p>
+                  <div className="series-meta">
+                    <span>
+                      <Star size={14} weight="fill" />{" "}
+                      {(Number(item.ratingTenths) / 10).toFixed(1)}
+                    </span>
+                    <span>
+                      {item.latestChapterNumber
+                        ? `Ch. ${item.latestChapterNumber}`
+                        : `${Number(item.chapterCount)} chapters`}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ) : (
+              <a className="series-list-row" href={`/title/${item.slug}`} key={item.id}>
+                <span className="series-list-cover">
+                  <CatalogCover item={item} compact />
+                </span>
+                <div>
+                  <SeriesTypeBadge type={item.type} />
+                  <h2>{item.title}</h2>
+                  <p>{item.synopsis}</p>
+                  <span>
+                    {catalogLabel(item.type)} · {catalogLabel(item.status)}
+                  </span>
+                </div>
+                <div className="list-stats">
+                  <span>
+                    <Star size={15} weight="fill" />{" "}
+                    {(Number(item.ratingTenths) / 10).toFixed(1)}
+                  </span>
+                  <span>
+                    {Number(item.followerCount).toLocaleString("en-US")} followers
+                  </span>
+                  <strong>
+                    {item.latestChapterNumber
+                      ? `Ch. ${item.latestChapterNumber}`
+                      : "No releases"}
+                  </strong>
+                </div>
+                <ArrowRight size={20} />
+              </a>
+            ),
+          )}
+        </section>
+      ) : (
+        <EmptyState
+          title="No titles match these filters"
+          body="Clear one filter or search for a broader theme."
+        />
+      )}
+      {!loading && !error && pagination.total > 0 ? (
+        <nav className="catalog-pagination" aria-label="Catalog pages">
+          <button
+            type="button"
+            disabled={!pagination.hasPrevious}
+            onClick={() => navigate({ page: Math.max(1, page - 1) })}
+          >
+            <CaretLeft size={16} /> Previous
+          </button>
+          <div>
+            {visiblePages.map((pageNumber) => (
+              <button
+                type="button"
+                key={pageNumber}
+                aria-current={pageNumber === pagination.page ? "page" : undefined}
+                onClick={() => navigate({ page: pageNumber })}
+              >
+                {pageNumber}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={!pagination.hasNext}
+            onClick={() =>
+              navigate({ page: Math.min(pagination.pageCount, page + 1) })
+            }
+          >
+            Next <CaretRight size={16} />
+          </button>
+          <label>
+            <span>Per page</span>
+            <select
+              value={pageSize}
+              onChange={(event) =>
+                navigate({
+                  pageSize: Number(event.target.value),
+                  page: 1,
+                })
+              }
+            >
+              {[12, 24, 36, 48].map((value) => (
+                <option value={value} key={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        </nav>
+      ) : null}
+    </main>
+  );
+}
+
+function GuestLibraryView() {
+  return (
+    <main className="page-main page-wrap">
+      <section className="auth-benefit">
+        <div>
+          <Books size={34} />
+          <p className="eyebrow">Your library</p>
+          <h1>Pick up at the exact panel.</h1>
+          <p>
+            Follow titles, keep your reading status organized, sync progress,
+            and export your private library from one place.
+          </p>
+          <a
+            className="button button-primary"
+            href={authEntryPath("login", "/library")}
+          >
+            <SignIn size={18} />
+            Sign in
+          </a>
+        </div>
+        <div className="library-preview" aria-hidden="true">
+          <div className="preview-book">
+            <img src="/art/cover-glass-orchard.png" alt="" />
+            <span style={{ height: "68%" }} />
+          </div>
+          <div className="preview-book">
+            <img src="/art/cover-neon-ronin.png" alt="" />
+            <span style={{ height: "41%" }} />
+          </div>
+          <div className="preview-book">
+            <img src="/art/cover-moon-parcel.png" alt="" />
+            <span style={{ height: "86%" }} />
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LibraryView({ actor }: { actor: Actor | null }) {
+  if (!actor) {
+    return <GuestLibraryView />;
+  }
+  return (
+    <main className="page-main page-wrap library-page">
+      <LibraryWorkspace />
+    </main>
+  );
+}
+
+type StoreCollection = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  themeKey: string;
+  isSeasonal: boolean;
+};
+
+type StoreCosmetic = {
+  id: string;
+  slug: string;
+  collectionId: string;
+  name: string;
+  description: string;
+  category: string;
+  priceOnyx: number;
+  previewUrl: string | null;
+  previewConfig: {
+    from?: string;
+    to?: string;
+    accent?: string;
+    symbol?: string;
+  };
+  owned: boolean;
+  equipped: boolean;
+};
+
+type StoreCategory =
+  | "coins"
+  | "memberships"
+  | "banners"
+  | "cosmetics"
+  | "logo-effects";
+
+const storeCategories: readonly StoreCategory[] = [
+  "coins",
+  "memberships",
+  "banners",
+  "cosmetics",
+  "logo-effects",
+];
+
+function normalizeStoreCategory(value?: string): StoreCategory {
+  return storeCategories.includes(value as StoreCategory)
+    ? (value as StoreCategory)
+    : "coins";
+}
+
+function cosmeticCategoryLabel(category: string) {
+  return {
+    PROFILE_BANNER: "Profile banner",
+    PROFILE_FRAME: "Animated profile frame",
+    USERNAME_DECORATION: "Username decoration",
+    COMMENT_EFFECT: "Comment effect",
+    COMMENT_GRADIENT: "Comment gradient",
+    SEASONAL_PROFILE: "Seasonal profile",
+    LOGO_EFFECT: "Logo effect",
+  }[category] ?? category.replaceAll("_", " ").toLowerCase();
+}
+
+type StoreOfferMedia = {
+  primary: string | null;
+  banner: string | null;
+  icon: string | null;
+};
+
+type StoreCoinPackage = CommercialSettings["economy"]["packages"][number] & {
+  ctaText: string;
+  altText: string;
+  themeKey: string;
+  detailedDescription: string;
+  media: StoreOfferMedia;
+};
+
+type StoreMembership = CommercialSettings["economy"]["memberships"][number] & {
+  ctaText: string;
+  altText: string;
+  themeKey: string;
+  detailedDescription: string;
+  media: StoreOfferMedia;
+};
+
+function StoreView({
+  actor,
+  category,
+  showToast,
+}: {
+  actor: Actor | null;
+  category?: string;
+  showToast: (text: string) => void;
+}) {
+  const { settings: commercial } = useCommercialSettings();
+  const selectedCategory = normalizeStoreCategory(category);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
+  const [balance, setBalance] = useState<number | null>(null);
+  const [checkoutEnabled, setCheckoutEnabled] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState(
+    "Checkout is not configured.",
+  );
+  const [collections, setCollections] = useState<StoreCollection[]>([]);
+  const [cosmetics, setCosmetics] = useState<StoreCosmetic[]>([]);
+  const [packages, setPackages] = useState<StoreCoinPackage[]>([]);
+  const [memberships, setMemberships] = useState<StoreMembership[]>([]);
+  const [categoryCounts, setCategoryCounts] = useState<
+    Record<StoreCategory, number>
+  >({
+    coins: 0,
+    memberships: 0,
+    banners: 0,
+    cosmetics: 0,
+    "logo-effects": 0,
+  });
+  const [activeCollection, setActiveCollection] = useState("all");
+  const [storeError, setStoreError] = useState("");
+  const [storeRevision, setStoreRevision] = useState(0);
+  const storeRequestKey = `${selectedCategory}:${storeRevision}`;
+  const [loadedStoreRequest, setLoadedStoreRequest] = useState("");
+  const storeLoading = loadedStoreRequest !== storeRequestKey;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(
+      `/api/v1/store/products?category=${encodeURIComponent(selectedCategory)}`,
+      { cache: "no-store", signal: controller.signal },
+    )
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          selectedCategory?: StoreCategory;
+          categoryCounts?: Partial<Record<StoreCategory, number>>;
+          data?: StoreCoinPackage[];
+          memberships?: StoreMembership[];
+          checkoutEnabled?: boolean;
+          checkoutStatus?: string;
+          collections?: StoreCollection[];
+          cosmetics?: StoreCosmetic[];
+          viewer?: { balance?: number } | null;
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "The Store could not be loaded.",
+          );
+        }
+        return payload;
+      })
+      .then(
+        (payload) => {
+          if (controller.signal.aborted) return;
+          setCheckoutEnabled(Boolean(payload.checkoutEnabled));
+          setCheckoutStatus(
+            payload.checkoutStatus ??
+              "Checkout is not configured.",
+          );
+          setCollections(payload.collections ?? []);
+          setCosmetics(payload.cosmetics ?? []);
+          setPackages(payload.data ?? []);
+          setMemberships(payload.memberships ?? []);
+          setActiveCollection("all");
+          setStoreError("");
+          setCategoryCounts((current) => ({
+            ...current,
+            ...payload.categoryCounts,
+          }));
+          if (payload.viewer) {
+            setBalance(Number(payload.viewer.balance ?? 0));
+          }
+          setLoadedStoreRequest(storeRequestKey);
+        },
+      )
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setCheckoutEnabled(false);
+        setCheckoutStatus("Checkout configuration could not be verified.");
+        setStoreError("The cosmetic marketplace could not be loaded.");
+        setLoadedStoreRequest(storeRequestKey);
+      });
+    if (actor) void fetch("/api/v1/wallet", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Wallet unavailable");
+        return (await response.json()) as { balance?: number };
+      })
+      .then((payload) => setBalance(Number(payload.balance ?? 0)))
+      .catch(() => {
+        if (!controller.signal.aborted) setBalance(null);
+      });
+    return () => controller.abort();
+  }, [actor, selectedCategory, storeRequestKey]);
+
+  async function unlockCosmetic(item: StoreCosmetic) {
+    if (!actor) {
+      window.location.assign(
+        authEntryPath("login", `/store/${selectedCategory}`),
+      );
+      return;
+    }
+    if (item.owned) {
+      await equipCosmetic(item);
+      return;
+    }
+    setBusy(item.id);
+    try {
+      const response = await fetch("/api/v1/store/purchases", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          itemId: item.id,
+          idempotencyKey: `${item.id}:${clientRandomId()}`,
+        }),
+      });
+      const payload = (await response.json()) as {
+        wallet?: { balance?: number };
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "This cosmetic could not be unlocked.",
+        );
+      }
+      setBalance(Number(payload.wallet?.balance ?? balance ?? 0));
+      showToast(`${item.name} is now in your collection.`);
+      setStoreError("");
+      setStoreRevision((value) => value + 1);
+    } catch (purchaseError) {
+      showToast(
+        purchaseError instanceof Error
+          ? purchaseError.message
+          : "This cosmetic could not be unlocked.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function equipCosmetic(item: StoreCosmetic) {
+    if (!actor) {
+      window.location.assign(
+        authEntryPath("login", `/store/${selectedCategory}`),
+      );
+      return;
+    }
+    setBusy(item.id);
+    try {
+      const response = await fetch("/api/v1/store/equip", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          itemId: item.equipped ? null : item.id,
+          category: item.category,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "Your cosmetic loadout could not be saved.",
+        );
+      }
+      showToast(item.equipped ? `${item.name} removed.` : `${item.name} equipped.`);
+      setStoreError("");
+      setStoreRevision((value) => value + 1);
+    } catch (equipError) {
+      showToast(
+        equipError instanceof Error
+          ? equipError.message
+          : "Your cosmetic loadout could not be saved.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function buy(productId: string) {
+    if (!checkoutEnabled) {
+      showToast(checkoutStatus);
+      return;
+    }
+    if (!actor) {
+      window.location.assign(
+        authEntryPath("login", `/store/${selectedCategory}`),
+      );
+      return;
+    }
+    setBusy(productId);
+    try {
+      const response = await fetch("/api/v1/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          productId,
+          idempotencyKey: `${productId}:${clientRandomId()}`,
+        }),
+      });
+      const payload = (await response.json()) as {
+        balance?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Checkout could not be completed.");
+      }
+      if (typeof payload.balance === "number") setBalance(payload.balance);
+      showToast("Order completed and added to your purchase history.");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Checkout could not be completed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const visibleCosmetics =
+    activeCollection === "all"
+      ? cosmetics
+      : cosmetics.filter((item) => item.collectionId === activeCollection);
+  const banners = visibleCosmetics.filter(
+    (item) => item.category === "PROFILE_BANNER",
+  );
+  const logoEffects = visibleCosmetics.filter(
+    (item) => item.category === "LOGO_EFFECT",
+  );
+  const standardCosmetics = visibleCosmetics.filter(
+    (item) =>
+      item.category !== "PROFILE_BANNER" &&
+      item.category !== "LOGO_EFFECT",
+  );
+
+  function renderStoreItems(items: StoreCosmetic[], emptyTitle: string) {
+    if (storeLoading) {
+      return (
+        <div
+          className="store-cosmetics-grid store-cosmetics-loading"
+          aria-busy="true"
+        >
+          {Array.from({ length: 4 }, (_, index) => (
+            <span key={index}>
+              <i />
+              <b />
+              <small />
+            </span>
+          ))}
+        </div>
+      );
+    }
+    if (storeError) {
+      return (
+        <div className="catalog-error" role="alert">
+          <WarningCircle size={24} />
+          <div>
+            <strong>Store unavailable</strong>
+            <span>{storeError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setStoreError("");
+              setStoreRevision((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    if (!items.length) {
+      return (
+        <EmptyState
+          title={emptyTitle}
+          body="Published Store items will appear here."
+          compact
+        />
+      );
+    }
+    return (
+      <div className="store-cosmetics-grid">
+        {items.map((item) => {
+          const previewStyle = {
+            "--store-from": item.previewConfig.from ?? "#0b4f7d",
+            "--store-to": item.previewConfig.to ?? "#08243b",
+            "--store-accent": item.previewConfig.accent ?? "#7dd3fc",
+          } as CSSProperties;
+          return (
+            <article className="store-cosmetic-card" key={item.id}>
+              <div className="store-cosmetic-preview" style={previewStyle}>
+                {item.previewUrl ? (
+                  <img
+                    src={item.previewUrl}
+                    alt={`Preview of ${item.name}`}
+                    loading="lazy"
+                  />
+                ) : (
+                  <>
+                    <span className="store-preview-avatar">
+                      <UserCircle size={38} weight="fill" />
+                    </span>
+                    <strong>{item.previewConfig.symbol ?? "ONYX"}</strong>
+                    <i />
+                  </>
+                )}
+                <span className="store-preview-label">Live preview</span>
+              </div>
+              <div className="store-cosmetic-copy">
+                <span>{cosmeticCategoryLabel(item.category)}</span>
+                <h3>{item.name}</h3>
+                <p>{item.description}</p>
+                <div>
+                  <strong>
+                    <Coins size={16} weight="fill" />
+                    {item.priceOnyx.toLocaleString("en-US")}
+                  </strong>
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    disabled={busy === item.id}
+                    onClick={() => void unlockCosmetic(item)}
+                  >
+                    {busy === item.id
+                      ? "Saving…"
+                      : item.equipped
+                        ? "Equipped"
+                        : item.owned
+                          ? "Equip"
+                          : actor
+                            ? "Unlock"
+                            : "Sign in"}
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <main className="page-main store-page">
+      <section className="store-hero page-wrap">
+        <div>
+          <p className="eyebrow">NyaScans store</p>
+          <h1>Choose what you unlock.</h1>
+          <p>
+            {commercial.economy.coinPlural}, memberships, and support are
+            shown clearly before confirmation.
+          </p>
+        </div>
+        <a className="wallet-chip" href="/wallet">
+          <span>
+            <Coins size={21} weight="fill" />
+            {commercial.economy.coinPlural} balance
+          </span>
+          <strong>{actor ? (balance ?? "...") : "Sign in"}</strong>
+          <ArrowRight size={17} />
+        </a>
+      </section>
+
+      <nav className="store-section-nav page-wrap" aria-label="Store sections">
+        <a
+          href="/store/coins"
+          aria-current={selectedCategory === "coins" ? "page" : undefined}
+        >
+          <Coins size={17} /> Coins
+          <small>{categoryCounts.coins}</small>
+        </a>
+        <a
+          href="/store/memberships"
+          aria-current={selectedCategory === "memberships" ? "page" : undefined}
+        >
+          <CrownSimple size={17} /> Memberships
+          <small>{categoryCounts.memberships}</small>
+        </a>
+        <a
+          href="/store/banners"
+          aria-current={selectedCategory === "banners" ? "page" : undefined}
+        >
+          <ImageIcon size={17} /> Banners
+          <small>{categoryCounts.banners}</small>
+        </a>
+        <a
+          href="/store/cosmetics"
+          aria-current={selectedCategory === "cosmetics" ? "page" : undefined}
+        >
+          <Gift size={17} /> Cosmetics
+          <small>{categoryCounts.cosmetics}</small>
+        </a>
+        <a
+          href="/store/logo-effects"
+          aria-current={
+            selectedCategory === "logo-effects" ? "page" : undefined
+          }
+        >
+          <Star size={17} /> Logo Effects
+          <small>{categoryCounts["logo-effects"]}</small>
+        </a>
+      </nav>
+
+      {!["banners", "cosmetics", "logo-effects"].includes(
+        selectedCategory,
+      ) && storeLoading ? (
+        <div className="settings-loading page-wrap" role="status">
+          Loading this Store category…
+        </div>
+      ) : null}
+      {!["banners", "cosmetics", "logo-effects"].includes(
+        selectedCategory,
+      ) && storeError ? (
+        <div className="catalog-error page-wrap" role="alert">
+          <WarningCircle size={24} />
+          <div>
+            <strong>Store unavailable</strong>
+            <span>{storeError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setStoreError("");
+              setStoreRevision((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+
+      {["banners", "cosmetics", "logo-effects"].includes(selectedCategory) ? (
+      <section className="store-marketplace page-wrap">
+        <SectionHeading
+          title={
+            selectedCategory === "banners"
+              ? "Profile banners"
+              : selectedCategory === "logo-effects"
+                ? "Logo effects"
+                : "Premium cosmetics"
+          }
+          body="Filter published visual items by their active collection."
+        />
+        <div className="store-collection-tabs" aria-label="Store collections">
+          <button
+            type="button"
+            aria-pressed={activeCollection === "all"}
+            onClick={() => setActiveCollection("all")}
+          >
+            All collections
+          </button>
+          {collections.map((collection) => (
+            <button
+              type="button"
+              key={collection.id}
+              aria-pressed={activeCollection === collection.id}
+              onClick={() => setActiveCollection(collection.id)}
+            >
+              {collection.name}
+              {collection.isSeasonal ? <small>Seasonal</small> : null}
+            </button>
+          ))}
+        </div>
+        {selectedCategory === "banners" ? (
+        <section className="store-category-section" id="banners">
+          <SectionHeading
+            title="Banners"
+            body="Wide profile artwork for public profiles and community identity."
+          />
+          {renderStoreItems(banners, "No banners in this collection")}
+        </section>
+        ) : null}
+        {selectedCategory === "cosmetics" ? (
+        <section className="store-category-section" id="cosmetics">
+          <SectionHeading
+            title="Cosmetics"
+            body="Frames, username details, gradients, and comment effects."
+          />
+          {renderStoreItems(
+            standardCosmetics,
+            "No cosmetics in this collection",
+          )}
+        </section>
+        ) : null}
+        {selectedCategory === "logo-effects" ? (
+        <section className="store-category-section" id="logo-effects">
+          <SectionHeading
+            title="Logo Effects"
+            body="Animated and seasonal treatments for your profile identity mark."
+          />
+          {renderStoreItems(
+            logoEffects,
+            "No logo effects in this collection",
+          )}
+        </section>
+        ) : null}
+      </section>
+      ) : null}
+
+      {selectedCategory === "coins" ? (
+      <section className="content-section page-wrap" id="coin-packages">
+        <SectionHeading
+          title={`${commercial.economy.coinPlural} packages`}
+          body={`Purchased and promotional ${commercial.economy.coinPlural} stay separate in your ledger.`}
+        />
+        {!checkoutEnabled ? (
+          <div className="commerce-unavailable" role="status">
+            <ShieldCheck size={19} />
+            <span>
+              <strong>Purchases are safely disabled.</strong>
+              {checkoutStatus}
+            </span>
+          </div>
+        ) : null}
+        <div className="package-grid">
+          {!storeLoading && !storeError && packages.length === 0 ? (
+            <EmptyState
+              title="No coin packages are available"
+              body="Published coin packages will appear here."
+              compact
+            />
+          ) : null}
+          {packages.map((product) => {
+            const totalCoins = product.baseCoins + product.bonusCoins;
+            const unitValue =
+              product.priceMinor > 0
+                ? Math.round(totalCoins / (product.priceMinor / 100))
+                : 0;
+            return (
+              <article
+                key={product.id}
+                className={[
+                  product.featured ? "package-featured" : "",
+                  `store-offer-theme-${product.themeKey.toLowerCase()}`,
+                ].filter(Boolean).join(" ")}
+              >
+                {product.media.primary ? (
+                  <img
+                    className="store-offer-art"
+                    src={product.media.primary}
+                    alt={product.altText}
+                  />
+                ) : null}
+                {product.promotionLabel ? (
+                  <span className="package-label">
+                    {product.promotionLabel}
+                  </span>
+                ) : null}
+                <span className="configured-coin-icon" aria-hidden="true">
+                  {product.media.icon ? (
+                    <img src={product.media.icon} alt="" />
+                  ) : (
+                    commercial.economy.coinIcon
+                  )}
+                </span>
+                <h2>{product.name}</h2>
+                <p>
+                  {product.baseCoins.toLocaleString("en-US")} base +{" "}
+                  <strong>
+                    {product.bonusCoins.toLocaleString("en-US")} bonus
+                  </strong>
+                </p>
+                <div className="package-price">
+                  {formatMoney(product.priceMinor, product.billingCurrency)}
+                </div>
+                <small>
+                  {unitValue.toLocaleString("en-US")}{" "}
+                  {commercial.economy.coinPlural} / {product.billingCurrency} 1
+                  {product.discountPercent > 0
+                    ? ` • ${product.discountPercent}% promotion`
+                    : ""}{" "}
+                  • Taxes may apply
+                </small>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={() => buy(product.id)}
+                  disabled={!checkoutEnabled || busy === product.id}
+                >
+                  {busy === product.id
+                    ? "Preparing..."
+                    : checkoutEnabled
+                      ? product.ctaText
+                      : "Unavailable"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+      ) : null}
+
+      {selectedCategory === "memberships" && memberships.length ? (
+      <section className="membership-section" id="memberships">
+        <div className="page-wrap membership-layout membership-layout-multiple">
+          <div className="membership-copy">
+            <CrownSimple size={34} weight="fill" />
+            <h2>Memberships for every reading rhythm.</h2>
+            <p>
+              Compare every active offer, its recurring Onyx allowance, and
+              chapter benefits before choosing.
+            </p>
+            <div className="billing-toggle" aria-label="Billing period">
+              <button type="button" aria-pressed={billing === "monthly"} onClick={() => setBilling("monthly")}>Monthly</button>
+              <button type="button" aria-pressed={billing === "annual"} onClick={() => setBilling("annual")}>
+                Annual
+              </button>
+            </div>
+          </div>
+          <div className="membership-card-grid">
+          {memberships.map((membership) => (
+          <article
+            className={`membership-card store-offer-theme-${membership.themeKey.toLowerCase()}`}
+            key={membership.id}
+          >
+            {membership.media.primary ? (
+              <img
+                className="store-offer-art"
+                src={membership.media.primary}
+                alt={membership.altText}
+              />
+            ) : null}
+            <div>
+              <span>{membership.name}</span>
+              {membership.promotionLabel ? (
+                <em>{membership.promotionLabel}</em>
+              ) : null}
+              <strong>
+                {formatMoney(
+                  billing === "monthly"
+                    ? membership.monthlyPriceMinor
+                    : membership.annualPriceMinor,
+                  membership.billingCurrency,
+                )}{" "}
+                <small>/ {billing === "monthly" ? "month" : "year"}</small>
+              </strong>
+            </div>
+            <ul>
+              {membership.monthlyCoins > 0 ? (
+                <li>
+                  <Check size={18} />{" "}
+                  {coinLabel(membership.monthlyCoins, commercial)} each month
+                </li>
+              ) : null}
+              {membership.benefits.map((benefit) => (
+                <li key={benefit}>
+                  <Check size={18} /> {benefit}
+                </li>
+              ))}
+              {commercial.economy.membershipDiscountsEnabled &&
+              membership.chapterDiscountPercent > 0 ? (
+                <li>
+                  <Check size={18} /> {membership.chapterDiscountPercent}%
+                  chapter discount
+                </li>
+              ) : null}
+            </ul>
+            <button className="button button-primary" type="button" onClick={() => buy(membership.id)} disabled={!checkoutEnabled || busy !== null}>
+              {checkoutEnabled ? membership.ctaText : "Unavailable"}
+            </button>
+            <small>Benefits are active only while the membership is current.</small>
+          </article>
+          ))}
+          </div>
+        </div>
+      </section>
+      ) : null}
+
+      {selectedCategory === "memberships" &&
+      !storeLoading &&
+      !storeError &&
+      memberships.length === 0 ? (
+        <section className="content-section page-wrap">
+          <EmptyState
+            title="No memberships are available"
+            body="Published membership offers will appear here."
+          />
+        </section>
+      ) : null}
+
+      {selectedCategory === "coins" || selectedCategory === "memberships" ? (
+      <section className="support-products page-wrap">
+        <div className="support-copy">
+          <Heart size={30} weight="fill" />
+          <h2>Support the team behind a story.</h2>
+          <p>
+            One-time support is allocated transparently after fees and refund
+            exposure.
+          </p>
+          <a className="button button-secondary" href="/team/black-kite">
+            Find a team
+          </a>
+        </div>
+      </section>
+      ) : null}
+    </main>
+  );
+}
+
+type DiscussionComment = {
+  id: string;
+  parentId: string | null;
+  body: string;
+  spoiler: number | boolean;
+  moderationStatus: "VISIBLE" | "DELETED";
+  createdAt: string;
+  updatedAt: string;
+  displayName: string;
+  role: string;
+  reactionCount: number;
+  reactedByViewer: number | boolean;
+  ownedByViewer: number | boolean;
+};
+
+function discussionRoleLabel(role: string) {
+  return {
+    ADMINISTRATOR: "Admin",
+    TEAM_LEADER: "Team leader",
+    UPLOADER: "Uploader",
+    USER: "Reader",
+  }[role] ?? "Reader";
+}
+
+function discussionDate(value: string) {
+  const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  }).format(date);
+}
+
+export function LegacyDiscussionSection({
+  actor,
+  seriesSlug,
+  chapterSlug = null,
+  showToast,
+}: {
+  actor: Actor | null;
+  seriesSlug: string;
+  chapterSlug?: string | null;
+  showToast: (text: string) => void;
+}) {
+  const [comments, setComments] = useState<DiscussionComment[]>([]);
+  const [count, setCount] = useState(0);
+  const [sort, setSort] = useState<"top" | "newest">("top");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [body, setBody] = useState("");
+  const [spoiler, setSpoiler] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+  const [revealedSpoilers, setRevealedSpoilers] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(
+    new Set(),
+  );
+  const [reportingId, setReportingId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState("Spoilers without a warning");
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const scopeLabel = chapterSlug ? "Chapter comments" : "Discussion";
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadComments() {
+      setLoading(true);
+      setLoadError("");
+      const query = new URLSearchParams({ series: seriesSlug, sort });
+      if (chapterSlug) query.set("chapter", chapterSlug);
+      try {
+        const response = await fetch(
+          `/api/v1/discussion-comments?${query.toString()}`,
+          { signal: controller.signal },
+        );
+        const payload = (await response.json()) as {
+          data?: DiscussionComment[];
+          count?: number;
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "Comments could not be loaded.",
+          );
+        }
+        setComments(payload.data ?? []);
+        setCount(Number(payload.count ?? 0));
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Comments could not be loaded.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+    void loadComments();
+    return () => controller.abort();
+  }, [chapterSlug, refreshKey, seriesSlug, sort]);
+
+  const rootComments = comments.filter((comment) => !comment.parentId);
+  const repliesByParent = useMemo(() => {
+    const grouped = new Map<string, DiscussionComment[]>();
+    for (const comment of comments) {
+      if (!comment.parentId) continue;
+      grouped.set(comment.parentId, [
+        ...(grouped.get(comment.parentId) ?? []),
+        comment,
+      ]);
+    }
+    return grouped;
+  }, [comments]);
+
+  function signInToComment() {
+    const returnTo = chapterSlug
+      ? `/title/${seriesSlug}/chapter/${chapterSlug}#comments`
+      : `/title/${seriesSlug}#comments`;
+    window.location.assign(authEntryPath("login", returnTo));
+  }
+
+  function startReply(comment: DiscussionComment) {
+    if (!actor) {
+      signInToComment();
+      return;
+    }
+    setReplyTo({ id: comment.id, name: comment.displayName });
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
+  async function submitComment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!actor) {
+      signInToComment();
+      return;
+    }
+    const nextBody = body.trim();
+    if (nextBody.length < 2) {
+      showToast("Write at least two characters.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/v1/discussion-comments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          seriesSlug,
+          chapterSlug,
+          parentId: replyTo?.id ?? null,
+          body: nextBody,
+          spoiler,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Comment could not be posted.");
+      }
+      setBody("");
+      setSpoiler(false);
+      setReplyTo(null);
+      setRefreshKey((value) => value + 1);
+      showToast(replyTo ? "Reply posted." : "Comment posted.");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Comment could not be posted.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleReaction(comment: DiscussionComment) {
+    if (!actor) {
+      signInToComment();
+      return;
+    }
+    const wasReacted = Boolean(comment.reactedByViewer);
+    setComments((current) =>
+      current.map((entry) =>
+        entry.id === comment.id
+          ? {
+              ...entry,
+              reactedByViewer: !wasReacted,
+              reactionCount: Math.max(
+                0,
+                Number(entry.reactionCount) + (wasReacted ? -1 : 1),
+              ),
+            }
+          : entry,
+      ),
+    );
+    try {
+      const response = await fetch("/api/v1/discussion-reactions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ commentId: comment.id }),
+      });
+      const payload = (await response.json()) as {
+        reacted?: boolean;
+        reactionCount?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Reaction could not be saved.");
+      }
+      setComments((current) =>
+        current.map((entry) =>
+          entry.id === comment.id
+            ? {
+                ...entry,
+                reactedByViewer: Boolean(payload.reacted),
+                reactionCount: Number(payload.reactionCount ?? 0),
+              }
+            : entry,
+        ),
+      );
+    } catch (error) {
+      setComments((current) =>
+        current.map((entry) =>
+          entry.id === comment.id
+            ? {
+                ...entry,
+                reactedByViewer: wasReacted,
+                reactionCount: Number(comment.reactionCount),
+              }
+            : entry,
+        ),
+      );
+      showToast(
+        error instanceof Error ? error.message : "Reaction could not be saved.",
+      );
+    }
+  }
+
+  async function reportComment(commentId: string) {
+    if (!actor) {
+      signInToComment();
+      return;
+    }
+    try {
+      const response = await fetch("/api/v1/reports", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          targetType: "COMMENT",
+          targetId: commentId,
+          category: reportReason,
+          detail: `Reader report from the ${chapterSlug ? "chapter" : "series"} discussion: ${reportReason}.`,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Report could not be sent.");
+      }
+      setReportedIds((current) => new Set(current).add(commentId));
+      setReportingId(null);
+      showToast("Report sent for moderator review.");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Report could not be sent.",
+      );
+    }
+  }
+
+  async function removeComment(commentId: string) {
+    try {
+      const response = await fetch(
+        `/api/v1/discussion-comments?id=${encodeURIComponent(commentId)}`,
+        { method: "DELETE" },
+      );
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Comment could not be removed.");
+      }
+      setDeletingId(null);
+      setRefreshKey((value) => value + 1);
+      showToast("Comment removed.");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Comment could not be removed.",
+      );
+    }
+  }
+
+  function renderComment(comment: DiscussionComment, isReply = false) {
+    const removed = comment.moderationStatus === "DELETED";
+    const hiddenSpoiler =
+      Boolean(comment.spoiler) && !revealedSpoilers.has(comment.id);
+    const replies = isReply ? [] : repliesByParent.get(comment.id) ?? [];
+    const repliesExpanded = expandedReplies.has(comment.id);
+    const visibleReplies = repliesExpanded ? replies : replies.slice(0, 1);
+
+    return (
+      <article
+        className={`comment-item ${isReply ? "comment-item-reply" : ""}`}
+        key={comment.id}
+      >
+        <div className="comment-avatar" aria-hidden="true">
+          {comment.displayName.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="comment-content">
+          <header className="comment-meta">
+            <div>
+              <strong>{comment.displayName}</strong>
+              <span className={`comment-role comment-role-${comment.role.toLowerCase()}`}>
+                {discussionRoleLabel(comment.role)}
+              </span>
+            </div>
+            <time dateTime={comment.createdAt}>
+              {discussionDate(comment.createdAt)}
+            </time>
+          </header>
+
+          {removed ? (
+            <p className="comment-removed">Comment removed by its author.</p>
+          ) : hiddenSpoiler ? (
+            <button
+              className="spoiler-cover"
+              type="button"
+              onClick={() =>
+                setRevealedSpoilers((current) =>
+                  new Set(current).add(comment.id),
+                )
+              }
+            >
+              <Eye size={17} />
+              Spoiler hidden. Tap to reveal.
+            </button>
+          ) : (
+            <p className="comment-body">{comment.body}</p>
+          )}
+
+          {!removed ? (
+            <div className="comment-actions">
+              <button
+                type="button"
+                aria-pressed={Boolean(comment.reactedByViewer)}
+                onClick={() => void toggleReaction(comment)}
+              >
+                <Heart
+                  size={16}
+                  weight={comment.reactedByViewer ? "fill" : "regular"}
+                />
+                Like
+                {Number(comment.reactionCount) > 0
+                  ? ` ${Number(comment.reactionCount)}`
+                  : ""}
+              </button>
+              {!isReply ? (
+                <button type="button" onClick={() => startReply(comment)}>
+                  <ChatCircle size={16} />
+                  Reply
+                </button>
+              ) : null}
+              {reportedIds.has(comment.id) ? (
+                <span>Reported</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setReportingId((current) =>
+                      current === comment.id ? null : comment.id,
+                    )
+                  }
+                >
+                  <WarningCircle size={16} />
+                  Report
+                </button>
+              )}
+              {Boolean(comment.ownedByViewer) ||
+              actor && ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(actor.role) ? (
+                <button
+                  className="comment-delete"
+                  type="button"
+                  onClick={() =>
+                    setDeletingId((current) =>
+                      current === comment.id ? null : comment.id,
+                    )
+                  }
+                >
+                  <Trash size={16} />
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {reportingId === comment.id ? (
+            <div className="comment-inline-action">
+              <label>
+                <span>Reason</span>
+                <select
+                  value={reportReason}
+                  onChange={(event) => setReportReason(event.target.value)}
+                >
+                  <option>Spoilers without a warning</option>
+                  <option>Harassment or hate</option>
+                  <option>Spam or promotion</option>
+                  <option>Illegal content</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void reportComment(comment.id)}
+              >
+                Send report
+              </button>
+              <button type="button" onClick={() => setReportingId(null)}>
+                Cancel
+              </button>
+            </div>
+          ) : null}
+
+          {deletingId === comment.id ? (
+            <div className="comment-inline-action comment-remove-confirm">
+              <span>Remove this comment?</span>
+              <button
+                type="button"
+                onClick={() => void removeComment(comment.id)}
+              >
+                Remove
+              </button>
+              <button type="button" onClick={() => setDeletingId(null)}>
+                Keep it
+              </button>
+            </div>
+          ) : null}
+
+          {visibleReplies.length > 0 ? (
+            <div className="comment-replies">
+              {visibleReplies.map((reply) => renderComment(reply, true))}
+            </div>
+          ) : null}
+          {replies.length > 1 && !repliesExpanded ? (
+            <button
+              className="show-replies"
+              type="button"
+              onClick={() =>
+                setExpandedReplies((current) =>
+                  new Set(current).add(comment.id),
+                )
+              }
+            >
+              Show {replies.length - 1} more{" "}
+              {replies.length - 1 === 1 ? "reply" : "replies"}
+            </button>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <section
+      className={`series-comments ${chapterSlug ? "chapter-comments" : ""}`}
+      id="comments"
+      aria-labelledby="comments-title"
+    >
+      <header className="comments-header">
+        <div>
+          <p className="eyebrow">{count} comments</p>
+          <h2 id="comments-title">{scopeLabel}</h2>
+          <span>Talk about the story. Mark spoilers before posting.</span>
+        </div>
+        <div className="comment-sort" aria-label="Sort comments">
+          <button
+            type="button"
+            aria-pressed={sort === "top"}
+            onClick={() => setSort("top")}
+          >
+            Top
+          </button>
+          <button
+            type="button"
+            aria-pressed={sort === "newest"}
+            onClick={() => setSort("newest")}
+          >
+            Newest
+          </button>
+        </div>
+      </header>
+
+      {actor ? (
+        <form className="comment-composer" onSubmit={submitComment}>
+          <div className="comment-composer-heading">
+            <div className="comment-avatar" aria-hidden="true">
+              {actor.displayName.slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <strong>Join the discussion</strong>
+              <span>Posting as {actor.displayName}</span>
+            </div>
+          </div>
+          {replyTo ? (
+            <div className="replying-to">
+              Replying to {replyTo.name}
+              <button type="button" onClick={() => setReplyTo(null)}>
+                Cancel reply
+              </button>
+            </div>
+          ) : null}
+          <label className="comment-field">
+            <span className="sr-only">Comment</span>
+            <textarea
+              ref={composerRef}
+              value={body}
+              maxLength={1500}
+              onChange={(event) => setBody(event.target.value)}
+              placeholder={
+                replyTo
+                  ? `Reply to ${replyTo.name}`
+                  : chapterSlug
+                    ? "What did you think of this chapter?"
+                    : "Share a theory, reaction, or recommendation"
+              }
+            />
+          </label>
+          <div className="comment-composer-actions">
+            <label>
+              <input
+                type="checkbox"
+                checked={spoiler}
+                onChange={(event) => setSpoiler(event.target.checked)}
+              />
+              Contains spoilers
+            </label>
+            <span>{body.length} / 1500</span>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={submitting || body.trim().length < 2}
+            >
+              {submitting ? "Posting..." : replyTo ? "Post reply" : "Post comment"}
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="comment-signin">
+          <ChatCircle size={27} />
+          <div>
+            <strong>Sign in to join the discussion</strong>
+            <span>Your reading identity stays attached to your comments.</span>
+          </div>
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={signInToComment}
+          >
+            Sign in
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="comment-loading" role="status">
+          <span />
+          <span />
+          <span />
+        </div>
+      ) : loadError ? (
+        <div className="comment-error" role="alert">
+          <WarningCircle size={21} />
+          <div>
+            <strong>Comments are temporarily unavailable</strong>
+            <span>{loadError}</span>
+          </div>
+          <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>
+            Try again
+          </button>
+        </div>
+      ) : rootComments.length > 0 ? (
+        <div className="comment-list">{rootComments.map((comment) => renderComment(comment))}</div>
+      ) : (
+        <div className="comment-empty">
+          <ChatCircle size={30} />
+          <strong>Start the discussion</strong>
+          <span>Be the first reader to leave a comment on this story.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type SeriesChapterAccess = {
+  teamId: string | null;
+  chapterSlug: string;
+  chapterLabel: string;
+  language: string;
+  version: number;
+  teamName: string | null;
+  publishedAt: string | null;
+  accessType: "FREE" | "PAID";
+  priceOnyx: number;
+  canRead: boolean;
+  reason:
+    | "FREE"
+    | "UNLOCKED"
+    | "ADMINISTRATOR_PREVIEW"
+    | "SIGN_IN_REQUIRED"
+    | "PURCHASE_REQUIRED"
+    | "UNAVAILABLE";
+};
+
+type PublicSeriesDetail = {
+  id: string;
+  slug: string;
+  title: string;
+  alternativeTitles: Array<{ title: string; language: string }>;
+  synopsis: string;
+  type: "MANGA" | "MANHWA" | "MANHUA";
+  status: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  ageRating: string;
+  publicationYear: number | null;
+  authors: Array<{ id: string; name: string }>;
+  artists: Array<{ id: string; name: string }>;
+  publisher: { id: string; name: string } | null;
+  countryCode: string;
+  languageCode: string;
+  readingDirection: string;
+  genres: Array<{ id: string; name: string }>;
+  teams: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    isPrimary: number | boolean;
+  }>;
+  accessType: "FREE" | "PAID";
+  rating: number;
+  followerCount: number;
+  viewCount: number;
+  coverUrl: string | null;
+  bannerUrl: string | null;
+  chapters: unknown[];
+};
+
+function publicDetailCard(detail: PublicSeriesDetail): SeriesCard {
+  const primaryTeam =
+    detail.teams.find((team) => Boolean(team.isPrimary)) ?? detail.teams[0];
+  const regionNames =
+    typeof Intl.DisplayNames === "function"
+      ? new Intl.DisplayNames(["en"], { type: "region" })
+      : null;
+  const languageNames =
+    typeof Intl.DisplayNames === "function"
+      ? new Intl.DisplayNames(["en"], { type: "language" })
+      : null;
+  const teamName = primaryTeam?.name ?? "Independent release";
+  return {
+    id: detail.id,
+    slug: detail.slug,
+    title: detail.title,
+    subtitle:
+      detail.alternativeTitles[0]?.title ??
+      detail.publisher?.name ??
+      "Published on NyaScans",
+    type:
+      detail.type === "MANHWA"
+        ? "Manhwa"
+        : detail.type === "MANHUA"
+          ? "Manhua"
+          : "Manga",
+    status:
+      detail.status === "COMPLETED"
+        ? "Completed"
+        : detail.status === "HIATUS"
+          ? "Hiatus"
+        : detail.status === "UPCOMING"
+          ? "Upcoming"
+          : "Ongoing",
+    access: detail.accessType,
+    rating: detail.rating,
+    followers: String(detail.followerCount),
+    chapter: `${detail.chapters.length} chapters`,
+    updated: "Recently",
+    cover: detail.coverUrl ?? "/art/series-cover-placeholder.svg",
+    accent: "#2d8cff",
+    genres: detail.genres.map((genre) => genre.name),
+    direction:
+      detail.readingDirection === "VERTICAL"
+        ? "VERTICAL"
+        : detail.readingDirection === "LEFT_TO_RIGHT"
+          ? "LTR"
+          : "RTL",
+    synopsis: detail.synopsis,
+    originalTitle: detail.alternativeTitles[0]?.title ?? "",
+    creator:
+      [...detail.authors, ...detail.artists]
+        .map((creator) => creator.name)
+        .filter((name, index, names) => names.indexOf(name) === index)
+        .join(", ") || "Not credited",
+    originalLanguage:
+      languageNames?.of(detail.languageCode) ?? detail.languageCode,
+    originCountry: regionNames?.of(detail.countryCode) ?? detail.countryCode,
+    releaseYear: detail.publicationYear,
+    ageRating: detail.ageRating,
+    chapterCount: detail.chapters.length,
+    team: {
+      name: teamName,
+      slug: primaryTeam?.slug ?? "",
+      initials: teamName
+        .split(/\s+/)
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    },
+  };
+}
+
+function TitleView({
+  slug,
+  actor,
+  showToast,
+}: {
+  slug?: string;
+  actor: Actor | null;
+  showToast: (text: string) => void;
+}) {
+  const { settings: commercial } = useCommercialSettings();
+  const [fetchedPublicDetail, setPublicDetail] = useState<PublicSeriesDetail | null>(
+    null,
+  );
+  const [loadedDetailSlug, setLoadedDetailSlug] = useState("");
+  const publicDetail =
+    fetchedPublicDetail?.slug === slug ? fetchedPublicDetail : null;
+  const detailLoading = Boolean(slug) && loadedDetailSlug !== slug;
+  const item = useMemo(
+    () =>
+      publicDetail
+        ? publicDetailCard(publicDetail)
+        : demoSeries[0],
+    [publicDetail],
+  );
+  const available = Boolean(publicDetail);
+  const [followed, setFollowed] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [liveFollowerCount, setLiveFollowerCount] = useState<number | null>(
+    null,
+  );
+  const [chapterQuery, setChapterQuery] = useState("");
+  const [chapterOrder, setChapterOrder] = useState<"newest" | "oldest">("newest");
+  const [chapterPolicies, setChapterPolicies] = useState<
+    SeriesChapterAccess[]
+  >([]);
+  const [seriesMetrics, setSeriesMetrics] = useState<CatalogResult | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!slug) return;
+    const controller = new AbortController();
+    void fetch(`/api/v1/series-detail?slug=${encodeURIComponent(slug)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: PublicSeriesDetail;
+        };
+        if (response.ok && payload.data) setPublicDetail(payload.data);
+      })
+      .catch(() => {
+        // The rights-safe catalogue fallback remains available during recovery.
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadedDetailSlug(slug);
+      });
+    return () => controller.abort();
+  }, [slug]);
+
+  useEffect(() => {
+    if (!available) return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/v1/chapter-access-list?series=${encodeURIComponent(item.slug)}`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: SeriesChapterAccess[];
+        };
+        if (response.ok && payload.data) setChapterPolicies(payload.data);
+      })
+      .catch(() => setChapterPolicies([]));
+    return () => controller.abort();
+  }, [available, item.slug]);
+  useEffect(() => {
+    if (!available) return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/v1/catalog?q=${encodeURIComponent(item.title)}&page=1&pageSize=6&sort=latest`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: CatalogResult[];
+        };
+        if (!response.ok) return;
+        setSeriesMetrics(
+          payload.data?.find((record) => record.slug === item.slug) ?? null,
+        );
+      })
+      .catch(() => {
+        // The title remains readable while database statistics recover.
+      });
+    return () => controller.abort();
+  }, [available, item.slug, item.title]);
+  useEffect(() => {
+    if (!available || !actor) return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/v1/series-follow?slug=${encodeURIComponent(item.slug)}`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          following?: boolean;
+          followerCount?: number;
+        };
+        if (!response.ok) return;
+        setFollowed(Boolean(payload.following));
+        setLiveFollowerCount(Number(payload.followerCount ?? 0));
+      })
+      .catch(() => {
+        // The persisted state is retried when the reader uses the control.
+      });
+    return () => controller.abort();
+  }, [actor, available, item.slug]);
+  const chapters = chapterPolicies.filter((chapter) =>
+    `${chapter.chapterLabel} ${chapter.accessType} ${chapter.language} ${chapter.teamName ?? ""}`
+      .toLowerCase()
+      .includes(chapterQuery.toLowerCase()),
+  );
+  const visibleChapters = chapterOrder === "newest" ? chapters : [...chapters].reverse();
+  const latestChapter = chapterPolicies[0] ?? null;
+  const firstChapter = chapterPolicies[chapterPolicies.length - 1] ?? null;
+
+  async function shareSeries() {
+    const shareData = {
+      title: item.title,
+      text: item.synopsis,
+      url: window.location.href,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        showToast("Share sheet opened.");
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        showToast("Series link copied.");
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        showToast("The series link could not be shared.");
+      }
+    }
+  }
+
+  async function toggleSeriesFollow() {
+    if (!actor) {
+      window.location.href = authEntryPath(
+        "login",
+        `/title/${item.slug}`,
+      );
+      return;
+    }
+    setFollowBusy(true);
+    try {
+      const response = await fetch("/api/v1/series-follow", {
+        method: followed ? "DELETE" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug: item.slug }),
+      });
+      const payload = (await response.json()) as {
+        following?: boolean;
+        followerCount?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok || typeof payload.following !== "boolean") {
+        throw new Error(
+          payload.error?.message ?? "Following could not be updated.",
+        );
+      }
+      setFollowed(payload.following);
+      setLiveFollowerCount(Number(payload.followerCount ?? 0));
+      setSeriesMetrics((current) =>
+        current && typeof payload.followerCount === "number"
+          ? { ...current, followerCount: payload.followerCount }
+          : current,
+      );
+      showToast(
+        payload.following
+          ? "Added to following."
+          : "Removed from following.",
+      );
+    } catch (followError) {
+      showToast(
+        followError instanceof Error
+          ? followError.message
+          : "Following could not be updated.",
+      );
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  if (detailLoading && !available) {
+    return (
+      <main className="page-main page-wrap">
+        <div className="catalog-loading" role="status">
+          Loading series details…
+        </div>
+      </main>
+    );
+  }
+
+  if (!available) {
+    return (
+      <main className="page-main page-wrap">
+        <EmptyState
+          title="Series not found"
+          body="This series is unavailable or has been removed from the published catalogue."
+        />
+      </main>
+    );
+  }
+
+  return (
+    <main className="title-page">
+      <section className="title-hero">
+        <div
+          className="title-backdrop"
+          style={{
+            backgroundImage: `url(${publicDetail?.bannerUrl ?? item.cover})`,
+          }}
+        />
+        <div className="page-wrap title-hero-inner">
+          <ResilientCoverImage
+            className="title-cover"
+            src={item.cover}
+            alt={`Cover art for ${item.title}`}
+            width={360}
+            height={540}
+            loading="eager"
+          />
+          <div className="title-copy">
+            <div className="title-badges">
+              <SeriesTypeBadge type={item.type} />
+              <span>{item.status}</span>
+              <span>{item.direction}</span>
+            </div>
+            <h1>{item.title}</h1>
+            <p className="title-subtitle" dir="auto">{item.originalTitle}</p>
+            <p className="title-kicker">{item.subtitle}</p>
+            <div className="title-stats">
+              <span>
+                <Star size={17} weight="fill" />{" "}
+                {(Number(seriesMetrics?.ratingTenths ?? 0) / 10).toFixed(1)}
+              </span>
+              <span>
+                <Eye size={17} />{" "}
+                {Number(seriesMetrics?.viewCount ?? 0).toLocaleString("en-US")} views
+              </span>
+              <span>
+                <Heart size={17} />{" "}
+                {Number(
+                  liveFollowerCount ??
+                    seriesMetrics?.followerCount ??
+                    publicDetail?.followerCount ??
+                    0,
+                ).toLocaleString("en-US")}
+              </span>
+            </div>
+            <p className="title-synopsis">{item.synopsis}</p>
+            <div className="tag-row">
+              {item.genres.map((genre) => (
+                <a key={genre} href={`/browse?genre=${genre}`}>{genre}</a>
+              ))}
+            </div>
+            <div className="title-actions">
+              {latestChapter ? (
+                <a
+                  className="button button-primary"
+                  href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}
+                >
+                  <Play size={17} weight="fill" />
+                  Read latest
+                </a>
+              ) : (
+                <span className="button button-primary is-disabled">
+                  No chapters yet
+                </span>
+              )}
+              <button
+                className="button button-secondary series-secondary-action"
+                type="button"
+                aria-pressed={followed}
+                disabled={followBusy}
+                onClick={() => void toggleSeriesFollow()}
+              >
+                <Heart size={22} weight={followed ? "fill" : "regular"} />
+                {followBusy ? "Saving…" : followed ? "Following" : "Follow"}
+              </button>
+              <button
+                className="button button-secondary series-secondary-action"
+                type="button"
+                aria-label="Share series"
+                onClick={() => void shareSeries()}
+              >
+                <ArrowUpRight size={22} />
+                Share
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <nav className="series-jump page-wrap" aria-label="Series sections">
+        <a href="#details">Details</a>
+        <a href="#chapters">Latest Chapters</a>
+        <a href="#reviews">Ratings & Reviews</a>
+        <a href="#comments">Discussion</a>
+      </nav>
+
+      <section className="series-details page-wrap" id="details" aria-labelledby="details-title">
+        <div className="series-details-copy">
+          <p className="eyebrow">Details</p>
+          <h2 id="details-title">About {item.title}</h2>
+          <p>{item.synopsis}</p>
+          <div className="tag-row">
+            {item.genres.map((genre) => (
+              <a key={genre} href={`/browse?genre=${encodeURIComponent(genre)}`}>
+                {genre}
+              </a>
+            ))}
+          </div>
+        </div>
+        <dl className="series-facts">
+          <div><dt>Title type</dt><dd>{item.type}</dd></div>
+          <div><dt>Title status</dt><dd>{item.status}</dd></div>
+          <div>
+            <dt>Author{(publicDetail?.authors.length ?? 0) === 1 ? "" : "s"}</dt>
+            <dd>
+              {publicDetail?.authors.map((author) => author.name).join(", ") ||
+                item.creator}
+            </dd>
+          </div>
+          {publicDetail?.artists.length ? (
+            <div>
+              <dt>Artist{publicDetail.artists.length === 1 ? "" : "s"}</dt>
+              <dd>{publicDetail.artists.map((artist) => artist.name).join(", ")}</dd>
+            </div>
+          ) : null}
+          {publicDetail?.publisher ? (
+            <div><dt>Original publisher</dt><dd>{publicDetail.publisher.name}</dd></div>
+          ) : null}
+          <div><dt>Release year</dt><dd>{item.releaseYear ?? "Not specified"}</dd></div>
+          <div><dt>Original language</dt><dd>{item.originalLanguage}</dd></div>
+          <div><dt>Origin</dt><dd>{item.originCountry}</dd></div>
+          <div><dt>Reading format</dt><dd>{item.direction}</dd></div>
+          <div><dt>Age rating</dt><dd>{item.ageRating}</dd></div>
+          <div><dt>Total chapters</dt><dd>{item.chapterCount}</dd></div>
+        </dl>
+        <div className="series-team-stack" aria-label="Publishing teams">
+          {(publicDetail?.teams.length
+            ? publicDetail.teams
+            : [
+                {
+                  id: item.team.slug,
+                  name: item.team.name,
+                  slug: item.team.slug,
+                  isPrimary: true,
+                },
+              ]
+          ).map((team) => (
+            <aside className="series-team-card" key={team.id}>
+              <span className="series-team-mark">
+                {team.name
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)}
+              </span>
+              <div>
+                <small>{team.isPrimary ? "Primary publishing team" : "Publishing team"}</small>
+                <strong>{team.name}</strong>
+                <span><ShieldCheck size={15} weight="fill" /> Active affiliation</span>
+              </div>
+              {team.slug ? (
+                <a href={`/team/${team.slug}`} aria-label={`Open ${team.name}`}>
+                  <ArrowRight size={18} />
+                </a>
+              ) : null}
+            </aside>
+          ))}
+        </div>
+      </section>
+
+      <section className="title-content page-wrap">
+        <aside className="title-sidebar" aria-label="Reading guide">
+          <section>
+            <p className="eyebrow">Reading guide</p>
+            <h3>{item.chapterCount} chapters</h3>
+            <p className="reading-guide-copy">
+              English release by {item.team.name}. Newest chapters appear first.
+            </p>
+            <div className="chapter-quick-links">
+              {latestChapter ? (
+                <a className="button button-primary" href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}>
+                  <Play size={15} weight="fill" /> Latest chapter
+                </a>
+              ) : null}
+              {firstChapter ? (
+                <a className="button button-secondary" href={`/title/${item.slug}/chapter/${firstChapter.chapterSlug}`}>
+                  First chapter
+                </a>
+              ) : null}
+            </div>
+          </section>
+          <a
+            className="report-link"
+            href={`/report?target=series&series=${encodeURIComponent(item.slug)}`}
+          >
+            <WarningCircle size={17} />
+            Report title
+          </a>
+        </aside>
+
+        <div className="title-main">
+          <section className="chapter-panel" id="chapters" aria-labelledby="chapters-title">
+            <div className="chapter-heading">
+              <div>
+                <p className="eyebrow">English release</p>
+                <h2 id="chapters-title">Latest Chapters</h2>
+                <span>{item.team.name} • Newest updates first</span>
+              </div>
+              <div className="chapter-tools">
+                <label className="chapter-search">
+                  <MagnifyingGlass size={18} />
+                  <span className="sr-only">Search chapters</span>
+                  <input
+                    value={chapterQuery}
+                    onChange={(event) => setChapterQuery(event.target.value)}
+                    placeholder="Search chapters"
+                  />
+                </label>
+                <label className="chapter-sort">
+                  <span className="sr-only">Sort chapters</span>
+                  <select
+                    value={chapterOrder}
+                    onChange={(event) =>
+                      setChapterOrder(event.target.value as "newest" | "oldest")
+                    }
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                  </select>
+                  <CaretDown size={15} />
+                </label>
+              </div>
+            </div>
+            <div className="chapter-list">
+              {visibleChapters.length > 0 ? (
+                visibleChapters.map((chapter, index) => {
+                  const access = chapter.accessType === "FREE" ? "Free" : "Paid";
+                  const number = chapter.chapterLabel.replace(
+                    /^(Chapter|Episode|Issue|Preview)\s*/i,
+                    "",
+                  );
+                  return (
+                    <a
+                      className="chapter-row"
+                      href={`/title/${item.slug}/chapter/${chapter.chapterSlug}`}
+                      key={`${chapter.chapterSlug}:${chapter.version}:${chapter.language}`}
+                    >
+                      <span className="chapter-number">#{number}</span>
+                      <span>
+                        <strong>{chapter.chapterLabel}</strong>
+                        <small>
+                          <time>
+                            {chapter.publishedAt
+                              ? `${releaseTime(chapter.publishedAt)} ago`
+                              : "Publication pending"}
+                          </time>
+                          {" • "}
+                          {chapter.teamName ?? item.team.name}
+                          {" • "}
+                          {chapter.language.toUpperCase()}
+                          {chapter.version > 1 ? ` • v${chapter.version}` : ""}
+                        </small>
+                      </span>
+                      <span className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}>
+                        {access === "Free" ? <Check size={14} /> : <LockSimple size={14} />}
+                        {access}
+                        {chapter.priceOnyx > 0 && access === "Paid"
+                          ? ` · ${coinLabel(chapter.priceOnyx, commercial)}`
+                          : ""}
+                      </span>
+                      <span className="chapter-read">
+                        {index === 0 ? "Read latest" : "Read"} <ArrowRight size={16} />
+                      </span>
+                    </a>
+                  );
+                })
+              ) : (
+                <div className="chapter-empty">
+                  <MagnifyingGlass size={24} />
+                  <strong>No chapters found</strong>
+                  <span>Try a different chapter number or access type.</span>
+                  <button type="button" onClick={() => setChapterQuery("")}>Clear search</button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <SeriesReviews
+            actor={actor}
+            seriesSlug={item.slug}
+            showToast={showToast}
+          />
+          <EnhancedDiscussionSection
+            actor={actor}
+            seriesSlug={item.slug}
+            showToast={showToast}
+          />
+          <SeriesRecommendations item={item} />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+type ChapterAccessData = {
+  chapterId: string;
+  seriesSlug: string;
+  chapterSlug: string;
+  chapterLabel: string;
+  accessType: "FREE" | "PAID";
+  priceOnyx: number;
+  canRead: boolean;
+  isUnlocked: boolean;
+  administratorPreview: boolean;
+  reason:
+    | "FREE"
+    | "UNLOCKED"
+    | "ADMINISTRATOR_PREVIEW"
+    | "SIGN_IN_REQUIRED"
+    | "PURCHASE_REQUIRED"
+    | "UNAVAILABLE";
+};
+
+type ReaderPageData = {
+  id: string;
+  pageIndex: number;
+  displayIndex?: number;
+  contentPageIndex?: number | null;
+  kind?: "CONTENT" | "FIXED_FIRST" | "FIXED_LAST";
+  width: number;
+  height: number;
+  url: string;
+};
+
+type ReaderContextData = {
+  series: {
+    slug: string;
+    title: string;
+    cover: string | null;
+    readingDirection: string;
+    teamName: string;
+  };
+  chapter: {
+    id: string;
+    teamId: string | null;
+    slug: string;
+    number: string;
+    title: string;
+    label: string;
+    language: string;
+    version: number;
+    publishedAt: string | null;
+    commentsEnabled: boolean;
+  };
+  previousChapter: {
+    slug: string;
+    number: string;
+    title: string;
+  } | null;
+  nextChapter: {
+    slug: string;
+    number: string;
+    title: string;
+  } | null;
+  chapterManagementHref: string | null;
+  access: ChapterAccessData;
+};
+
+async function fetchReaderResource<T>(
+  url: string,
+  signal: AbortSignal,
+  attempts = 3,
+): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        signal,
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as T & {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        const message =
+          payload.error?.message ?? "The reader request could not be completed.";
+        if (response.status < 500 || attempt === attempts - 1) {
+          throw new Error(message);
+        }
+        lastError = new Error(message);
+      } else {
+        return payload;
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      lastError = error;
+      if (attempt === attempts - 1) throw error;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(resolve, 350 * 2 ** attempt);
+      signal.addEventListener(
+        "abort",
+        () => {
+          window.clearTimeout(timeout);
+          reject(new DOMException("Aborted", "AbortError"));
+        },
+        { once: true },
+      );
+    });
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("The reader request could not be completed.");
+}
+
+function initialReaderSettings(): ReaderSettings {
+  if (typeof window === "undefined") return defaultReaderSettings;
+  try {
+    const stored = window.localStorage.getItem(
+      "nyascans:reader-settings:v1",
+    );
+    if (!stored) return defaultReaderSettings;
+    return {
+      ...defaultReaderSettings,
+      ...(JSON.parse(stored) as Partial<ReaderSettings>),
+      volumeNavigation: false,
+    };
+  } catch {
+    window.localStorage.removeItem("nyascans:reader-settings:v1");
+    return defaultReaderSettings;
+  }
+}
+
+function ReaderPageImage({
+  pageData,
+  index,
+  chapterLabel,
+  hidden,
+  brightness,
+}: {
+  pageData: ReaderPageData;
+  index: number;
+  chapterLabel: string;
+  hidden: boolean;
+  brightness: number;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const retryTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (retryTimer.current !== null) {
+        window.clearTimeout(retryTimer.current);
+      }
+    },
+    [],
+  );
+
+  function retry() {
+    if (retryTimer.current !== null) {
+      window.clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+    }
+    setState("loading");
+    setAttempt((value) => value + 1);
+  }
+
+  const retrySeparator = pageData.url.includes("?") ? "&" : "?";
+  return (
+    <article
+      className={`comic-page chapter-image-page ${
+        hidden ? "comic-page-hidden" : ""
+      }`}
+      aria-label={`Page ${index + 1}`}
+    >
+      {state !== "ready" ? (
+        <div
+          className={`reader-image-state reader-image-${state}`}
+          role={state === "error" ? "alert" : "status"}
+        >
+          {state === "loading" ? (
+            <>
+              <SpinnerGap size={24} className="is-spinning" />
+              <span>Loading page {index + 1}…</span>
+            </>
+          ) : (
+            <>
+              <WarningCircle size={25} />
+              <strong>Page {index + 1} did not load</strong>
+              <span>Your position is safe. Retry only this page.</span>
+              <button type="button" onClick={retry}>
+                Try page again
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+      <img
+        key={attempt}
+        src={`${pageData.url}${retrySeparator}retry=${attempt}`}
+        alt={`Page ${index + 1} of ${chapterLabel}`}
+        width={Math.max(1, Number(pageData.width))}
+        height={Math.max(1, Number(pageData.height))}
+        loading={index < 2 ? "eager" : "lazy"}
+        decoding="async"
+        style={{ filter: `brightness(${brightness}%)` }}
+        onLoad={() => setState("ready")}
+        onError={() => {
+          if (attempt >= 2) {
+            setState("error");
+            return;
+          }
+          setState("loading");
+          retryTimer.current = window.setTimeout(
+            () => setAttempt((value) => value + 1),
+            450 * (attempt + 1),
+          );
+        }}
+      />
+    </article>
+  );
+}
+
+function ReaderView({
+  slug,
+  chapterSlug,
+  actor,
+  showToast,
+}: {
+  slug?: string;
+  chapterSlug?: string;
+  actor: Actor | null;
+  showToast: (text: string) => void;
+}) {
+  const routeSeriesSlug = slug ?? "";
+  const routeChapterSlug = chapterSlug ?? "";
+  const catalogItem =
+    demoSeries.find((entry) => entry.slug === routeSeriesSlug) ?? null;
+  const { settings: commercial } = useCommercialSettings();
+  const [readerContext, setReaderContext] =
+    useState<ReaderContextData | null>(null);
+  const [contextRevision, setContextRevision] = useState(0);
+  const [pagesRevision, setPagesRevision] = useState(0);
+  const [page, setPage] = useState(1);
+  const [ui, setUi] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
+  const [chapterList, setChapterList] = useState<SeriesChapterAccess[]>([]);
+  const [chapterListSeries, setChapterListSeries] = useState("");
+  const [chapterListLoading, setChapterListLoading] = useState(false);
+  const [chapterListError, setChapterListError] = useState("");
+  const [readerSettings, setReaderSettings] =
+    useState<ReaderSettings>(initialReaderSettings);
+  const [accessError, setAccessError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [readerPages, setReaderPages] = useState<ReaderPageData[]>([]);
+  const [pagesLoading, setPagesLoading] = useState(false);
+  const [pagesError, setPagesError] = useState("");
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletError, setWalletError] = useState("");
+  const completedAnalyticsKey = useRef("");
+  const restoredProgressKey = useRef("");
+  const chapterDrawerTrigger = useRef<HTMLButtonElement>(null);
+  const chapterDrawer = useRef<HTMLElement>(null);
+  const chapterListRequest = useRef<AbortController | null>(null);
+  const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
+  const unlockIdempotencyKey = useRef("");
+  const access =
+    readerContext?.series.slug === routeSeriesSlug &&
+    readerContext.chapter.slug === routeChapterSlug
+      ? readerContext.access
+      : null;
+  const nextChapter = readerContext?.nextChapter ?? null;
+  const previousChapter = readerContext?.previousChapter ?? null;
+  const seriesTitle =
+    readerContext?.series.title ?? catalogItem?.title ?? "NyaScans";
+  const seriesCover =
+    readerContext?.series.cover ?? catalogItem?.cover ?? null;
+  const teamName =
+    readerContext?.series.teamName ??
+    catalogItem?.team.name ??
+    "Independent release";
+  const releaseChapters = useMemo(() => {
+    if (
+      chapterListSeries !== routeSeriesSlug ||
+      !readerContext
+    ) {
+      return [];
+    }
+    return chapterList.filter(
+      (chapter) =>
+        chapter.language === readerContext.chapter.language &&
+        chapter.teamId === readerContext.chapter.teamId,
+    );
+  }, [
+    chapterList,
+    chapterListSeries,
+    readerContext,
+    routeSeriesSlug,
+  ]);
+  const mode = readerSettings.mode;
+  const wakeLockSupported =
+    typeof navigator !== "undefined" && "wakeLock" in navigator;
+  const panelCount = readerPages.length;
+  const readerBackground =
+    readerSettings.readerTheme === "paper"
+      ? "#f5f0e5"
+      : readerSettings.readerTheme === "sepia"
+        ? "#2d251d"
+        : readerSettings.backgroundColor;
+  const readerStyle = {
+    "--reader-background": readerBackground,
+    "--reader-image-gap": `${readerSettings.imageSpacing}px`,
+    "--reader-top-margin": `${readerSettings.topMargin}px`,
+    "--reader-bottom-margin": `${readerSettings.bottomMargin}px`,
+  } as CSSProperties;
+
+  useEffect(() => {
+    unlockIdempotencyKey.current = "";
+  }, [routeChapterSlug, routeSeriesSlug]);
+
+  useEffect(
+    () => () => {
+      chapterListRequest.current?.abort();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!chapterDrawerOpen) return;
+    function closeDrawer(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setChapterDrawerOpen(false);
+        chapterDrawerTrigger.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        chapterDrawer.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    }
+    document.addEventListener("keydown", closeDrawer);
+    return () => document.removeEventListener("keydown", closeDrawer);
+  }, [chapterDrawerOpen]);
+
+  useEffect(() => {
+    if (readerSettings.rememberSettings) {
+      window.localStorage.setItem(
+        "nyascans:reader-settings:v1",
+        JSON.stringify(readerSettings),
+      );
+      return;
+    }
+    window.localStorage.removeItem("nyascans:reader-settings:v1");
+  }, [readerSettings]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchReaderResource<ReaderContextData>(
+      `/api/v1/reader-context?series=${encodeURIComponent(routeSeriesSlug)}&chapter=${encodeURIComponent(routeChapterSlug)}`,
+      controller.signal,
+    )
+      .then((context) => {
+        setReaderContext(context);
+        if (
+          !window.localStorage.getItem("nyascans:reader-settings:v1")
+        ) {
+          const readingDirection =
+            context.series.readingDirection === "RTL" ? "rtl" : "ltr";
+          setReaderSettings((current) => ({
+            ...current,
+            readingDirection,
+          }));
+        }
+      })
+      .catch((error: unknown) => {
+        if ((error as Error).name === "AbortError") return;
+        setAccessError(
+          error instanceof Error
+            ? error.message
+            : "Chapter access could not be verified.",
+        );
+      });
+    return () => controller.abort();
+  }, [contextRevision, routeChapterSlug, routeSeriesSlug]);
+
+  useEffect(() => {
+    if (!access?.canRead) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setPagesLoading(true);
+      setPagesError("");
+      setReaderPages([]);
+      void fetchReaderResource<{ data?: ReaderPageData[] }>(
+        `/api/v1/chapter-pages?series=${encodeURIComponent(routeSeriesSlug)}&chapter=${encodeURIComponent(routeChapterSlug)}`,
+        controller.signal,
+      )
+        .then((payload) => {
+          setReaderPages(payload.data ?? []);
+          setPage(1);
+        })
+        .catch((error: unknown) => {
+          if ((error as Error).name === "AbortError") return;
+          setPagesError(
+            error instanceof Error
+              ? error.message
+              : "Chapter pages could not be loaded.",
+          );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPagesLoading(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    access?.canRead,
+    pagesRevision,
+    routeChapterSlug,
+    routeSeriesSlug,
+  ]);
+
+  useEffect(() => {
+    if (
+      !actor ||
+      !access?.canRead ||
+      !access.chapterId ||
+      panelCount === 0
+    ) {
+      return;
+    }
+    const key = `${actor.email}:${access.chapterId}`;
+    if (restoredProgressKey.current === key) return;
+    restoredProgressKey.current = key;
+    const controller = new AbortController();
+    void fetchReaderResource<{
+      data: {
+        pageIndex: number;
+        scrollOffset: number;
+        progressBasisPoints: number;
+      } | null;
+    }>(
+      `/api/v1/reader/progress?chapterId=${encodeURIComponent(access.chapterId)}`,
+      controller.signal,
+      2,
+    )
+      .then((payload) => {
+        if (!payload.data) return;
+        const manifestIndex = readerPages.findIndex(
+          (readerPage) =>
+            readerPage.kind === "CONTENT" &&
+            Number(readerPage.contentPageIndex ?? readerPage.pageIndex) ===
+              Number(payload.data?.pageIndex),
+        );
+        const restoredPage =
+          manifestIndex >= 0
+            ? manifestIndex + 1
+            : Math.min(
+                panelCount,
+                Math.max(1, Number(payload.data.pageIndex) + 1),
+              );
+        setPage(restoredPage);
+        if (mode === "vertical" && restoredPage > 1) {
+          window.setTimeout(() => {
+            document
+              .querySelector<HTMLElement>(
+                `.reader-stage [aria-label="Page ${restoredPage}"]`,
+              )
+              ?.scrollIntoView({ block: "start" });
+          }, 100);
+        }
+      })
+      .catch(() => {
+        restoredProgressKey.current = "";
+      });
+    return () => controller.abort();
+  }, [
+    access?.canRead,
+    access?.chapterId,
+    actor,
+    mode,
+    panelCount,
+    readerPages,
+  ]);
+
+  useEffect(() => {
+    if (mode !== "vertical" || !access?.canRead || panelCount === 0) return;
+    const pages = Array.from(
+      document.querySelectorAll<HTMLElement>(".reader-stage .comic-page"),
+    );
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const mostVisible = [...entries]
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+        if (!mostVisible) return;
+        const index = pages.indexOf(mostVisible.target as HTMLElement);
+        if (index >= 0) setPage(index + 1);
+      },
+      {
+        rootMargin: "-28% 0px -52% 0px",
+        threshold: [0.08, 0.3, 0.6],
+      },
+    );
+    pages.forEach((comicPage) => observer.observe(comicPage));
+    return () => observer.disconnect();
+  }, [access?.canRead, mode, panelCount]);
+
+  useEffect(() => {
+    if (
+      !actor ||
+      !access?.canRead ||
+      !readerSettings.saveReadingProgress ||
+      panelCount === 0
+    ) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      const contentPages = readerPages.filter(
+        (readerPage) => readerPage.kind !== "FIXED_FIRST" &&
+          readerPage.kind !== "FIXED_LAST",
+      );
+      const manifestPage = readerPages[page - 1];
+      const contentPageIndex =
+        manifestPage?.kind === "FIXED_LAST"
+          ? Math.max(0, contentPages.length - 1)
+          : manifestPage?.kind === "FIXED_FIRST"
+            ? 0
+            : Math.max(
+                0,
+                Number(
+                  manifestPage?.contentPageIndex ??
+                    manifestPage?.pageIndex ??
+                    page - 1,
+                ),
+              );
+      void fetch("/api/v1/reader/progress", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chapterId: access.chapterId,
+          pageIndex: contentPageIndex,
+          scrollOffset: Math.max(0, Math.round(window.scrollY)),
+          progressBasisPoints:
+            manifestPage?.kind === "FIXED_LAST"
+              ? 10000
+              : Math.round(
+                  ((contentPageIndex + 1) /
+                    Math.max(1, contentPages.length)) *
+                    10000,
+                ),
+          markCompleted: readerSettings.autoMarkRead,
+        }),
+      });
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [
+    access?.canRead,
+    access?.chapterId,
+    actor,
+    page,
+    panelCount,
+    readerPages,
+    readerSettings.autoMarkRead,
+    readerSettings.saveReadingProgress,
+  ]);
+
+  useEffect(() => {
+    if (!readerSettings.keepAwake || !wakeLockSupported) {
+      void wakeLock.current?.release();
+      wakeLock.current = null;
+      return;
+    }
+    const wakeNavigator = navigator as Navigator & {
+      wakeLock?: {
+        request: (type: "screen") => Promise<{
+          release: () => Promise<void>;
+        }>;
+      };
+    };
+    let cancelled = false;
+    void wakeNavigator.wakeLock
+      ?.request("screen")
+      .then((sentinel) => {
+        if (cancelled) {
+          void sentinel.release();
+          return;
+        }
+        wakeLock.current = sentinel;
+      })
+      .catch(() => {
+        showToast("This device could not keep the screen awake.");
+      });
+    return () => {
+      cancelled = true;
+      void wakeLock.current?.release();
+      wakeLock.current = null;
+    };
+  }, [readerSettings.keepAwake, showToast, wakeLockSupported]);
+
+  useEffect(() => {
+    if (!actor || access?.reason !== "PURCHASE_REQUIRED") {
+      return;
+    }
+    const controller = new AbortController();
+    void fetchReaderResource<{ balance: number }>(
+      "/api/v1/wallet",
+      controller.signal,
+      2,
+    )
+      .then((wallet) => {
+        setWalletBalance(Number(wallet.balance));
+        setWalletError("");
+      })
+      .catch((error: unknown) => {
+        if ((error as Error).name === "AbortError") return;
+        setWalletError("Balance is temporarily unavailable.");
+      });
+    return () => controller.abort();
+  }, [access?.reason, actor]);
+
+  useEffect(() => {
+    if (
+      !readerSettings.preloadNextChapter ||
+      !nextChapter ||
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(
+      `/api/v1/reader-context?series=${encodeURIComponent(routeSeriesSlug)}&chapter=${encodeURIComponent(nextChapter.slug)}`,
+      { signal: controller.signal, cache: "no-store" },
+    ).catch(() => undefined);
+    return () => controller.abort();
+  }, [
+    nextChapter,
+    readerSettings.preloadNextChapter,
+    routeSeriesSlug,
+  ]);
+
+  useEffect(() => {
+    if (
+      !access?.canRead ||
+      access.administratorPreview ||
+      panelCount === 0
+    ) return;
+    recordAnalyticsEvent("CHAPTER_START", {
+      seriesSlug: routeSeriesSlug,
+      chapterSlug: routeChapterSlug,
+    });
+  }, [
+    access?.administratorPreview,
+    access?.canRead,
+    panelCount,
+    routeChapterSlug,
+    routeSeriesSlug,
+  ]);
+
+  useEffect(() => {
+    if (
+      !access?.canRead ||
+      access.administratorPreview ||
+      panelCount === 0 ||
+      page < panelCount
+    ) {
+      return;
+    }
+    const key = `${routeSeriesSlug}:${routeChapterSlug}`;
+    if (completedAnalyticsKey.current === key) return;
+    completedAnalyticsKey.current = key;
+    recordAnalyticsEvent("CHAPTER_COMPLETE", {
+      seriesSlug: routeSeriesSlug,
+      chapterSlug: routeChapterSlug,
+    });
+  }, [
+    access?.administratorPreview,
+    access?.canRead,
+    page,
+    panelCount,
+    routeChapterSlug,
+    routeSeriesSlug,
+  ]);
+
+  function updateReaderSettings(patch: Partial<ReaderSettings>) {
+    setReaderSettings((current) => ({ ...current, ...patch }));
+  }
+
+  function closeChapterDrawer(restoreFocus = true) {
+    setChapterDrawerOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => chapterDrawerTrigger.current?.focus());
+    }
+  }
+
+  function openChapterDrawer() {
+    setSettingsOpen(false);
+    setChapterDrawerOpen(true);
+    if (chapterListSeries === routeSeriesSlug) return;
+    chapterListRequest.current?.abort();
+    const controller = new AbortController();
+    chapterListRequest.current = controller;
+    setChapterListLoading(true);
+    setChapterListError("");
+    void fetchReaderResource<{ data?: SeriesChapterAccess[] }>(
+      `/api/v1/chapter-access-list?series=${encodeURIComponent(routeSeriesSlug)}`,
+      controller.signal,
+      2,
+    )
+      .then((payload) => {
+        setChapterList(payload.data ?? []);
+        setChapterListSeries(routeSeriesSlug);
+      })
+      .catch((error: unknown) => {
+        if ((error as Error).name === "AbortError") return;
+        setChapterListError(
+          error instanceof Error
+            ? error.message
+            : "The chapter list could not be loaded.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setChapterListLoading(false);
+      });
+  }
+
+  function movePage(direction: -1 | 1) {
+    const step = mode === "double" ? 2 : 1;
+    setPage((current) =>
+      Math.min(panelCount, Math.max(1, current + direction * step)),
+    );
+  }
+
+  useEffect(() => {
+    if (mode === "vertical") return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        settingsOpen ||
+        chapterDrawerOpen ||
+        ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(
+          (event.target as HTMLElement | null)?.tagName ?? "",
+        )
+      ) {
+        return;
+      }
+      const forwardKey =
+        readerSettings.readingDirection === "rtl"
+          ? "ArrowLeft"
+          : "ArrowRight";
+      const backwardKey =
+        readerSettings.readingDirection === "rtl"
+          ? "ArrowRight"
+          : "ArrowLeft";
+      if (event.key === forwardKey || event.key === "PageDown") {
+        event.preventDefault();
+        movePage(1);
+      } else if (event.key === backwardKey || event.key === "PageUp") {
+        event.preventDefault();
+        movePage(-1);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  function jumpToReaderSection(targetId: string, forceVertical = false) {
+    const scrollToTarget = () => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    };
+    if (forceVertical && mode !== "vertical") {
+      updateReaderSettings({ mode: "vertical" });
+      window.setTimeout(scrollToTarget, 60);
+      return;
+    }
+    scrollToTarget();
+  }
+
+  async function saveProgress() {
+    if (!actor) {
+      showToast("Sign in to sync reading progress.");
+      return;
+    }
+    if (!access?.canRead) {
+      showToast("Unlock this chapter before saving progress.");
+      return;
+    }
+    if (panelCount === 0) {
+      showToast("This release has no processed pages yet.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/v1/reader/progress", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chapterId: access.chapterId,
+          pageIndex: page - 1,
+          scrollOffset: Math.max(0, Math.round(window.scrollY)),
+          progressBasisPoints: Math.round((page / panelCount) * 10000),
+          markCompleted: readerSettings.autoMarkRead,
+        }),
+      });
+      if (!response.ok) throw new Error("save failed");
+      showToast("Reading progress saved.");
+    } catch {
+      showToast("Progress could not be saved yet.");
+    }
+  }
+
+  async function unlockChapter() {
+    if (!actor) {
+      window.location.href = authEntryPath(
+        "login",
+        `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`,
+      );
+      return;
+    }
+    if (!unlockIdempotencyKey.current) {
+      unlockIdempotencyKey.current =
+        `unlock:${routeSeriesSlug}:${routeChapterSlug}:${clientRandomId()}`;
+    }
+    setUnlocking(true);
+    setAccessError("");
+    try {
+      const response = await fetch("/api/v1/unlocks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          seriesSlug: routeSeriesSlug,
+          chapterSlug: routeChapterSlug,
+          idempotencyKey: unlockIdempotencyKey.current,
+        }),
+      });
+      const payload = (await response.json()) as {
+        access?: ChapterAccessData;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.access) {
+        throw new Error(
+          payload.error?.message ?? "This chapter could not be unlocked.",
+        );
+      }
+      setReaderContext((current) =>
+        current ? { ...current, access: payload.access! } : current,
+      );
+      setWalletBalance((current) =>
+        current === null ? current : Math.max(0, current - payload.access!.priceOnyx),
+      );
+      showToast(
+        payload.access.isUnlocked
+          ? "Chapter unlocked for this account."
+          : "Chapter access confirmed.",
+      );
+    } catch (error) {
+      setAccessError(
+        error instanceof Error
+          ? error.message
+          : "This chapter could not be unlocked.",
+      );
+    } finally {
+      setUnlocking(false);
+    }
+  }
+
+  if (!access) {
+    return (
+      <main className="reader-access-page">
+        <a className="reader-access-back" href={`/title/${routeSeriesSlug}`}>
+          <CaretLeft size={18} /> Back to {seriesTitle}
+        </a>
+        <section className="reader-access-card reader-access-loading" role="status">
+          <span />
+          <strong>Checking chapter access…</strong>
+          <p>
+            The reader stays closed until this chapter’s release and entitlement
+            rules are verified.
+          </p>
+          {accessError ? (
+            <button
+              type="button"
+              onClick={() => {
+                setAccessError("");
+                setContextRevision((value) => value + 1);
+              }}
+            >
+              Retry access check
+            </button>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
+
+  if (!access.canRead) {
+    const title =
+      access.reason === "UNAVAILABLE"
+          ? "This chapter is not published yet"
+          : access.reason === "SIGN_IN_REQUIRED"
+            ? "Sign in before unlocking this paid chapter"
+            : "Unlock this paid chapter to continue";
+    return (
+      <main className="reader-access-page">
+        <a className="reader-access-back" href={`/title/${routeSeriesSlug}#chapters`}>
+          <CaretLeft size={18} /> Back to Latest Chapters
+        </a>
+        <section className="reader-access-card">
+          <div className="reader-lock-cover">
+            {seriesCover ? (
+              <img
+                src={seriesCover}
+                alt={`Cover art for ${seriesTitle}`}
+                width={240}
+                height={360}
+              />
+            ) : (
+              <div className="reader-lock-cover-placeholder">
+                <Books size={40} />
+              </div>
+            )}
+            <span>
+              <LockSimple size={38} weight="fill" />
+            </span>
+          </div>
+          <div className="reader-lock-copy">
+            <p className="eyebrow">{access.chapterLabel}</p>
+            <h1>{title}</h1>
+            <p>
+              {access.reason === "UNAVAILABLE"
+                  ? "The publishing team is still preparing this release."
+                  : access.reason === "SIGN_IN_REQUIRED"
+                    ? "Create or use your NyaScans account to check your balance and keep the chapter in your library."
+                    : "No chapter pages are requested until the secure Onyx unlock is complete."}
+            </p>
+            <dl>
+              <div>
+                <dt>Access</dt>
+                <dd>{access.accessType === "FREE" ? "Free" : "Paid"}</dd>
+              </div>
+              {access.priceOnyx > 0 ? (
+                <div>
+                  <dt>Required</dt>
+                  <dd>
+                    <Coins size={16} weight="fill" />{" "}
+                    {coinLabel(access.priceOnyx, commercial)}
+                  </dd>
+                </div>
+              ) : null}
+              {access.reason === "PURCHASE_REQUIRED" ? (
+                <div>
+                  <dt>Your balance</dt>
+                  <dd>
+                    {walletBalance === null
+                      ? walletError || "Checking…"
+                      : coinLabel(walletBalance, commercial)}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+            {accessError ? (
+              <p className="reader-access-error" role="alert">
+                <WarningCircle size={17} /> {accessError}
+              </p>
+            ) : null}
+            {access.reason === "SIGN_IN_REQUIRED" ? (
+              <div className="reader-unlock-actions">
+                <a
+                  className="button button-primary"
+                  href={authEntryPath(
+                    "login",
+                    `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`,
+                  )}
+                >
+                  <SignIn size={18} /> Sign In
+                </a>
+                <a
+                  className="button button-secondary"
+                  href={authEntryPath(
+                    "signup",
+                    `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`,
+                  )}
+                >
+                  <UserCircle size={18} /> Create Account
+                </a>
+              </div>
+            ) : access.reason === "PURCHASE_REQUIRED" ? (
+              <div className="reader-unlock-actions">
+                <button
+                  className="button button-primary"
+                  type="button"
+                  disabled={
+                    unlocking ||
+                    walletBalance === null ||
+                    walletBalance < access.priceOnyx
+                  }
+                  onClick={() => void unlockChapter()}
+                >
+                  <LockSimple size={18} />
+                  {unlocking
+                    ? "Confirming unlock…"
+                    : `Unlock for ${coinLabel(access.priceOnyx, commercial)}`}
+                </button>
+                <a
+                  className="button button-secondary"
+                  href="/store/coins#coin-packages"
+                >
+                  <Coins size={18} /> Buy {commercial.economy.coinPlural}
+                </a>
+              </div>
+            ) : null}
+            {actor ? (
+              <a className="reader-wallet-link" href="/wallet">
+                View wallet and owned chapters <ArrowRight size={16} />
+              </a>
+            ) : null}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main
+      className={`reader-page reader-mode-${mode} reader-fit-${readerSettings.imageFit} reader-theme-${readerSettings.readerTheme}`}
+      id="reader-start"
+      style={readerStyle}
+    >
+      {ui ? (
+        <header className="reader-header">
+          <a href={`/title/${routeSeriesSlug}`} aria-label="Exit reader">
+            <CaretLeft size={21} />
+          </a>
+          <div>
+            <strong>{seriesTitle}</strong>
+            <span>{access.chapterLabel} • {teamName}</span>
+          </div>
+          <div className="reader-header-actions">
+            <button type="button" onClick={saveProgress}>
+              <BookmarkSimple size={19} />
+              <span>Save</span>
+            </button>
+            <button type="button" onClick={() => setUi(false)}>
+              <ArrowsOut size={19} />
+              <span>Hide UI</span>
+            </button>
+            <button
+              type="button"
+              aria-expanded={settingsOpen}
+              onClick={() => {
+                setChapterDrawerOpen(false);
+                setSettingsOpen((value) => !value);
+              }}
+            >
+              <GearSix size={19} />
+              <span>Settings</span>
+            </button>
+            <button
+              ref={chapterDrawerTrigger}
+              type="button"
+              aria-expanded={chapterDrawerOpen}
+              aria-controls="reader-chapter-drawer"
+              onClick={() =>
+                chapterDrawerOpen
+                  ? closeChapterDrawer(false)
+                  : openChapterDrawer()
+              }
+            >
+              <List size={20} />
+              <span>Chapters</span>
+            </button>
+            {actor ? (
+              <>
+                <a href="/account" aria-label="Open account" title="Open account">
+                  <UserCircle size={19} />
+                  <span>Account</span>
+                </a>
+                <a
+                  href="/signout-with-chatgpt?return_to=%2F"
+                  aria-label="Logout"
+                  title="Logout"
+                >
+                  <SignOut size={19} />
+                  <span>Logout</span>
+                </a>
+              </>
+            ) : (
+              <a
+                href={authEntryPath(
+                  "login",
+                  `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`,
+                )}
+              >
+                <SignIn size={19} />
+                <span>Login</span>
+              </a>
+            )}
+          </div>
+        </header>
+      ) : (
+        <button className="reader-show-ui" type="button" onClick={() => setUi(true)}>
+          Show controls
+        </button>
+      )}
+
+      {ui && settingsOpen ? (
+        <aside
+          className="reader-settings-panel"
+          role="dialog"
+          aria-modal="false"
+          aria-label="Reader settings"
+        >
+          <button
+            className="reader-settings-close"
+            type="button"
+            onClick={() => setSettingsOpen(false)}
+            aria-label="Close reader settings"
+          >
+            <X size={18} />
+          </button>
+          <ReaderSettingsPanel
+            settings={readerSettings}
+            onChange={updateReaderSettings}
+            onReset={() => setReaderSettings(defaultReaderSettings)}
+            wakeLockSupported={wakeLockSupported}
+            volumeNavigationSupported={false}
+          />
+        </aside>
+      ) : null}
+
+      {ui && chapterDrawerOpen ? (
+        <div className="reader-chapter-layer">
+          <button
+            className="reader-chapter-scrim"
+            type="button"
+            aria-label="Close chapter list"
+            onClick={() => closeChapterDrawer()}
+          />
+          <aside
+            className="reader-chapter-drawer"
+            id="reader-chapter-drawer"
+            ref={chapterDrawer}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reader-chapter-drawer-title"
+          >
+            <header>
+              <div>
+                <span>Chapter list</span>
+                <h2 id="reader-chapter-drawer-title">{seriesTitle}</h2>
+                <p>
+                  {readerContext?.chapter.language.toUpperCase()} · {teamName}
+                </p>
+              </div>
+              <button
+                type="button"
+                autoFocus
+                aria-label="Close chapter list"
+                onClick={() => closeChapterDrawer()}
+              >
+                <X size={20} />
+              </button>
+            </header>
+            <div className="reader-chapter-list">
+              {chapterListLoading ? (
+                <div className="reader-chapter-list-state" role="status">
+                  <SpinnerGap size={22} className="is-spinning" />
+                  <span>Loading chapters…</span>
+                </div>
+              ) : chapterListError ? (
+                <div className="reader-chapter-list-state" role="alert">
+                  <WarningCircle size={22} />
+                  <strong>Chapters could not be loaded</strong>
+                  <span>{chapterListError}</span>
+                  <button type="button" onClick={openChapterDrawer}>
+                    Try again
+                  </button>
+                </div>
+              ) : releaseChapters.length ? (
+                releaseChapters.map((chapter) => {
+                  const current = chapter.chapterSlug === routeChapterSlug;
+                  return (
+                    <a
+                      className={current ? "is-current" : ""}
+                      href={`/title/${routeSeriesSlug}/chapter/${chapter.chapterSlug}`}
+                      key={`${chapter.chapterSlug}:${chapter.version}`}
+                      aria-current={current ? "page" : undefined}
+                      onClick={() => closeChapterDrawer(false)}
+                    >
+                      <span>
+                        {chapter.canRead ? (
+                          <CheckCircle size={17} />
+                        ) : (
+                          <LockSimple size={17} />
+                        )}
+                      </span>
+                      <div>
+                        <strong>{chapter.chapterLabel}</strong>
+                        <small>
+                          {chapter.accessType === "PAID"
+                            ? `${coinLabel(chapter.priceOnyx, commercial)}`
+                            : "Free"}
+                          {" · "}
+                          Version {chapter.version}
+                        </small>
+                      </div>
+                      {current ? <em>Reading</em> : <CaretRight size={17} />}
+                    </a>
+                  );
+                })
+              ) : (
+                <div className="reader-chapter-list-state">
+                  <Books size={24} />
+                  <strong>No matching chapters</strong>
+                  <span>
+                    This release has no other public chapters in the same
+                    language and team.
+                  </span>
+                </div>
+              )}
+            </div>
+            <footer>
+              <a href={`/title/${routeSeriesSlug}`}>
+                <Books size={18} /> Series details
+              </a>
+              {readerContext?.chapterManagementHref ? (
+                <a href={readerContext.chapterManagementHref}>
+                  <GearSix size={18} /> Manage current release
+                </a>
+              ) : null}
+            </footer>
+          </aside>
+        </div>
+      ) : null}
+
+      <section className="reader-stage">
+        {pagesLoading ? (
+          <div className="reader-page-state" role="status">
+            <SpinnerGap size={28} className="is-spinning" />
+            <strong>Loading chapter pages…</strong>
+          </div>
+        ) : pagesError ? (
+          <div className="reader-page-state" role="alert">
+            <WarningCircle size={28} />
+            <strong>Chapter pages could not be loaded</strong>
+            <span>{pagesError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setPagesLoading(true);
+                setPagesError("");
+                setPagesRevision((value) => value + 1);
+              }}
+            >
+              Retry chapter pages
+            </button>
+          </div>
+        ) : readerPages.length ? (
+          readerPages.map((readerPage, index) => (
+            <ReaderPageImage
+              key={readerPage.id}
+              pageData={readerPage}
+              index={index}
+              chapterLabel={access.chapterLabel}
+              brightness={readerSettings.brightness}
+              hidden={
+                mode !== "vertical" &&
+                page !== index + 1 &&
+                !(mode === "double" && page + 1 === index + 1)
+              }
+            />
+          ))
+        ) : (
+          <div className="reader-page-state">
+            <ImageIcon size={30} />
+            <strong>Pages are still processing</strong>
+            <span>
+              This release is visible to administrators, but it has no verified
+              page assets yet.
+            </span>
+          </div>
+        )}
+        {mode !== "vertical" && readerPages.length ? (
+          <>
+            {readerSettings.tapZones ? (
+              <div
+                className={`reader-tap-zones reader-direction-${readerSettings.readingDirection}`}
+                aria-label="Page tap zones"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    movePage(
+                      readerSettings.readingDirection === "rtl" ? 1 : -1,
+                    )
+                  }
+                  aria-label={
+                    readerSettings.readingDirection === "rtl"
+                      ? "Next page"
+                      : "Previous page"
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    movePage(
+                      readerSettings.readingDirection === "rtl" ? -1 : 1,
+                    )
+                  }
+                  aria-label={
+                    readerSettings.readingDirection === "rtl"
+                      ? "Previous page"
+                      : "Next page"
+                  }
+                />
+              </div>
+            ) : null}
+            <div className="reader-page-nav">
+            <button
+              type="button"
+              onClick={() => movePage(-1)}
+              disabled={page === 1}
+              aria-label="Previous page"
+            >
+              <CaretLeft size={24} />
+            </button>
+            <button
+              type="button"
+              onClick={() => movePage(1)}
+              disabled={page >= panelCount}
+              aria-label="Next page"
+            >
+              <CaretRight size={24} />
+            </button>
+          </div>
+          </>
+        ) : null}
+      </section>
+
+      {panelCount > 0 ? (
+        <section className="reader-chapter-complete" id="chapter-end">
+          <div>
+            <CheckCircle size={28} weight="fill" />
+            <span>
+              <strong>Chapter complete</strong>
+              <small>
+                Continue within this {readerContext?.chapter.language.toUpperCase()}{" "}
+                release.
+              </small>
+            </span>
+          </div>
+          <nav
+            className="reader-chapter-navigation"
+            aria-label="Previous and next chapters"
+          >
+            {previousChapter ? (
+              <a
+                href={`/title/${routeSeriesSlug}/chapter/${previousChapter.slug}`}
+                rel="prev"
+              >
+                <CaretLeft size={21} />
+                <span>
+                  <small>Previous</small>
+                  <strong>Chapter {previousChapter.number}</strong>
+                </span>
+              </a>
+            ) : (
+              <span aria-disabled="true">
+                <CaretLeft size={21} />
+                <span>
+                  <small>Previous</small>
+                  <strong>First chapter</strong>
+                </span>
+              </span>
+            )}
+            {nextChapter ? (
+              <a
+                href={`/title/${routeSeriesSlug}/chapter/${nextChapter.slug}`}
+                rel="next"
+              >
+                <span>
+                  <small>Next</small>
+                  <strong>Chapter {nextChapter.number}</strong>
+                </span>
+                <CaretRight size={21} />
+              </a>
+            ) : (
+              <span aria-disabled="true">
+                <span>
+                  <small>Next</small>
+                  <strong>Latest chapter</strong>
+                </span>
+                <CaretRight size={21} />
+              </span>
+            )}
+          </nav>
+        </section>
+      ) : null}
+
+      <footer className={`reader-footer ${ui ? "" : "reader-footer-hidden"}`}>
+        <span>
+          {panelCount === 0
+            ? "No processed pages"
+            : mode === "vertical"
+              ? `${panelCount} pages · Continuous`
+              : `Page ${page} of ${panelCount}`}
+        </span>
+        <div className="reader-progress">
+          <i
+            style={{
+              width: `${panelCount ? (page / panelCount) * 100 : 0}%`,
+            }}
+          />
+        </div>
+        <a href={`/title/${routeSeriesSlug}`}>
+          Series details <ArrowRight size={17} />
+        </a>
+      </footer>
+
+      <nav className="reader-quick-nav" aria-label="Chapter quick navigation">
+        <button
+          type="button"
+          title="Go to chapter start"
+          aria-label="Go to chapter start"
+          onClick={() => jumpToReaderSection("reader-start")}
+        >
+          <ArrowUp size={20} />
+        </button>
+        <button
+          type="button"
+          title="Go to chapter end"
+          aria-label="Go to chapter end"
+          onClick={() => jumpToReaderSection("chapter-end", true)}
+        >
+          <ArrowDown size={20} />
+        </button>
+        {readerContext?.chapter.commentsEnabled ? (
+          <button
+            type="button"
+            title="Go to comments"
+            aria-label="Go to chapter comments"
+            onClick={() => jumpToReaderSection("comments", true)}
+          >
+            <ChatCircle size={20} />
+          </button>
+        ) : null}
+      </nav>
+
+      {mode === "vertical" ? (
+        <>
+          <div className="reader-discussion">
+            {readerContext?.chapter.commentsEnabled ? (
+              <EnhancedDiscussionSection
+                actor={actor}
+                seriesSlug={routeSeriesSlug}
+                chapterSlug={routeChapterSlug}
+                showToast={showToast}
+              />
+            ) : (
+              <section className="reader-comments-disabled">
+                <LockSimple size={22} />
+                <div>
+                  <strong>Comments are disabled for this release</strong>
+                  <span>
+                    The publishing team has closed chapter discussion.
+                  </span>
+                </div>
+              </section>
+            )}
+            {catalogItem ? <SeriesRecommendations item={catalogItem} /> : null}
+          </div>
+        </>
+      ) : null}
+    </main>
+  );
+}
+
+type WalletActivity = {
+  id: string;
+  kind: string;
+  memo: string;
+  createdAt: string;
+  amount: number;
+};
+
+type WalletData = {
+  balance: number;
+  currency: string;
+  activity: WalletActivity[];
+};
+
+type OrderData = {
+  id: string;
+  status: string;
+  totalMinor: number;
+  billingCurrency: string;
+  provider: string;
+  providerReference?: string;
+  createdAt: string;
+};
+
+function useCommerceData(actor: Actor) {
+  const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [orders, setOrders] = useState<OrderData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([fetch("/api/v1/wallet"), fetch("/api/v1/orders")])
+      .then(async ([walletResponse, orderResponse]) => {
+        const walletPayload = (await walletResponse.json()) as WalletData & {
+          error?: { message?: string };
+        };
+        const orderPayload = (await orderResponse.json()) as {
+          data?: OrderData[];
+          error?: { message?: string };
+        };
+        if (!walletResponse.ok || !orderResponse.ok) {
+          throw new Error(
+            walletPayload.error?.message ??
+              orderPayload.error?.message ??
+              "Wallet and purchases could not be loaded.",
+          );
+        }
+        if (!active) return;
+        setWallet(walletPayload);
+        setOrders(orderPayload.data ?? []);
+        setLoading(false);
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Wallet and purchases could not be loaded.",
+        );
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [actor, reloadKey]);
+
+  return {
+    wallet,
+    orders,
+    loading,
+    error,
+    reload: () => {
+      setLoading(true);
+      setError("");
+      setReloadKey((value) => value + 1);
+    },
+  };
+}
+
+function CommerceLoading() {
+  return (
+    <div className="commerce-loading" role="status">
+      <span />
+      <span />
+      <span />
+      Loading wallet and purchases…
+    </div>
+  );
+}
+
+function WalletOrdersPanel({
+  actor,
+  initialTab = "wallet",
+  compact = false,
+}: {
+  actor: Actor;
+  initialTab?: "wallet" | "orders";
+  compact?: boolean;
+}) {
+  const { settings: commercialSettings } = useCommercialSettings();
+  const [tab, setTab] = useState<"wallet" | "orders">(initialTab);
+  const commerce = useCommerceData(actor);
+
+  if (commerce.loading) return <CommerceLoading />;
+  if (commerce.error) {
+    return (
+      <div className="commerce-error">
+        <WarningCircle size={22} />
+        <div>
+          <strong>We could not load this account data.</strong>
+          <p>{commerce.error}</p>
+        </div>
+        <button type="button" onClick={commerce.reload}>Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`wallet-orders-panel ${compact ? "wallet-orders-compact" : ""}`}>
+      <div className="commerce-tabs" role="tablist" aria-label="Wallet and orders">
+        <button type="button" role="tab" aria-selected={tab === "wallet"} onClick={() => setTab("wallet")}>
+          <Wallet size={17} /> Wallet
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
+          <CreditCard size={17} /> Orders
+        </button>
+      </div>
+      {tab === "wallet" ? (
+        <>
+          <section className="wallet-hero">
+            <div>
+              <span>
+                <Wallet size={22} />{" "}
+                {commercialSettings.economy.coinPlural} wallet
+              </span>
+              <strong>{commerce.wallet?.balance ?? 0}</strong>
+              <p>
+                Available {commercialSettings.economy.coinPlural} • verified
+                ledger balance
+              </p>
+            </div>
+            <a className="button button-primary" href="/store#coin-packages">
+              Add {commercialSettings.economy.coinPlural}
+            </a>
+          </section>
+          <section className="ledger-section">
+            <SectionHeading
+              title="Transaction history"
+              body="Every grant, spend, purchase, and reversal appears here."
+            />
+            {commerce.wallet?.activity.length ? (
+              commerce.wallet.activity.map((item) => (
+                <div className="ledger-row" key={item.id}>
+                  <span className={item.amount >= 0 ? "ledger-in" : "ledger-out"}>
+                    {item.amount >= 0 ? <Plus size={18} /> : <ArrowUpRight size={18} />}
+                  </span>
+                  <div>
+                    <strong>{item.memo || item.kind}</strong>
+                    <small>{item.kind.replaceAll("_", " ").toLowerCase()}</small>
+                  </div>
+                  <time>{new Date(item.createdAt).toLocaleDateString()}</time>
+                  <b>{item.amount > 0 ? "+" : ""}{item.amount}</b>
+                </div>
+              ))
+            ) : (
+              <EmptyState
+                title="No wallet activity yet"
+                body={`${commercialSettings.economy.coinPlural} grants and purchases will appear here.`}
+                compact
+              />
+            )}
+          </section>
+        </>
+      ) : (
+        <section className="orders-section">
+          <SectionHeading
+            title="Orders"
+            body="One-time store purchases and their current status."
+          />
+          {commerce.orders.length ? (
+            commerce.orders.map((order) => (
+              <article className="order-row" key={order.id}>
+                <span><CreditCard size={18} /></span>
+                <div>
+                  <strong>Order {order.id.slice(0, 8)}</strong>
+                  <small>{order.provider} • {order.providerReference ?? "Processing reference"}</small>
+                </div>
+                <time>{new Date(order.createdAt).toLocaleDateString()}</time>
+                <b>{new Intl.NumberFormat("en", { style: "currency", currency: order.billingCurrency }).format(order.totalMinor / 100)}</b>
+                <em>{order.status}</em>
+              </article>
+            ))
+          ) : (
+            <EmptyState title="No orders yet" body="Completed store orders will appear here with their status." compact />
+          )}
+          <a className="button button-primary" href="/store">Visit store</a>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function WalletView({ actor }: { actor: Actor | null }) {
+  if (!actor) return <LibraryView actor={null} />;
+  return (
+    <main className="page-main page-wrap wallet-page">
+      <WalletOrdersPanel actor={actor} />
+    </main>
+  );
+}
+
+function OrdersView({ actor }: { actor: Actor | null }) {
+  if (!actor) return <LibraryView actor={null} />;
+  return (
+    <main className="page-main page-wrap wallet-page">
+      <WalletOrdersPanel actor={actor} initialTab="orders" />
+    </main>
+  );
+}
+
+function AuthEntryView({
+  intent,
+  actor,
+  authenticatedIdentity,
+  accountBlocked,
+  returnTo,
+}: {
+  intent: "login" | "signup";
+  actor: Actor | null;
+  authenticatedIdentity: Pick<Actor, "displayName" | "email"> | null;
+  accountBlocked: boolean;
+  returnTo: string;
+}) {
+  const signInHref =
+    `/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`;
+  const isSignup = intent === "signup";
+
+  return (
+    <main className="page-main page-wrap auth-entry-page">
+      <section className="auth-entry-card" aria-labelledby="auth-entry-title">
+        <Logo />
+        <nav className="auth-intent-switcher" aria-label="Account access">
+          <a
+            href={authEntryPath("login", returnTo)}
+            aria-current={!isSignup ? "page" : undefined}
+          >
+            Sign In
+          </a>
+          <a
+            href={authEntryPath("signup", returnTo)}
+            aria-current={isSignup ? "page" : undefined}
+          >
+            Create Account
+          </a>
+        </nav>
+
+        {accountBlocked ? (
+          <div className="auth-entry-state auth-entry-blocked" role="alert">
+            <WarningCircle size={34} />
+            <div>
+              <p className="eyebrow">Account unavailable</p>
+              <h1 id="auth-entry-title">This NyaScans account is suspended.</h1>
+              <p>
+                Publishing, comments, purchases, and other protected actions
+                remain disabled. Contact support if you believe this is an
+                error.
+              </p>
+            </div>
+            <div className="auth-entry-actions">
+              <a
+                className="button button-secondary"
+                href="/support?topic=account-access"
+              >
+                Contact Support
+              </a>
+              <a
+                className="button button-quiet"
+                href="/signout-with-chatgpt?return_to=%2Flogin"
+              >
+                Use Another Account
+              </a>
+            </div>
+          </div>
+        ) : actor || authenticatedIdentity ? (
+          <div className="auth-entry-state">
+            <CheckCircle size={34} weight="fill" />
+            <div>
+              <p className="eyebrow">Signed in securely</p>
+              <h1 id="auth-entry-title">
+                Welcome back,{" "}
+                {(actor ?? authenticatedIdentity)?.displayName ?? "reader"}.
+              </h1>
+              <p>
+                Continue to the page you requested. Your session is managed by
+                the configured ChatGPT identity provider.
+              </p>
+            </div>
+            <a className="button button-primary" href={returnTo}>
+              Continue <ArrowRight size={18} />
+            </a>
+          </div>
+        ) : (
+          <>
+            <div className="auth-entry-heading">
+              <p className="eyebrow">
+                {isSignup ? "Join NyaScans" : "Welcome back"}
+              </p>
+              <h1 id="auth-entry-title">
+                {isSignup
+                  ? "Create your reader account."
+                  : "Sign in to your account."}
+              </h1>
+              <p>
+                {isSignup
+                  ? "ChatGPT is the only identity provider configured for this deployment. First-time authorization creates your NyaScans reader profile."
+                  : "Continue with the identity provider configured for NyaScans. You will return to the page you requested."}
+              </p>
+            </div>
+            <a className="auth-provider-button" href={signInHref}>
+              <ShieldCheck size={21} weight="fill" />
+              <span>
+                {isSignup
+                  ? "Create or Continue with ChatGPT"
+                  : "Continue with ChatGPT"}
+              </span>
+              <ArrowRight size={18} />
+            </a>
+            <div className="auth-provider-note">
+              <ShieldCheck size={18} />
+              <p>
+                Secure provider session. NyaScans never receives or stores your
+                ChatGPT password or provider token.
+              </p>
+            </div>
+            <p className="auth-terms">
+              By continuing, you agree to the{" "}
+              <a href="/legal/terms">Terms</a> and acknowledge the{" "}
+              <a href="/legal/privacy">Privacy Policy</a>.
+            </p>
+          </>
+        )}
+      </section>
+      <aside className="auth-entry-aside" aria-label="Account benefits">
+        <span className="auth-entry-aside-lock">
+          <LockSimple size={22} weight="fill" />
+        </span>
+        <p className="eyebrow">One account, every device</p>
+        <h2>Keep your place without weakening paid chapter protection.</h2>
+        <ul>
+          <li><Check size={17} /> Sync reading progress and Library choices</li>
+          <li><Check size={17} /> Retain purchased chapter entitlements</li>
+          <li><Check size={17} /> Return to the exact unlock page after sign-in</li>
+        </ul>
+      </aside>
+    </main>
+  );
+}
+
+function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (text: string) => void }) {
+  const [section, setSection] = useState("Profile");
+  const [accountSettings, setAccountSettings] = useState({
+    displayName: actor?.displayName ?? "",
+    contentLanguage: "en",
+    readerMode: "VERTICAL",
+    readingDirection: "AUTO",
+    brightness: 100,
+    matureContent: false,
+    notifications: {
+      newChapters: true,
+      unlockReminders: true,
+      purchaseReceipts: true,
+      securityAlerts: true,
+      newFollowers: true,
+    },
+    privacy: {
+      showReadingActivity: false,
+      personalizedRecommendations: true,
+      analyticsCookies: false,
+    },
+  });
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const accountSections = [
+    ["Profile", UserCircle],
+    ["Reader settings", Books],
+    ["Security", ShieldCheck],
+    ["Notifications", Bell],
+    ["Connected accounts", Key],
+    ["Preferences", LockSimple],
+    ["Wallet and orders", Wallet],
+  ] as const;
+
+  useEffect(() => {
+    function syncFromLocation() {
+      const requested = new URLSearchParams(window.location.search).get("tab");
+      if (!requested) {
+        setSection("Profile");
+        return;
+      }
+      const match = accountSections.find(
+        ([label]) =>
+          label.toLowerCase().replaceAll(" ", "-") === requested.toLowerCase(),
+      );
+      setSection(match?.[0] ?? "Profile");
+    }
+    const timeout = window.setTimeout(syncFromLocation, 0);
+    window.addEventListener("popstate", syncFromLocation);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("popstate", syncFromLocation);
+    };
+  // The tab registry is intentionally static.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function selectSection(nextSection: string) {
+    setSection(nextSection);
+    const tab = nextSection.toLowerCase().replaceAll(" ", "-");
+    window.history.pushState(
+      {},
+      "",
+      tab === "profile" ? "/account" : `/account?tab=${tab}`,
+    );
+  }
+
+  useEffect(() => {
+    if (!actor) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/v1/account-settings", {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as {
+          data?: Partial<typeof accountSettings>;
+        };
+        if (response.ok && payload.data) {
+          setAccountSettings((current) => ({
+            ...current,
+            ...payload.data,
+            notifications: {
+              ...current.notifications,
+              ...(payload.data?.notifications ?? {}),
+            },
+            privacy: {
+              ...current.privacy,
+              ...(payload.data?.privacy ?? {}),
+            },
+          }));
+        }
+      } catch {
+        // The form keeps safe defaults and surfaces failures on save.
+      }
+    }, 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  // The actor id is stable for the mounted account page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actor?.email]);
+
+  async function saveAccountSettings(
+    values: Record<string, unknown>,
+    successMessage: string,
+  ) {
+    setSettingsBusy(true);
+    try {
+      const response = await fetch("/api/v1/account-settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "Account settings could not be saved.",
+        );
+      }
+      showToast(successMessage);
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Account settings could not be saved.",
+      );
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  if (!actor) {
+    return (
+      <main className="page-main page-wrap account-auth">
+        <section className="auth-card">
+          <Logo />
+          <h1>Sign in to keep reading.</h1>
+          <p>
+            Continue on any device, manage your wallet, and receive only the
+            updates you choose.
+          </p>
+          <a
+            className="button button-primary"
+            href={authEntryPath("login", "/account")}
+          >
+            <SignIn size={18} />
+            Open Sign In
+          </a>
+          <div className="auth-assurances">
+            <span><ShieldCheck size={17} /> Secure session</span>
+            <span><Key size={17} /> MFA supported</span>
+          </div>
+          <small>
+            By continuing, you agree to the Terms and acknowledge the Privacy
+            Policy.
+          </small>
+        </section>
+        <aside className="auth-art">
+          <img src="/art/cover-neon-ronin.png" alt="" />
+          <blockquote>
+            “A reader should feel the story, not the interface.”
+            <span>NyaScans reader principle</span>
+          </blockquote>
+        </aside>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page-main page-wrap account-page">
+      <aside className="account-sidebar">
+        <div className="account-person">
+          <span>{actor.displayName.slice(0, 1).toUpperCase()}</span>
+          <div><strong>{actor.displayName}</strong><small>{actor.email}</small></div>
+        </div>
+        {accountSections.map(([label, Icon]) => (
+          <button type="button" key={String(label)} aria-current={section === label ? "page" : undefined} onClick={() => selectSection(String(label))}>
+            <Icon size={18} /> {String(label)}
+          </button>
+        ))}
+      </aside>
+      <section className="account-content">
+        <SectionHeading title={section} body={section === "Profile" ? "How you appear across NyaScans." : `Manage your ${section.toLowerCase()} preferences.`} />
+        {section === "Wallet and orders" ? (
+          <WalletOrdersPanel actor={actor} compact />
+        ) : section === "Profile" ? (
+          <ProfileSettingsWorkspace onSaved={showToast} />
+        ) : section === "__legacy_profile__" ? (
+          <>
+            <form className="settings-form">
+              <label>
+                <span>Display name</span>
+                <input
+                  value={accountSettings.displayName}
+                  minLength={2}
+                  maxLength={80}
+                  onChange={(event) =>
+                    setAccountSettings((current) => ({
+                      ...current,
+                      displayName: event.target.value,
+                    }))
+                  }
+                />
+                <small>Visible on reviews and comments.</small>
+              </label>
+              <label>
+                <span>Email address</span>
+                <input defaultValue={actor.email} disabled />
+                <small>Managed by your sign-in provider.</small>
+              </label>
+              <div className="form-grid">
+                <label>
+                  <span>Content language</span>
+                  <select
+                    value={accountSettings.contentLanguage}
+                    onChange={(event) =>
+                      setAccountSettings((current) => ({
+                        ...current,
+                        contentLanguage: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="en">English</option>
+                    <option value="fr">French</option>
+                    <option value="ar">Arabic</option>
+                  </select>
+                </label>
+                <label className="settings-check">
+                  <input
+                    type="checkbox"
+                    checked={accountSettings.matureContent}
+                    onChange={(event) =>
+                      setAccountSettings((current) => ({
+                        ...current,
+                        matureContent: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Allow mature-content discovery</span>
+                </label>
+              </div>
+              <button
+                className="button button-primary"
+                type="button"
+                disabled={settingsBusy}
+                onClick={() =>
+                  void saveAccountSettings(
+                    {
+                      displayName: accountSettings.displayName,
+                      contentLanguage: accountSettings.contentLanguage,
+                      matureContent: accountSettings.matureContent,
+                    },
+                    "Profile settings saved.",
+                  )
+                }
+              >
+                {settingsBusy ? "Saving…" : "Save changes"}
+              </button>
+            </form>
+            <section className="danger-zone">
+              <div><h3>Data and account</h3><p>Export your data or request account deletion.</p></div>
+              <a href="/api/v1/account-export" download>
+                <DownloadSimple size={17} /> Export data
+              </a>
+              <a href="/support?topic=account-deletion">
+                <Trash size={17} /> Request deletion
+              </a>
+            </section>
+          </>
+        ) : section === "Reader settings" ? (
+          <form className="settings-form">
+            <div className="form-grid">
+              <label>
+                <span>Reading mode</span>
+                <select
+                  value={accountSettings.readerMode}
+                  onChange={(event) =>
+                    setAccountSettings((current) => ({
+                      ...current,
+                      readerMode: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="VERTICAL">Vertical</option>
+                  <option value="SINGLE">Single page</option>
+                  <option value="DOUBLE">Double page</option>
+                </select>
+              </label>
+              <label>
+                <span>Reading direction</span>
+                <select
+                  value={accountSettings.readingDirection}
+                  onChange={(event) =>
+                    setAccountSettings((current) => ({
+                      ...current,
+                      readingDirection: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="AUTO">Automatic</option>
+                  <option value="LTR">Left to right</option>
+                  <option value="RTL">Right to left</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>Default brightness</span>
+              <input
+                type="range"
+                min="40"
+                max="100"
+                value={accountSettings.brightness}
+                onChange={(event) =>
+                  setAccountSettings((current) => ({
+                    ...current,
+                    brightness: Number(event.target.value),
+                  }))
+                }
+              />
+            </label>
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={settingsBusy}
+              onClick={() =>
+                void saveAccountSettings(
+                  {
+                    readerMode: accountSettings.readerMode,
+                    readingDirection: accountSettings.readingDirection,
+                    brightness: accountSettings.brightness,
+                  },
+                  "Reader settings saved.",
+                )
+              }
+            >
+              {settingsBusy ? "Saving…" : "Save reader settings"}
+            </button>
+          </form>
+        ) : section === "Security" ? (
+          <div className="account-setting-card">
+            <ShieldCheck size={28} />
+            <div>
+              <h3>Sign-in security</h3>
+              <p>
+                Your identity, password, verification, and MFA are managed by
+                ChatGPT. NyaScans never stores provider passwords or tokens.
+              </p>
+            </div>
+          </div>
+        ) : section === "Connected accounts" ? (
+          <div className="connected-account-list">
+            <article>
+              <span><ShieldCheck size={22} weight="fill" /></span>
+              <div>
+                <strong>ChatGPT identity</strong>
+                <small>{actor.email} · connected</small>
+              </div>
+              <em>Primary</em>
+            </article>
+            <p>
+              Additional Google, Discord, email, or phone providers require a
+              supported external identity service. NyaScans does not simulate
+              provider connections or store provider passwords.
+            </p>
+          </div>
+        ) : section === "Notifications" ? (
+          <form className="settings-form">
+            {[
+              ["newChapters", "New chapters from followed series"],
+              ["unlockReminders", "Paid chapter and balance reminders"],
+              ["purchaseReceipts", "Purchase receipts"],
+              ["securityAlerts", "Security alerts"],
+              ["newFollowers", "New followers"],
+            ].map(([key, label]) => (
+              <label className="settings-check" key={key}>
+                <input
+                  type="checkbox"
+                  checked={
+                    accountSettings.notifications[
+                      key as keyof typeof accountSettings.notifications
+                    ]
+                  }
+                  onChange={(event) =>
+                    setAccountSettings((current) => ({
+                      ...current,
+                      notifications: {
+                        ...current.notifications,
+                        [key]: event.target.checked,
+                      },
+                    }))
+                  }
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={settingsBusy}
+              onClick={() =>
+                void saveAccountSettings(
+                  { notifications: accountSettings.notifications },
+                  "Notification choices saved.",
+                )
+              }
+            >
+              {settingsBusy ? "Saving…" : "Save notifications"}
+            </button>
+          </form>
+        ) : (
+          <form className="settings-form">
+            {[
+              ["showReadingActivity", "Show reading activity on my profile"],
+              [
+                "personalizedRecommendations",
+                "Allow personalized recommendations",
+              ],
+              ["analyticsCookies", "Use optional analytics cookies"],
+            ].map(([key, label]) => (
+              <label className="settings-check" key={key}>
+                <input
+                  type="checkbox"
+                  checked={
+                    accountSettings.privacy[
+                      key as keyof typeof accountSettings.privacy
+                    ]
+                  }
+                  onChange={(event) =>
+                    setAccountSettings((current) => ({
+                      ...current,
+                      privacy: {
+                        ...current.privacy,
+                        [key]: event.target.checked,
+                      },
+                    }))
+                  }
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={settingsBusy}
+              onClick={() =>
+                void saveAccountSettings(
+                  { privacy: accountSettings.privacy },
+                  "Privacy choices saved.",
+                )
+              }
+            >
+              {settingsBusy ? "Saving…" : "Save privacy choices"}
+            </button>
+          </form>
+        )}
+      </section>
+    </main>
+  );
+}
+
+type OperationsNavigationGroup = {
+  id: string;
+  label: string;
+  items: ReadonlyArray<readonly [string, PhosphorIcon]>;
+};
+
+function OperationsView({
+  mode,
+  actor,
+  initialSectionSlug,
+  initialSubsectionSlug,
+  initialUploadMode,
+}: {
+  mode: "dashboard" | "admin";
+  actor: Actor;
+  initialSectionSlug?: string;
+  initialSubsectionSlug?: string;
+  initialUploadMode?: "SINGLE" | "BATCH";
+}) {
+  const admin = mode === "admin";
+  const groups = useMemo<OperationsNavigationGroup[]>(() => {
+    if (!admin && actor.role === "MODERATOR") {
+      return [
+        {
+          id: "community",
+          label: "Community",
+          items: [["Comments", ChatCircle] as const],
+        },
+      ];
+    }
+    if (!admin) {
+      const canUpload = Boolean(
+        actor.canUpload ??
+          ["TEAM_LEADER", "UPLOADER"].includes(actor.role),
+      );
+      return [
+        {
+          id: "publishing",
+          label: "Publishing",
+          items: [
+            ["Workspace", SquaresFour],
+            ["Upload center", CloudArrowUp],
+            ...(canUpload
+              ? ([
+                  ["Series", Books],
+                  ["Review queue", FileText],
+                ] as const)
+              : []),
+          ] as const,
+        },
+        {
+          id: "community",
+          label: "Community & insight",
+          items: [
+            ...(actor.role === "TEAM_LEADER"
+              ? ([
+                  ["Comments", ChatCircle],
+                  ["Analytics", ChartLineUp],
+                ] as const)
+              : []),
+            ["Rights", ShieldCheck],
+            ["Settings", GearSix],
+          ] as const,
+        },
+      ];
+    }
+    return [
+      {
+        id: "catalogue",
+        label: "Catalogue & publishing",
+        items: [
+          ["Overview", SquaresFour],
+          ["Upload center", CloudArrowUp],
+          ["New Series Queue", FileText],
+          ["Series", Books],
+          ["Chapter access", LockSimple],
+          ["Teams", ShieldCheck],
+        ] as const,
+      },
+      {
+        id: "community",
+        label: "Community",
+        items: [
+          ["Users", UsersThree],
+          ["Review queue", CheckCircle],
+          ["Discussions", ChatCircle],
+        ] as const,
+      },
+      {
+        id: "growth",
+        label: "Insights & editorial",
+        items: [
+          ["Analytics", ChartLineUp],
+          ["Editorial", Star],
+        ] as const,
+      },
+      {
+        id: "commerce",
+        label: "Commerce",
+        items: [
+          ["Commerce", Coins],
+          ["Store Management", Storefront],
+        ] as const,
+      },
+      {
+        id: "system",
+        label: "Site administration",
+        items: [
+          ["Appearance", GearSix],
+          ["Security", Key],
+          ...(actor.role === "OWNER"
+            ? ([["Audit log", FileText]] as const)
+            : []),
+        ] as const,
+      },
+    ];
+  }, [actor.canUpload, actor.role, admin]);
+  const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const defaultSection =
+    !admin && actor.role === "MODERATOR"
+      ? "Comments"
+      : admin
+        ? "Overview"
+        : "Workspace";
+  const sectionFromSlug =
+    items.find(
+      ([label]) =>
+        String(label).toLowerCase().replaceAll(" ", "-") ===
+        initialSectionSlug?.toLowerCase(),
+    )?.[0] ?? defaultSection;
+  const [activeSection, setActiveSection] = useState(String(sectionFromSlug));
+  const [activeSubsection, setActiveSubsection] = useState(
+    initialSubsectionSlug ?? "",
+  );
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(groups.map((group) => group.id)),
+  );
+  const [dirtyState, setDirtyState] = useState({
+    dirty: false,
+    label: "administrative changes",
+  });
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    section: string;
+    subsection?: string;
+  } | null>(null);
+  const sectionBase = admin ? "/onyx/admin/access" : "/dashboard";
+
+  const sectionHref = useCallback((section: string, subsection?: string) => {
+    const base =
+      section === defaultSection && !subsection
+        ? sectionBase
+        : `${sectionBase}/${section.toLowerCase().replaceAll(" ", "-")}`;
+    return subsection ? `${base}/${subsection}` : base;
+  }, [defaultSection, sectionBase]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const stored = window.sessionStorage.getItem(
+          `nyascans-${mode}-nav-groups`,
+        );
+        if (stored) {
+          const parsed = JSON.parse(stored) as unknown;
+          if (Array.isArray(parsed)) {
+            setExpandedGroups(
+              new Set(parsed.filter((value) => typeof value === "string")),
+            );
+          }
+        }
+      } catch {
+        // Session-only navigation preferences are optional.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode]);
+
+  useEffect(() => {
+    function onDirty(event: Event) {
+      const detail = (
+        event as CustomEvent<{ dirty?: boolean; label?: string }>
+      ).detail;
+      setDirtyState({
+        dirty: Boolean(detail?.dirty),
+        label: detail?.label || "administrative changes",
+      });
+    }
+    window.addEventListener("nyascans-admin-dirty", onDirty);
+    return () => window.removeEventListener("nyascans-admin-dirty", onDirty);
+  }, []);
+
+  useEffect(() => {
+    function syncSectionFromLocation() {
+      const pathParts = window.location.pathname
+        .slice(sectionBase.length)
+        .replace(/^\/+/, "")
+        .split("/")
+        .filter(Boolean);
+      const next =
+        items.find(
+          ([label]) =>
+            String(label).toLowerCase().replaceAll(" ", "-") === pathParts[0],
+        )?.[0] ?? defaultSection;
+      const nextSubsection = pathParts[1] ?? "";
+      if (
+        dirtyState.dirty &&
+        (String(next) !== activeSection ||
+          nextSubsection !== activeSubsection) &&
+        !window.confirm(
+          `Discard unsaved ${dirtyState.label} and leave this section?`,
+        )
+      ) {
+        window.history.pushState(
+          {},
+          "",
+          sectionHref(activeSection, activeSubsection),
+        );
+        return;
+      }
+      setActiveSection(String(next));
+      setActiveSubsection(nextSubsection);
+    }
+    window.addEventListener("popstate", syncSectionFromLocation);
+    return () => window.removeEventListener("popstate", syncSectionFromLocation);
+  }, [
+    activeSection,
+    activeSubsection,
+    defaultSection,
+    dirtyState,
+    items,
+    sectionBase,
+    sectionHref,
+  ]);
+
+  function commitSection(section: string, subsection?: string) {
+    setActiveSection(section);
+    setActiveSubsection(subsection ?? "");
+    window.history.pushState({}, "", sectionHref(section, subsection));
+  }
+
+  function openSection(
+    section: string,
+    subsection?: string,
+    confirmedDiscard = false,
+  ) {
+    if (
+      dirtyState.dirty &&
+      !confirmedDiscard &&
+      (section !== activeSection ||
+        (subsection ?? "") !== activeSubsection)
+    ) {
+      setPendingNavigation({ section, subsection });
+      return;
+    }
+    commitSection(section, subsection);
+  }
+
+  function toggleGroup(groupId: string) {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      try {
+        window.sessionStorage.setItem(
+          `nyascans-${mode}-nav-groups`,
+          JSON.stringify([...next]),
+        );
+      } catch {
+        // The grouped navigation remains functional without storage.
+      }
+      return next;
+    });
+  }
+
+  return (
+    <main className="ops-shell">
+      <aside className="ops-sidebar">
+        <Logo />
+        <div className="ops-workspace">
+          <span>{admin ? "OA" : actor.role === "MODERATOR" ? "MO" : "BK"}</span>
+          <div>
+            <strong>
+              {admin
+                ? "NyaScans administration"
+                : actor.role === "MODERATOR"
+                  ? "Moderation workspace"
+                  : "Black Kite"}
+            </strong>
+            <small>{admin ? "Platform operations" : "Publishing workspace"}</small>
+          </div>
+          <CaretDown size={15} />
+        </div>
+        <nav className="ops-grouped-nav">
+          {groups.map((group) => (
+            <section className="ops-nav-group" key={group.id}>
+              <button
+                className="ops-nav-group-toggle"
+                type="button"
+                aria-expanded={expandedGroups.has(group.id)}
+                onClick={() => toggleGroup(group.id)}
+              >
+                <span>{group.label}</span>
+                <CaretDown size={14} />
+              </button>
+              <div
+                className="ops-nav-group-items"
+                hidden={!expandedGroups.has(group.id)}
+              >
+                {group.items.map(([label, Icon]) => (
+                  <a
+                    href={sectionHref(String(label))}
+                    key={String(label)}
+                    aria-current={activeSection === label ? "page" : undefined}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openSection(String(label));
+                    }}
+                  >
+                    <Icon size={18} /> <span>{String(label)}</span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          ))}
+        </nav>
+        <div className="ops-session-actions">
+          <a href="/">
+            <House size={18} />
+            <span>Reader site</span>
+          </a>
+          <a href="/signout-with-chatgpt?return_to=%2F">
+            <SignOut size={18} />
+            <span>Logout</span>
+          </a>
+        </div>
+        <div className="ops-user">
+          <span>{actor.displayName.slice(0, 1)}</span>
+          <div>
+            <strong>{actor.displayName}</strong>
+            <small>{roleLabel(actor.role)}</small>
+          </div>
+          <DotsThree size={20} />
+        </div>
+      </aside>
+      <section className="ops-main">
+        <header className="ops-header">
+          <div>
+            <p>{admin ? "Platform operations" : "Publishing workspace"}</p>
+            <h1>{activeSection}</h1>
+          </div>
+          <div>
+            <a className="button button-secondary" href="/">
+              <House size={17} /> Reader site
+            </a>
+          </div>
+        </header>
+        <label className="ops-mobile-section">
+          <span>Open section</span>
+          <select
+            value={activeSection}
+            onChange={(event) => openSection(event.target.value)}
+          >
+            {groups.map((group) => (
+              <optgroup key={group.id} label={group.label}>
+                {group.items.map(([label]) => (
+                  <option key={String(label)} value={String(label)}>
+                    {String(label)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <CaretDown size={17} />
+        </label>
+        {admin && activeSection === "Discussions" ? (
+          <ReactionLibraryPanel settingsPanel={<DiscussionSettingsPanel />} />
+        ) : admin && activeSection === "Appearance" ? (
+          <AppearanceWorkspace
+            initialTab={
+              ["branding", "reader", "footer", "theme", "preview"].includes(
+                activeSubsection,
+              )
+                ? (activeSubsection as
+                    | "branding"
+                    | "reader"
+                    | "footer"
+                    | "theme"
+                    | "preview")
+                : "branding"
+            }
+            onTabChange={(tab) => openSection("Appearance", tab)}
+          />
+        ) : (
+          <Suspense
+            fallback={
+              <EmptyState
+                title="Loading workspace"
+                body="Preparing the protected publishing tools."
+                compact
+              />
+            }
+          >
+            <OperationsControlPanel
+              admin={admin}
+              section={activeSection}
+              subsection={activeSubsection}
+              actorRole={actor.role}
+              canUpload={Boolean(
+                admin ||
+                  actor.canUpload ||
+                  ["OWNER", "ADMINISTRATOR"].includes(actor.role),
+              )}
+              canRequestSeries={Boolean(
+                admin || actor.canRequestSeries,
+              )}
+              canManageTeam={Boolean(admin || actor.canManageTeam)}
+              onNavigate={openSection}
+              initialUploadMode={initialUploadMode}
+            />
+          </Suspense>
+        )}
+      </section>
+      <ConfirmActionDialog
+        open={Boolean(pendingNavigation)}
+        title="Discard unsaved changes?"
+        description={`Leaving now will discard your unsaved ${dirtyState.label}.`}
+        confirmLabel="Discard and continue"
+        onCancel={() => setPendingNavigation(null)}
+        onConfirm={() => {
+          const next = pendingNavigation;
+          setPendingNavigation(null);
+          if (next) commitSection(next.section, next.subsection);
+        }}
+      />
+    </main>
+  );
+}
+
+function AccessView({
+  actor,
+  signInPath,
+  adminGate,
+}: {
+  actor: Actor | null;
+  signInPath?: string;
+  adminGate?: boolean;
+}) {
+  return (
+    <main className="access-page">
+      <section>
+        <Logo />
+        <span className="access-icon">
+          {adminGate ? <ShieldCheck size={30} /> : <CloudArrowUp size={30} />}
+        </span>
+        <h1>{adminGate ? "Administrator verification" : "Workspace sign-in"}</h1>
+        <p>
+          {actor
+            ? "Your identity is verified, but this account does not have the required role."
+            : "This workspace requires an authenticated account before role permissions are evaluated."}
+        </p>
+        {actor ? (
+          <>
+            <div className="access-identity">
+              <span>{actor.displayName.slice(0, 1)}</span>
+              <div><strong>{actor.displayName}</strong><small>{actor.email}</small></div>
+            </div>
+            <a className="button button-secondary" href="/signout-with-chatgpt?return_to=%2F">
+              <SignOut size={18} />
+              Logout and use another account
+            </a>
+          </>
+        ) : (
+          <a
+            className="button button-primary"
+            href={signInPath ?? authEntryPath("login", "/")}
+          >
+            <SignIn size={18} />
+            Verify identity
+          </a>
+        )}
+        <small>
+          {adminGate
+            ? "An active administrator role and server-side policy checks are required. MFA is configured through the identity provider."
+            : "Role and active team membership are checked before protected publishing actions."}
+        </small>
+        <a href="/">Return to NyaScans</a>
+      </section>
+    </main>
+  );
+}
+
+function StatusView() {
+  const { settings: commercial } = useCommercialSettings();
+  return (
+    <main className="page-main page-wrap status-page">
+      <section className="status-hero">
+        <span><Pulse size={25} /> All systems operational</span>
+        <h1>NyaScans status</h1>
+        <p>Live service health for readers, uploads, search, and commerce.</p>
+      </section>
+      <section className="service-list">
+        {[
+          ["Reader and catalog", "Operational", "99.98%"],
+          ["Account and library", "Operational", "99.96%"],
+          ["Image delivery", "Operational", "99.99%"],
+          ["Search", "Operational", "99.95%"],
+          [
+            `Payments and ${commercial.economy.coinPlural}`,
+            "Test mode",
+            "Configuration required",
+          ],
+          ["Publishing jobs", "Operational", "99.91%"],
+        ].map(([service, status, uptime]) => (
+          <div key={service}>
+            <span className={status === "Test mode" ? "service-test" : "service-ok"}>
+              <CheckCircle size={17} weight="fill" />
+            </span>
+            <strong>{service}</strong>
+            <span>{status}</span>
+            <small>{uptime}</small>
+          </div>
+        ))}
+      </section>
+      <section className="incident-card">
+        <h2>Recent incidents</h2>
+        <EmptyState title="No incidents in the last 30 days" body="Service notices will appear here with a complete timeline." compact />
+      </section>
+    </main>
+  );
+}
+
+function GenericView({
+  view,
+  resourceSlug,
+  showToast,
+}: {
+  view: AppView;
+  resourceSlug?: string;
+  showToast: (text: string) => void;
+}) {
+  const { settings: commercial } = useCommercialSettings();
+  const legalCopy: Record<string, [string, string]> = {
+    terms: ["Terms of Service", "Rules for accounts, content access, publishing, and commerce."],
+    privacy: ["Privacy Policy", "How NyaScans collects, uses, retains, and protects personal data."],
+    cookies: ["Cookie Policy", "Essential, analytics, and marketing choices explained clearly."],
+    "content-policy": ["Content Policy", "Age ratings, prohibited material, warnings, and region controls."],
+    copyright: ["Copyright and Rights", "Reporting, quarantine, counter-notice, and repeat-infringer procedures."],
+    refunds: [
+      "Refund Policy",
+      `Eligibility rules for ${commercial.economy.coinPlural}, memberships, support, and episode access.`,
+    ],
+  };
+  const [title, intro] =
+    view === "legal"
+      ? legalCopy[resourceSlug ?? "terms"] ?? legalCopy.terms
+      : view === "support"
+        ? ["Support", "Find an answer or open a tracked support ticket."]
+        : view === "rankings"
+              ? ["Rankings", "Time-decayed charts built from verified reading and support signals."]
+              : ["Explore NyaScans", "This product area is connected to the shared catalog and account system."];
+
+  return (
+    <main className="page-main page-wrap generic-page">
+      <section className="generic-hero">
+        <h1>{title}</h1>
+        <p>{intro}</p>
+      </section>
+      {view === "rankings" ? (
+        <div className="ranking-list">
+          {demoSeries.map((item, index) => (
+            <a href={`/title/${item.slug}`} key={item.id}>
+              <b>{String(index + 1).padStart(2, "0")}</b>
+              <ResilientCoverImage
+                src={item.cover}
+                alt={`Cover art for ${item.title}`}
+                decorative
+              />
+              <div><strong>{item.title}</strong><small>{item.genres.join(" • ")}</small></div>
+              <span><TrendUp size={17} /> {index < 3 ? `+${3 - index}` : "0"}</span>
+              <em>{item.rating}</em>
+              <ArrowRight size={18} />
+            </a>
+          ))}
+        </div>
+      ) : view === "support" ? (
+        <section className="support-grid">
+          {[
+            ["Account and security", Key],
+            ["Reading and library", Books],
+            [`Purchases and ${commercial.economy.coinPlural}`, Wallet],
+            ["Publishing help", UploadSimple],
+          ].map(([label, Icon]) => (
+            <button type="button" key={String(label)} onClick={() => showToast(`${String(label)} help opened.`)}><Icon size={24} /><strong>{String(label)}</strong><ArrowRight size={17} /></button>
+          ))}
+          <div className="support-ticket">
+            <ChatCircle size={26} />
+            <h2>Still need help?</h2>
+            <p>Open a ticket with attachments and a tracked response history.</p>
+            <button className="button button-primary" type="button" onClick={() => showToast("Support ticket form opened.")}>Open Ticket</button>
+          </div>
+        </section>
+      ) : (
+        <article className="legal-article">
+          <aside>
+            {Object.entries(legalCopy).map(([slug, copy]) => <a href={`/legal/${slug}`} key={slug}>{copy[0]}</a>)}
+          </aside>
+          <div>
+            <div className="legal-notice"><WarningCircle size={19} /><p>This editable template requires review by qualified counsel before a public commercial launch.</p></div>
+            <h2>Purpose and scope</h2>
+            <p>NyaScans is designed to publish and sell only content with a documented lawful basis. Rights, territory, language, term, and renewal state are recorded for each title.</p>
+            <h2>Your choices</h2>
+            <p>Account controls include consent preferences, a personal data export, session revocation, and a deletion or anonymization request.</p>
+            <h2>Contact and appeals</h2>
+            <p>Reports and appeals receive a case identifier, status history, and an auditable resolution. Sensitive evidence remains private.</p>
+            <p className="legal-updated">Template updated July 23, 2026.</p>
+          </div>
+        </article>
+      )}
+    </main>
+  );
+}
+
+function ErrorView({ code = "404" }: { code?: string }) {
+  const copy: Record<string, [string, string]> = {
+    "403": ["This panel is restricted.", "Your account does not have permission to open this area."],
+    "404": ["This page left the archive.", "The link may have changed, or the story is no longer available."],
+    "409": ["That action crossed another update.", "Refresh the current state before trying again."],
+    "429": ["Too many pages turned at once.", "Wait a moment, then continue at a calmer pace."],
+    "500": ["The panel slipped out of place.", "We could not finish this request. Your reading progress is safe."],
+  };
+  const [title, body] = copy[code] ?? copy["404"];
+  return (
+    <main className="error-page">
+      <Logo />
+      <span>{code}</span>
+      <h1>{title}</h1>
+      <p>{body}</p>
+      <div>
+        <a className="button button-primary" href="/">Return home</a>
+        <a className="button button-secondary" href="/support">Get help</a>
+      </div>
+    </main>
+  );
+}
+
+function FooterGroup({
+  title,
+  links,
+}: {
+  title: string;
+  links: string[][];
+}) {
+  const key = `nyascans:footer:${title.toLowerCase()}`;
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        try {
+          setOpen(window.sessionStorage.getItem(key) === "open");
+        } catch {
+          setOpen(false);
+        }
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [key]);
+  const panelId = `${key.replaceAll(":", "-")}-links`;
+  return (
+    <section className="footer-group" data-open={open ? "true" : "false"}>
+      <button
+        className="footer-group-toggle"
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          try {
+            window.sessionStorage.setItem(key, next ? "open" : "closed");
+          } catch {
+            // Session storage availability never blocks footer navigation.
+          }
+        }}
+      >
+        {title}
+        <span aria-hidden="true">{open ? "−" : "+"}</span>
+      </button>
+      <div id={panelId} hidden={!open}>
+        {links.map(([label, href]) => (
+          <a href={href} key={label}>
+            {label}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SiteFooter() {
+  const { settings } = useSiteConfiguration();
+  const groups = [
+    {
+      title: "Browse",
+      links: [
+        ["Latest Updates", "/latest"],
+        ["Popular Series", "/rankings"],
+        ["Completed", "/browse?status=completed"],
+        ["Genres", "/browse#genres"],
+      ],
+    },
+    {
+      title: "Community",
+      links: [
+        ["Teams", "/browse?view=teams"],
+        ["Latest Top Comments", "/#community"],
+        ["Support", "/support"],
+        ["Contact", "mailto:support@nyascans.com"],
+      ],
+    },
+    {
+      title: "Legal",
+      links: [
+        ["Privacy Policy", "/legal/privacy"],
+        ["Terms of Service", "/legal/terms"],
+        ["Content Removal / DMCA", "/legal/copyright"],
+        ["Content Policy", "/legal/content-policy"],
+      ],
+    },
+  ];
+  return (
+    <footer className="site-footer">
+      <div className="page-wrap footer-main">
+        <div className="footer-brand">
+          <Logo />
+          <p>
+            {settings.brand.shortDescription ||
+              "A focused home for manga, manhwa, manhua, webtoons, readers, and the teams that make every release possible."}
+          </p>
+          <div className="footer-socials" aria-label="Social links">
+            {settings.footer.socialLinks
+              .filter((link) => link.enabled && link.url)
+              .map((link) => {
+                return (
+                  <a
+                    href={link.url}
+                    key={link.id}
+                    target={link.openInNewTab ? "_blank" : undefined}
+                    rel={
+                      link.openInNewTab ? "noreferrer noopener" : undefined
+                    }
+                  >
+                    {link.label}
+                  </a>
+                );
+              })}
+          </div>
+        </div>
+        <div className="footer-links">
+          {groups.map((group) => (
+            <FooterGroup
+              key={group.title}
+              title={group.title}
+              links={group.links}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="page-wrap footer-bottom">
+        <span>© 2026 NyaScans. Original platform artwork.</span>
+      </div>
+    </footer>
+  );
+}
+
+export function NyaScansApp({
+  view,
+  actor,
+  authenticatedIdentity = null,
+  accountBlocked = false,
+  authReturnTo = "/account",
+  resourceSlug,
+  chapterSlug,
+  uploadMode,
+  signInPath,
+  adminGate,
+  operationPath,
+}: AppProps) {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("nyascans-theme");
+    const next =
+      stored === "light" || stored === "dark"
+        ? stored
+        : window.matchMedia("(prefers-color-scheme: light)").matches
+          ? "light"
+          : "dark";
+    const frame = window.requestAnimationFrame(() => {
+      setTheme(next);
+      document.documentElement.dataset.theme = next;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (event.key === "/" && !typing) {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+      if (event.key === "Escape") setSearchOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  useEffect(() => {
+    const eventType: AnalyticsEventType | null =
+      view === "home"
+        ? "HOME_VIEW"
+        : view === "latest"
+          ? "LATEST_VIEW"
+          : view === "browse"
+            ? "BROWSE_VIEW"
+            : view === "title"
+              ? "SERIES_VIEW"
+              : null;
+    if (!eventType) return;
+    recordAnalyticsEvent(
+      eventType,
+      eventType === "SERIES_VIEW" ? { seriesSlug: resourceSlug } : {},
+    );
+  }, [resourceSlug, view]);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    window.localStorage.setItem("nyascans-theme", next);
+  }
+
+  if (view === "reader") {
+    return (
+      <>
+        <ReaderView
+          slug={resourceSlug}
+          chapterSlug={chapterSlug}
+          actor={actor}
+          showToast={setToast}
+        />
+        {toast ? <div className="toast" role="status">{toast}</div> : null}
+      </>
+    );
+  }
+
+  if (view === "dashboard" && actor) {
+    return (
+      <div className="site-shell workspace-site-shell">
+        <SiteHeader
+          view={view}
+          actor={actor}
+          theme={theme}
+          onTheme={toggleTheme}
+          onSearch={() => setSearchOpen(true)}
+        />
+        <OperationsView
+          mode="dashboard"
+          actor={actor}
+          initialSectionSlug={operationPath?.[0] ?? resourceSlug}
+          initialSubsectionSlug={operationPath?.[1]}
+          initialUploadMode={uploadMode}
+        />
+        <SiteFooter />
+        <MobileNav view={view} actor={actor} />
+        {searchOpen ? (
+          <SearchOverlay onClose={() => setSearchOpen(false)} />
+        ) : null}
+        {toast ? <div className="toast" role="status">{toast}</div> : null}
+      </div>
+    );
+  }
+  if (view === "admin" && actor) {
+    return (
+      <OperationsView
+        mode="admin"
+        actor={actor}
+        initialSectionSlug={operationPath?.[0] ?? resourceSlug}
+        initialSubsectionSlug={operationPath?.[1]}
+        initialUploadMode={uploadMode}
+      />
+    );
+  }
+  if (view === "access") {
+    return <AccessView actor={actor} signInPath={signInPath} adminGate={adminGate} />;
+  }
+  if (view === "error") return <ErrorView code={resourceSlug} />;
+
+  const mainContent =
+    view === "home" ? (
+      <HomeView actor={actor} showToast={setToast} />
+    ) : view === "latest" ? (
+      <LatestUpdatesView />
+    ) : view === "browse" ? (
+      <BrowseView showToast={setToast} />
+    ) : view === "library" ? (
+      <LibraryView actor={actor} />
+    ) : view === "store" ? (
+      <StoreView
+        actor={actor}
+        category={resourceSlug}
+        showToast={setToast}
+      />
+    ) : view === "title" ? (
+      <TitleView slug={resourceSlug} actor={actor} showToast={setToast} />
+    ) : view === "wallet" ? (
+      <WalletView actor={actor} />
+    ) : view === "orders" ? (
+      <OrdersView actor={actor} />
+    ) : view === "login" || view === "signup" ? (
+      <AuthEntryView
+        intent={view}
+        actor={actor}
+        authenticatedIdentity={authenticatedIdentity}
+        accountBlocked={accountBlocked}
+        returnTo={authReturnTo}
+      />
+    ) : view === "account" ? (
+      <AccountView actor={actor} showToast={setToast} />
+    ) : view === "profile" ? (
+      <PublicProfileView username={resourceSlug ?? ""} />
+    ) : view === "notifications" ? (
+      <NotificationsView actor={actor} />
+    ) : view === "team" ? (
+      <PublicTeamView slug={resourceSlug} />
+    ) : view === "status" ? (
+      <StatusView />
+    ) : (
+      <GenericView view={view} resourceSlug={resourceSlug} showToast={setToast} />
+    );
+
+  return (
+    <div className="site-shell">
+      <SiteHeader
+        view={view}
+        actor={actor}
+        theme={theme}
+        onTheme={toggleTheme}
+        onSearch={() => setSearchOpen(true)}
+      />
+      {mainContent}
+      <SiteFooter />
+      <MobileNav view={view} actor={actor} />
+      {searchOpen ? <SearchOverlay onClose={() => setSearchOpen(false)} /> : null}
+      {toast ? <div className="toast" role="status">{toast}</div> : null}
+    </div>
+  );
+}

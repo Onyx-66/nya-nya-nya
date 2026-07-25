@@ -1,0 +1,1 @@
+CREATE INDEX `chapters_latest_release_idx` ON `chapters` (`state`,`published_at`,`created_at`,`id`);
