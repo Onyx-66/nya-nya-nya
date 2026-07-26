@@ -24,7 +24,7 @@ async function migratedDatabase() {
   return { database, migrationNames };
 }
 
-test("Latest Updates exposes five unique chapter numbers with Free or Paid status", async () => {
+test("Latest Updates exposes every unique chapter number with Free or Paid status", async () => {
   const [api, app] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
@@ -39,7 +39,12 @@ test("Latest Updates exposes five unique chapter numbers with Free or Paid statu
     /PARTITION BY LTRIM\(c\.chapter_number, '0'\)/,
   );
   assert.match(api, /WHERE releaseRank = 1/);
-  assert.match(api, /LIMIT 5/);
+  const latestApi = api.slice(
+    api.indexOf('if (path === "latest-releases")'),
+    api.indexOf('if (path === "search")'),
+  );
+  assert.doesNotMatch(latestApi, /WHERE releaseRank = 1[\s\S]*LIMIT 5/);
+  assert.match(latestApi, /isNewInPeriod/);
   assert.match(api, /datetime\(newest\.created_at\) DESC/);
   assert.match(api, /newest\.id DESC/);
   assert.match(

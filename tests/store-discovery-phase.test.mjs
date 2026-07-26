@@ -208,7 +208,8 @@ test("Latest Updates is deterministically newest-first and refreshes visibly", a
     /ORDER BY datetime\(c\.published_at\) DESC,\s*datetime\(c\.created_at\) DESC,\s*c\.id DESC/,
   );
   assert.match(api, /headers: \{ "cache-control": "no-store" \}/);
-  assert.match(app, /window\.setInterval[\s\S]*12_000/);
+  assert.match(app, /requestInFlight/);
+  assert.match(app, /window\.setInterval[\s\S]*60_000/);
   assert.match(app, /document\.addEventListener\("visibilitychange"/);
   assert.match(app, /window\.addEventListener\("focus"/);
 });

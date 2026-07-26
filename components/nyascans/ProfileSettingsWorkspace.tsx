@@ -8,8 +8,15 @@ import {
   ImageSquare,
   Trash,
   WarningCircle,
+  X,
 } from "@phosphor-icons/react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type OwnProfile = {
   username: string;
@@ -28,6 +35,437 @@ type OwnProfile = {
     showLibrarySummary?: boolean;
   };
 };
+
+type AvatarCropSource = {
+  file: File;
+  url: string;
+  width: number;
+  height: number;
+};
+
+const AVATAR_OUTPUT_SIZE = 512;
+const AVATAR_PREVIEW_MAX_EDGE = 3072;
+const AVATAR_SOURCE_MAX_EDGE = 16_384;
+const AVATAR_SOURCE_MAX_PIXELS = 50_000_000;
+
+type AvatarCropImage = HTMLImageElement | ImageBitmap;
+
+function cropImageDimensions(image: AvatarCropImage) {
+  if (image instanceof HTMLImageElement) {
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  }
+  return { width: image.width, height: image.height };
+}
+
+function drawAvatarCrop(
+  canvas: HTMLCanvasElement,
+  image: AvatarCropImage,
+  zoom: number,
+  horizontal: number,
+  vertical: number,
+) {
+  const context = canvas.getContext("2d");
+  const { width, height } = cropImageDimensions(image);
+  if (!context || !width || !height) return;
+  const cropSize =
+    Math.min(width, height) / Math.max(1, zoom);
+  const horizontalRange = Math.max(0, width - cropSize);
+  const verticalRange = Math.max(0, height - cropSize);
+  const sourceX =
+    horizontalRange / 2 + (horizontal / 100) * (horizontalRange / 2);
+  const sourceY =
+    verticalRange / 2 + (vertical / 100) * (verticalRange / 2);
+  canvas.width = AVATAR_OUTPUT_SIZE;
+  canvas.height = AVATAR_OUTPUT_SIZE;
+  context.clearRect(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    image,
+    Math.max(0, Math.min(horizontalRange, sourceX)),
+    Math.max(0, Math.min(verticalRange, sourceY)),
+    cropSize,
+    cropSize,
+    0,
+    0,
+    AVATAR_OUTPUT_SIZE,
+    AVATAR_OUTPUT_SIZE,
+  );
+}
+
+async function avatarImageDimensions(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const ascii = (offset: number, length: number) =>
+    String.fromCharCode(...bytes.subarray(offset, offset + length));
+
+  if (
+    bytes.length >= 24 &&
+    bytes[0] === 0x89 &&
+    ascii(1, 3) === "PNG"
+  ) {
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+
+  if (bytes.length >= 30 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP") {
+    const format = ascii(12, 4);
+    if (format === "VP8X") {
+      const width =
+        1 + bytes[24]! + (bytes[25]! << 8) + (bytes[26]! << 16);
+      const height =
+        1 + bytes[27]! + (bytes[28]! << 8) + (bytes[29]! << 16);
+      return { width, height };
+    }
+    if (format === "VP8 " && ascii(23, 3) === "\u009d\u0001\u002a") {
+      return {
+        width: view.getUint16(26, true) & 0x3fff,
+        height: view.getUint16(28, true) & 0x3fff,
+      };
+    }
+    if (format === "VP8L" && bytes[20] === 0x2f) {
+      const bits = view.getUint32(21, true);
+      return {
+        width: (bits & 0x3fff) + 1,
+        height: ((bits >>> 14) & 0x3fff) + 1,
+      };
+    }
+  }
+
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = bytes[offset + 1]!;
+      offset += 2;
+      if (marker === 0xd8 || marker === 0xd9) continue;
+      if (offset + 2 > bytes.length) break;
+      const length = view.getUint16(offset);
+      const isStartOfFrame =
+        (marker >= 0xc0 && marker <= 0xc3) ||
+        (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) ||
+        (marker >= 0xcd && marker <= 0xcf);
+      if (isStartOfFrame && offset + 7 <= bytes.length) {
+        return {
+          width: view.getUint16(offset + 5),
+          height: view.getUint16(offset + 3),
+        };
+      }
+      if (length < 2) break;
+      offset += length;
+    }
+  }
+
+  throw new Error("This image could not be inspected. Choose another file.");
+}
+
+async function avatarFileFromCanvas(
+  canvas: HTMLCanvasElement,
+  originalName: string,
+) {
+  const encode = (type: "image/webp" | "image/jpeg") =>
+    new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, type, type === "image/webp" ? 0.9 : 0.92),
+    );
+  const blob =
+    (await encode("image/webp")) ?? (await encode("image/jpeg"));
+  if (!blob) {
+    throw new Error("The cropped avatar could not be prepared.");
+  }
+  const stem = originalName.replace(/\.[^.]+$/, "").slice(0, 80) || "avatar";
+  const extension = blob.type === "image/webp" ? "webp" : "jpg";
+  return new File([blob], `${stem}-cropped.${extension}`, {
+    type: blob.type,
+    lastModified: Date.now(),
+  });
+}
+
+function AvatarCropDialog({
+  source,
+  busy,
+  onCancel,
+  onSave,
+}: {
+  source: AvatarCropSource;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (file: File) => Promise<string | null>;
+}) {
+  const [zoom, setZoom] = useState(1);
+  const [horizontal, setHorizontal] = useState(0);
+  const [vertical, setVertical] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState("");
+  const imageRef = useRef<AvatarCropImage | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let fallbackImage: HTMLImageElement | null = null;
+    let bitmap: ImageBitmap | null = null;
+    async function preparePreview() {
+      try {
+        if ("createImageBitmap" in window) {
+          const scale = Math.min(
+            1,
+            AVATAR_PREVIEW_MAX_EDGE / Math.max(source.width, source.height),
+          );
+          bitmap = await createImageBitmap(source.file, {
+            resizeWidth: Math.max(1, Math.round(source.width * scale)),
+            resizeHeight: Math.max(1, Math.round(source.height * scale)),
+            resizeQuality: "high",
+            imageOrientation: "from-image",
+          });
+          if (cancelled) {
+            bitmap.close();
+            return;
+          }
+          imageRef.current = bitmap;
+          setReady(true);
+          return;
+        }
+        if (source.width * source.height > 16_000_000) {
+          throw new Error(
+            "This browser cannot safely prepare such a large image. Choose a smaller source.",
+          );
+        }
+        fallbackImage = new Image();
+        fallbackImage.decoding = "async";
+        fallbackImage.onload = () => {
+          if (cancelled || !fallbackImage) return;
+          imageRef.current = fallbackImage;
+          setReady(true);
+        };
+        fallbackImage.onerror = () => {
+          if (cancelled) return;
+          setError("This image could not be opened. Choose another file.");
+        };
+        fallbackImage.src = source.url;
+      } catch (previewError) {
+        if (cancelled) return;
+        setError(
+          previewError instanceof Error
+            ? previewError.message
+            : "This image could not be opened. Choose another file.",
+        );
+      }
+    }
+    void preparePreview();
+    return () => {
+      cancelled = true;
+      if (fallbackImage) {
+        fallbackImage.onload = null;
+        fallbackImage.onerror = null;
+        fallbackImage.src = "";
+      }
+      bitmap?.close();
+      imageRef.current = null;
+    };
+  }, [source]);
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const frame = window.requestAnimationFrame(() =>
+      closeButtonRef.current?.focus(),
+    );
+    return () => {
+      window.cancelAnimationFrame(frame);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const image = imageRef.current;
+    if (!canvas || !image || !ready) return;
+    drawAvatarCrop(canvas, image, zoom, horizontal, vertical);
+  }, [horizontal, ready, vertical, zoom]);
+
+  useEffect(() => {
+    function handleDialogKeys(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busy) {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled])',
+        ),
+      );
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      const activeElement = document.activeElement;
+      if (
+        activeElement === dialogRef.current ||
+        !(activeElement instanceof Node) ||
+        !dialogRef.current.contains(activeElement)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleDialogKeys);
+    return () => document.removeEventListener("keydown", handleDialogKeys);
+  }, [busy, onCancel]);
+
+  useEffect(() => {
+    if (busy) dialogRef.current?.focus();
+  }, [busy]);
+
+  async function saveCrop() {
+    const canvas = canvasRef.current;
+    if (!canvas || !ready || busy) return;
+    setError("");
+    try {
+      const cropped = await avatarFileFromCanvas(canvas, source.file.name);
+      const saveError = await onSave(cropped);
+      if (saveError) setError(saveError);
+    } catch (cropError) {
+      setError(
+        cropError instanceof Error
+          ? cropError.message
+          : "The cropped avatar could not be prepared.",
+      );
+    }
+  }
+
+  return (
+    <div
+      className="avatar-crop-overlay"
+      role="presentation"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div
+        className="avatar-crop-dialog"
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="avatar-crop-title"
+        aria-describedby="avatar-crop-description"
+      >
+        <header>
+          <div>
+            <p className="eyebrow">Profile image</p>
+            <h3 id="avatar-crop-title">Crop your avatar</h3>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Close avatar crop"
+          >
+            <X size={19} />
+          </button>
+        </header>
+        <div className="avatar-crop-preview">
+          <canvas
+            ref={canvasRef}
+            width={AVATAR_OUTPUT_SIZE}
+            height={AVATAR_OUTPUT_SIZE}
+            aria-label="Cropped avatar preview"
+            aria-busy={!ready}
+          />
+          {!ready && !error ? <span role="status">Preparing preview…</span> : null}
+        </div>
+        <p id="avatar-crop-description">
+          Position the real image inside the site’s avatar frame. It will be
+          saved as a sharp 512 × 512 image.
+        </p>
+        <div className="avatar-crop-controls">
+          <label>
+            <span>Zoom</span>
+            <input
+              type="range"
+              min="1"
+              max="3"
+              step="0.05"
+              value={zoom}
+              disabled={!ready || busy}
+              onChange={(event) => setZoom(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            <span>Horizontal position</span>
+            <input
+              type="range"
+              min="-100"
+              max="100"
+              step="1"
+              value={horizontal}
+              disabled={!ready || busy}
+              onChange={(event) => setHorizontal(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            <span>Vertical position</span>
+            <input
+              type="range"
+              min="-100"
+              max="100"
+              step="1"
+              value={vertical}
+              disabled={!ready || busy}
+              onChange={(event) => setVertical(Number(event.target.value))}
+            />
+          </label>
+        </div>
+        {error ? (
+          <div className="avatar-crop-error" role="alert">
+            <WarningCircle size={17} /> {error}
+          </div>
+        ) : null}
+        <footer>
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={() => {
+              setZoom(1);
+              setHorizontal(0);
+              setVertical(0);
+            }}
+            disabled={!ready || busy}
+          >
+            Reset
+          </button>
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={() => void saveCrop()}
+            disabled={!ready || busy}
+          >
+            <Camera size={17} />
+            {busy ? "Saving crop…" : "Crop & save"}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
 
 function profileUpdatePayload(profile: OwnProfile) {
   return {
@@ -59,7 +497,16 @@ export function ProfileSettingsWorkspace({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mediaBusy, setMediaBusy] = useState<"avatar" | "banner" | null>(null);
+  const [avatarCropSource, setAvatarCropSource] =
+    useState<AvatarCropSource | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(
+    () => () => {
+      if (avatarCropSource) URL.revokeObjectURL(avatarCropSource.url);
+    },
+    [avatarCropSource],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -149,7 +596,9 @@ export function ProfileSettingsWorkspace({
     slot: "avatar" | "banner",
     file: File | undefined,
   ) {
-    if (!profile || !file || mediaBusy) return;
+    if (!profile || !file || mediaBusy) {
+      return "The profile image upload is not ready yet.";
+    }
     setMediaBusy(slot);
     setError("");
     try {
@@ -225,14 +674,54 @@ export function ProfileSettingsWorkspace({
         });
       });
       onSaved?.(`${slot === "avatar" ? "Avatar" : "Banner"} saved.`);
+      window.dispatchEvent(new CustomEvent("nyascans:profile-changed"));
+      return null;
     } catch (mediaError) {
-      setError(
+      const message =
         mediaError instanceof Error
           ? mediaError.message
-          : "Profile media could not be saved.",
-      );
+          : "Profile media could not be saved.";
+      setError(message);
+      return message;
     } finally {
       setMediaBusy(null);
+    }
+  }
+
+  async function beginAvatarCrop(file: File | undefined) {
+    if (!file || mediaBusy) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPEG, PNG, or WebP avatar.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("The avatar source must be 10 MB or smaller.");
+      return;
+    }
+    try {
+      const dimensions = await avatarImageDimensions(file);
+      if (
+        dimensions.width < 1 ||
+        dimensions.height < 1 ||
+        Math.max(dimensions.width, dimensions.height) > AVATAR_SOURCE_MAX_EDGE ||
+        dimensions.width * dimensions.height > AVATAR_SOURCE_MAX_PIXELS
+      ) {
+        throw new Error(
+          "The avatar source is too large. Use an image up to 50 megapixels and 16,384 px per side.",
+        );
+      }
+      setError("");
+      setAvatarCropSource({
+        file,
+        url: URL.createObjectURL(file),
+        ...dimensions,
+      });
+    } catch (dimensionError) {
+      setError(
+        dimensionError instanceof Error
+          ? dimensionError.message
+          : "This image could not be inspected. Choose another file.",
+      );
     }
   }
 
@@ -270,6 +759,7 @@ export function ProfileSettingsWorkspace({
         });
       });
       onSaved?.(`${slot === "avatar" ? "Avatar" : "Banner"} removed.`);
+      window.dispatchEvent(new CustomEvent("nyascans:profile-changed"));
     } catch (mediaError) {
       setError(
         mediaError instanceof Error
@@ -370,10 +860,10 @@ export function ProfileSettingsWorkspace({
             {profile.avatarUrl ? "Change avatar" : "Upload avatar"}
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/jpeg,image/png,image/webp"
               disabled={mediaBusy !== null}
               onChange={(event) => {
-                void uploadMedia("avatar", event.target.files?.[0]);
+                void beginAvatarCrop(event.target.files?.[0]);
                 event.target.value = "";
               }}
             />
@@ -571,6 +1061,18 @@ export function ProfileSettingsWorkspace({
           {saving ? "Saving…" : "Save profile"}
         </button>
       </footer>
+      {avatarCropSource ? (
+        <AvatarCropDialog
+          source={avatarCropSource}
+          busy={mediaBusy === "avatar"}
+          onCancel={() => setAvatarCropSource(null)}
+          onSave={async (file) => {
+            const saveError = await uploadMedia("avatar", file);
+            if (!saveError) setAvatarCropSource(null);
+            return saveError;
+          }}
+        />
+      ) : null}
     </form>
   );
 }

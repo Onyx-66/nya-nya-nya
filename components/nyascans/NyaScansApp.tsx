@@ -148,6 +148,15 @@ type Actor = {
   canManageTeam?: boolean;
 };
 
+type HeaderNotification = {
+  id: string;
+  title: string;
+  body: string;
+  readAt: string | null;
+  actionUrl: string | null;
+  createdAt: string;
+};
+
 type AppProps = {
   view: AppView;
   actor: Actor | null;
@@ -317,6 +326,25 @@ function roleLabel(role: string) {
   if (role === "TEAM_LEADER") return "Team leader";
   if (role === "UPLOADER") return "Uploader";
   return "Reader";
+}
+
+function safeHeaderActionUrl(value: string | null) {
+  const candidate = value?.trim() ?? "";
+  if (
+    !candidate.startsWith("/") ||
+    candidate.startsWith("//") ||
+    candidate.includes("\\")
+  ) {
+    return "/notifications";
+  }
+  try {
+    const base = "https://nyascans.local";
+    const parsed = new URL(candidate, base);
+    if (parsed.origin !== base) return "/notifications";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/notifications";
+  }
 }
 
 function activeNav(view: AppView, label: string) {
@@ -654,9 +682,20 @@ function SiteHeader({
   const elevated = elevatedDestination(actor);
   const canUpload = Boolean(actor?.canUseUploadCenter);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationRecords, setNotificationRecords] = useState<
+    HeaderNotification[]
+  >([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(
+    Boolean(actor),
+  );
+  const [notificationsError, setNotificationsError] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -684,30 +723,96 @@ function SiteHeader({
   }, [menuOpen]);
 
   useEffect(() => {
+    if (!notificationsOpen) return;
+    function closeOutside(event: PointerEvent) {
+      if (
+        notificationRef.current &&
+        event.target instanceof Node &&
+        !notificationRef.current.contains(event.target)
+      ) {
+        setNotificationsOpen(false);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setNotificationsOpen(false);
+        notificationButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [notificationsOpen]);
+
+  useEffect(() => {
     if (!actor) return;
     const controller = new AbortController();
-    async function loadUnread() {
+    async function loadNotifications() {
+      setNotificationsError("");
       try {
         const response = await fetch(
-          "/api/v1/notifications?state=UNREAD&page=1&pageSize=1",
+          "/api/v1/notifications?state=ALL&page=1&pageSize=5",
           { cache: "no-store", signal: controller.signal },
         );
         const payload = (await response.json()) as {
+          data?: HeaderNotification[];
           summary?: { unreadCount?: number };
+          error?: { message?: string };
         };
-        if (response.ok) {
-          setUnreadCount(Number(payload.summary?.unreadCount ?? 0));
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "Notifications could not be loaded.",
+          );
         }
-      } catch {
-        // The bell remains available even while its unread count recovers.
+        setNotificationRecords(payload.data ?? []);
+        setUnreadCount(Number(payload.summary?.unreadCount ?? 0));
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setNotificationsError(
+            error instanceof Error
+              ? error.message
+              : "Notifications could not be loaded.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setNotificationsLoading(false);
       }
     }
-    void loadUnread();
-    const refresh = () => void loadUnread();
-    window.addEventListener("nyascans:notifications-changed", refresh);
+    async function loadProfileAvatar() {
+      try {
+        const response = await fetch("/api/v1/profiles", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as {
+          data?: { avatarUrl?: string | null };
+        };
+        if (response.ok) {
+          setProfileAvatarUrl(payload.data?.avatarUrl ?? null);
+        }
+      } catch {
+        // The account initial remains available while profile media recovers.
+      }
+    }
+    void loadNotifications();
+    void loadProfileAvatar();
+    const refreshNotifications = () => void loadNotifications();
+    const refreshProfile = () => void loadProfileAvatar();
+    window.addEventListener(
+      "nyascans:notifications-changed",
+      refreshNotifications,
+    );
+    window.addEventListener("nyascans:profile-changed", refreshProfile);
     return () => {
       controller.abort();
-      window.removeEventListener("nyascans:notifications-changed", refresh);
+      window.removeEventListener(
+        "nyascans:notifications-changed",
+        refreshNotifications,
+      );
+      window.removeEventListener("nyascans:profile-changed", refreshProfile);
     };
   }, [actor]);
 
@@ -745,6 +850,39 @@ function SiteHeader({
     }
   }
 
+  function markNotificationRead(
+    notificationId: string,
+    destination: string,
+  ) {
+    setNotificationsOpen(false);
+    setNotificationRecords((current) =>
+      current.map((record) =>
+        record.id === notificationId
+          ? { ...record, readAt: new Date().toISOString() }
+          : record,
+      ),
+    );
+    setUnreadCount((current) => Math.max(0, current - 1));
+    void fetch("/api/v1/notifications", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "READ", id: notificationId }),
+        keepalive: true,
+      })
+      .then((response) => {
+        if (!response.ok) return;
+        window.dispatchEvent(
+          new CustomEvent("nyascans:notifications-changed", {
+            detail: { action: "READ", id: notificationId },
+          }),
+        );
+      })
+      .catch(() => {
+        // The destination remains available if the read mutation cannot finish.
+      });
+    window.location.assign(destination);
+  }
+
   return (
     <header className="site-header">
       <div className="site-header-inner">
@@ -773,24 +911,160 @@ function SiteHeader({
           </button>
           {actor ? (
             <>
-              <a
-                className="header-notifications"
-                href="/notifications"
-                aria-label={
-                  unreadCount
-                    ? `Notifications, ${unreadCount} unread`
-                    : "Notifications"
-                }
-                aria-current={view === "notifications" ? "page" : undefined}
-                title="Notifications"
-              >
-                <Bell size={20} weight={view === "notifications" ? "fill" : "regular"} />
-                {unreadCount ? (
-                  <span aria-hidden="true">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
+              <div className="header-notification-wrap" ref={notificationRef}>
+                <button
+                  className="header-notifications"
+                  ref={notificationButtonRef}
+                  type="button"
+                  aria-label={
+                    unreadCount
+                      ? `Notifications, ${unreadCount} unread`
+                      : "Notifications"
+                  }
+                  aria-expanded={notificationsOpen}
+                  aria-controls="header-notifications-panel"
+                  title="Notifications"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setNotificationsOpen((value) => !value);
+                  }}
+                >
+                  <Bell
+                    size={20}
+                    weight={
+                      notificationsOpen || view === "notifications"
+                        ? "fill"
+                        : "regular"
+                    }
+                  />
+                  {unreadCount ? (
+                    <span aria-hidden="true">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  ) : null}
+                </button>
+                {notificationsOpen ? (
+                  <div
+                    className="header-notification-menu"
+                    id="header-notifications-panel"
+                    role="region"
+                    aria-label="Recent notifications"
+                    onBlur={(event) => {
+                      if (
+                        event.relatedTarget instanceof Node &&
+                        event.currentTarget.parentElement?.contains(
+                          event.relatedTarget,
+                        )
+                      ) {
+                        return;
+                      }
+                      setNotificationsOpen(false);
+                    }}
+                  >
+                    <header>
+                      <div>
+                        <strong>Notifications</strong>
+                        <small>
+                          {unreadCount
+                            ? `${unreadCount} unread`
+                            : "You’re all caught up"}
+                        </small>
+                      </div>
+                      <Bell size={18} weight="fill" aria-hidden="true" />
+                    </header>
+                    <ul className="header-notification-list">
+                      {notificationsLoading ? (
+                        <li>
+                          <span
+                            className="header-notification-state"
+                            role="status"
+                          >
+                            <SpinnerGap size={18} className="spin" />
+                            Loading notifications…
+                          </span>
+                        </li>
+                      ) : notificationsError ? (
+                        <li>
+                          <span
+                            className="header-notification-state"
+                            role="alert"
+                          >
+                            <WarningCircle size={18} />
+                            {notificationsError}
+                          </span>
+                        </li>
+                      ) : notificationRecords.length ? (
+                        notificationRecords.map((notification) => (
+                          <li key={notification.id}>
+                            <a
+                              className={
+                                notification.readAt
+                                  ? "header-notification-item"
+                                  : "header-notification-item is-unread"
+                              }
+                              href={safeHeaderActionUrl(notification.actionUrl)}
+                              onClick={(event) => {
+                                if (notification.readAt) {
+                                  setNotificationsOpen(false);
+                                  return;
+                                }
+                                if (
+                                  event.metaKey ||
+                                  event.ctrlKey ||
+                                  event.shiftKey ||
+                                  event.altKey
+                                ) {
+                                  return;
+                                }
+                                event.preventDefault();
+                                markNotificationRead(
+                                  notification.id,
+                                  safeHeaderActionUrl(notification.actionUrl),
+                                );
+                              }}
+                            >
+                              <span aria-hidden="true">
+                                <Bell
+                                  size={15}
+                                  weight={
+                                    notification.readAt ? "regular" : "fill"
+                                  }
+                                />
+                              </span>
+                              <span>
+                                <strong>
+                                  {!notification.readAt ? (
+                                    <span className="sr-only">Unread: </span>
+                                  ) : null}
+                                  {notification.title}
+                                </strong>
+                                <small>{notification.body}</small>
+                                <time dateTime={notification.createdAt}>
+                                  {releaseTime(notification.createdAt)} ago
+                                </time>
+                              </span>
+                            </a>
+                          </li>
+                        ))
+                      ) : (
+                        <li>
+                          <span className="header-notification-state">
+                            <Bell size={18} />
+                            No notifications yet.
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                    <a
+                      className="header-notification-all"
+                      href="/notifications"
+                      onClick={() => setNotificationsOpen(false)}
+                    >
+                      View all notifications <ArrowRight size={16} />
+                    </a>
+                  </div>
                 ) : null}
-              </a>
+              </div>
               <div
                 className="header-overflow"
                 ref={menuRef}
@@ -803,7 +1077,10 @@ function SiteHeader({
                   aria-haspopup="menu"
                   aria-expanded={menuOpen}
                   aria-label="Open profile and account menu"
-                  onClick={() => setMenuOpen((value) => !value)}
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    setMenuOpen((value) => !value);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "ArrowDown") {
                       event.preventDefault();
@@ -817,7 +1094,15 @@ function SiteHeader({
                   }}
                 >
                   <span className="header-avatar" aria-hidden="true">
-                    {actor.displayName.slice(0, 1).toUpperCase()}
+                    {profileAvatarUrl ? (
+                      <img
+                        src={profileAvatarUrl}
+                        alt=""
+                        onError={() => setProfileAvatarUrl(null)}
+                      />
+                    ) : (
+                      actor.displayName.slice(0, 1).toUpperCase()
+                    )}
                   </span>
                   <span className="header-profile-copy">
                     <small>Welcome</small>
@@ -829,7 +1114,15 @@ function SiteHeader({
                   <div className="header-overflow-menu" role="menu">
                     <div className="header-menu-profile">
                       <span aria-hidden="true">
-                        {actor.displayName.slice(0, 1).toUpperCase()}
+                        {profileAvatarUrl ? (
+                          <img
+                            src={profileAvatarUrl}
+                            alt=""
+                            onError={() => setProfileAvatarUrl(null)}
+                          />
+                        ) : (
+                          actor.displayName.slice(0, 1).toUpperCase()
+                        )}
                       </span>
                       <div>
                         <strong>{actor.displayName}</strong>
@@ -1524,6 +1817,7 @@ type LatestRelease = {
     publishedAt: string;
     teamName: string | null;
     isFresh?: boolean;
+    isNewInPeriod?: boolean;
   }>;
 };
 
@@ -1550,6 +1844,20 @@ function FreshChapterMark({ fresh }: { fresh?: boolean }) {
   );
 }
 
+function PeriodChapterMark({ active }: { active?: boolean }) {
+  if (!active) return null;
+  return (
+    <>
+      <span
+        className="period-chapter-mark"
+        aria-hidden="true"
+        title="New in the selected period"
+      />
+      <span className="sr-only">New in the selected period: </span>
+    </>
+  );
+}
+
 function LatestUpdatesGrid({
   heading = true,
   pagination = false,
@@ -1569,14 +1877,19 @@ function LatestUpdatesGrid({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [homePeriod, setHomePeriod] = useState<"today" | "week">("today");
+  const [homePeriod, setHomePeriod] = useState<
+    "today" | "week" | "month"
+  >("week");
   const effectivePeriod =
     heading && !pagination ? homePeriod : period;
 
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
+    let requestInFlight = false;
     async function load(showLoading: boolean) {
+      if (requestInFlight) return;
+      requestInFlight = true;
       if (showLoading) setLoading(true);
       setError("");
       try {
@@ -1609,13 +1922,14 @@ function LatestUpdatesGrid({
           );
         }
       } finally {
+        requestInFlight = false;
         if (active && !controller.signal.aborted && showLoading) setLoading(false);
       }
     }
     void load(true);
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void load(false);
-    }, 12_000);
+    }, 60_000);
     function refreshVisible() {
       if (document.visibilityState === "visible") void load(false);
     }
@@ -1666,6 +1980,16 @@ function LatestUpdatesGrid({
                 }}
               >
                 This Week
+              </button>
+              <button
+                type="button"
+                aria-pressed={homePeriod === "month"}
+                onClick={() => {
+                  setPage(1);
+                  setHomePeriod("month");
+                }}
+              >
+                This Month
               </button>
             </div>
             <a href="/latest">
@@ -1739,7 +2063,7 @@ function LatestUpdatesGrid({
                         <a
                           href={`/title/${update.slug}/chapter/${chapter.slug}`}
                         >
-                          <FreshChapterMark fresh={chapter.isFresh} />
+                          <PeriodChapterMark active={chapter.isNewInPeriod} />
                           Chapter {normalizeChapterNumber(chapter.chapterNumber)}
                         </a>
                         <time dateTime={chapter.publishedAt}>
@@ -1802,7 +2126,7 @@ function LatestUpdatesGrid({
 function LatestUpdatesView() {
   const [period, setPeriod] = useState<
     "today" | "week" | "month" | "all"
-  >("all");
+  >("week");
   return (
     <main className="page-main latest-page">
       <header className="latest-hero page-wrap">
@@ -1894,22 +2218,6 @@ function TrendingShowcase({
           <h2>Trending</h2>
         </div>
         <div className="trending-actions">
-          <div aria-label="Move Trending slider">
-            <button
-              type="button"
-              onClick={() => moveRail(-1)}
-              aria-label="Previous Trending titles"
-            >
-              <CaretLeft size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={() => moveRail(1)}
-              aria-label="Next Trending titles"
-            >
-              <CaretRight size={18} />
-            </button>
-          </div>
           <a href="/rankings">
             Full ranking <ArrowRight size={17} />
           </a>
@@ -8654,6 +8962,7 @@ export function NyaScansApp({
     return (
       <div className="site-shell workspace-site-shell">
         <SiteHeader
+          key={actor?.email ?? "guest"}
           view={view}
           actor={actor}
           theme={theme}
@@ -8738,6 +9047,7 @@ export function NyaScansApp({
   return (
     <div className="site-shell">
       <SiteHeader
+        key={actor?.email ?? "guest"}
         view={view}
         actor={actor}
         theme={theme}

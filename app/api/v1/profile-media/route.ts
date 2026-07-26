@@ -178,6 +178,16 @@ export async function PUT(request: Request) {
       );
     }
     const verified = await validateImageFile(file, mediaRules[slot]);
+    if (
+      slot === "avatar" &&
+      verified.dimensions.width !== verified.dimensions.height
+    ) {
+      throw new ApiError(
+        422,
+        "AVATAR_CROP_REQUIRED",
+        "Crop the avatar to a square before saving it.",
+      );
+    }
     const digest = await sha256Hex(verified.bytes);
     const objectKey =
       `private/profiles/${actor.id}/${slot}/` +

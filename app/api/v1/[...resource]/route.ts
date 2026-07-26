@@ -2052,11 +2052,25 @@ export async function GET(request: Request, context: RouteContext) {
         .enum(["today", "week", "month", "all"])
         .catch("all")
         .parse(url.searchParams.get("period"));
-      const periodPredicate = {
+      const seriesPeriodPredicate = {
+        today: "AND date(newest.published_at) = date('now')",
+        week:
+          "AND datetime(newest.published_at) >= datetime('now', '-7 days')",
+        month:
+          "AND datetime(newest.published_at) >= datetime('now', '-1 month')",
+        all: "",
+      }[period];
+      const countPeriodPredicate = {
         today: "AND date(c.published_at) = date('now')",
         week: "AND datetime(c.published_at) >= datetime('now', '-7 days')",
         month: "AND datetime(c.published_at) >= datetime('now', '-1 month')",
         all: "",
+      }[period];
+      const newInPeriodExpression = {
+        today: "date(c.published_at) = date('now')",
+        week: "datetime(c.published_at) >= datetime('now', '-7 days')",
+        month: "datetime(c.published_at) >= datetime('now', '-1 month')",
+        all: "0",
       }[period];
       const [seriesRows, totalRow] = await Promise.all([
         env.DB.prepare(
@@ -2077,13 +2091,13 @@ export async function GET(request: Request, context: RouteContext) {
                     AND newest.state = 'PUBLISHED'
                     AND newest.visibility = 'PUBLIC'
                     AND datetime(newest.published_at) <= datetime('now')
+                    ${seriesPeriodPredicate}
                   ORDER BY datetime(newest.published_at) DESC,
                            datetime(newest.created_at) DESC,
                            newest.id DESC
                   LIMIT 1
                )
             WHERE ${publicSeriesPredicate("s")}
-              ${periodPredicate}
             ORDER BY datetime(c.published_at) DESC,
                      datetime(c.created_at) DESC,
                      c.id DESC,
@@ -2109,7 +2123,7 @@ export async function GET(request: Request, context: RouteContext) {
               AND c.state = 'PUBLISHED'
               AND c.visibility = 'PUBLIC'
               AND datetime(c.published_at) <= datetime('now')
-              ${periodPredicate}`,
+              ${countPeriodPredicate}`,
         ).first<{ count: number }>(),
       ]);
       const chapterResults = seriesRows.results.length
@@ -2128,6 +2142,8 @@ export async function GET(request: Request, context: RouteContext) {
                           c.published_at AS publishedAt,
                           datetime(c.published_at) >
                             datetime('now', '-36 hours') AS isFresh,
+                          CASE WHEN ${newInPeriodExpression}
+                               THEN 1 ELSE 0 END AS isNewInPeriod,
                           c.created_at AS createdAt,
                           c.id,
                           t.name AS teamName,
@@ -2143,7 +2159,6 @@ export async function GET(request: Request, context: RouteContext) {
                       AND c.state = 'PUBLISHED'
                       AND c.visibility = 'PUBLIC'
                       AND datetime(c.published_at) <= datetime('now')
-                      ${periodPredicate}
                  )
                  SELECT slug,
                         chapterNumber,
@@ -2155,13 +2170,15 @@ export async function GET(request: Request, context: RouteContext) {
                         priceOnyx,
                         publishedAt,
                         isFresh,
+                        isNewInPeriod,
                         teamName
                    FROM ranked
                   WHERE releaseRank = 1
-                  ORDER BY datetime(publishedAt) DESC,
+                  ORDER BY CAST(chapterNumber AS REAL) DESC,
+                           datetime(publishedAt) DESC,
                            datetime(createdAt) DESC,
                            id DESC
-                  LIMIT 5`,
+                  `,
               ).bind(seriesRecord.id),
             ),
           )
@@ -2188,6 +2205,7 @@ export async function GET(request: Request, context: RouteContext) {
                     String(chapter.chapterNumber),
                   ),
                   isFresh: Boolean(chapter.isFresh),
+                  isNewInPeriod: Boolean(chapter.isNewInPeriod),
                 }),
               ),
             };
