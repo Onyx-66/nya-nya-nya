@@ -599,7 +599,7 @@ export async function POST(request: Request) {
         `SELECT c.id, c.state
            FROM chapters c
           WHERE c.series_id = ?
-            AND c.chapter_number = ?
+            AND LTRIM(c.chapter_number, '0') = LTRIM(?, '0')
             AND c.language = ?
             AND COALESCE(c.team_id, '') = COALESCE(?, '')
             AND c.version = ?
@@ -777,7 +777,7 @@ export async function PATCH(request: Request) {
         `SELECT id
            FROM chapters
           WHERE series_id = ?
-            AND chapter_number = ?
+            AND LTRIM(chapter_number, '0') = LTRIM(?, '0')
             AND language = ?
             AND COALESCE(team_id, '') = COALESCE(?, '')
             AND version = ?
@@ -847,7 +847,8 @@ export async function PATCH(request: Request) {
                   FROM upload_job_items duplicate_item
                  WHERE duplicate_item.job_id = upload_job_items.job_id
                    AND duplicate_item.id <> upload_job_items.id
-                   AND duplicate_item.chapter_number = ?
+                   AND LTRIM(duplicate_item.chapter_number, '0') =
+                       LTRIM(?, '0')
                    AND duplicate_item.language = ?
                    AND duplicate_item.version = ?
               )
@@ -855,7 +856,8 @@ export async function PATCH(request: Request) {
                 SELECT 1
                   FROM chapters duplicate_chapter
                  WHERE duplicate_chapter.series_id = upload_job_items.series_id
-                   AND duplicate_chapter.chapter_number = ?
+                   AND LTRIM(duplicate_chapter.chapter_number, '0') =
+                       LTRIM(?, '0')
                    AND duplicate_chapter.language = ?
                    AND COALESCE(duplicate_chapter.team_id, '') =
                        COALESCE(upload_job_items.team_id, '')
@@ -1212,7 +1214,7 @@ export async function PATCH(request: Request) {
         `SELECT id
            FROM chapters
           WHERE series_id = ?
-            AND chapter_number = ?
+            AND LTRIM(chapter_number, '0') = LTRIM(?, '0')
             AND language = ?
             AND COALESCE(team_id, '') = COALESCE(?, '')
             AND version = ?
@@ -1304,7 +1306,8 @@ export async function PATCH(request: Request) {
                 SELECT 1
                   FROM chapters duplicate
                  WHERE duplicate.series_id = uji.series_id
-                   AND duplicate.chapter_number = uji.chapter_number
+                   AND LTRIM(duplicate.chapter_number, '0') =
+                       LTRIM(uji.chapter_number, '0')
                    AND duplicate.language = uji.language
                    AND COALESCE(duplicate.team_id, '') =
                        COALESCE(uji.team_id, '')

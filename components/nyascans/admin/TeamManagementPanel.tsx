@@ -78,16 +78,6 @@ type TeamDraft = Pick<
   series: TeamRecord["series"];
 };
 
-const tabs = [
-  ["identity", "Identity"],
-  ["media", "Logo & banner"],
-  ["members", "Members & roles"],
-  ["series", "Series relationships"],
-  ["staff", "Staff identity"],
-  ["status", "Visibility"],
-  ["activity", "Activity"],
-] as const;
-
 const emptyDraft: TeamDraft = {
   id: "",
   revision: 1,
@@ -143,7 +133,6 @@ export function TeamManagementPanel({
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<TeamDraft>(emptyDraft);
   const [saved, setSaved] = useState<TeamDraft>(emptyDraft);
-  const [tab, setTab] = useState<(typeof tabs)[number][0]>("identity");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -216,24 +205,6 @@ export function TeamManagementPanel({
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, query]);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const stored = window.sessionStorage.getItem(
-        "nyascans-admin-team-tab",
-      );
-      if (stored && tabs.some(([key]) => key === stored)) {
-        setTab(stored as (typeof tabs)[number][0]);
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  function changeTab(value: string) {
-    const next = value as (typeof tabs)[number][0];
-    setTab(next);
-    window.sessionStorage.setItem("nyascans-admin-team-tab", next);
-  }
 
   function select(team: TeamRecord) {
     if (dirty && !window.confirm("Discard unsaved team changes?")) return;
@@ -442,9 +413,6 @@ export function TeamManagementPanel({
       kicker="People, permissions & identity"
       title="Team management"
       description="Manage public identity, active affiliations, series permissions, and safe discussion effects without changing upload authorization."
-      tabs={tabs.map(([key, label]) => ({ key, label }))}
-      activeTab={tab}
-      onTabChange={changeTab}
       state={
         loading
           ? { kind: "loading", message: "Loading teams and affiliations…" }
@@ -563,22 +531,22 @@ export function TeamManagementPanel({
           </footer>
         </aside>
 
-        <div
-          className="admin-detail-form"
-          hidden={tab !== "members"}
-          aria-hidden={tab !== "members"}
-        >
-          {membersPanel ?? (
-            <div className="admin-state-card">
-              <UsersThree size={24} />
-              <h3>No membership editor available</h3>
-              <p>Membership authorization remains unchanged.</p>
+        <div className="admin-team-editor-stack">
+          <details className="admin-editor-box" open>
+            <summary>Members &amp; roles</summary>
+            <div className="admin-detail-form">
+              {membersPanel ?? (
+                <div className="admin-state-card">
+                  <UsersThree size={24} />
+                  <h3>No membership editor available</h3>
+                  <p>Membership authorization remains unchanged.</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        {tab !== "members" ? (
+          </details>
           <form className="admin-detail-form" onSubmit={saveTeam}>
-          {tab === "identity" ? (
+          <details className="admin-editor-box" open>
+            <summary>Identity</summary>
             <div className="admin-form-section">
               <div className="admin-section-heading">
                 <span>01</span>
@@ -641,9 +609,10 @@ export function TeamManagementPanel({
                 />
               </label>
             </div>
-          ) : null}
+          </details>
 
-          {tab === "media" ? (
+          <details className="admin-editor-box" open>
+            <summary>Logo &amp; banner</summary>
             <div className="admin-media-grid">
               <AdminMediaField
                 label="Team logo"
@@ -670,9 +639,10 @@ export function TeamManagementPanel({
                 onRemove={() => removeMediaSlot("banner")}
               />
             </div>
-          ) : null}
+          </details>
 
-          {tab === "series" ? (
+          <details className="admin-editor-box">
+            <summary>Series relationships</summary>
             <div className="admin-form-section">
               <div className="admin-section-heading">
                 <ShieldCheck size={22} />
@@ -701,9 +671,10 @@ export function TeamManagementPanel({
                 )}
               </div>
             </div>
-          ) : null}
+          </details>
 
-          {tab === "staff" ? (
+          <details className="admin-editor-box">
+            <summary>Staff identity</summary>
             <div className="admin-form-section">
               <AdminMediaField
                 label="Staff badge"
@@ -812,9 +783,10 @@ export function TeamManagementPanel({
                 Enable the comment effect independently from the badge
               </label>
             </div>
-          ) : null}
+          </details>
 
-          {tab === "status" ? (
+          <details className="admin-editor-box">
+            <summary>Visibility</summary>
             <div className="admin-form-section">
               <label>
                 Verification status
@@ -846,16 +818,17 @@ export function TeamManagementPanel({
                 Archive this team and remove it from new assignments
               </label>
             </div>
-          ) : null}
+          </details>
 
-          {tab === "activity" ? (
+          <details className="admin-editor-box">
+            <summary>Activity</summary>
             <div className="admin-summary-grid">
               <article><strong>{draft.members.length}</strong><span>Members</span></article>
               <article><strong>{draft.series.length}</strong><span>Series</span></article>
               <article><strong>{draft.revision}</strong><span>Record version</span></article>
               <p>Detailed immutable changes are available in the owner-only Audit Log.</p>
             </div>
-          ) : null}
+          </details>
 
           <footer className="admin-sticky-actions">
             <small>
@@ -889,7 +862,7 @@ export function TeamManagementPanel({
             </button>
           </footer>
           </form>
-        ) : null}
+        </div>
       </div>
     </AdminPageScaffold>
   );

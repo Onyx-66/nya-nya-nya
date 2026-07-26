@@ -21,8 +21,9 @@ const mangaDexIdSchema = z
   .uuid("Enter a valid MangaDex title URL or UUID.");
 
 type MangaDexRelationship = {
+  id?: string;
   type?: string;
-  attributes?: { name?: string };
+  attributes?: { name?: string; fileName?: string };
 };
 
 type MangaDexPayload = {
@@ -38,6 +39,36 @@ type MangaDexPayload = {
       tags?: Array<{ attributes?: { name?: Record<string, string> } }>;
     };
     relationships?: MangaDexRelationship[];
+  };
+};
+
+type MangaUpdatesPayload = {
+  series_id?: number | string;
+  title?: string;
+  url?: string;
+  description?: string;
+  associated?: Array<{ title?: string } | string>;
+  authors?: Array<{
+    name?: string;
+    type?: string;
+    author_name?: string;
+  }>;
+  publishers?: Array<{
+    publisher_name?: string;
+    name?: string;
+    type?: string;
+  }>;
+  genres?: Array<{ genre?: string; name?: string } | string>;
+  type?: string;
+  year?: number | string | null;
+  status?: string;
+  image?: {
+    url?: {
+      original?: string;
+      thumb?: string;
+    };
+    original?: string;
+    thumb?: string;
   };
 };
 
@@ -71,6 +102,53 @@ export function normalizeMangaDexInput(value: string) {
   const titleIndex = parts.indexOf("title");
   const id = mangaDexIdSchema.parse(parts[titleIndex + 1]?.toLowerCase());
   return { id, url: `https://mangadex.org/title/${id}` };
+}
+
+export function normalizeMangaUpdatesInput(value: string) {
+  const trimmed = value.trim();
+  if (/^\d{1,12}$/.test(trimmed)) {
+    return {
+      id: trimmed,
+      url: `https://www.mangaupdates.com/series/${trimmed}`,
+    };
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new ApiError(
+      422,
+      "MANGAUPDATES_INPUT_INVALID",
+      "Enter a MangaUpdates series URL or numeric ID.",
+    );
+  }
+  if (
+    url.protocol !== "https:" ||
+    !["mangaupdates.com", "www.mangaupdates.com"].includes(url.hostname)
+  ) {
+    throw new ApiError(
+      422,
+      "MANGAUPDATES_INPUT_INVALID",
+      "Use an official MangaUpdates series URL.",
+    );
+  }
+  const token =
+    url.searchParams.get("id") ??
+    url.pathname.split("/").filter(Boolean).at(-1) ??
+    "";
+  let id = token;
+  if (!/^\d{1,12}$/.test(id) && /^[a-z0-9]+$/i.test(id)) {
+    const numeric = Number.parseInt(id, 36);
+    id = Number.isSafeInteger(numeric) ? String(numeric) : "";
+  }
+  if (!/^\d{1,12}$/.test(id)) {
+    throw new ApiError(
+      422,
+      "MANGAUPDATES_INPUT_INVALID",
+      "Enter a MangaUpdates series URL or numeric ID.",
+    );
+  }
+  return { id, url: `https://www.mangaupdates.com/series/${token || id}` };
 }
 
 function firstText(record: Record<string, string> | undefined) {
@@ -146,13 +224,18 @@ function mapMangaDex(
     .map((name) => ({ name }));
   const statusMap: Record<
     string,
-    "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING"
+    "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING"
   > = {
     ongoing: "ONGOING",
     completed: "COMPLETED",
     hiatus: "HIATUS",
-    cancelled: "COMPLETED",
+    cancelled: "PAUSED",
   };
+  const cover = relationships.find(
+    (relationship) =>
+      relationship.type === "cover_art" &&
+      relationship.attributes?.fileName,
+  );
   return {
     source: "MANGADEX",
     externalId: id,
@@ -172,9 +255,149 @@ function mapMangaDex(
       status: statusMap[attributes.status ?? ""],
       publicationYear: attributes.year ?? null,
       genres,
-      coverReferenceUrl: null,
+      coverReferenceUrl:
+        cover?.attributes?.fileName
+          ? `https://uploads.mangadex.org/covers/${data.id}/${cover.attributes.fileName}.512.jpg`
+          : null,
     },
   };
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function mapMangaUpdates(
+  payload: MangaUpdatesPayload,
+  id: string,
+  sourceUrl: string,
+  responseHash: string,
+  cached: boolean,
+): ImportedSeriesMetadata {
+  const title = normalizeString(payload.title);
+  if (!title) {
+    throw new ApiError(
+      502,
+      "MANGAUPDATES_RESPONSE_INVALID",
+      "MangaUpdates returned an incomplete metadata response.",
+    );
+  }
+  const typeText = normalizeString(payload.type)?.toLowerCase() ?? "";
+  const type =
+    typeText.includes("manhwa")
+      ? ("MANHWA" as const)
+      : typeText.includes("manhua")
+        ? ("MANHUA" as const)
+        : ("MANGA" as const);
+  const languageCode =
+    type === "MANHWA" ? "ko" : type === "MANHUA" ? "zh" : "ja";
+  const statusText = normalizeString(payload.status)?.toLowerCase() ?? "";
+  const status =
+    statusText.includes("complete")
+      ? ("COMPLETED" as const)
+      : statusText.includes("hiatus")
+        ? ("HIATUS" as const)
+        : statusText.includes("discontinued") ||
+            statusText.includes("cancel")
+          ? ("PAUSED" as const)
+          : statusText.includes("not yet") || statusText.includes("upcoming")
+            ? ("UPCOMING" as const)
+            : ("ONGOING" as const);
+  const contributors = (kind: "author" | "artist") =>
+    (payload.authors ?? [])
+      .filter((entry) => {
+        const entryType = normalizeString(entry.type)?.toLowerCase() ?? "";
+        return kind === "author"
+          ? !entryType || entryType.includes("author")
+          : entryType.includes("artist");
+      })
+      .map((entry) => normalizeString(entry.name ?? entry.author_name))
+      .filter((name): name is string => Boolean(name))
+      .map((name) => ({ name }));
+  const publisherName = (payload.publishers ?? [])
+    .map((entry) => normalizeString(entry.publisher_name ?? entry.name))
+    .find(Boolean);
+  const coverReferenceUrl =
+    normalizeString(payload.image?.url?.original) ??
+    normalizeString(payload.image?.original) ??
+    normalizeString(payload.image?.url?.thumb) ??
+    normalizeString(payload.image?.thumb) ??
+    null;
+  const numericYear = Number(payload.year);
+  return {
+    source: "MANGAUPDATES",
+    externalId: id,
+    sourceUrl: normalizeString(payload.url) ?? sourceUrl,
+    responseHash,
+    fetchedAt: new Date().toISOString(),
+    cached,
+    fields: {
+      title,
+      alternativeTitles: (payload.associated ?? [])
+        .map((entry) =>
+          normalizeString(
+            typeof entry === "string" ? entry : entry.title,
+          ),
+        )
+        .filter((value): value is string => Boolean(value)),
+      synopsis: normalizeString(payload.description),
+      authors: contributors("author"),
+      artists: contributors("artist"),
+      publisher: publisherName ? { name: publisherName } : undefined,
+      countryCode:
+        type === "MANHWA" ? "KR" : type === "MANHUA" ? "CN" : "JP",
+      languageCode,
+      type,
+      status,
+      publicationYear:
+        Number.isInteger(numericYear) && numericYear >= 1800
+          ? numericYear
+          : null,
+      genres: (payload.genres ?? [])
+        .map((entry) =>
+          normalizeString(typeof entry === "string" ? entry : entry.genre ?? entry.name),
+        )
+        .filter((name): name is string => Boolean(name))
+        .map((name) => ({ name })),
+      coverReferenceUrl,
+    },
+  };
+}
+
+export function deriveCachedCoverUrl(
+  source: "MANGADEX" | "MANGAUPDATES",
+  externalId: string,
+  raw: string,
+) {
+  let payload: MangaDexPayload | MangaUpdatesPayload;
+  try {
+    payload = JSON.parse(raw) as MangaDexPayload | MangaUpdatesPayload;
+  } catch {
+    throw new ApiError(
+      502,
+      "METADATA_RESPONSE_INVALID",
+      "The cached metadata response is unreadable.",
+    );
+  }
+  if (source === "MANGADEX") {
+    const relationship = (
+      (payload as MangaDexPayload).data?.relationships ?? []
+    ).find(
+      (entry) =>
+        entry.type === "cover_art" && entry.attributes?.fileName,
+    );
+    return relationship?.attributes?.fileName
+      ? `https://uploads.mangadex.org/covers/${externalId}/${relationship.attributes.fileName}.512.jpg`
+      : null;
+  }
+  const mangaUpdates = payload as MangaUpdatesPayload;
+  return (
+    normalizeString(mangaUpdates.image?.url?.original) ??
+    normalizeString(mangaUpdates.image?.original) ??
+    normalizeString(mangaUpdates.image?.url?.thumb) ??
+    normalizeString(mangaUpdates.image?.thumb) ??
+    null
+  );
 }
 
 async function fetchWithRetry(url: string) {
@@ -235,11 +458,8 @@ export async function previewExternalMetadata(
   const normalized =
     context.source === "MANGADEX"
       ? normalizeMangaDexInput(context.input)
-      : null;
-  const attemptedId =
-    normalized?.id ||
-    context.input.replace(/\D+/g, "").slice(0, 160) ||
-    "invalid";
+      : normalizeMangaUpdatesInput(context.input);
+  const attemptedId = normalized.id;
   const attemptLogId = randomId();
   const reservation = await db
     .prepare(
@@ -275,21 +495,7 @@ export async function previewExternalMetadata(
     );
   }
   try {
-    if (context.source === "MANGAUPDATES") {
-      throw new ApiError(
-        501,
-        "MANGAUPDATES_PROVIDER_NOT_CONFIGURED",
-        "MangaUpdates import is unavailable because no stable permitted provider interface is configured. Manual metadata entry remains available.",
-      );
-    }
-    if (!normalized) {
-      throw new ApiError(
-        422,
-        "METADATA_SOURCE_INVALID",
-        "Choose a supported metadata source.",
-      );
-    }
-    const cacheKey = `MANGADEX:${normalized.id}`;
+    const cacheKey = `${context.source}:${normalized.id}`;
     let raw = "";
     let cached = false;
     if (!context.refresh) {
@@ -310,34 +516,47 @@ export async function previewExternalMetadata(
     }
     if (!raw) {
       raw = await fetchWithRetry(
-        `https://api.mangadex.org/manga/${normalized.id}?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art`,
+        context.source === "MANGADEX"
+          ? `https://api.mangadex.org/manga/${normalized.id}?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art`
+          : `https://api.mangaupdates.com/v1/series/${normalized.id}`,
       );
     }
     const responseHash = await sha256Hex(new TextEncoder().encode(raw));
-    let providerPayload: MangaDexPayload;
+    let providerPayload: MangaDexPayload | MangaUpdatesPayload;
     try {
-      providerPayload = JSON.parse(raw) as MangaDexPayload;
+      providerPayload = JSON.parse(raw) as
+        | MangaDexPayload
+        | MangaUpdatesPayload;
     } catch {
       throw new ApiError(
         502,
-        "MANGADEX_RESPONSE_INVALID",
-        "MangaDex returned an unreadable metadata response.",
+        "METADATA_RESPONSE_INVALID",
+        `${context.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} returned an unreadable metadata response.`,
       );
     }
-    const imported = mapMangaDex(
-      providerPayload,
-      normalized.id,
-      normalized.url,
-      responseHash,
-      cached,
-    );
+    const imported =
+      context.source === "MANGADEX"
+        ? mapMangaDex(
+            providerPayload as MangaDexPayload,
+            normalized.id,
+            normalized.url,
+            responseHash,
+            cached,
+          )
+        : mapMangaUpdates(
+            providerPayload as MangaUpdatesPayload,
+            normalized.id,
+            normalized.url,
+            responseHash,
+            cached,
+          );
     if (!cached) {
       await db
         .prepare(
           `INSERT INTO metadata_import_cache
            (cache_key, source, external_id, response_json, response_hash,
             fetched_at, expires_at)
-           VALUES (?, 'MANGADEX', ?, ?, ?, CURRENT_TIMESTAMP,
+           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
                    datetime('now', '+12 hours'))
            ON CONFLICT(cache_key) DO UPDATE SET
              response_json = excluded.response_json,
@@ -345,7 +564,13 @@ export async function previewExternalMetadata(
              fetched_at = excluded.fetched_at,
              expires_at = excluded.expires_at`,
         )
-        .bind(cacheKey, normalized.id, raw, responseHash)
+        .bind(
+          cacheKey,
+          context.source,
+          normalized.id,
+          raw,
+          responseHash,
+        )
         .run();
     }
     const [duplicateSeries, duplicateRequest] = await db.batch([
@@ -354,12 +579,13 @@ export async function previewExternalMetadata(
           `SELECT ses.series_id AS seriesId, s.title, s.slug
              FROM series_external_sources ses
              JOIN series s ON s.id = ses.series_id
-            WHERE ses.source = 'MANGADEX'
+            WHERE ses.source = ?
               AND ses.external_id = ?
               AND (? IS NULL OR ses.series_id <> ?)
             LIMIT 1`,
         )
         .bind(
+          context.source,
           normalized.id,
           context.seriesId ?? null,
           context.seriesId ?? null,
@@ -380,7 +606,9 @@ export async function previewExternalMetadata(
             LIMIT 1`,
         )
         .bind(
-          normalized.id,
+          context.source === "MANGADEX"
+            ? normalized.id
+            : `unsupported:${normalized.id}`,
           context.seriesRequestId ?? null,
           context.seriesRequestId ?? null,
         ),
@@ -396,7 +624,7 @@ export async function previewExternalMetadata(
       .bind(
         cached
           ? "Metadata preview loaded from cache."
-          : "Metadata preview loaded from MangaDex.",
+          : `Metadata preview loaded from ${context.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"}.`,
         attemptLogId,
       )
       .run();

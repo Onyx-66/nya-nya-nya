@@ -4,6 +4,7 @@ import { CheckCircle, FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@pho
 import { useEffect, useState } from "react";
 import {
   defaultSiteTheme,
+  newSeriesLayoutOptions,
   parseSiteTheme,
   sliderSizeOptions,
   sliderStyleOptions,
@@ -349,6 +350,31 @@ export function ThemeSettingsPanel() {
                   <small>{option.detail}</small>
                 </button>
               ))}
+            </div>
+            <div className="slider-behavior-controls">
+              <div>
+                <span>New Series layout</span>
+                <div role="group" aria-label="New Series layout">
+                  {newSeriesLayoutOptions.map((option) => (
+                    <button
+                      type="button"
+                      key={option.value}
+                      aria-pressed={
+                        settings.experience.newSeriesLayout === option.value
+                      }
+                      onClick={() =>
+                        update("experience", {
+                          ...settings.experience,
+                          newSeriesLayout: option.value,
+                        })
+                      }
+                    >
+                      <strong>{option.label}</strong>
+                      <small>{option.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="slider-behavior-controls">
               <div>

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { demoSeries } from "@/lib/catalog";
+import { normalizeChapterNumber } from "@/lib/chapter-number";
 import {
   countryCodeSchema,
   languageCodeSchema,
@@ -205,7 +206,7 @@ const adminSeriesSchema = z.object({
   nativeTitle: z.string().trim().max(160).default(""),
   synopsis: z.string().trim().min(20).max(4000),
   type: z.enum(["MANHWA", "MANGA", "MANHUA"]),
-  status: z.enum(["ONGOING", "COMPLETED", "HIATUS", "UPCOMING"]),
+  status: z.enum(["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"]),
   originCountry: countryCodeSchema,
   originalLanguage: languageCodeSchema,
   readingDirection: z.enum(["VERTICAL", "RIGHT_TO_LEFT", "LEFT_TO_RIGHT"]),
@@ -322,7 +323,12 @@ const adminChapterAccessSchema = z
   .object({
     id: z.string().min(3).max(120),
     expectedRevision: z.coerce.number().int().min(1),
-    chapterNumber: z.string().trim().min(1).max(40),
+    chapterNumber: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .transform(normalizeChapterNumber),
     title: z.string().trim().max(240),
     volume: z.string().trim().max(40),
     language: z
@@ -1054,13 +1060,16 @@ function storeItemPreviewUrl(
 }
 
 function chapterAccessContract(
-  decision: Awaited<ReturnType<typeof resolveChapterAccess>>,
+  decision: Awaited<ReturnType<typeof resolveChapterAccess>> & {
+    isFresh?: boolean;
+  },
 ) {
   return {
     chapterId: decision.chapterId,
     teamId: decision.teamId,
     seriesSlug: decision.seriesSlug,
     chapterSlug: decision.chapterSlug,
+    chapterNumber: normalizeChapterNumber(decision.chapterNumber),
     chapterLabel: decision.chapterLabel,
     language: decision.language,
     version: decision.version,
@@ -1068,6 +1077,7 @@ function chapterAccessContract(
     accessType: decision.accessType,
     priceOnyx: decision.priceOnyx,
     publishedAt: decision.publishedAt,
+    isFresh: Boolean(decision.isFresh),
     canRead: decision.canRead,
     isUnlocked: decision.isUnlocked,
     administratorPreview: decision.administratorPreview,
@@ -1456,7 +1466,7 @@ export async function GET(request: Request, context: RouteContext) {
             id: record.chapterId,
             teamId: record.teamId,
             slug: record.chapterSlug,
-            number: record.chapterNumber,
+            number: normalizeChapterNumber(record.chapterNumber),
             title: record.chapterTitle,
             label: access.chapterLabel,
             language: record.language,
@@ -1467,14 +1477,14 @@ export async function GET(request: Request, context: RouteContext) {
           previousChapter: previous
             ? {
                 slug: previous.slug,
-                number: previous.chapterNumber,
+                number: normalizeChapterNumber(previous.chapterNumber),
                 title: previous.title,
               }
             : null,
           nextChapter: next
             ? {
                 slug: next.slug,
-                number: next.chapterNumber,
+                number: normalizeChapterNumber(next.chapterNumber),
                 title: next.title,
               }
             : null,
@@ -1519,6 +1529,7 @@ export async function GET(request: Request, context: RouteContext) {
                 c.team_id AS teamId,
                 s.slug AS seriesSlug,
                 c.slug AS chapterSlug,
+                c.chapter_number AS chapterNumber,
                 CASE
                   WHEN c.title = '' THEN 'Chapter ' || c.chapter_number
                   ELSE 'Chapter ' || c.chapter_number || ' · ' || c.title
@@ -1529,6 +1540,8 @@ export async function GET(request: Request, context: RouteContext) {
                 c.access_type AS accessType,
                 c.price_onyx AS priceOnyx,
                 c.published_at AS publishedAt,
+                datetime(c.published_at) >
+                  datetime('now', '-36 hours') AS isFresh,
                 c.state,
                 c.visibility,
                 s.is_published AS seriesPublished,
@@ -1567,6 +1580,7 @@ export async function GET(request: Request, context: RouteContext) {
             seriesPublished: number;
             priceOnyx: number;
             teamPreviewAllowed: number;
+            isFresh: number;
           }
         >();
       const actor = await getActor();
@@ -1588,8 +1602,8 @@ export async function GET(request: Request, context: RouteContext) {
           unlockedIds.add(entitlement.chapterId);
         }
       }
-      const decisions = releaseRows.results.map((chapter) =>
-        decideChapterAccess(
+      const decisions = releaseRows.results.map((chapter) => ({
+        ...decideChapterAccess(
           {
             ...chapter,
             priceOnyx: Number(chapter.priceOnyx),
@@ -1599,7 +1613,8 @@ export async function GET(request: Request, context: RouteContext) {
           actor,
           unlockedIds.has(chapter.id),
         ),
-      );
+        isFresh: Boolean(chapter.isFresh),
+      }));
       return json(
         id,
         { data: decisions.map(chapterAccessContract) },
@@ -1830,7 +1845,7 @@ export async function GET(request: Request, context: RouteContext) {
         .catch(24)
         .parse(url.searchParams.get("pageSize"));
       const status = z
-        .enum(["ONGOING", "COMPLETED", "HIATUS", "UPCOMING"])
+        .enum(["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"])
         .optional()
         .catch(undefined)
         .parse(url.searchParams.get("status")?.toUpperCase());
@@ -2038,7 +2053,7 @@ export async function GET(request: Request, context: RouteContext) {
         .catch("all")
         .parse(url.searchParams.get("period"));
       const periodPredicate = {
-        today: "AND datetime(c.published_at) >= datetime('now', '-1 day')",
+        today: "AND date(c.published_at) = date('now')",
         week: "AND datetime(c.published_at) >= datetime('now', '-7 days')",
         month: "AND datetime(c.published_at) >= datetime('now', '-1 month')",
         all: "",
@@ -2049,6 +2064,7 @@ export async function GET(request: Request, context: RouteContext) {
                   s.slug,
                   s.title,
                   s.type,
+                  s.status,
                   s.cover_key AS coverKey,
                   s.rating_tenths AS ratingTenths,
                   c.published_at AS latestPublishedAt
@@ -2080,6 +2096,7 @@ export async function GET(request: Request, context: RouteContext) {
             slug: string;
             title: string;
             type: string;
+            status: string;
             coverKey: string | null;
             ratingTenths: number;
             latestPublishedAt: string;
@@ -2109,11 +2126,13 @@ export async function GET(request: Request, context: RouteContext) {
                           c.access_type AS effectiveAccessType,
                           c.price_onyx AS priceOnyx,
                           c.published_at AS publishedAt,
+                          datetime(c.published_at) >
+                            datetime('now', '-36 hours') AS isFresh,
                           c.created_at AS createdAt,
                           c.id,
                           t.name AS teamName,
                           ROW_NUMBER() OVER (
-                            PARTITION BY c.chapter_number
+                            PARTITION BY LTRIM(c.chapter_number, '0')
                             ORDER BY datetime(c.published_at) DESC,
                                      datetime(c.created_at) DESC,
                                      c.id DESC
@@ -2124,6 +2143,7 @@ export async function GET(request: Request, context: RouteContext) {
                       AND c.state = 'PUBLISHED'
                       AND c.visibility = 'PUBLIC'
                       AND datetime(c.published_at) <= datetime('now')
+                      ${periodPredicate}
                  )
                  SELECT slug,
                         chapterNumber,
@@ -2134,6 +2154,7 @@ export async function GET(request: Request, context: RouteContext) {
                         effectiveAccessType,
                         priceOnyx,
                         publishedAt,
+                        isFresh,
                         teamName
                    FROM ranked
                   WHERE releaseRank = 1
@@ -2160,7 +2181,15 @@ export async function GET(request: Request, context: RouteContext) {
                   : coverKey
                     ? `/api/v1/series-cover?slug=${encodeURIComponent(seriesRecord.slug)}`
                     : null,
-              chapters: chapterResults[index]?.results ?? [],
+              chapters: (chapterResults[index]?.results ?? []).map(
+                (chapter) => ({
+                  ...chapter,
+                  chapterNumber: normalizeChapterNumber(
+                    String(chapter.chapterNumber),
+                  ),
+                  isFresh: Boolean(chapter.isFresh),
+                }),
+              ),
             };
           }),
           pagination: {
@@ -2510,6 +2539,27 @@ export async function GET(request: Request, context: RouteContext) {
                 s.synopsis,
                 s.cover_key AS coverKey,
                 s.rating_tenths AS ratingTenths,
+                COALESCE((
+                  SELECT COUNT(DISTINCT chapter_count.chapter_number)
+                    FROM chapters chapter_count
+                   WHERE chapter_count.series_id = s.id
+                     AND chapter_count.state = 'PUBLISHED'
+                     AND chapter_count.visibility = 'PUBLIC'
+                     AND chapter_count.published_at IS NOT NULL
+                     AND datetime(chapter_count.published_at) <= datetime('now')
+                ), 0) AS chapterCount,
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM library_entries library_count
+                   WHERE library_count.series_id = s.id
+                ), 0) AS bookmarkCount,
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM discussion_comments comment_count
+                   WHERE comment_count.series_slug = s.slug
+                     AND comment_count.moderation_status = 'VISIBLE'
+                     AND comment_count.deleted_at IS NULL
+                ), 0) AS commentCount,
                 (
                   SELECT c.slug
                     FROM chapters c
@@ -2549,6 +2599,9 @@ export async function GET(request: Request, context: RouteContext) {
         synopsis: string;
         coverKey: string | null;
         ratingTenths: number;
+        chapterCount: number;
+        bookmarkCount: number;
+        commentCount: number;
         latestChapterSlug: string | null;
         genres: string;
       }>();
@@ -2557,6 +2610,9 @@ export async function GET(request: Request, context: RouteContext) {
         {
           data: rows.results.map((row) => ({
             ...row,
+            chapterCount: Number(row.chapterCount ?? 0),
+            bookmarkCount: Number(row.bookmarkCount ?? 0),
+            commentCount: Number(row.commentCount ?? 0),
             genres: row.genres ? row.genres.split("||").filter(Boolean) : [],
             cover: publicSeriesCover(row.slug, row.coverKey),
           })),
@@ -2790,6 +2846,18 @@ export async function GET(request: Request, context: RouteContext) {
                     FROM discussion_votes dv
                    WHERE dv.comment_id = dc.id
                 ), 0) AS voteScore,
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM discussion_votes dv
+                   WHERE dv.comment_id = dc.id
+                     AND dv.value > 0
+                ), 0) AS upvoteCount,
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM discussion_votes dv
+                   WHERE dv.comment_id = dc.id
+                     AND dv.value < 0
+                ), 0) AS downvoteCount,
                 COALESCE((
                   SELECT own_vote.value
                     FROM discussion_votes own_vote
@@ -3083,6 +3151,18 @@ export async function GET(request: Request, context: RouteContext) {
                 ), 0) AS voteScore,
                 COALESCE((
                   SELECT COUNT(*)
+                    FROM discussion_votes dv
+                   WHERE dv.comment_id = dc.id
+                     AND dv.value > 0
+                ), 0) AS upvoteCount,
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM discussion_votes dv
+                   WHERE dv.comment_id = dc.id
+                     AND dv.value < 0
+                ), 0) AS downvoteCount,
+                COALESCE((
+                  SELECT COUNT(*)
                     FROM discussion_comments replies
                    WHERE replies.parent_id = dc.id
                      AND replies.moderation_status = 'VISIBLE'
@@ -3124,6 +3204,8 @@ export async function GET(request: Request, context: RouteContext) {
         chapterTitle: string;
         coverKey: string | null;
         voteScore: number;
+        upvoteCount: number;
+        downvoteCount: number;
         replyCount: number;
       }>();
       return json(
@@ -3132,6 +3214,8 @@ export async function GET(request: Request, context: RouteContext) {
           data: result.results.map((entry) => ({
             ...entry,
             voteScore: Number(entry.voteScore ?? 0),
+            upvoteCount: Number(entry.upvoteCount ?? 0),
+            downvoteCount: Number(entry.downvoteCount ?? 0),
             replyCount: Number(entry.replyCount ?? 0),
             cover: publicSeriesCover(entry.seriesSlug, entry.coverKey),
           })),
@@ -4835,7 +4919,11 @@ export async function GET(request: Request, context: RouteContext) {
                 ) AS entitlementCount
            FROM chapters c
            JOIN series s ON s.id = c.series_id
-          ORDER BY c.updated_at DESC, s.title, c.chapter_number DESC
+          ORDER BY s.title COLLATE NOCASE,
+                   CAST(c.chapter_number AS REAL) DESC,
+                   c.version DESC,
+                   c.updated_at DESC,
+                   c.id DESC
           LIMIT 200`,
       ).all();
       const metrics = await env.DB.prepare(
@@ -4860,7 +4948,14 @@ export async function GET(request: Request, context: RouteContext) {
       return json(
         id,
         {
-          data: result.results,
+          data: result.results.map((chapter) => ({
+            ...chapter,
+            chapterNumber: normalizeChapterNumber(
+              String(
+                (chapter as { chapterNumber: string }).chapterNumber,
+              ),
+            ),
+          })),
           metrics: {
             total: Number(metrics?.total ?? 0),
             paid: Number(metrics?.paid ?? 0),
@@ -6183,6 +6278,8 @@ export async function PUT(request: Request, context: RouteContext) {
       );
       const current = await env.DB.prepare(
         `SELECT c.id,
+                c.series_id AS seriesId,
+                c.team_id AS teamId,
                 c.chapter_number AS chapterNumber,
                 c.title,
                 c.volume,
@@ -6205,6 +6302,8 @@ export async function PUT(request: Request, context: RouteContext) {
         .bind(payload.id)
         .first<{
           id: string;
+          seriesId: string;
+          teamId: string | null;
           chapterNumber: string;
           title: string;
           volume: string | null;
@@ -6232,6 +6331,34 @@ export async function PUT(request: Request, context: RouteContext) {
           409,
           "STALE_VERSION",
           "Another administrator changed this chapter. Reload it before saving.",
+        );
+      }
+      const duplicate = await env.DB.prepare(
+        `SELECT id
+           FROM chapters
+          WHERE series_id = ?
+            AND id <> ?
+            AND LTRIM(chapter_number, '0') = LTRIM(?, '0')
+            AND language = ?
+            AND COALESCE(team_id, '') = COALESCE(?, '')
+            AND version = ?
+            AND state IN ('DRAFT', 'READY_FOR_REVIEW', 'PUBLISHED')
+          LIMIT 1`,
+      )
+        .bind(
+          current.seriesId,
+          payload.id,
+          payload.chapterNumber,
+          payload.language,
+          current.teamId,
+          payload.version,
+        )
+        .first();
+      if (duplicate) {
+        throw new ApiError(
+          409,
+          "DUPLICATE_RELEASE",
+          "This team already has the same chapter, language, and version.",
         );
       }
       const priceOnyx =
@@ -9816,29 +9943,42 @@ export async function POST(request: Request, context: RouteContext) {
       const payload = progressSchema.parse(await request.json());
       if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Progress storage is unavailable.");
       await requireReadableChapter(actor, payload.chapterId);
-      await env.DB.prepare(
-        `INSERT INTO reading_progress
-         (user_id, chapter_id, page_index, scroll_offset, progress_basis_points, completed_at)
-         VALUES (?, ?, ?, ?, ?, CASE WHEN ? >= 9200 THEN CURRENT_TIMESTAMP ELSE NULL END)
-         ON CONFLICT(user_id, chapter_id) DO UPDATE SET
-           page_index = excluded.page_index,
-           scroll_offset = excluded.scroll_offset,
-           progress_basis_points = excluded.progress_basis_points,
-           completed_at = CASE
-             WHEN excluded.completed_at IS NOT NULL THEN excluded.completed_at
-             ELSE reading_progress.completed_at
-           END,
-           updated_at = CURRENT_TIMESTAMP`,
-      )
-        .bind(
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO reading_progress
+           (user_id, chapter_id, page_index, scroll_offset, progress_basis_points, completed_at)
+           VALUES (?, ?, ?, ?, ?, CASE WHEN ? >= 9200 THEN CURRENT_TIMESTAMP ELSE NULL END)
+           ON CONFLICT(user_id, chapter_id) DO UPDATE SET
+             page_index = excluded.page_index,
+             scroll_offset = excluded.scroll_offset,
+             progress_basis_points = excluded.progress_basis_points,
+             completed_at = CASE
+               WHEN excluded.completed_at IS NOT NULL THEN excluded.completed_at
+               ELSE reading_progress.completed_at
+             END,
+             updated_at = CURRENT_TIMESTAMP`,
+        ).bind(
           actor.id,
           payload.chapterId,
           payload.pageIndex,
           payload.scrollOffset,
           payload.progressBasisPoints,
           payload.markCompleted ? payload.progressBasisPoints : 0,
-        )
-        .run();
+        ),
+        env.DB.prepare(
+          `INSERT INTO library_entries
+           (user_id, series_id, list_type, is_favorite, notifications_enabled)
+           SELECT ?, c.series_id, 'READING', 0, 1
+             FROM chapters c
+            WHERE c.id = ?
+           ON CONFLICT(user_id, series_id) DO UPDATE SET
+             list_type = CASE
+               WHEN library_entries.list_type = 'PLANNING' THEN 'READING'
+               ELSE library_entries.list_type
+             END,
+             updated_at = CURRENT_TIMESTAMP`,
+        ).bind(actor.id, payload.chapterId),
+      ]);
       return json(id, { ok: true, savedAt: new Date().toISOString() });
     }
 

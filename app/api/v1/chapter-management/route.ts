@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
+import { normalizeChapterNumber } from "@/lib/chapter-number";
 import {
   assertSameOrigin,
   auditStatement,
@@ -26,7 +27,12 @@ const updateSchema = z
     seriesId: identifierSchema,
     chapterId: identifierSchema,
     expectedRevision: z.number().int().min(1),
-    chapterNumber: z.string().trim().min(1).max(40),
+    chapterNumber: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .transform(normalizeChapterNumber),
     volume: z.string().trim().max(40).default(""),
     title: z.string().trim().max(240).default(""),
     language: z
@@ -198,6 +204,7 @@ export async function GET(request: Request) {
       {
         data: {
           ...chapter,
+          chapterNumber: normalizeChapterNumber(chapter.chapterNumber),
           commentsEnabled: Boolean(chapter.commentsEnabled),
           seriesPublished: Boolean(chapter.seriesPublished),
           credits: parsedCredits(chapter.creditsJson),
@@ -337,7 +344,7 @@ export async function PATCH(request: Request) {
          FROM chapters
         WHERE series_id = ?
           AND id <> ?
-          AND chapter_number = ?
+          AND LTRIM(chapter_number, '0') = LTRIM(?, '0')
           AND language = ?
           AND COALESCE(team_id, '') = COALESCE(?, '')
           AND version = ?
@@ -456,7 +463,7 @@ export async function PATCH(request: Request) {
               FROM chapters duplicate
              WHERE duplicate.series_id = chapters.series_id
                AND duplicate.id <> chapters.id
-               AND duplicate.chapter_number = ?
+               AND LTRIM(duplicate.chapter_number, '0') = LTRIM(?, '0')
                AND duplicate.language = ?
                AND COALESCE(duplicate.team_id, '') =
                    COALESCE(chapters.team_id, '')

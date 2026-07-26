@@ -35,7 +35,7 @@ type SeriesRecord = {
   alternativeTitles: string[];
   synopsis: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
   ageRating: "EVERYONE" | "TEEN" | "MATURE";
   publicationYear: number | null;
   authors: Entity[];
@@ -96,7 +96,7 @@ type ImportedData = {
     countryCode?: string;
     languageCode?: string;
     type?: "MANGA" | "MANHWA" | "MANHUA";
-    status?: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+    status?: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
     publicationYear?: number | null;
     genres?: Entity[];
     coverReferenceUrl?: string | null;
@@ -132,19 +132,6 @@ type FormState = {
   removeCover: boolean;
   removeBanner: boolean;
 };
-
-const tabs = [
-  ["basic", "Basic information"],
-  ["titles", "Titles & synopsis"],
-  ["credits", "Credits & publishing"],
-  ["origin", "Origin & classification"],
-  ["taxonomy", "Taxonomy"],
-  ["teams", "Teams"],
-  ["media", "Media"],
-  ["external", "External metadata"],
-  ["visibility", "Visibility"],
-  ["review", "Review & save"],
-] as const;
 
 const emptyForm: FormState = {
   title: "",
@@ -405,8 +392,6 @@ export function SeriesManagementPanel() {
   const [options, setOptions] = useState<Options | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [savedForm, setSavedForm] = useState<FormState>(emptyForm);
-  const [activeTab, setActiveTab] =
-    useState<(typeof tabs)[number][0]>("basic");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -535,24 +520,6 @@ export function SeriesManagementPanel() {
     ? teamSearchResults
     : [];
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const stored = window.sessionStorage.getItem(
-        "nyascans-admin-series-tab",
-      );
-      if (stored && tabs.some(([key]) => key === stored)) {
-        setActiveTab(stored as (typeof tabs)[number][0]);
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  function changeTab(key: string) {
-    const next = key as (typeof tabs)[number][0];
-    setActiveTab(next);
-    window.sessionStorage.setItem("nyascans-admin-series-tab", next);
-  }
-
   function startNew() {
     if (dirty && !window.confirm("Discard the unsaved series changes?")) return;
     setForm(emptyForm);
@@ -564,7 +531,6 @@ export function SeriesManagementPanel() {
     setImportApplied(false);
     setAltEditIndex(null);
     setAltEditValue("");
-    setActiveTab("basic");
     setMessage(null);
   }
 
@@ -635,6 +601,14 @@ export function SeriesManagementPanel() {
       ]);
     };
     try {
+      const importedCover =
+        imported &&
+        importApplied &&
+        importFields.has("coverReferenceUrl") &&
+        imported.fields.coverReferenceUrl &&
+        !coverFile
+          ? imported
+          : null;
       const method = form.id ? "PUT" : "POST";
       const saved = await fetch("/api/v1/admin/series-management", {
         method,
@@ -656,6 +630,28 @@ export function SeriesManagementPanel() {
       persistedRecord = current;
       applyPersistedRecord(current);
       setImportApplied(false);
+      if (importedCover) {
+        const media = await fetch("/api/v1/admin/series-media", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            seriesId: current.id,
+            revision: current.revision,
+            source: importedCover.source,
+            externalId: importedCover.externalId,
+            responseHash: importedCover.responseHash,
+          }),
+        }).then((response) =>
+          api<{ data: { revision: number; url: string } }>(response),
+        );
+        current = {
+          ...current,
+          revision: media.data.revision,
+          coverUrl: media.data.url,
+        };
+        persistedRecord = current;
+        applyPersistedRecord(current);
+      }
       for (const [slot, file] of [
         ["cover", coverFile] as const,
         ["banner", bannerFile] as const,
@@ -859,9 +855,6 @@ export function SeriesManagementPanel() {
           <Plus size={17} /> New series
         </button>
       }
-      tabs={tabs.map(([key, label]) => ({ key, label }))}
-      activeTab={activeTab}
-      onTabChange={changeTab}
       state={state}
       message={message}
     >
@@ -936,7 +929,8 @@ export function SeriesManagementPanel() {
           </footer>
         </aside>
         <form className="admin-editor-form" onSubmit={save}>
-          {activeTab === "basic" ? (
+          <details className="admin-editor-box" open>
+            <summary>Basic information</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Basic information</h3>
@@ -1000,6 +994,7 @@ export function SeriesManagementPanel() {
                     <option value="ONGOING">Ongoing</option>
                     <option value="COMPLETED">Completed</option>
                     <option value="HIATUS">Hiatus</option>
+                    <option value="PAUSED">Paused</option>
                     <option value="UPCOMING">Upcoming</option>
                   </select>
                 </label>
@@ -1049,9 +1044,10 @@ export function SeriesManagementPanel() {
                 </label>
               </div>
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "titles" ? (
+          <details className="admin-editor-box" open>
+            <summary>Titles &amp; synopsis</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Titles and synopsis</h3>
@@ -1147,9 +1143,10 @@ export function SeriesManagementPanel() {
                 <small>{form.synopsis.length.toLocaleString()} / 10,000</small>
               </label>
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "credits" ? (
+          <details className="admin-editor-box">
+            <summary>Credits &amp; publishing</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Credits and publishing</h3>
@@ -1181,9 +1178,10 @@ export function SeriesManagementPanel() {
                 }
               />
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "origin" ? (
+          <details className="admin-editor-box">
+            <summary>Origin &amp; classification</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Origin and classification</h3>
@@ -1254,9 +1252,10 @@ export function SeriesManagementPanel() {
                 onChange={(genres) => setField("genres", genres)}
               />
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "teams" ? (
+          <details className="admin-editor-box">
+            <summary>Publishing teams</summary>
             <section className="admin-form-section">
               <header>
                 <h3>NyaScans publishing teams</h3>
@@ -1339,11 +1338,17 @@ export function SeriesManagementPanel() {
                 )}
               </div>
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "taxonomy" ? <TaxonomyManager /> : null}
+          <details className="admin-editor-box">
+            <summary>Taxonomy</summary>
+            <section className="admin-form-section">
+              <TaxonomyManager />
+            </section>
+          </details>
 
-          {activeTab === "media" ? (
+          <details className="admin-editor-box" open>
+            <summary>Cover &amp; banner</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Cover and banner</h3>
@@ -1384,9 +1389,10 @@ export function SeriesManagementPanel() {
                 }}
               />
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "external" ? (
+          <details className="admin-editor-box" open>
+            <summary>External metadata import</summary>
             <section className="admin-form-section">
               <header>
                 <h3>External metadata import</h3>
@@ -1449,6 +1455,17 @@ export function SeriesManagementPanel() {
                     </div>
                     <span>{imported.cached ? "Cached response" : "Fresh response"}</span>
                   </header>
+                  {imported.fields.coverReferenceUrl ? (
+                    <div className="admin-import-cover-preview">
+                      {/* External artwork is previewed here, then re-derived and
+                          verified by the server before it enters storage. */}
+                      <img
+                        src={imported.fields.coverReferenceUrl}
+                        alt="Imported cover preview"
+                      />
+                      <span>Provider cover will be imported with the selected metadata.</span>
+                    </div>
+                  ) : null}
                   {Object.entries(imported.fields)
                     .filter(([, value]) => value !== undefined && value !== null)
                     .map(([field, value]) => (
@@ -1511,9 +1528,10 @@ export function SeriesManagementPanel() {
                 </div>
               ) : null}
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "visibility" ? (
+          <details className="admin-editor-box">
+            <summary>Visibility &amp; publication</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Visibility and publication</h3>
@@ -1579,9 +1597,10 @@ export function SeriesManagementPanel() {
                 </span>
               </label>
             </section>
-          ) : null}
+          </details>
 
-          {activeTab === "review" ? (
+          <details className="admin-editor-box" open>
+            <summary>Review &amp; save</summary>
             <section className="admin-form-section">
               <header>
                 <h3>Review and save</h3>
@@ -1615,7 +1634,7 @@ export function SeriesManagementPanel() {
                 </div>
               ) : null}
             </section>
-          ) : null}
+          </details>
 
           <footer className="admin-sticky-actions">
             <div>

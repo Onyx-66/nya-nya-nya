@@ -52,7 +52,10 @@ test("shared import service validates sources, rate-limits, caches and detects e
   assert.match(service, /series_external_sources/);
   assert.match(service, /FROM series_requests/);
   assert.match(service, /mangadex_id = \?/);
-  assert.match(service, /MANGAUPDATES_PROVIDER_NOT_CONFIGURED/);
+  assert.match(service, /normalizeMangaUpdatesInput/);
+  assert.match(service, /api\.mangaupdates\.com\/v1\/series/);
+  assert.match(service, /mapMangaUpdates/);
+  assert.match(service, /coverReferenceUrl/);
   assert.match(service, /result = 'FAILURE'/);
 });
 

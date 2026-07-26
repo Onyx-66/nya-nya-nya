@@ -27,6 +27,7 @@ import {
   DownloadSimple,
   Eye,
   FileText,
+  Fire,
   GearSix,
   Gift,
   Heart,
@@ -100,6 +101,10 @@ import {
   demoSeries,
   type SeriesCard,
 } from "@/lib/catalog";
+import {
+  compareChapterNumbers,
+  normalizeChapterNumber,
+} from "@/lib/chapter-number";
 
 const OperationsControlPanel = lazy(() =>
   import("@/components/nyascans/OperationsControlPanel").then((module) => ({
@@ -274,7 +279,6 @@ function ResilientCoverImage({
 const navItems = [
   { label: "Home", href: "/", icon: House },
   { label: "Latest Updates", href: "/latest", icon: Pulse },
-  { label: "Completed", href: "/browse?status=completed", icon: CheckCircle },
   { label: "Browse", href: "/browse", icon: Compass },
   { label: "Library", href: "/library", icon: Books },
   { label: "Store", href: "/store", icon: Storefront },
@@ -318,7 +322,6 @@ function roleLabel(role: string) {
 function activeNav(view: AppView, label: string) {
   if (label === "Home") return view === "home";
   if (label === "Latest Updates") return view === "latest";
-  if (label === "Completed") return false;
   if (label === "Browse") return view === "browse";
   if (label === "Library") return view === "library";
   if (label === "Store") return view === "store" || view === "wallet";
@@ -391,7 +394,7 @@ function SearchResultCard({
         ) : null}
         <em>
           {item.latestChapter
-            ? `Latest · Chapter ${item.latestChapter.number}${item.latestChapter.title ? ` · ${item.latestChapter.title}` : ""}`
+            ? `Latest · Chapter ${normalizeChapterNumber(item.latestChapter.number)}${item.latestChapter.title ? ` · ${item.latestChapter.title}` : ""}`
             : "No published chapters yet"}
         </em>
       </span>
@@ -843,17 +846,10 @@ function SiteHeader({
                     </a>
                     <a
                       role="menuitem"
-                      href="/library"
+                      href="/support"
                       onClick={() => setMenuOpen(false)}
                     >
-                      <Books size={18} /> Library
-                    </a>
-                    <a
-                      role="menuitem"
-                      href="/store"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      <Storefront size={18} /> Store
+                      <ChatCircle size={18} /> Support
                     </a>
                     {canUpload ? (
                       <a
@@ -878,13 +874,6 @@ function SiteHeader({
                         {elevated.title}
                       </a>
                     ) : null}
-                    <a
-                      role="menuitem"
-                      href="/support"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      <ChatCircle size={18} /> Support
-                    </a>
                     <a
                       role="menuitem"
                       href="/account?tab=preferences"
@@ -992,15 +981,36 @@ function MobileNav({ view, actor }: { view: AppView; actor: Actor | null }) {
 }
 
 function SeriesTypeBadge({ type }: { type: SeriesCard["type"] | string }) {
-  const normalized =
+  const normalized: "Manga" | "Manhwa" | "Manhua" =
     type.toUpperCase() === "MANHWA"
       ? "Manhwa"
       : type.toUpperCase() === "MANHUA"
         ? "Manhua"
         : "Manga";
+  const flag =
+    normalized === "Manhwa" ? "🇰🇷" : normalized === "Manhua" ? "🇨🇳" : "🇯🇵";
   return (
     <span className={`series-type-badge type-${normalized.toLowerCase()}`}>
+      <span aria-hidden="true">{flag}</span>
       {normalized}
+    </span>
+  );
+}
+
+function SeriesStatusBadge({ status }: { status: string }) {
+  const normalized = status.toUpperCase();
+  const tone =
+    normalized === "COMPLETED"
+      ? "completed"
+      : normalized === "HIATUS" || normalized === "PAUSED"
+        ? "paused"
+        : normalized === "ONGOING"
+          ? "ongoing"
+          : "upcoming";
+  return (
+    <span className={`series-status-badge status-${tone}`}>
+      <i aria-hidden="true" />
+      {catalogLabel(normalized)}
     </span>
   );
 }
@@ -1498,6 +1508,7 @@ type LatestRelease = {
   slug: string;
   title: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
+  status: string;
   cover: string | null;
   ratingTenths: number;
   latestPublishedAt: string;
@@ -1512,6 +1523,7 @@ type LatestRelease = {
     priceOnyx: number;
     publishedAt: string;
     teamName: string | null;
+    isFresh?: boolean;
   }>;
 };
 
@@ -1523,6 +1535,19 @@ function releaseTime(value: string) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} hr`;
   return `${Math.round(hours / 24)}d`;
+}
+
+function FreshChapterMark({ fresh }: { fresh?: boolean }) {
+  if (!fresh) return null;
+  return (
+    <span
+      className="fresh-chapter-mark"
+      aria-label="Published within the last 36 hours"
+      title="Published within the last 36 hours"
+    >
+      <Fire size={15} weight="fill" aria-hidden="true" />
+    </span>
+  );
 }
 
 function LatestUpdatesGrid({
@@ -1544,6 +1569,9 @@ function LatestUpdatesGrid({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [homePeriod, setHomePeriod] = useState<"today" | "week">("today");
+  const effectivePeriod =
+    heading && !pagination ? homePeriod : period;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1553,7 +1581,7 @@ function LatestUpdatesGrid({
       setError("");
       try {
         const response = await fetch(
-          `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${period}`,
+          `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${effectivePeriod}`,
           { signal: controller.signal, cache: "no-store" },
         );
         const payload = (await response.json()) as {
@@ -1600,7 +1628,7 @@ function LatestUpdatesGrid({
       window.removeEventListener("focus", refreshVisible);
       controller.abort();
     };
-  }, [page, pageSize, period, revision]);
+  }, [effectivePeriod, page, pageSize, revision]);
 
   const pageNumbers = useMemo(() => {
     const start = Math.max(1, Math.min(page - 2, pageCount - 4));
@@ -1613,10 +1641,38 @@ function LatestUpdatesGrid({
   return (
     <section className="latest-updates-block">
       {heading ? (
-        <SectionHeading
-          title="Latest Updates"
-          action={{ label: "View All", href: "/latest" }}
-        />
+        <div className="section-heading latest-updates-heading">
+          <div>
+            <h2>Latest Updates</h2>
+          </div>
+          <div className="latest-updates-actions">
+            <div className="latest-home-periods" aria-label="Latest updates period">
+              <button
+                type="button"
+                aria-pressed={homePeriod === "today"}
+                onClick={() => {
+                  setPage(1);
+                  setHomePeriod("today");
+                }}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                aria-pressed={homePeriod === "week"}
+                onClick={() => {
+                  setPage(1);
+                  setHomePeriod("week");
+                }}
+              >
+                This Week
+              </button>
+            </div>
+            <a href="/latest">
+              View All <ArrowRight size={17} />
+            </a>
+          </div>
+        </div>
       ) : null}
       {loading ? (
         <div className="latest-grid latest-loading-grid" aria-busy="true">
@@ -1664,7 +1720,10 @@ function LatestUpdatesGrid({
                 <div className="latest-card-copy">
                   <div className="latest-card-head">
                     <div>
-                      <SeriesTypeBadge type={update.type} />
+                      <div className="latest-series-badges">
+                        <SeriesTypeBadge type={update.type} />
+                        <SeriesStatusBadge status={update.status} />
+                      </div>
                       <a href={`/title/${update.slug}`}>
                         <h3>{update.title}</h3>
                       </a>
@@ -1680,16 +1739,17 @@ function LatestUpdatesGrid({
                         <a
                           href={`/title/${update.slug}/chapter/${chapter.slug}`}
                         >
-                          Chapter {chapter.chapterNumber}
+                          <FreshChapterMark fresh={chapter.isFresh} />
+                          Chapter {normalizeChapterNumber(chapter.chapterNumber)}
                         </a>
+                        <time dateTime={chapter.publishedAt}>
+                          {releaseTime(chapter.publishedAt)} ago
+                        </time>
                         <ChapterAccessBadge
                           accessType={
                             chapter.effectiveAccessType ?? chapter.accessType
                           }
                         />
-                        <time dateTime={chapter.publishedAt}>
-                          {releaseTime(chapter.publishedAt)} ago
-                        </time>
                       </li>
                     ))}
                   </ul>
@@ -1894,6 +1954,8 @@ type CommunityHighlight = {
   body: string;
   displayName: string;
   voteScore: number;
+  upvoteCount: number;
+  downvoteCount: number;
   replyCount: number;
   createdAt: string;
   cover: string | null;
@@ -1921,7 +1983,12 @@ function CommunityHighlights() {
           );
         }
         if (!active) return;
-        setItems(payload.data ?? []);
+        setItems(
+          (payload.data ?? []).map((item) => ({
+            ...item,
+            chapterNumber: normalizeChapterNumber(item.chapterNumber),
+          })),
+        );
         setError("");
       } catch (loadError) {
         if (!active || background) return;
@@ -1979,7 +2046,8 @@ function CommunityHighlights() {
                 <q>{item.body}</q>
                 <span className="community-highlight-meta">
                   <strong>{item.displayName}</strong>
-                  <span><ArrowUp size={13} /> {item.voteScore}</span>
+                  <span><ArrowUp size={13} /> {item.upvoteCount}</span>
+                  <span><ArrowDown size={13} /> {item.downvoteCount}</span>
                   <span><ChatCircle size={13} /> {item.replyCount}</span>
                 </span>
               </span>
@@ -2076,6 +2144,9 @@ type EditorPick = {
   cover: string | null;
   ratingTenths: number;
   latestChapterSlug: string | null;
+  chapterCount: number;
+  bookmarkCount: number;
+  commentCount: number;
   genres: string[];
 };
 
@@ -2148,10 +2219,15 @@ function FeaturedSeriesSlider() {
 
   const safeActive = active < picks.length ? active : 0;
   const item = picks[safeActive]!;
+  const farPreviousIndex = (safeActive - 2 + picks.length) % picks.length;
   const previousIndex = (safeActive - 1 + picks.length) % picks.length;
   const nextIndex = (safeActive + 1) % picks.length;
+  const farNextIndex = (safeActive + 2) % picks.length;
+  const farPreviousItem = picks[farPreviousIndex]!;
   const previousItem = picks[previousIndex]!;
   const nextItem = picks[nextIndex]!;
+  const farNextItem = picks[farNextIndex]!;
+  const showFiveCards = picks.length >= 5;
   const move = (direction: -1 | 1) =>
     setActive(
       (current) => (current + direction + picks.length) % picks.length,
@@ -2187,7 +2263,28 @@ function FeaturedSeriesSlider() {
       ) : null}
       <div className="featured-slider-shade" />
       <div className="featured-slider-inner page-wrap">
-        <div className="featured-slider-stage">
+        <div
+          className="featured-slider-stage"
+          data-visible-count={showFiveCards ? "5" : "3"}
+        >
+          {showFiveCards ? (
+            <button
+              className="featured-side-card featured-edge-card featured-edge-card-left"
+              type="button"
+              aria-label={`Show ${farPreviousItem.title}`}
+              onClick={() => setActive(farPreviousIndex)}
+            >
+              {farPreviousItem.cover ? (
+                <ResilientCoverImage
+                  src={farPreviousItem.cover}
+                  alt=""
+                  decorative
+                />
+              ) : (
+                <Books size={26} />
+              )}
+            </button>
+          ) : null}
           {picks.length > 1 ? (
             <button
               className="featured-side-card featured-side-card-left"
@@ -2222,9 +2319,13 @@ function FeaturedSeriesSlider() {
             ) : (
               <Books size={42} />
             )}
-            <span>
-              <Star size={13} weight="fill" />
-              {(item.ratingTenths / 10).toFixed(1)}
+            <span className="featured-main-details">
+              <strong>{item.title}</strong>
+              <SeriesStatusBadge status={item.status} />
+              <small>
+                <span>{item.chapterCount} chapters</span>
+                <span><BookmarkSimple size={14} /> {item.bookmarkCount}</span>
+              </small>
             </span>
           </a>
           {picks.length > 1 ? (
@@ -2238,6 +2339,24 @@ function FeaturedSeriesSlider() {
                 <ResilientCoverImage src={nextItem.cover} alt="" decorative />
               ) : (
                 <Books size={30} />
+              )}
+            </button>
+          ) : null}
+          {showFiveCards ? (
+            <button
+              className="featured-side-card featured-edge-card featured-edge-card-right"
+              type="button"
+              aria-label={`Show ${farNextItem.title}`}
+              onClick={() => setActive(farNextIndex)}
+            >
+              {farNextItem.cover ? (
+                <ResilientCoverImage
+                  src={farNextItem.cover}
+                  alt=""
+                  decorative
+                />
+              ) : (
+                <Books size={26} />
               )}
             </button>
           ) : null}
@@ -2257,45 +2376,6 @@ function FeaturedSeriesSlider() {
               >
                 <CaretRight size={21} />
               </button>
-            </div>
-          ) : null}
-        </div>
-        <div className="featured-slider-copy" key={`featured-${item.id}`}>
-          <div>
-            <SeriesTypeBadge type={item.type} />
-            <span>{item.categoryLabel}</span>
-          </div>
-          <h1>{item.title}</h1>
-          <p>{item.shortDescription || item.synopsis}</p>
-          <div className="featured-slider-actions">
-            <a
-              className="button button-primary"
-              href={
-                item.latestChapterSlug
-                  ? `/title/${item.slug}/chapter/${item.latestChapterSlug}`
-                  : `/title/${item.slug}`
-              }
-            >
-              <Play size={17} weight="fill" /> Read now
-            </a>
-            <a className="button button-secondary" href={`/title/${item.slug}`}>
-              Series details <ArrowRight size={16} />
-            </a>
-          </div>
-          {picks.length > 1 ? (
-            <div
-              className="featured-slider-dots"
-              aria-label="Choose featured series"
-            >
-              {picks.map((pick, index) => (
-                <button
-                  type="button"
-                  key={pick.id}
-                  aria-label={`Show ${pick.title}`}
-                  aria-pressed={index === safeActive}
-                  onClick={() => setActive(index)}
-                />
-              ))}
             </div>
           ) : null}
         </div>
@@ -2530,22 +2610,13 @@ function EditorsPickSection({
         <div className="editors-pick-copy" key={`copy-${item.id}`}>
           <div className="editors-pick-chips">
             <SeriesTypeBadge type={item.type} />
-            <span>{item.categoryLabel}</span>
-            {item.genres.slice(0, 3).map((genre) => (
-              <span key={genre}>{genre}</span>
-            ))}
+            <SeriesStatusBadge status={item.status} />
           </div>
           <h3>{item.title}</h3>
-          {item.nativeTitle ? <small>{item.nativeTitle}</small> : null}
-          <p className="editors-pick-teaser">{item.shortDescription}</p>
-          <div className="editors-pick-state">
-            <span>{catalogLabel(item.type)}</span>
-            <em>{catalogLabel(item.status)}</em>
-          </div>
-          <p>{item.synopsis || item.shortDescription}</p>
           <div className="editors-pick-meta">
+            <span><Books size={15} /> {item.chapterCount} chapters</span>
             <span><Star size={15} weight="fill" /> {(item.ratingTenths / 10).toFixed(1)}</span>
-            <span>Curated feature</span>
+            <span><ChatCircle size={15} /> {item.commentCount} comments</span>
           </div>
           <div className="editors-pick-actions">
             <a
@@ -2601,6 +2672,8 @@ function HomeView({
       <FeaturedSeriesSlider />
 
       <main>
+        <TrendingShowcase ordered={demoSeries} />
+
         <section className="home-continue page-wrap">
           {actor ? (
             <a className="continue-card" href="/title/the-glass-orchard/chapter/episode-30">
@@ -2637,8 +2710,6 @@ function HomeView({
             </div>
           )}
         </section>
-
-        <TrendingShowcase ordered={demoSeries} />
 
         <section className="updates-section">
           <div className="page-wrap">
@@ -2684,7 +2755,7 @@ type CatalogResult = {
   nativeTitle: string | null;
   synopsis: string;
   type: "MANHWA" | "MANGA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
   accessType: "FREE" | "PAID";
   cover: string | null;
   ratingTenths: number;
@@ -2778,7 +2849,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           : "All",
       );
       setStatus(
-        ["ONGOING", "COMPLETED", "HIATUS", "UPCOMING"].includes(nextStatus)
+        ["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"].includes(nextStatus)
           ? nextStatus
           : "All",
       );
@@ -3041,6 +3112,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
             ["ONGOING", "Ongoing"],
             ["COMPLETED", "Completed"],
             ["HIATUS", "Hiatus"],
+            ["PAUSED", "Paused"],
             ["UPCOMING", "Upcoming"],
           ].map(([value, label]) => (
             <button
@@ -3133,7 +3205,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                     </span>
                     <span>
                       {item.latestChapterNumber
-                        ? `Ch. ${item.latestChapterNumber}`
+                        ? `Ch. ${normalizeChapterNumber(item.latestChapterNumber)}`
                         : `${Number(item.chapterCount)} chapters`}
                     </span>
                   </div>
@@ -3162,7 +3234,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                   </span>
                   <strong>
                     {item.latestChapterNumber
-                      ? `Ch. ${item.latestChapterNumber}`
+                      ? `Ch. ${normalizeChapterNumber(item.latestChapterNumber)}`
                       : "No releases"}
                   </strong>
                 </div>
@@ -3482,6 +3554,20 @@ function StoreView({
       await equipCosmetic(item);
       return;
     }
+    const currentBalance = Number(balance ?? 0);
+    if (balance !== null && currentBalance < item.priceOnyx) {
+      showToast(
+        `You need ${(item.priceOnyx - currentBalance).toLocaleString("en-US")} more Onyx to unlock ${item.name}.`,
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        `Unlock ${item.name} for ${item.priceOnyx.toLocaleString("en-US")} Onyx?\n\nBalance: ${currentBalance.toLocaleString("en-US")} → ${(currentBalance - item.priceOnyx).toLocaleString("en-US")} Onyx`,
+      )
+    ) {
+      return;
+    }
     setBusy(item.id);
     try {
       const response = await fetch("/api/v1/store/purchases", {
@@ -3501,8 +3587,11 @@ function StoreView({
           payload.error?.message ?? "This cosmetic could not be unlocked.",
         );
       }
-      setBalance(Number(payload.wallet?.balance ?? balance ?? 0));
-      showToast(`${item.name} is now in your collection.`);
+      const nextBalance = Number(payload.wallet?.balance ?? balance ?? 0);
+      setBalance(nextBalance);
+      showToast(
+        `${item.name} unlocked. ${nextBalance.toLocaleString("en-US")} Onyx remaining.`,
+      );
       setStoreError("");
       setStoreRevision((value) => value + 1);
     } catch (purchaseError) {
@@ -4676,11 +4765,13 @@ export function LegacyDiscussionSection({
 type SeriesChapterAccess = {
   teamId: string | null;
   chapterSlug: string;
+  chapterNumber: string;
   chapterLabel: string;
   language: string;
   version: number;
   teamName: string | null;
   publishedAt: string | null;
+  isFresh?: boolean;
   accessType: "FREE" | "PAID";
   priceOnyx: number;
   canRead: boolean;
@@ -4693,6 +4784,27 @@ type SeriesChapterAccess = {
     | "UNAVAILABLE";
 };
 
+function chapterDisplayNumber(chapter: SeriesChapterAccess) {
+  const fallback = chapter.chapterLabel
+    .replace(/^(Chapter|Episode|Issue|Preview)\s*/i, "")
+    .trim()
+    .match(/^\S+/)?.[0];
+  return normalizeChapterNumber(chapter.chapterNumber || fallback || "");
+}
+
+function chapterDisplayLabel(chapter: SeriesChapterAccess) {
+  const number = chapterDisplayNumber(chapter);
+  const withoutPrefix = chapter.chapterLabel
+    .replace(/^(Chapter|Episode|Issue|Preview)\s*/i, "")
+    .trim();
+  const sourceNumber = withoutPrefix.match(/^\S+/)?.[0] ?? "";
+  const title = withoutPrefix
+    .slice(sourceNumber.length)
+    .replace(/^\s*[·:-]\s*/, "")
+    .trim();
+  return `Chapter ${number}${title ? ` · ${title}` : ""}`;
+}
+
 type PublicSeriesDetail = {
   id: string;
   slug: string;
@@ -4700,7 +4812,7 @@ type PublicSeriesDetail = {
   alternativeTitles: Array<{ title: string; language: string }>;
   synopsis: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
   ageRating: string;
   publicationYear: number | null;
   authors: Array<{ id: string; name: string }>;
@@ -4756,6 +4868,8 @@ function publicDetailCard(detail: PublicSeriesDetail): SeriesCard {
         ? "Completed"
         : detail.status === "HIATUS"
           ? "Hiatus"
+        : detail.status === "PAUSED"
+          ? "Paused"
         : detail.status === "UPCOMING"
           ? "Upcoming"
           : "Ongoing",
@@ -4918,14 +5032,30 @@ function TitleView({
       });
     return () => controller.abort();
   }, [actor, available, item.slug]);
-  const chapters = chapterPolicies.filter((chapter) =>
-    `${chapter.chapterLabel} ${chapter.accessType} ${chapter.language} ${chapter.teamName ?? ""}`
-      .toLowerCase()
-      .includes(chapterQuery.toLowerCase()),
-  );
-  const visibleChapters = chapterOrder === "newest" ? chapters : [...chapters].reverse();
-  const latestChapter = chapterPolicies[0] ?? null;
-  const firstChapter = chapterPolicies[chapterPolicies.length - 1] ?? null;
+  const chapters = chapterPolicies
+    .filter((chapter) =>
+      `${chapter.chapterLabel} ${chapter.accessType} ${chapter.language} ${chapter.teamName ?? ""}`
+        .toLowerCase()
+        .includes(chapterQuery.toLowerCase()),
+    )
+    .sort((left, right) => {
+      const numberOrder = compareChapterNumbers(
+        chapterDisplayNumber(left),
+        chapterDisplayNumber(right),
+      );
+      return numberOrder || left.version - right.version;
+    });
+  const visibleChapters =
+    chapterOrder === "newest" ? [...chapters].reverse() : chapters;
+  const allChaptersAscending = [...chapterPolicies].sort((left, right) => {
+    const numberOrder = compareChapterNumbers(
+      chapterDisplayNumber(left),
+      chapterDisplayNumber(right),
+    );
+    return numberOrder || left.version - right.version;
+  });
+  const latestChapter = allChaptersAscending.at(-1) ?? null;
+  const firstChapter = allChaptersAscending[0] ?? null;
 
   async function shareSeries() {
     const shareData = {
@@ -5255,19 +5385,19 @@ function TitleView({
               {visibleChapters.length > 0 ? (
                 visibleChapters.map((chapter, index) => {
                   const access = chapter.accessType === "FREE" ? "Free" : "Paid";
-                  const number = chapter.chapterLabel.replace(
-                    /^(Chapter|Episode|Issue|Preview)\s*/i,
-                    "",
-                  );
+                  const number = chapterDisplayNumber(chapter);
                   return (
                     <a
                       className="chapter-row"
                       href={`/title/${item.slug}/chapter/${chapter.chapterSlug}`}
                       key={`${chapter.chapterSlug}:${chapter.version}:${chapter.language}`}
                     >
-                      <span className="chapter-number">#{number}</span>
+                      <span className="chapter-number">
+                        <FreshChapterMark fresh={chapter.isFresh} />
+                        <span>#{number}</span>
+                      </span>
                       <span>
-                        <strong>{chapter.chapterLabel}</strong>
+                        <strong>{chapterDisplayLabel(chapter)}</strong>
                         <small>
                           <time>
                             {chapter.publishedAt
@@ -5610,11 +5740,19 @@ function ReaderView({
     ) {
       return [];
     }
-    return chapterList.filter(
-      (chapter) =>
-        chapter.language === readerContext.chapter.language &&
-        chapter.teamId === readerContext.chapter.teamId,
-    );
+    return chapterList
+      .filter(
+        (chapter) =>
+          chapter.language === readerContext.chapter.language &&
+          chapter.teamId === readerContext.chapter.teamId,
+      )
+      .sort((left, right) => {
+        const numberOrder = compareChapterNumbers(
+          chapterDisplayNumber(right),
+          chapterDisplayNumber(left),
+        );
+        return numberOrder || right.version - left.version;
+      });
   }, [
     chapterList,
     chapterListSeries,
@@ -6534,7 +6672,10 @@ function ReaderView({
                         )}
                       </span>
                       <div>
-                        <strong>{chapter.chapterLabel}</strong>
+                        <strong>
+                          <FreshChapterMark fresh={chapter.isFresh} />
+                          {chapterDisplayLabel(chapter)}
+                        </strong>
                         <small>
                           {chapter.accessType === "PAID"
                             ? `${coinLabel(chapter.priceOnyx, commercial)}`

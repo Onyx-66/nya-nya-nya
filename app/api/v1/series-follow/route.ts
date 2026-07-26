@@ -126,6 +126,11 @@ export async function POST(request: Request) {
         requestId,
       ),
       env.DB!.prepare(
+        `INSERT OR IGNORE INTO library_entries
+         (user_id, series_id, list_type, is_favorite, notifications_enabled)
+         VALUES (?, ?, 'PLANNING', 0, 1)`,
+      ).bind(actor.id, series.id),
+      env.DB!.prepare(
         `UPDATE series
             SET follower_count = (
               SELECT COUNT(*) FROM follows WHERE series_id = ?

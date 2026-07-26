@@ -19,6 +19,10 @@ import {
 } from "react";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
 import {
+  optimizeReactionAsset,
+  REACTION_ASSET_LIMIT,
+} from "@/lib/client/reaction-media";
+import {
   AdminPageScaffold,
   ConfirmActionDialog,
   useUnsavedChanges,
@@ -88,6 +92,10 @@ const emptyDraft: Draft = {
   usageCount: 0,
 };
 
+function formatBytes(value: number) {
+  return `${(value / 1_000_000).toFixed(2)} MB`;
+}
+
 async function api<T>(input: RequestInfo | URL, init?: RequestInit) {
   const response = await fetch(input, init);
   const payload = (await response.json()) as T & {
@@ -117,6 +125,8 @@ export function ReactionLibraryPanel({
   const [state, setState] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizationNote, setOptimizationNote] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -163,6 +173,7 @@ export function ReactionLibraryPanel({
         setSaved(emptyDraft);
       }
       setAssetFile(null);
+      setOptimizationNote("");
       setRemoveAsset(false);
       setMessage(null);
       setHasLoaded(true);
@@ -190,6 +201,7 @@ export function ReactionLibraryPanel({
     setDraft(reaction);
     setSaved(reaction);
     setAssetFile(null);
+    setOptimizationNote("");
     setRemoveAsset(false);
     setMessage(null);
   }
@@ -206,6 +218,7 @@ export function ReactionLibraryPanel({
     });
     setSaved(emptyDraft);
     setAssetFile(null);
+    setOptimizationNote("");
     setRemoveAsset(false);
   }
 
@@ -330,7 +343,7 @@ export function ReactionLibraryPanel({
     [assetFile, draft.assetUrl],
   );
   const hasSavedVisual = Boolean(
-    draft.assetUrl || draft.emojiFallback.trim(),
+    assetFile || draft.assetUrl || draft.emojiFallback.trim(),
   );
   useEffect(
     () => () => {
@@ -507,15 +520,16 @@ export function ReactionLibraryPanel({
             </aside>
 
             <form className="admin-detail-form" onSubmit={save}>
-              <div className="admin-form-section">
-                <div className="admin-section-heading">
+              <details className="admin-editor-box" open>
+                <summary className="admin-section-heading">
                   <ArrowsDownUp size={22} />
                   <div>
                     <h3>Reaction details</h3>
                     <p>Names, accessible labels, availability, and display order are stored centrally.</p>
                   </div>
-                </div>
-                <div className="admin-form-grid">
+                </summary>
+                <div className="admin-editor-box-body">
+                  <div className="admin-form-grid">
                   <label>
                     Name <b>Required</b>
                     <input
@@ -676,8 +690,8 @@ export function ReactionLibraryPanel({
                       ))}
                     </fieldset>
                   ) : null}
-                </div>
-                <label className="admin-check-row">
+                  </div>
+                  <label className="admin-check-row">
                   <input
                     type="checkbox"
                     checked={draft.isActive}
@@ -698,48 +712,93 @@ export function ReactionLibraryPanel({
                     }
                   />
                   Active and available in the reader reaction picker
-                </label>
-              </div>
-
-              <AdminMediaField
-                label="Reaction image or animation"
-                helperText="PNG, WebP, GIF, or JPEG. Transparent formats are preferred; animation is preserved."
-                recommendedDimensions="128 × 128 px; maximum 512 × 512 px and 2 MB"
-                currentUrl={draft.assetUrl}
-                file={assetFile}
-                accept="image/png,image/webp,image/gif,image/jpeg"
-                disabledReason={!draft.id ? "Create the reaction before uploading an asset." : undefined}
-                busy={saving}
-                onSelect={(file) => {
-                  setAssetFile(file);
-                  if (file) setRemoveAsset(false);
-                }}
-                onRemove={() => {
-                  if (assetFile) {
-                    setAssetFile(null);
-                  } else if (draft.assetUrl) {
-                    setRemoveAsset(true);
-                    setDraft((current) => ({
-                      ...current,
-                      assetUrl: null,
-                      isActive: current.emojiFallback.trim()
-                        ? current.isActive
-                        : false,
-                    }));
-                  }
-                }}
-              />
-              <div className="reaction-live-preview" aria-label={previewLabel}>
-                {assetPreviewUrl ? (
-                  <img src={assetPreviewUrl} alt={previewLabel} />
-                ) : (
-                  <span>{draft.emojiFallback || "◎"}</span>
-                )}
-                <div>
-                  <strong>{draft.name || "Reaction preview"}</strong>
-                  <small>{draft.accessibleLabel || "Accessible label will appear here"}</small>
+                  </label>
                 </div>
-              </div>
+              </details>
+
+              <details className="admin-editor-box" open>
+                <summary className="admin-section-heading">
+                  <ImageIcon size={22} />
+                  <div>
+                    <h3>Reaction asset &amp; preview</h3>
+                    <p>Images and GIFs are optimized automatically before upload.</p>
+                  </div>
+                </summary>
+                <div className="admin-editor-box-body">
+                  <AdminMediaField
+                    label="Reaction image or animation"
+                    helperText="PNG, WebP, GIF, or JPEG. Large images and animated GIFs are compressed automatically."
+                    recommendedDimensions="128 × 128 px; maximum 512 × 512 px and 1.25 MB after optimization"
+                    currentUrl={draft.assetUrl}
+                    file={assetFile}
+                    accept="image/png,image/webp,image/gif,image/jpeg"
+                    busy={saving || optimizing}
+                    onSelect={(file) => {
+                      if (!file) {
+                        setAssetFile(null);
+                        setOptimizationNote("");
+                        return;
+                      }
+                      setOptimizing(true);
+                      setOptimizationNote("Optimizing image…");
+                      void optimizeReactionAsset(file)
+                        .then((optimized) => {
+                          if (optimized.optimizedBytes > REACTION_ASSET_LIMIT) {
+                            throw new Error("The optimized asset is still larger than 1.25 MB.");
+                          }
+                          setAssetFile(optimized.file);
+                          setRemoveAsset(false);
+                          setOptimizationNote(
+                            `${optimized.animated ? "Animated GIF" : "Image"} optimized from ${formatBytes(optimized.originalBytes)} to ${formatBytes(optimized.optimizedBytes)}.`,
+                          );
+                        })
+                        .catch((error) => {
+                          setAssetFile(null);
+                          setOptimizationNote("");
+                          setMessage({
+                            kind: "error",
+                            text:
+                              error instanceof Error
+                                ? error.message
+                                : "The reaction image could not be optimized.",
+                          });
+                        })
+                        .finally(() => setOptimizing(false));
+                    }}
+                    onRemove={() => {
+                      setOptimizationNote("");
+                      if (assetFile) {
+                        setAssetFile(null);
+                      } else if (draft.assetUrl) {
+                        setRemoveAsset(true);
+                        setDraft((current) => ({
+                          ...current,
+                          assetUrl: null,
+                          isActive: current.emojiFallback.trim()
+                            ? current.isActive
+                            : false,
+                        }));
+                      }
+                    }}
+                  />
+                  {optimizationNote ? (
+                    <p className="reaction-optimization-note" role="status">
+                      {optimizationNote}
+                    </p>
+                  ) : null}
+                  <div className="reaction-live-preview" aria-label={previewLabel}>
+                    {assetPreviewUrl ? (
+                      <img src={assetPreviewUrl} alt={previewLabel} />
+                    ) : (
+                      <span>{draft.emojiFallback || "◎"}</span>
+                    )}
+                    <div>
+                      <strong>{draft.name || "Reaction preview"}</strong>
+                      <small>{draft.accessibleLabel || "Accessible label will appear here"}</small>
+                    </div>
+                  </div>
+                </div>
+              </details>
 
               <footer className="admin-sticky-actions">
                 {draft.id ? (
@@ -778,6 +837,7 @@ export function ReactionLibraryPanel({
                   className="button button-primary"
                   disabled={
                     saving ||
+                    optimizing ||
                     !dirty ||
                     !draft.slug ||
                     !draft.name ||

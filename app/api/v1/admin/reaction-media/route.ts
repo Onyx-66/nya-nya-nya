@@ -53,7 +53,7 @@ export async function PUT(request: Request) {
     }
     const image = await validateImageFile(file, {
       label: "reaction",
-      maxBytes: 2_000_000,
+      maxBytes: 1_250_000,
       minWidth: 24,
       minHeight: 24,
       maxWidth: 512,

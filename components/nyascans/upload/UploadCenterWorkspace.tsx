@@ -1240,7 +1240,13 @@ function UploadComposer({
                     : "Choose ordered chapter images"}
               </strong>
               <span>Verified JPEG, PNG, or WebP only · 25 MB per page</span>
+              <span className="upload-file-cta">
+                {sourceType === "DIRECT_FOLDER" || kind === "BATCH"
+                  ? "Choose folder"
+                  : "Choose files"}
+              </span>
               <input
+                className="upload-native-file"
                 ref={sourceType === "DIRECT_FOLDER" || kind === "BATCH" ? folderRef : undefined}
                 type="file"
                 multiple

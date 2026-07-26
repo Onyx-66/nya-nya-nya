@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { can } from "@/lib/permissions.mjs";
 import {
   normalizeUploadPath,
@@ -30,7 +31,12 @@ export const uploadItemInputSchema = z
     clientKey: z.string().trim().min(1).max(120),
     sourceLabel: z.string().trim().min(1).max(240),
     volume: z.string().trim().max(40).default(""),
-    chapterNumber: z.string().trim().min(1).max(40),
+    chapterNumber: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .transform(normalizeChapterNumber),
     title: z.string().trim().max(240).default(""),
     language: z
       .string()

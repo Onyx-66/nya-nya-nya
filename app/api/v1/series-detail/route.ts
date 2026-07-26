@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
@@ -180,8 +181,11 @@ export async function GET(request: Request) {
          AND c.visibility = 'PUBLIC'
          AND c.published_at IS NOT NULL
          AND datetime(c.published_at) <= datetime('now')
-       ORDER BY COALESCE(c.published_at, c.created_at) DESC,
-                c.created_at DESC, c.id DESC
+       ORDER BY CAST(c.chapter_number AS REAL) DESC,
+                c.version DESC,
+                COALESCE(c.published_at, c.created_at) DESC,
+                c.created_at DESC,
+                c.id DESC
        LIMIT 100`,
     )
       .bind(row.id)
@@ -246,7 +250,14 @@ export async function GET(request: Request) {
             "banner",
             row.revision,
           ),
-          chapters: chapters.results,
+          chapters: chapters.results.map((chapter) => ({
+            ...chapter,
+            chapterNumber: normalizeChapterNumber(
+              String(
+                (chapter as { chapterNumber: string }).chapterNumber,
+              ),
+            ),
+          })),
           updatedAt: row.updatedAt,
         },
       },

@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/admin-utils";
 import { requireActor, requireAdmin } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { deriveCachedCoverUrl } from "@/lib/server/metadata-import";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,14 @@ const mediaInputSchema = z.object({
   seriesId: z.string().trim().min(3).max(160),
   slot: z.enum(["cover", "banner"]),
   revision: z.coerce.number().int().min(1),
+});
+
+const importedCoverSchema = z.object({
+  seriesId: z.string().trim().min(3).max(160),
+  revision: z.number().int().min(1),
+  source: z.enum(["MANGADEX", "MANGAUPDATES"]),
+  externalId: z.string().trim().min(1).max(160),
+  responseHash: z.string().regex(/^[a-f0-9]{64}$/i),
 });
 
 function dependencies() {
@@ -202,6 +211,251 @@ export async function PUT(request: Request) {
         targetType: "SERIES",
         targetId: "uncommitted",
         reason: "Failed series media upload",
+      });
+    }
+    return errorResponse(requestId, error);
+  }
+}
+
+function assertImportedCoverHost(
+  source: "MANGADEX" | "MANGAUPDATES",
+  value: string,
+) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ApiError(
+      422,
+      "IMPORTED_COVER_INVALID",
+      "The metadata provider did not return a valid cover.",
+    );
+  }
+  const allowed =
+    url.protocol === "https:" &&
+    (source === "MANGADEX"
+      ? url.hostname === "uploads.mangadex.org"
+      : url.hostname === "mangaupdates.com" ||
+        url.hostname.endsWith(".mangaupdates.com"));
+  if (!allowed) {
+    throw new ApiError(
+      422,
+      "IMPORTED_COVER_HOST_INVALID",
+      "The provider cover host is not permitted.",
+    );
+  }
+  return url;
+}
+
+export async function POST(request: Request) {
+  const requestId = requestIdFor(request);
+  let uploadedKey = "";
+  try {
+    assertSameOrigin(request);
+    const actor = await requireActor();
+    requireAdmin(actor);
+    const { db, bucket } = dependencies();
+    await retryPendingMediaCleanup(db, bucket);
+    const payload = importedCoverSchema.parse(await request.json());
+    const cached = await db
+      .prepare(
+        `SELECT response_json AS responseJson
+           FROM metadata_import_cache
+          WHERE cache_key = ?
+            AND source = ?
+            AND external_id = ?
+            AND response_hash = ?
+          LIMIT 1`,
+      )
+      .bind(
+        `${payload.source}:${payload.externalId}`,
+        payload.source,
+        payload.externalId,
+        payload.responseHash,
+      )
+      .first<{ responseJson: string }>();
+    if (!cached) {
+      throw new ApiError(
+        409,
+        "IMPORT_PREVIEW_STALE",
+        "Preview the provider again before importing its cover.",
+      );
+    }
+    const derived = deriveCachedCoverUrl(
+      payload.source,
+      payload.externalId,
+      cached.responseJson,
+    );
+    if (!derived) {
+      throw new ApiError(
+        422,
+        "IMPORTED_COVER_MISSING",
+        "This provider record does not include a cover image.",
+      );
+    }
+    assertImportedCoverHost(payload.source, derived);
+    const response = await fetch(derived, {
+      headers: {
+        accept: "image/jpeg,image/png,image/webp",
+        "user-agent": "NyaScans-Metadata/1.2",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok || !response.body) {
+      throw new ApiError(
+        503,
+        "IMPORTED_COVER_UNAVAILABLE",
+        "The provider cover could not be downloaded.",
+      );
+    }
+    assertImportedCoverHost(
+      payload.source,
+      response.url || derived,
+    );
+    const contentLength = Number(response.headers.get("content-length") ?? 0);
+    if (contentLength > 8_000_000) {
+      throw new ApiError(
+        422,
+        "IMAGE_TOO_LARGE",
+        "The imported cover is larger than 8 MB.",
+      );
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > 8_000_000) {
+      throw new ApiError(
+        422,
+        "IMAGE_TOO_LARGE",
+        "The imported cover is larger than 8 MB.",
+      );
+    }
+    const image = await validateImageFile(
+      new File([bytes], "provider-cover", {
+        type: response.headers.get("content-type")?.split(";")[0] ?? "",
+      }),
+      {
+        label: "cover",
+        maxBytes: 8_000_000,
+        minWidth: 300,
+        minHeight: 450,
+        maxWidth: 8_000,
+        maxHeight: 10_000,
+        allowAnimation: false,
+        allowedTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
+      },
+    );
+    validateAspect("cover", image.dimensions);
+    const current = await db
+      .prepare(
+        `SELECT title, revision, cover_key AS coverKey
+           FROM series
+          WHERE id = ?
+          LIMIT 1`,
+      )
+      .bind(payload.seriesId)
+      .first<{
+        title: string;
+        revision: number;
+        coverKey: string | null;
+      }>();
+    if (!current) {
+      throw new ApiError(
+        404,
+        "SERIES_NOT_FOUND",
+        "This series record no longer exists.",
+      );
+    }
+    if (Number(current.revision) !== payload.revision) {
+      throw new ApiError(
+        409,
+        "STALE_VERSION",
+        "Another administrator changed this series. Reload it before importing media.",
+      );
+    }
+    const digest = await sha256Hex(image.bytes);
+    uploadedKey = `series/${payload.seriesId}/cover/${randomId()}-${digest.slice(0, 12)}.${extensionFor(image.contentType)}`;
+    await bucket.put(uploadedKey, image.bytes, {
+      httpMetadata: {
+        contentType: image.contentType,
+        cacheControl: "public, max-age=31536000, immutable",
+      },
+      customMetadata: {
+        width: String(image.dimensions.width),
+        height: String(image.dimensions.height),
+        sha256: digest,
+        source: payload.source,
+        externalId: payload.externalId,
+      },
+    });
+    const results = await db.batch([
+      db
+        .prepare(
+          `UPDATE series
+              SET cover_key = ?, revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND revision = ?`,
+        )
+        .bind(uploadedKey, payload.seriesId, payload.revision),
+      auditStatement(
+        db,
+        actor,
+        requestId,
+        {
+          action: "series.cover.import",
+          category: "SERIES_CHAPTERS",
+          sourceArea: "SERIES_MEDIA",
+          targetType: "SERIES",
+          targetId: payload.seriesId,
+          targetLabel: current.title,
+          metadata: {
+            source: payload.source,
+            externalId: payload.externalId,
+            contentType: image.contentType,
+            width: image.dimensions.width,
+            height: image.dimensions.height,
+            byteSize: image.bytes.byteLength,
+          },
+        },
+        "changes() = 1",
+      ),
+    ]);
+    if (Number(results[0]?.meta.changes ?? 0) === 0) {
+      await deleteMediaObject(db, bucket, uploadedKey, {
+        mediaKind: "SERIES_COVER",
+        targetType: "SERIES",
+        targetId: payload.seriesId,
+        reason: "Uncommitted imported series cover",
+      });
+      uploadedKey = "";
+      throw new ApiError(
+        409,
+        "STALE_VERSION",
+        "Another administrator changed this series. Reload it before importing media.",
+      );
+    }
+    uploadedKey = "";
+    if (current.coverKey) {
+      await deleteMediaObject(db, bucket, current.coverKey, {
+        mediaKind: "SERIES_COVER",
+        targetType: "SERIES",
+        targetId: payload.seriesId,
+        reason: "Replaced series cover from metadata provider",
+      });
+    }
+    return json(requestId, {
+      data: {
+        slot: "cover",
+        revision: payload.revision + 1,
+        url: `/api/v1/series-media?id=${encodeURIComponent(payload.seriesId)}&slot=cover&v=${payload.revision + 1}`,
+      },
+    });
+  } catch (error) {
+    if (uploadedKey && env.DB && env.BUCKET) {
+      await deleteMediaObject(env.DB, env.BUCKET, uploadedKey, {
+        mediaKind: "SERIES_COVER",
+        targetType: "SERIES",
+        targetId: "uncommitted",
+        reason: "Failed imported series cover",
       });
     }
     return errorResponse(requestId, error);

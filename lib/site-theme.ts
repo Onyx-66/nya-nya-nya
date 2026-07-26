@@ -79,6 +79,19 @@ export const sliderSizeOptions = [
   { value: "LARGE", label: "Large", detail: "Bigger cover artwork" },
 ] as const;
 
+export const newSeriesLayoutOptions = [
+  {
+    value: "CAROUSEL",
+    label: "Trending-style carousel",
+    detail: "A swipeable cover rail with compact details and a New marker.",
+  },
+  {
+    value: "CLASSIC_GRID",
+    label: "Classic grid",
+    detail: "Keep the current multi-column New Series card layout.",
+  },
+] as const;
+
 const experienceSchema = z.object({
   template: z
     .enum([
@@ -101,6 +114,7 @@ const experienceSchema = z.object({
   sliderSize: z.enum(["COMPACT", "BALANCED", "LARGE"]).default("BALANCED"),
   sliderAutoplay: z.boolean().default(true),
   sliderIntervalSeconds: z.number().int().min(3).max(15).default(7),
+  newSeriesLayout: z.enum(["CAROUSEL", "CLASSIC_GRID"]).default("CAROUSEL"),
 });
 
 export const siteThemeSchema = z.object({
@@ -164,6 +178,7 @@ export const siteThemeSchema = z.object({
     sliderSize: "BALANCED",
     sliderAutoplay: true,
     sliderIntervalSeconds: 7,
+    newSeriesLayout: "CAROUSEL",
   }),
 });
 
@@ -232,6 +247,7 @@ export const defaultSiteTheme: SiteTheme = {
     sliderSize: "BALANCED",
     sliderAutoplay: true,
     sliderIntervalSeconds: 7,
+    newSeriesLayout: "CAROUSEL",
   },
 };
 
@@ -303,6 +319,9 @@ export function siteThemeDataAttributes(theme: SiteTheme) {
       .replaceAll("_", "-"),
     "data-slider-size": theme.experience.sliderSize.toLowerCase(),
     "data-slider-autoplay": String(theme.experience.sliderAutoplay),
+    "data-new-series-layout": theme.experience.newSeriesLayout
+      .toLowerCase()
+      .replaceAll("_", "-"),
     "data-slider-interval": String(
       theme.experience.sliderIntervalSeconds,
     ),

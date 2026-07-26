@@ -33,6 +33,7 @@ import {
   parseDiscussionSettings,
   type DiscussionSettings,
 } from "@/lib/discussion-settings";
+import { optimizeReactionAsset } from "@/lib/client/reaction-media";
 
 type DiscussionActor = {
   displayName: string;
@@ -405,20 +406,51 @@ export function EnhancedDiscussionSection({
     setUploadingMedia(true);
     setMediaError("");
     try {
+      const isGif =
+        file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+      const typedFile =
+        isGif && file.type !== "image/gif"
+          ? new File([file], file.name, {
+              type: "image/gif",
+              lastModified: file.lastModified,
+            })
+          : file;
+      const uploadFile = isGif
+        ? (await optimizeReactionAsset(typedFile)).file
+        : file;
       const form = new FormData();
-      form.set("file", file);
+      form.set("file", uploadFile);
       form.set("altText", file.name.replace(/\.[^.]+$/, "").replaceAll("_", " "));
       const response = await fetch("/api/v1/discussion-media", {
         method: "POST",
         body: form,
       });
-      const payload = (await response.json()) as DiscussionMedia & {
-        error?: { message?: string };
-      };
+      const responseText = await response.text();
+      let payload:
+        | (DiscussionMedia & { error?: { message?: string } })
+        | null = null;
+      try {
+        payload = JSON.parse(responseText) as DiscussionMedia & {
+          error?: { message?: string };
+        };
+      } catch {
+        // Some hosts return a plain-text body for request-size failures.
+      }
       if (!response.ok) {
+        if (
+          response.status === 413 ||
+          /payload too large/i.test(responseText)
+        ) {
+          throw new Error(
+            "This attachment is too large to upload. Try a shorter GIF or a smaller image.",
+          );
+        }
         throw new Error(
-          payload.error?.message ?? "The attachment could not be uploaded.",
+          payload?.error?.message ?? "The attachment could not be uploaded.",
         );
+      }
+      if (!payload?.id) {
+        throw new Error("The attachment could not be uploaded.");
       }
       setPendingMedia((current) => [
         ...current,

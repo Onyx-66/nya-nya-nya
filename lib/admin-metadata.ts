@@ -333,7 +333,7 @@ export const seriesManagementSchema = z
       .default([]),
     synopsis: z.string().trim().min(20).max(10_000),
     type: z.enum(["MANGA", "MANHWA", "MANHUA"]),
-    status: z.enum(["ONGOING", "COMPLETED", "HIATUS", "UPCOMING"]),
+    status: z.enum(["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"]),
     ageRating: z.enum(["EVERYONE", "TEEN", "MATURE"]),
     publicationYear: z.coerce
       .number()
@@ -458,7 +458,7 @@ export type ImportedSeriesMetadata = {
     countryCode?: CountryCode;
     languageCode?: LanguageCode;
     type?: "MANGA" | "MANHWA" | "MANHUA";
-    status?: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+    status?: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
     publicationYear?: number | null;
     genres?: Array<{ name: string }>;
     coverReferenceUrl?: string | null;

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { can } from "@/lib/permissions.mjs";
 import { ApiError } from "@/lib/server/api";
 import type { Actor } from "@/lib/server/policy";
@@ -10,6 +11,7 @@ export type ChapterAccessDecision = {
   teamId: string | null;
   seriesSlug: string;
   chapterSlug: string;
+  chapterNumber: string;
   chapterLabel: string;
   language: string;
   version: number;
@@ -30,12 +32,17 @@ export type ChapterAccessDecision = {
 };
 
 function decisionBase(chapter: ChapterAccessRecord) {
+  const chapterNumber = normalizeChapterNumber(chapter.chapterNumber);
   return {
     chapterId: chapter.id,
     teamId: chapter.teamId,
     seriesSlug: chapter.seriesSlug,
     chapterSlug: chapter.chapterSlug,
-    chapterLabel: chapter.chapterLabel,
+    chapterNumber,
+    chapterLabel: chapter.chapterLabel.replace(
+      /^Chapter\s+\S+/,
+      `Chapter ${chapterNumber}`,
+    ),
     language: chapter.language,
     version: chapter.version,
     teamName: chapter.teamName,
@@ -50,6 +57,7 @@ export type ChapterAccessRecord = {
   teamId: string | null;
   seriesSlug: string;
   chapterSlug: string;
+  chapterNumber: string;
   chapterLabel: string;
   language: string;
   version: number;
@@ -85,6 +93,7 @@ async function databaseChapterRecord(
             c.team_id AS teamId,
             s.slug AS seriesSlug,
             c.slug AS chapterSlug,
+            c.chapter_number AS chapterNumber,
             CASE
               WHEN c.title = '' THEN 'Chapter ' || c.chapter_number
               ELSE 'Chapter ' || c.chapter_number || ' · ' || c.title
@@ -123,6 +132,7 @@ async function databaseChapterRecord(
       teamId: string | null;
       seriesSlug: string;
       chapterSlug: string;
+      chapterNumber: string;
       chapterLabel: string;
       language: string;
       version: number;

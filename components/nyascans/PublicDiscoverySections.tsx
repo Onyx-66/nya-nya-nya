@@ -9,6 +9,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { normalizeChapterNumber } from "@/lib/chapter-number";
 
 type NewSeriesRecord = {
   id: string;
@@ -38,6 +39,41 @@ function label(value: string) {
     .toLowerCase()
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function SeriesTypeLabel({ type }: { type: string }) {
+  const normalized =
+    type.toUpperCase() === "MANHWA"
+      ? "Manhwa"
+      : type.toUpperCase() === "MANHUA"
+        ? "Manhua"
+        : "Manga";
+  const flag =
+    normalized === "Manhwa" ? "🇰🇷" : normalized === "Manhua" ? "🇨🇳" : "🇯🇵";
+  return (
+    <span className={`series-type-badge type-${normalized.toLowerCase()}`}>
+      <span aria-hidden="true">{flag}</span>
+      {normalized}
+    </span>
+  );
+}
+
+function SeriesStatusLabel({ status }: { status: string }) {
+  const normalized = status.toUpperCase();
+  const tone =
+    normalized === "COMPLETED"
+      ? "completed"
+      : normalized === "HIATUS" || normalized === "PAUSED"
+        ? "paused"
+        : normalized === "ONGOING"
+          ? "ongoing"
+          : "upcoming";
+  return (
+    <span className={`series-status-badge status-${tone}`}>
+      <i aria-hidden="true" />
+      {label(status)}
+    </span>
+  );
 }
 
 function NewSeriesCover({ record }: { record: NewSeriesRecord }) {
@@ -142,6 +178,14 @@ export function NewSeriesSection() {
   const [records, setRecords] = useState<NewSeriesRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const railRef = useRef<HTMLDivElement | null>(null);
+
+  function move(direction: -1 | 1) {
+    railRef.current?.scrollBy({
+      left: direction * Math.max(260, railRef.current.clientWidth * 0.78),
+      behavior: "smooth",
+    });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -183,9 +227,21 @@ export function NewSeriesSection() {
           <h2 id="new-series-title">New Series</h2>
           <p>Recently published titles, newest additions first.</p>
         </div>
-        <a href="/browse?sort=added">
-          View all <ArrowRight size={17} />
-        </a>
+        <div className="new-series-heading-actions">
+          {records.length > 1 ? (
+            <div className="new-series-controls" aria-label="New series navigation">
+              <button type="button" onClick={() => move(-1)} aria-label="Previous new series">
+                <CaretLeft size={18} />
+              </button>
+              <button type="button" onClick={() => move(1)} aria-label="Next new series">
+                <CaretRight size={18} />
+              </button>
+            </div>
+          ) : null}
+          <a href="/browse?sort=added">
+            View all <ArrowRight size={17} />
+          </a>
+        </div>
       </div>
       {loading ? (
         <div className="public-discovery-loading" role="status">
@@ -197,7 +253,21 @@ export function NewSeriesSection() {
           <span>{error}</span>
         </div>
       ) : records.length ? (
-        <div className="new-series-grid">
+        <div
+          className="new-series-grid"
+          ref={railRef}
+          tabIndex={0}
+          aria-label="New series carousel"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              move(-1);
+            } else if (event.key === "ArrowRight") {
+              event.preventDefault();
+              move(1);
+            }
+          }}
+        >
           {records.map((record) => (
             <a
               className="new-series-card"
@@ -208,8 +278,9 @@ export function NewSeriesSection() {
               <NewSeriesCover record={record} />
               <span className="new-series-copy">
                 <strong>{record.title}</strong>
-                <span>
-                  {label(record.type)} · {label(record.status)}
+                <span className="new-series-badges">
+                  <SeriesTypeLabel type={record.type} />
+                  <SeriesStatusLabel status={record.status} />
                 </span>
                 <small>
                   {record.genres.length
@@ -217,7 +288,9 @@ export function NewSeriesSection() {
                     : "Genres pending"}
                 </small>
                 {record.latestChapter ? (
-                  <em>Latest: Chapter {record.latestChapter}</em>
+                  <em>
+                    Latest: Chapter {normalizeChapterNumber(record.latestChapter)}
+                  </em>
                 ) : null}
               </span>
             </a>
@@ -328,24 +401,6 @@ export function PublishingTeamsCarousel() {
           <h2 id="publishing-teams-title">Publishing Teams</h2>
           <p>Meet the verified teams producing releases across NyaScans.</p>
         </div>
-        {records.length > 1 ? (
-          <div className="teams-carousel-controls">
-            <button
-              type="button"
-              aria-label="Previous publishing teams"
-              onClick={() => move(-1)}
-            >
-              <CaretLeft size={19} />
-            </button>
-            <button
-              type="button"
-              aria-label="Next publishing teams"
-              onClick={() => move(1)}
-            >
-              <CaretRight size={19} />
-            </button>
-          </div>
-        ) : null}
       </div>
       {loading ? (
         <div className="public-discovery-loading" role="status">
@@ -357,30 +412,50 @@ export function PublishingTeamsCarousel() {
           <span>{error}</span>
         </div>
       ) : (
-        <div
-          className={`teams-carousel ${records.length === 1 ? "is-single" : ""}`}
-          ref={railRef}
-          tabIndex={0}
-          aria-label="Publishing teams carousel"
-          onScroll={syncActiveCard}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowLeft") {
-              event.preventDefault();
-              move(-1);
-            } else if (event.key === "ArrowRight") {
-              event.preventDefault();
-              move(1);
-            }
-          }}
-        >
-          {records.map((record, index) => (
-            <PublishingTeamCard
-              active={index === activeIndex}
-              index={index}
-              key={record.id}
-              record={record}
-            />
-          ))}
+        <div className="teams-carousel-shell">
+          {records.length > 1 ? (
+            <div className="teams-carousel-controls">
+              <button
+                type="button"
+                aria-label="Previous publishing teams"
+                onClick={() => move(-1)}
+              >
+                <CaretLeft size={19} />
+              </button>
+              <button
+                type="button"
+                aria-label="Next publishing teams"
+                onClick={() => move(1)}
+              >
+                <CaretRight size={19} />
+              </button>
+            </div>
+          ) : null}
+          <div
+            className={`teams-carousel ${records.length === 1 ? "is-single" : ""}`}
+            ref={railRef}
+            tabIndex={0}
+            aria-label="Publishing teams carousel"
+            onScroll={syncActiveCard}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                move(-1);
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                move(1);
+              }
+            }}
+          >
+            {records.map((record, index) => (
+              <PublishingTeamCard
+                active={index === activeIndex}
+                index={index}
+                key={record.id}
+                record={record}
+              />
+            ))}
+          </div>
         </div>
       )}
       {!loading && !error && records.length > 1 ? (

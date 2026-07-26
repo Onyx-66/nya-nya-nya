@@ -34,12 +34,18 @@ test("Latest Updates exposes five unique chapter numbers with Free or Paid statu
     app.indexOf("function LatestUpdatesView"),
   );
 
-  assert.match(api, /PARTITION BY c\.chapter_number/);
+  assert.match(
+    api,
+    /PARTITION BY LTRIM\(c\.chapter_number, '0'\)/,
+  );
   assert.match(api, /WHERE releaseRank = 1/);
   assert.match(api, /LIMIT 5/);
   assert.match(api, /datetime\(newest\.created_at\) DESC/);
   assert.match(api, /newest\.id DESC/);
-  assert.match(latestMarkup, /Chapter \{chapter\.chapterNumber\}/);
+  assert.match(
+    latestMarkup,
+    /Chapter \{normalizeChapterNumber\(chapter\.chapterNumber\)\}/,
+  );
   assert.match(latestMarkup, /ChapterAccessBadge/);
   assert.doesNotMatch(latestMarkup, /chapter\.title/);
 });
