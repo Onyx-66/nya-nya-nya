@@ -39,6 +39,7 @@ function resolveView(slug: string[]): {
   if (root === "signup" || root === "register") return { view: "signup" };
   if (root === "wallet") return { view: "wallet" };
   if (root === "orders") return { view: "orders" };
+  if (root === "roulette") return { view: "roulette" };
   if (root === "notifications") return { view: "notifications" };
   if (root === "latest") return { view: "latest" };
   if (root === "rankings") return { view: "rankings" };
@@ -86,6 +87,7 @@ export async function generateMetadata({
     notifications: "Notifications",
     latest: "Latest Updates",
     rankings: "Rankings",
+    roulette: "Daily Roulette",
     status: "System Status",
     support: "Support",
     legal: "Legal",
@@ -93,7 +95,15 @@ export async function generateMetadata({
   return {
     title: labels[view] ?? "Explore",
     robots:
-      ["account", "login", "signup", "wallet", "orders", "notifications"].includes(view)
+      [
+        "account",
+        "login",
+        "signup",
+        "wallet",
+        "orders",
+        "notifications",
+        "roulette",
+      ].includes(view)
         ? { index: false, follow: false }
         : undefined,
   };

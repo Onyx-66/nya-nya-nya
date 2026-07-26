@@ -3,12 +3,23 @@ import { z } from "zod";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import {
+  economySnapshot,
+  walletSnapshot,
+} from "@/lib/server/economy";
 import { getActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
 const categorySchema = z
-  .enum(["coins", "memberships", "banners", "cosmetics", "logo-effects"])
+  .enum([
+    "coins",
+    "memberships",
+    "gifts",
+    "banners",
+    "cosmetics",
+    "logo-effects",
+  ])
   .default("coins");
 
 function parseJson(value: string, fallback: unknown) {
@@ -17,28 +28,6 @@ function parseJson(value: string, fallback: unknown) {
   } catch {
     return fallback;
   }
-}
-
-async function walletSnapshot(userId: string) {
-  if (!env.DB) return null;
-  const accountId = `la_user_${userId}`;
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO ledger_accounts
-     (id, owner_type, owner_id, currency, account_type)
-     VALUES (?, 'USER', ?, 'ONYX', 'AVAILABLE')`,
-  )
-    .bind(accountId, userId)
-    .run();
-  const balance = await env.DB.prepare(
-    "SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries WHERE account_id = ?",
-  )
-    .bind(accountId)
-    .first<{ balance: number }>();
-  return {
-    balance: Number(balance?.balance ?? 0),
-    currency: "ONYX",
-    accountId,
-  };
 }
 
 function productMedia(
@@ -165,6 +154,7 @@ export async function storeProductsResponse(request: Request) {
               `SELECT si.id, si.slug, si.collection_id AS collectionId,
                       si.name, si.description, si.category,
                       si.price_onyx AS priceOnyx,
+                      si.price_currency AS priceCurrency,
                       si.preview_key AS previewKey,
                       si.preview_config_json AS previewConfigJson,
                       si.sort_order AS sortOrder, si.updated_at AS updatedAt
@@ -184,6 +174,7 @@ export async function storeProductsResponse(request: Request) {
               description: string;
               category: string;
               priceOnyx: number;
+              priceCurrency: "ONYX" | "SHARDS";
               previewKey: string | null;
               previewConfigJson: string;
               sortOrder: number;
@@ -330,6 +321,7 @@ export async function storeProductsResponse(request: Request) {
         categoryCounts: {
           coins: countValue(0),
           memberships: countValue(1),
+          gifts: 2,
           banners: countValue(2),
           cosmetics: countValue(3),
           "logo-effects": countValue(4),
@@ -343,6 +335,7 @@ export async function storeProductsResponse(request: Request) {
         cosmetics: itemRows.results.map((item) => ({
           ...item,
           priceOnyx: Number(item.priceOnyx),
+          priceCurrency: item.priceCurrency,
           previewConfig: parseJson(item.previewConfigJson, {}),
           previewUrl: item.previewKey
             ? `/api/v1/store-preview?id=${encodeURIComponent(item.id)}&v=${encodeURIComponent(item.updatedAt)}`
@@ -356,7 +349,10 @@ export async function storeProductsResponse(request: Request) {
           plural: commercial.settings.economy.coinPlural,
           icon: commercial.settings.economy.coinIcon,
         },
-        viewer: actor ? await walletSnapshot(actor.id) : null,
+        viewer: actor
+          ? await walletSnapshot(env.DB, actor.id, "ONYX")
+          : null,
+        balances: actor ? await economySnapshot(env.DB, actor.id) : null,
         checkoutEnabled: false,
         checkoutStatus:
           "Coin checkout requires a verified payment provider. Cosmetics can be unlocked with an existing Onyx balance.",

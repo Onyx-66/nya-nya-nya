@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "05f2790e-c6eb-4ac0-a2b3-913f482359e4",
-  "prevId": "b4489935-6308-4544-8971-347e77a47df4",
+  "id": "7b59a50c-5923-475d-bd41-cf123f9b75bf",
+  "prevId": "05f2790e-c6eb-4ac0-a2b3-913f482359e4",
   "tables": {
     "analytics_events": {
       "name": "analytics_events",
@@ -382,6 +382,227 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "chapter_reward_claims": {
+      "name": "chapter_reward_claims",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chapter_id": {
+          "name": "chapter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active_seconds": {
+          "name": "active_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "chapter_reward_claims_transaction_uidx": {
+          "name": "chapter_reward_claims_transaction_uidx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "chapter_reward_claims_recent_idx": {
+          "name": "chapter_reward_claims_recent_idx",
+          "columns": [
+            "user_id",
+            "claimed_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "chapter_reward_claims_user_id_users_id_fk": {
+          "name": "chapter_reward_claims_user_id_users_id_fk",
+          "tableFrom": "chapter_reward_claims",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chapter_reward_claims_chapter_id_chapters_id_fk": {
+          "name": "chapter_reward_claims_chapter_id_chapters_id_fk",
+          "tableFrom": "chapter_reward_claims",
+          "tableTo": "chapters",
+          "columnsFrom": [
+            "chapter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chapter_reward_claims_transaction_id_ledger_transactions_id_fk": {
+          "name": "chapter_reward_claims_transaction_id_ledger_transactions_id_fk",
+          "tableFrom": "chapter_reward_claims",
+          "tableTo": "ledger_transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "chapter_reward_claims_user_id_chapter_id_pk": {
+          "columns": [
+            "user_id",
+            "chapter_id"
+          ],
+          "name": "chapter_reward_claims_user_id_chapter_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "chapter_reward_claims_seconds_check": {
+          "name": "chapter_reward_claims_seconds_check",
+          "value": "\"chapter_reward_claims\".\"active_seconds\" >= 0"
+        }
+      }
+    },
+    "chapter_reward_sessions": {
+      "name": "chapter_reward_sessions",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chapter_id": {
+          "name": "chapter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active_seconds": {
+          "name": "active_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "last_heartbeat_at": {
+          "name": "last_heartbeat_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "chapter_reward_sessions_active_idx": {
+          "name": "chapter_reward_sessions_active_idx",
+          "columns": [
+            "user_id",
+            "active_seconds",
+            "updated_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "chapter_reward_sessions_user_id_users_id_fk": {
+          "name": "chapter_reward_sessions_user_id_users_id_fk",
+          "tableFrom": "chapter_reward_sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chapter_reward_sessions_chapter_id_chapters_id_fk": {
+          "name": "chapter_reward_sessions_chapter_id_chapters_id_fk",
+          "tableFrom": "chapter_reward_sessions",
+          "tableTo": "chapters",
+          "columnsFrom": [
+            "chapter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "chapter_reward_sessions_user_id_chapter_id_pk": {
+          "columns": [
+            "user_id",
+            "chapter_id"
+          ],
+          "name": "chapter_reward_sessions_user_id_chapter_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "chapter_reward_sessions_seconds_check": {
+          "name": "chapter_reward_sessions_seconds_check",
+          "value": "\"chapter_reward_sessions\".\"active_seconds\" >= 0"
+        }
+      }
     },
     "chapters": {
       "name": "chapters",
@@ -868,6 +1089,120 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "community_reward_claims": {
+      "name": "community_reward_claims",
+      "columns": {
+        "beneficiary_user_id": {
+          "name": "beneficiary_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reward_type": {
+          "name": "reward_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "community_reward_claims_transaction_uidx": {
+          "name": "community_reward_claims_transaction_uidx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "community_reward_claims_recent_idx": {
+          "name": "community_reward_claims_recent_idx",
+          "columns": [
+            "beneficiary_user_id",
+            "claimed_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "community_reward_claims_beneficiary_user_id_users_id_fk": {
+          "name": "community_reward_claims_beneficiary_user_id_users_id_fk",
+          "tableFrom": "community_reward_claims",
+          "tableTo": "users",
+          "columnsFrom": [
+            "beneficiary_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_reward_claims_transaction_id_ledger_transactions_id_fk": {
+          "name": "community_reward_claims_transaction_id_ledger_transactions_id_fk",
+          "tableFrom": "community_reward_claims",
+          "tableTo": "ledger_transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "community_reward_claims_beneficiary_user_id_reward_type_source_id_pk": {
+          "columns": [
+            "beneficiary_user_id",
+            "reward_type",
+            "source_id"
+          ],
+          "name": "community_reward_claims_beneficiary_user_id_reward_type_source_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "community_reward_claims_type_check": {
+          "name": "community_reward_claims_type_check",
+          "value": "\"community_reward_claims\".\"reward_type\" IN ('COMMENT_CREATED', 'COMMENT_UPVOTE')"
+        },
+        "community_reward_claims_amount_check": {
+          "name": "community_reward_claims_amount_check",
+          "value": "\"community_reward_claims\".\"amount\" >= 0"
+        }
+      }
     },
     "creators": {
       "name": "creators",
@@ -2556,6 +2891,248 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "gift_cards": {
+      "name": "gift_cards",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_ciphertext": {
+          "name": "code_ciphertext",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_nonce": {
+          "name": "code_nonce",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_suffix": {
+          "name": "code_suffix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purchaser_user_id": {
+          "name": "purchaser_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purchase_idempotency_key": {
+          "name": "purchase_idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "coin_amount": {
+          "name": "coin_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient_label": {
+          "name": "recipient_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'ACTIVE'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "purchase_transaction_id": {
+          "name": "purchase_transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "redeemed_by_user_id": {
+          "name": "redeemed_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "redeemed_transaction_id": {
+          "name": "redeemed_transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "redeemed_at": {
+          "name": "redeemed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "gift_cards_code_hash_uidx": {
+          "name": "gift_cards_code_hash_uidx",
+          "columns": [
+            "code_hash"
+          ],
+          "isUnique": true
+        },
+        "gift_cards_purchase_idempotency_uidx": {
+          "name": "gift_cards_purchase_idempotency_uidx",
+          "columns": [
+            "purchaser_user_id",
+            "purchase_idempotency_key"
+          ],
+          "isUnique": true
+        },
+        "gift_cards_redeem_transaction_uidx": {
+          "name": "gift_cards_redeem_transaction_uidx",
+          "columns": [
+            "redeemed_transaction_id"
+          ],
+          "isUnique": true
+        },
+        "gift_cards_owner_recent_idx": {
+          "name": "gift_cards_owner_recent_idx",
+          "columns": [
+            "purchaser_user_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "gift_cards_status_idx": {
+          "name": "gift_cards_status_idx",
+          "columns": [
+            "status",
+            "expires_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "gift_cards_purchaser_user_id_users_id_fk": {
+          "name": "gift_cards_purchaser_user_id_users_id_fk",
+          "tableFrom": "gift_cards",
+          "tableTo": "users",
+          "columnsFrom": [
+            "purchaser_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "gift_cards_purchase_transaction_id_ledger_transactions_id_fk": {
+          "name": "gift_cards_purchase_transaction_id_ledger_transactions_id_fk",
+          "tableFrom": "gift_cards",
+          "tableTo": "ledger_transactions",
+          "columnsFrom": [
+            "purchase_transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "gift_cards_redeemed_by_user_id_users_id_fk": {
+          "name": "gift_cards_redeemed_by_user_id_users_id_fk",
+          "tableFrom": "gift_cards",
+          "tableTo": "users",
+          "columnsFrom": [
+            "redeemed_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "gift_cards_redeemed_transaction_id_ledger_transactions_id_fk": {
+          "name": "gift_cards_redeemed_transaction_id_ledger_transactions_id_fk",
+          "tableFrom": "gift_cards",
+          "tableTo": "ledger_transactions",
+          "columnsFrom": [
+            "redeemed_transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "gift_cards_amount_check": {
+          "name": "gift_cards_amount_check",
+          "value": "\"gift_cards\".\"coin_amount\" > 0"
+        },
+        "gift_cards_status_check": {
+          "name": "gift_cards_status_check",
+          "value": "\"gift_cards\".\"status\" IN ('ACTIVE', 'REDEEMED', 'EXPIRED')"
+        }
+      }
     },
     "ledger_accounts": {
       "name": "ledger_accounts",
@@ -4265,6 +4842,300 @@
           "tableTo": "series",
           "columnsFrom": [
             "series_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "reward_settings": {
+      "name": "reward_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "settings_json": {
+          "name": "settings_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "updated_by_user_id": {
+          "name": "updated_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "reward_settings_updated_by_user_id_users_id_fk": {
+          "name": "reward_settings_updated_by_user_id_users_id_fk",
+          "tableFrom": "reward_settings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updated_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "roulette_spins": {
+      "name": "roulette_spins",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reward_key": {
+          "name": "reward_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reward_type": {
+          "name": "reward_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reward_amount": {
+          "name": "reward_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "store_item_id": {
+          "name": "store_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next_eligible_at": {
+          "name": "next_eligible_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spun_at": {
+          "name": "spun_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "roulette_spins_idempotency_uidx": {
+          "name": "roulette_spins_idempotency_uidx",
+          "columns": [
+            "user_id",
+            "idempotency_key"
+          ],
+          "isUnique": true
+        },
+        "roulette_spins_transaction_uidx": {
+          "name": "roulette_spins_transaction_uidx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "roulette_spins_user_recent_idx": {
+          "name": "roulette_spins_user_recent_idx",
+          "columns": [
+            "user_id",
+            "spun_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "roulette_spins_user_id_users_id_fk": {
+          "name": "roulette_spins_user_id_users_id_fk",
+          "tableFrom": "roulette_spins",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "roulette_spins_store_item_id_store_items_id_fk": {
+          "name": "roulette_spins_store_item_id_store_items_id_fk",
+          "tableFrom": "roulette_spins",
+          "tableTo": "store_items",
+          "columnsFrom": [
+            "store_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "roulette_spins_transaction_id_ledger_transactions_id_fk": {
+          "name": "roulette_spins_transaction_id_ledger_transactions_id_fk",
+          "tableFrom": "roulette_spins",
+          "tableTo": "ledger_transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "roulette_spins_reward_type_check": {
+          "name": "roulette_spins_reward_type_check",
+          "value": "\"roulette_spins\".\"reward_type\" IN ('SHARDS', 'ONYX', 'STORE_ITEM')"
+        },
+        "roulette_spins_reward_amount_check": {
+          "name": "roulette_spins_reward_amount_check",
+          "value": "\"roulette_spins\".\"reward_amount\" >= 0"
+        }
+      }
+    },
+    "roulette_state": {
+      "name": "roulette_state",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next_eligible_at": {
+          "name": "next_eligible_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'1970-01-01T00:00:00.000Z'"
+        },
+        "last_spin_id": {
+          "name": "last_spin_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "roulette_state_user_id_users_id_fk": {
+          "name": "roulette_state_user_id_users_id_fk",
+          "tableFrom": "roulette_state",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
           ],
           "columnsTo": [
             "id"
@@ -6201,6 +7072,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "price_currency": {
+          "name": "price_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'ONYX'"
+        },
         "preview_key": {
           "name": "preview_key",
           "type": "text",
@@ -6312,6 +7191,10 @@
         "store_items_price_check": {
           "name": "store_items_price_check",
           "value": "\"store_items\".\"price_onyx\" >= 0"
+        },
+        "store_items_currency_check": {
+          "name": "store_items_currency_check",
+          "value": "\"store_items\".\"price_currency\" IN ('ONYX', 'SHARDS')"
         },
         "store_items_category_check": {
           "name": "store_items_category_check",
@@ -6448,6 +7331,151 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "team_support_receipts": {
+      "name": "team_support_receipts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supporter_user_id": {
+          "name": "supporter_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "coin_amount": {
+          "name": "coin_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "team_support_idempotency_uidx": {
+          "name": "team_support_idempotency_uidx",
+          "columns": [
+            "supporter_user_id",
+            "idempotency_key"
+          ],
+          "isUnique": true
+        },
+        "team_support_transaction_uidx": {
+          "name": "team_support_transaction_uidx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "team_support_team_recent_idx": {
+          "name": "team_support_team_recent_idx",
+          "columns": [
+            "team_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "team_support_user_recent_idx": {
+          "name": "team_support_user_recent_idx",
+          "columns": [
+            "supporter_user_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "team_support_receipts_supporter_user_id_users_id_fk": {
+          "name": "team_support_receipts_supporter_user_id_users_id_fk",
+          "tableFrom": "team_support_receipts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "supporter_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_support_receipts_team_id_teams_id_fk": {
+          "name": "team_support_receipts_team_id_teams_id_fk",
+          "tableFrom": "team_support_receipts",
+          "tableTo": "teams",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_support_receipts_transaction_id_ledger_transactions_id_fk": {
+          "name": "team_support_receipts_transaction_id_ledger_transactions_id_fk",
+          "tableFrom": "team_support_receipts",
+          "tableTo": "ledger_transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "team_support_amount_check": {
+          "name": "team_support_amount_check",
+          "value": "\"team_support_receipts\".\"coin_amount\" > 0"
+        }
+      }
     },
     "teams": {
       "name": "teams",

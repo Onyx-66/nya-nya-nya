@@ -532,6 +532,8 @@ export function EnhancedDiscussionSection({
         }),
       });
       const payload = (await response.json()) as {
+        id?: string;
+        rewardAmount?: number;
         error?: { message?: string };
       };
       if (!response.ok) {
@@ -546,7 +548,29 @@ export function EnhancedDiscussionSection({
       setPendingMedia([]);
       setMediaError("");
       setRefreshKey((value) => value + 1);
-      showToast(postedReply ? "Reply posted." : "Comment posted.");
+      let rewardAmount = Number(payload.rewardAmount ?? 0);
+      if (payload.id) {
+        const rewardResponse = await fetch("/api/v1/rewards", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "CLAIM_COMMENT",
+            commentId: payload.id,
+          }),
+        }).catch(() => null);
+        if (rewardResponse?.ok) {
+          const reward = (await rewardResponse.json()) as {
+            awarded?: boolean;
+            amount?: number;
+          };
+          if (reward.awarded) rewardAmount = Number(reward.amount ?? 0);
+        }
+      }
+      showToast(
+        `${postedReply ? "Reply" : "Comment"} posted.${
+          rewardAmount > 0 ? ` +${rewardAmount} Shards` : ""
+        }`,
+      );
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : "Comment could not be posted.",
@@ -606,6 +630,18 @@ export function EnhancedDiscussionSection({
             : entry,
         ),
       );
+      if (desiredVote === 1) {
+        void fetch("/api/v1/rewards", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "CLAIM_UPVOTE",
+            commentId: comment.id,
+          }),
+        }).catch(() => {
+          // The author's reward can be retried without affecting the vote.
+        });
+      }
     } catch (error) {
       setComments((current) =>
         current.map((entry) =>

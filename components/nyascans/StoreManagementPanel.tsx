@@ -88,6 +88,7 @@ type StoreItem = {
     | "SEASONAL_PROFILE"
     | "LOGO_EFFECT";
   priceOnyx: number;
+  priceCurrency: "ONYX" | "SHARDS";
   previewUrl: string | null;
   previewConfig: PreviewConfig;
   isPublished: boolean;
@@ -458,6 +459,7 @@ export function StoreManagementPanel({
       description: "Describe how this Store item appears and what it changes.",
       category: defaultCategory,
       priceOnyx: 200,
+      priceCurrency: "ONYX" as const,
       previewConfig: defaultPreview,
       isPublished: false,
       isHidden: false,
@@ -1319,7 +1321,8 @@ export function StoreManagementPanel({
                       <div>
                         <strong>{item.name}</strong>
                         <small>
-                          {categoryLabel(item.category)} · {item.priceOnyx} Onyx
+                          {categoryLabel(item.category)} · {item.priceOnyx}{" "}
+                          {item.priceCurrency === "SHARDS" ? "Shards" : "Onyx"}
                         </small>
                       </div>
                       <em>
@@ -1538,7 +1541,7 @@ export function StoreManagementPanel({
                 </select>
               </label>
               <label>
-                Price · Onyx Coins
+                Price amount
                 <input
                   type="number"
                   min={0}
@@ -1548,6 +1551,23 @@ export function StoreManagementPanel({
                     setDraft({ ...draft, priceOnyx: Number(event.target.value) })
                   }
                 />
+              </label>
+              <label>
+                Price currency
+                <select
+                  value={draft.priceCurrency}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      priceCurrency: event.target.value as
+                        | "ONYX"
+                        | "SHARDS",
+                    })
+                  }
+                >
+                  <option value="ONYX">Onyx Coins</option>
+                  <option value="SHARDS">Shards</option>
+                </select>
               </label>
               <label>
                 Display order

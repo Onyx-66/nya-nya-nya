@@ -167,6 +167,16 @@ export const commercialSettings = sqliteTable("commercial_settings", {
   updatedAt,
 });
 
+export const rewardSettings = sqliteTable("reward_settings", {
+  id: text("id").primaryKey(),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  settingsJson: text("settings_json").notNull(),
+  revision: integer("revision").notNull().default(1),
+  updatedByUserId: text("updated_by_user_id").references(() => users.id),
+  createdAt,
+  updatedAt,
+});
+
 export const teams = sqliteTable(
   "teams",
   {
@@ -940,6 +950,36 @@ export const readingProgress = sqliteTable(
   ],
 );
 
+export const chapterRewardSessions = sqliteTable(
+  "chapter_reward_sessions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapters.id, { onDelete: "cascade" }),
+    activeSeconds: integer("active_seconds").notNull().default(0),
+    startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    lastHeartbeatAt: text("last_heartbeat_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.chapterId] }),
+    index("chapter_reward_sessions_active_idx").on(
+      table.userId,
+      table.activeSeconds,
+      table.updatedAt,
+    ),
+    check(
+      "chapter_reward_sessions_seconds_check",
+      sql`${table.activeSeconds} >= 0`,
+    ),
+  ],
+);
+
 export const analyticsEvents = sqliteTable(
   "analytics_events",
   {
@@ -1429,6 +1469,7 @@ export const storeItems = sqliteTable(
     description: text("description").notNull(),
     category: text("category").notNull(),
     priceOnyx: integer("price_onyx").notNull(),
+    priceCurrency: text("price_currency").notNull().default("ONYX"),
     previewKey: text("preview_key"),
     previewConfigJson: text("preview_config_json").notNull().default("{}"),
     isPublished: integer("is_published", { mode: "boolean" })
@@ -1446,6 +1487,10 @@ export const storeItems = sqliteTable(
   (table) => [
     uniqueIndex("store_items_slug_uidx").on(table.slug),
     check("store_items_price_check", sql`${table.priceOnyx} >= 0`),
+    check(
+      "store_items_currency_check",
+      sql`${table.priceCurrency} IN ('ONYX', 'SHARDS')`,
+    ),
     check(
       "store_items_category_check",
       sql`${table.category} IN (
@@ -1610,6 +1655,202 @@ export const ledgerEntries = sqliteTable(
   (table) => [
     index("ledger_entries_account_idx").on(table.accountId, table.createdAt),
     index("ledger_entries_tx_idx").on(table.transactionId),
+  ],
+);
+
+export const chapterRewardClaims = sqliteTable(
+  "chapter_reward_claims",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapters.id, { onDelete: "cascade" }),
+    transactionId: text("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    activeSeconds: integer("active_seconds").notNull(),
+    claimedAt: text("claimed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.chapterId] }),
+    uniqueIndex("chapter_reward_claims_transaction_uidx").on(
+      table.transactionId,
+    ),
+    index("chapter_reward_claims_recent_idx").on(table.userId, table.claimedAt),
+    check(
+      "chapter_reward_claims_seconds_check",
+      sql`${table.activeSeconds} >= 0`,
+    ),
+  ],
+);
+
+export const communityRewardClaims = sqliteTable(
+  "community_reward_claims",
+  {
+    beneficiaryUserId: text("beneficiary_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    rewardType: text("reward_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    amount: integer("amount").notNull(),
+    transactionId: text("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    claimedAt: text("claimed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.beneficiaryUserId, table.rewardType, table.sourceId],
+    }),
+    uniqueIndex("community_reward_claims_transaction_uidx").on(
+      table.transactionId,
+    ),
+    index("community_reward_claims_recent_idx").on(
+      table.beneficiaryUserId,
+      table.claimedAt,
+    ),
+    check(
+      "community_reward_claims_type_check",
+      sql`${table.rewardType} IN ('COMMENT_CREATED', 'COMMENT_UPVOTE')`,
+    ),
+    check("community_reward_claims_amount_check", sql`${table.amount} >= 0`),
+  ],
+);
+
+export const giftCards = sqliteTable(
+  "gift_cards",
+  {
+    id: text("id").primaryKey(),
+    codeHash: text("code_hash").notNull(),
+    codeCiphertext: text("code_ciphertext").notNull(),
+    codeNonce: text("code_nonce").notNull(),
+    codeSuffix: text("code_suffix").notNull(),
+    purchaserUserId: text("purchaser_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purchaseIdempotencyKey: text("purchase_idempotency_key").notNull(),
+    coinAmount: integer("coin_amount").notNull(),
+    recipientLabel: text("recipient_label").notNull().default(""),
+    message: text("message").notNull().default(""),
+    status: text("status").notNull().default("ACTIVE"),
+    expiresAt: text("expires_at"),
+    purchaseTransactionId: text("purchase_transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    redeemedByUserId: text("redeemed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    redeemedTransactionId: text("redeemed_transaction_id").references(
+      () => ledgerTransactions.id,
+    ),
+    redeemedAt: text("redeemed_at"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("gift_cards_code_hash_uidx").on(table.codeHash),
+    uniqueIndex("gift_cards_purchase_idempotency_uidx").on(
+      table.purchaserUserId,
+      table.purchaseIdempotencyKey,
+    ),
+    uniqueIndex("gift_cards_redeem_transaction_uidx").on(
+      table.redeemedTransactionId,
+    ),
+    index("gift_cards_owner_recent_idx").on(
+      table.purchaserUserId,
+      table.createdAt,
+    ),
+    index("gift_cards_status_idx").on(table.status, table.expiresAt),
+    check("gift_cards_amount_check", sql`${table.coinAmount} > 0`),
+    check(
+      "gift_cards_status_check",
+      sql`${table.status} IN ('ACTIVE', 'REDEEMED', 'EXPIRED')`,
+    ),
+  ],
+);
+
+export const teamSupportReceipts = sqliteTable(
+  "team_support_receipts",
+  {
+    id: text("id").primaryKey(),
+    supporterUserId: text("supporter_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    coinAmount: integer("coin_amount").notNull(),
+    message: text("message").notNull().default(""),
+    transactionId: text("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("team_support_idempotency_uidx").on(
+      table.supporterUserId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("team_support_transaction_uidx").on(table.transactionId),
+    index("team_support_team_recent_idx").on(table.teamId, table.createdAt),
+    index("team_support_user_recent_idx").on(
+      table.supporterUserId,
+      table.createdAt,
+    ),
+    check("team_support_amount_check", sql`${table.coinAmount} > 0`),
+  ],
+);
+
+export const rouletteState = sqliteTable("roulette_state", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  nextEligibleAt: text("next_eligible_at")
+    .notNull()
+    .default("1970-01-01T00:00:00.000Z"),
+  lastSpinId: text("last_spin_id"),
+  revision: integer("revision").notNull().default(1),
+  updatedAt,
+});
+
+export const rouletteSpins = sqliteTable(
+  "roulette_spins",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    rewardKey: text("reward_key").notNull(),
+    rewardType: text("reward_type").notNull(),
+    rewardAmount: integer("reward_amount").notNull().default(0),
+    storeItemId: text("store_item_id").references(() => storeItems.id, {
+      onDelete: "set null",
+    }),
+    transactionId: text("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    nextEligibleAt: text("next_eligible_at").notNull(),
+    spunAt: text("spun_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("roulette_spins_idempotency_uidx").on(
+      table.userId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("roulette_spins_transaction_uidx").on(table.transactionId),
+    index("roulette_spins_user_recent_idx").on(table.userId, table.spunAt),
+    check(
+      "roulette_spins_reward_type_check",
+      sql`${table.rewardType} IN ('SHARDS', 'ONYX', 'STORE_ITEM')`,
+    ),
+    check(
+      "roulette_spins_reward_amount_check",
+      sql`${table.rewardAmount} >= 0`,
+    ),
   ],
 );
 

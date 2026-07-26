@@ -60,6 +60,24 @@ export function errorResponse(requestId: string, error: unknown) {
 
   if (
     error instanceof Error &&
+    error.message.toLowerCase().includes("insufficient_balance")
+  ) {
+    return json(
+      requestId,
+      {
+        error: {
+          code: "INSUFFICIENT_BALANCE",
+          message: "Your selected currency balance is too low for this action.",
+          fields: [],
+          requestId,
+        },
+      },
+      { status: 409 },
+    );
+  }
+
+  if (
+    error instanceof Error &&
     error.message.toLowerCase().includes("final_active_owner_required")
   ) {
     return json(

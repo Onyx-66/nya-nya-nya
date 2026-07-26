@@ -21,6 +21,7 @@ import {
   CloudArrowUp,
   Coins,
   Compass,
+  Copy,
   CreditCard,
   CrownSimple,
   DotsThree,
@@ -47,6 +48,7 @@ import {
   SlidersHorizontal,
   SpinnerGap,
   SquaresFour,
+  Sparkle,
   Star,
   Storefront,
   Sun,
@@ -73,6 +75,7 @@ import {
 } from "react";
 import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
+import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
 import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
 import { NotificationsView } from "@/components/nyascans/NotificationsView";
 import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
@@ -82,9 +85,11 @@ import {
 } from "@/components/nyascans/PublicDiscoverySections";
 import { PublicProfileView } from "@/components/nyascans/PublicProfileView";
 import { PublicTeamView } from "@/components/nyascans/PublicTeamView";
+import { RouletteView } from "@/components/nyascans/RouletteView";
 import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 import { ReactionLibraryPanel } from "@/components/nyascans/admin/ReactionLibraryPanel";
+import { RewardSettingsPanel } from "@/components/nyascans/admin/RewardSettingsPanel";
 import {
   defaultReaderSettings,
   ReaderSettingsPanel,
@@ -127,6 +132,7 @@ export type AppView =
   | "notifications"
   | "latest"
   | "rankings"
+  | "roulette"
   | "orders"
   | "team"
   | "status"
@@ -1143,6 +1149,13 @@ function SiteHeader({
                       onClick={() => setMenuOpen(false)}
                     >
                       <ChatCircle size={18} /> Support
+                    </a>
+                    <a
+                      role="menuitem"
+                      href="/roulette"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <Sparkle size={18} /> Roulette
                     </a>
                     {canUpload ? (
                       <a
@@ -2456,6 +2469,7 @@ type EditorPick = {
   bookmarkCount: number;
   commentCount: number;
   genres: string[];
+  alternativeTitles: string[];
 };
 
 function FeaturedSeriesSlider() {
@@ -2921,6 +2935,37 @@ function EditorsPickSection({
             <SeriesStatusBadge status={item.status} />
           </div>
           <h3>{item.title}</h3>
+          <div className="editors-pick-desktop-detail">
+            {[
+              item.nativeTitle,
+              ...(item.alternativeTitles ?? []),
+            ].filter(Boolean).length ? (
+              <p className="editors-pick-alternatives">
+                <strong>Alternative titles</strong>
+                <span>
+                  {[
+                    item.nativeTitle,
+                    ...(item.alternativeTitles ?? []),
+                  ]
+                    .filter(
+                      (title, index, all): title is string =>
+                        Boolean(title) && all.indexOf(title) === index,
+                    )
+                    .join(" · ")}
+                </span>
+              </p>
+            ) : null}
+            {item.genres.length ? (
+              <div className="editors-pick-genres" aria-label="Genres">
+                {item.genres.map((genre) => (
+                  <span key={genre}>{genre}</span>
+                ))}
+              </div>
+            ) : null}
+            <p className="editors-pick-description">
+              {item.synopsis || item.shortDescription}
+            </p>
+          </div>
           <div className="editors-pick-meta">
             <span><Books size={15} /> {item.chapterCount} chapters</span>
             <span><Star size={15} weight="fill" /> {(item.ratingTenths / 10).toFixed(1)}</span>
@@ -3032,25 +3077,6 @@ function HomeView({
         <PublishingTeamsCarousel />
 
         <CommunityHighlights />
-
-        <section className="notification-cta">
-          <div className="page-wrap notification-cta-inner">
-            <div>
-              <Bell size={24} />
-              <span>
-                <strong>Control chapter alerts from your profile.</strong>
-                Choose followed titles, teams, unlock reminders, and security
-                notices in one place.
-              </span>
-            </div>
-            <a
-              className="button button-secondary"
-              href="/account?tab=notifications"
-            >
-              Notification settings <ArrowRight size={17} />
-            </a>
-          </div>
-        </section>
       </main>
     </>
   );
@@ -3678,6 +3704,7 @@ type StoreCosmetic = {
   description: string;
   category: string;
   priceOnyx: number;
+  priceCurrency: "ONYX" | "SHARDS";
   previewUrl: string | null;
   previewConfig: {
     from?: string;
@@ -3692,6 +3719,7 @@ type StoreCosmetic = {
 type StoreCategory =
   | "coins"
   | "memberships"
+  | "gifts"
   | "banners"
   | "cosmetics"
   | "logo-effects";
@@ -3699,6 +3727,7 @@ type StoreCategory =
 const storeCategories: readonly StoreCategory[] = [
   "coins",
   "memberships",
+  "gifts",
   "banners",
   "cosmetics",
   "logo-effects",
@@ -3758,6 +3787,7 @@ function StoreView({
   const [busy, setBusy] = useState<string | null>(null);
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [balance, setBalance] = useState<number | null>(null);
+  const [shardBalance, setShardBalance] = useState<number | null>(null);
   const [checkoutEnabled, setCheckoutEnabled] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState(
     "Checkout is not configured.",
@@ -3771,6 +3801,7 @@ function StoreView({
   >({
     coins: 0,
     memberships: 0,
+    gifts: 2,
     banners: 0,
     cosmetics: 0,
     "logo-effects": 0,
@@ -3778,6 +3809,10 @@ function StoreView({
   const [activeCollection, setActiveCollection] = useState("all");
   const [storeError, setStoreError] = useState("");
   const [storeRevision, setStoreRevision] = useState(0);
+  const updateStoreBalances = useCallback((onyx: number, shards: number) => {
+    setBalance(onyx);
+    setShardBalance(shards);
+  }, []);
   const storeRequestKey = `${selectedCategory}:${storeRevision}`;
   const [loadedStoreRequest, setLoadedStoreRequest] = useState("");
   const storeLoading = loadedStoreRequest !== storeRequestKey;
@@ -3799,6 +3834,10 @@ function StoreView({
           collections?: StoreCollection[];
           cosmetics?: StoreCosmetic[];
           viewer?: { balance?: number } | null;
+          balances?: {
+            onyx?: { balance?: number };
+            shards?: { balance?: number };
+          } | null;
           error?: { message?: string };
         };
         if (!response.ok) {
@@ -3828,6 +3867,10 @@ function StoreView({
           }));
           if (payload.viewer) {
             setBalance(Number(payload.viewer.balance ?? 0));
+          }
+          if (payload.balances) {
+            setBalance(Number(payload.balances.onyx?.balance ?? 0));
+            setShardBalance(Number(payload.balances.shards?.balance ?? 0));
           }
           setLoadedStoreRequest(storeRequestKey);
         },
@@ -3862,16 +3905,20 @@ function StoreView({
       await equipCosmetic(item);
       return;
     }
-    const currentBalance = Number(balance ?? 0);
-    if (balance !== null && currentBalance < item.priceOnyx) {
+    const currencyBalance =
+      item.priceCurrency === "SHARDS" ? shardBalance : balance;
+    const currentBalance = Number(currencyBalance ?? 0);
+    const currencyLabel =
+      item.priceCurrency === "SHARDS" ? "Shards" : "Onyx";
+    if (currencyBalance !== null && currentBalance < item.priceOnyx) {
       showToast(
-        `You need ${(item.priceOnyx - currentBalance).toLocaleString("en-US")} more Onyx to unlock ${item.name}.`,
+        `You need ${(item.priceOnyx - currentBalance).toLocaleString("en-US")} more ${currencyLabel} to unlock ${item.name}.`,
       );
       return;
     }
     if (
       !window.confirm(
-        `Unlock ${item.name} for ${item.priceOnyx.toLocaleString("en-US")} Onyx?\n\nBalance: ${currentBalance.toLocaleString("en-US")} → ${(currentBalance - item.priceOnyx).toLocaleString("en-US")} Onyx`,
+        `Unlock ${item.name} for ${item.priceOnyx.toLocaleString("en-US")} ${currencyLabel}?\n\nBalance: ${currentBalance.toLocaleString("en-US")} → ${(currentBalance - item.priceOnyx).toLocaleString("en-US")} ${currencyLabel}`,
       )
     ) {
       return;
@@ -3887,7 +3934,10 @@ function StoreView({
         }),
       });
       const payload = (await response.json()) as {
-        wallet?: { balance?: number };
+        balances?: {
+          onyx?: { balance?: number };
+          shards?: { balance?: number };
+        };
         error?: { message?: string };
       };
       if (!response.ok) {
@@ -3895,10 +3945,19 @@ function StoreView({
           payload.error?.message ?? "This cosmetic could not be unlocked.",
         );
       }
-      const nextBalance = Number(payload.wallet?.balance ?? balance ?? 0);
-      setBalance(nextBalance);
+      const nextBalance = Number(
+        item.priceCurrency === "SHARDS"
+          ? payload.balances?.shards?.balance ?? shardBalance ?? 0
+          : payload.balances?.onyx?.balance ?? balance ?? 0,
+      );
+      if (payload.balances) {
+        setBalance(Number(payload.balances.onyx?.balance ?? balance ?? 0));
+        setShardBalance(
+          Number(payload.balances.shards?.balance ?? shardBalance ?? 0),
+        );
+      }
       showToast(
-        `${item.name} unlocked. ${nextBalance.toLocaleString("en-US")} Onyx remaining.`,
+        `${item.name} unlocked. ${nextBalance.toLocaleString("en-US")} ${currencyLabel} remaining.`,
       );
       setStoreError("");
       setStoreRevision((value) => value + 1);
@@ -4085,7 +4144,11 @@ function StoreView({
                 <p>{item.description}</p>
                 <div>
                   <strong>
-                    <Coins size={16} weight="fill" />
+                    {item.priceCurrency === "SHARDS" ? (
+                      <Sparkle size={16} weight="fill" />
+                    ) : (
+                      <Coins size={16} weight="fill" />
+                    )}
                     {item.priceOnyx.toLocaleString("en-US")}
                   </strong>
                   <button
@@ -4120,16 +4183,19 @@ function StoreView({
           <p className="eyebrow">NyaScans store</p>
           <h1>Choose what you unlock.</h1>
           <p>
-            {commercial.economy.coinPlural}, memberships, and support are
-            shown clearly before confirmation.
+            Onyx, Shards, memberships, gifts, and cosmetics are shown clearly
+            before confirmation.
           </p>
         </div>
-        <a className="wallet-chip" href="/wallet">
+        <a className="wallet-chip wallet-chip-multi" href="/wallet">
           <span>
-            <Coins size={21} weight="fill" />
-            {commercial.economy.coinPlural} balance
+            <Coins size={19} weight="fill" />
+            <b>{actor ? (balance ?? "...") : "Sign in"}</b> Onyx
           </span>
-          <strong>{actor ? (balance ?? "...") : "Sign in"}</strong>
+          <span>
+            <Sparkle size={18} weight="fill" />
+            <b>{actor ? (shardBalance ?? "...") : "Sign in"}</b> Shards
+          </span>
           <ArrowRight size={17} />
         </a>
       </section>
@@ -4148,6 +4214,13 @@ function StoreView({
         >
           <CrownSimple size={17} /> Memberships
           <small>{categoryCounts.memberships}</small>
+        </a>
+        <a
+          href="/store/gifts"
+          aria-current={selectedCategory === "gifts" ? "page" : undefined}
+        >
+          <Gift size={17} /> Gifts
+          <small>{categoryCounts.gifts}</small>
         </a>
         <a
           href="/store/banners"
@@ -4174,14 +4247,14 @@ function StoreView({
         </a>
       </nav>
 
-      {!["banners", "cosmetics", "logo-effects"].includes(
+      {!["gifts", "banners", "cosmetics", "logo-effects"].includes(
         selectedCategory,
       ) && storeLoading ? (
         <div className="settings-loading page-wrap" role="status">
           Loading this Store category…
         </div>
       ) : null}
-      {!["banners", "cosmetics", "logo-effects"].includes(
+      {!["gifts", "banners", "cosmetics", "logo-effects"].includes(
         selectedCategory,
       ) && storeError ? (
         <div className="catalog-error page-wrap" role="alert">
@@ -4200,6 +4273,14 @@ function StoreView({
             Try again
           </button>
         </div>
+      ) : null}
+
+      {selectedCategory === "gifts" ? (
+        <GiftStorePanel
+          signedIn={Boolean(actor)}
+          showToast={showToast}
+          onBalances={updateStoreBalances}
+        />
       ) : null}
 
       {["banners", "cosmetics", "logo-effects"].includes(selectedCategory) ? (
@@ -4451,21 +4532,6 @@ function StoreView({
         </section>
       ) : null}
 
-      {selectedCategory === "coins" || selectedCategory === "memberships" ? (
-      <section className="support-products page-wrap">
-        <div className="support-copy">
-          <Heart size={30} weight="fill" />
-          <h2>Support the team behind a story.</h2>
-          <p>
-            One-time support is allocated transparently after fees and refund
-            exposure.
-          </p>
-          <a className="button button-secondary" href="/team/black-kite">
-            Find a team
-          </a>
-        </div>
-      </section>
-      ) : null}
     </main>
   );
 }
@@ -6020,12 +6086,17 @@ function ReaderView({
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletError, setWalletError] = useState("");
   const completedAnalyticsKey = useRef("");
+  const rewardedChapterKey = useRef("");
+  const currentReaderPage = useRef(page);
   const restoredProgressKey = useRef("");
   const chapterDrawerTrigger = useRef<HTMLButtonElement>(null);
   const chapterDrawer = useRef<HTMLElement>(null);
   const chapterListRequest = useRef<AbortController | null>(null);
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const unlockIdempotencyKey = useRef("");
+  useEffect(() => {
+    currentReaderPage.current = page;
+  }, [page]);
   const access =
     readerContext?.series.slug === routeSeriesSlug &&
     readerContext.chapter.slug === routeChapterSlug
@@ -6346,6 +6417,95 @@ function ReaderView({
     readerPages,
     readerSettings.autoMarkRead,
     readerSettings.saveReadingProgress,
+  ]);
+
+  useEffect(() => {
+    if (
+      !actor ||
+      !access?.canRead ||
+      !access.chapterId ||
+      panelCount === 0
+    ) {
+      return;
+    }
+    const chapterId = access.chapterId;
+    const controller = new AbortController();
+    let active = true;
+    let requestBusy = false;
+
+    async function tick() {
+      if (
+        !active ||
+        requestBusy ||
+        document.visibilityState !== "visible" ||
+        !document.hasFocus()
+      ) {
+        return;
+      }
+      requestBusy = true;
+      try {
+        const response = await fetch("/api/v1/rewards", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ action: "HEARTBEAT", chapterId }),
+        });
+        const status = (await response.json()) as {
+          eligible?: boolean;
+          alreadyClaimed?: boolean;
+        };
+        if (!active) return;
+        const atChapterEnd =
+          currentReaderPage.current / Math.max(1, panelCount) >= 0.92;
+        if (
+          !response.ok ||
+          !status.eligible ||
+          status.alreadyClaimed ||
+          !atChapterEnd ||
+          rewardedChapterKey.current === chapterId
+        ) {
+          if (status.alreadyClaimed) rewardedChapterKey.current = chapterId;
+          return;
+        }
+        const claimResponse = await fetch("/api/v1/rewards", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ action: "CLAIM_CHAPTER", chapterId }),
+        });
+        const claim = (await claimResponse.json()) as {
+          awarded?: boolean;
+          amount?: number;
+        };
+        if (!active) return;
+        if (claimResponse.ok && claim.awarded) {
+          rewardedChapterKey.current = chapterId;
+        }
+        if (claimResponse.ok && claim.awarded) {
+          showToast(
+            `Chapter completed · +${Number(claim.amount ?? 0).toLocaleString("en-US")} Shards`,
+          );
+        }
+      } catch {
+        // Reader rewards retry on the next visible heartbeat.
+      } finally {
+        requestBusy = false;
+      }
+    }
+
+    void tick();
+    const interval = window.setInterval(() => void tick(), 15_000);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [
+    access?.canRead,
+    access?.chapterId,
+    actor,
+    panelCount,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -7287,17 +7447,37 @@ type OrderData = {
   createdAt: string;
 };
 
+type GiftCardData = {
+  id: string;
+  code: string;
+  amount: number;
+  currency: "ONYX";
+  recipientLabel: string;
+  message: string;
+  status: "ACTIVE" | "REDEEMED" | "EXPIRED";
+  valid: boolean;
+  expiresAt: string | null;
+  redeemedAt: string | null;
+  createdAt: string;
+};
+
 function useCommerceData(actor: Actor) {
   const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [shardWallet, setShardWallet] = useState<WalletData | null>(null);
   const [orders, setOrders] = useState<OrderData[]>([]);
+  const [giftCards, setGiftCards] = useState<GiftCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
-    void Promise.all([fetch("/api/v1/wallet"), fetch("/api/v1/orders")])
-      .then(async ([walletResponse, orderResponse]) => {
+    void Promise.all([
+      fetch("/api/v1/wallet"),
+      fetch("/api/v1/orders"),
+      fetch("/api/v1/gifts", { cache: "no-store" }),
+    ])
+      .then(async ([walletResponse, orderResponse, giftsResponse]) => {
         const walletPayload = (await walletResponse.json()) as WalletData & {
           error?: { message?: string };
         };
@@ -7305,16 +7485,26 @@ function useCommerceData(actor: Actor) {
           data?: OrderData[];
           error?: { message?: string };
         };
-        if (!walletResponse.ok || !orderResponse.ok) {
+        const giftsPayload = (await giftsResponse.json()) as {
+          cards?: GiftCardData[];
+          balances?: {
+            shards?: WalletData;
+          };
+          error?: { message?: string };
+        };
+        if (!walletResponse.ok || !orderResponse.ok || !giftsResponse.ok) {
           throw new Error(
             walletPayload.error?.message ??
               orderPayload.error?.message ??
+              giftsPayload.error?.message ??
               "Wallet and purchases could not be loaded.",
           );
         }
         if (!active) return;
         setWallet(walletPayload);
+        setShardWallet(giftsPayload.balances?.shards ?? null);
         setOrders(orderPayload.data ?? []);
+        setGiftCards(giftsPayload.cards ?? []);
         setLoading(false);
       })
       .catch((reason: unknown) => {
@@ -7333,7 +7523,9 @@ function useCommerceData(actor: Actor) {
 
   return {
     wallet,
+    shardWallet,
     orders,
+    giftCards,
     loading,
     error,
     reload: () => {
@@ -7361,12 +7553,49 @@ function WalletOrdersPanel({
   compact = false,
 }: {
   actor: Actor;
-  initialTab?: "wallet" | "orders";
+  initialTab?: "wallet" | "orders" | "gifts";
   compact?: boolean;
 }) {
   const { settings: commercialSettings } = useCommercialSettings();
-  const [tab, setTab] = useState<"wallet" | "orders">(initialTab);
+  const [tab, setTab] = useState<"wallet" | "orders" | "gifts">(initialTab);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [giftStatus, setGiftStatus] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
   const commerce = useCommerceData(actor);
+
+  async function redeemGiftCard() {
+    setRedeeming(true);
+    setGiftStatus("");
+    try {
+      const response = await fetch("/api/v1/gifts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "REDEEM_GIFT", code: redeemCode }),
+      });
+      const payload = (await response.json()) as {
+        amount?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "This Gift Code could not be redeemed.",
+        );
+      }
+      setGiftStatus(
+        `${Number(payload.amount ?? 0).toLocaleString("en-US")} Onyx added to your wallet.`,
+      );
+      setRedeemCode("");
+      commerce.reload();
+    } catch (error) {
+      setGiftStatus(
+        error instanceof Error
+          ? error.message
+          : "This Gift Code could not be redeemed.",
+      );
+    } finally {
+      setRedeeming(false);
+    }
+  }
 
   if (commerce.loading) return <CommerceLoading />;
   if (commerce.error) {
@@ -7384,17 +7613,21 @@ function WalletOrdersPanel({
 
   return (
     <div className={`wallet-orders-panel ${compact ? "wallet-orders-compact" : ""}`}>
-      <div className="commerce-tabs" role="tablist" aria-label="Wallet and orders">
+      <div className="commerce-tabs" role="tablist" aria-label="Wallet, orders, and Gift Cards">
         <button type="button" role="tab" aria-selected={tab === "wallet"} onClick={() => setTab("wallet")}>
           <Wallet size={17} /> Wallet
         </button>
         <button type="button" role="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
           <CreditCard size={17} /> Orders
         </button>
+        <button type="button" role="tab" aria-selected={tab === "gifts"} onClick={() => setTab("gifts")}>
+          <Gift size={17} /> Gift Cards
+        </button>
       </div>
       {tab === "wallet" ? (
         <>
-          <section className="wallet-hero">
+          <section className="wallet-balance-grid">
+          <div className="wallet-hero">
             <div>
               <span>
                 <Wallet size={22} />{" "}
@@ -7409,6 +7642,17 @@ function WalletOrdersPanel({
             <a className="button button-primary" href="/store#coin-packages">
               Add {commercialSettings.economy.coinPlural}
             </a>
+          </div>
+          <div className="wallet-hero wallet-hero-shards">
+            <div>
+              <span><Sparkle size={22} /> Shards wallet</span>
+              <strong>{commerce.shardWallet?.balance ?? 0}</strong>
+              <p>Earned from reading and community contributions</p>
+            </div>
+            <a className="button button-secondary" href="/roulette">
+              Daily Roulette
+            </a>
+          </div>
           </section>
           <section className="ledger-section">
             <SectionHeading
@@ -7438,7 +7682,7 @@ function WalletOrdersPanel({
             )}
           </section>
         </>
-      ) : (
+      ) : tab === "orders" ? (
         <section className="orders-section">
           <SectionHeading
             title="Orders"
@@ -7461,6 +7705,80 @@ function WalletOrdersPanel({
             <EmptyState title="No orders yet" body="Completed store orders will appear here with their status." compact />
           )}
           <a className="button button-primary" href="/store">Visit store</a>
+        </section>
+      ) : (
+        <section className="gift-cards-account">
+          <SectionHeading
+            title="Gift Cards"
+            body="Create Gifts in the Store, copy purchased codes here, or redeem a code you received."
+          />
+          <div className="gift-redeem-card">
+            <div>
+              <Gift size={24} weight="duotone" />
+              <span>
+                <strong>Redeem a Gift Code</strong>
+                Each 18-character code can be used once.
+              </span>
+            </div>
+            <label>
+              <span>Gift Code</span>
+              <input
+                value={redeemCode}
+                maxLength={32}
+                autoCapitalize="characters"
+                placeholder="Paste your 18-character code"
+                onChange={(event) => setRedeemCode(event.target.value)}
+              />
+            </label>
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={redeeming || redeemCode.replace(/[^A-Za-z0-9]/gu, "").length !== 18}
+              onClick={() => void redeemGiftCard()}
+            >
+              {redeeming ? "Redeeming…" : "Redeem Code"}
+            </button>
+            {giftStatus ? <p role="status">{giftStatus}</p> : null}
+          </div>
+          <div className="gift-card-history">
+            <header>
+              <h3>Purchased Gift Cards</h3>
+              <a href="/store/gifts">Create another <ArrowRight size={15} /></a>
+            </header>
+            {commerce.giftCards.length ? (
+              commerce.giftCards.map((card) => (
+                <article key={card.id}>
+                  <span className="gift-history-icon"><Gift size={19} /></span>
+                  <div>
+                    <small>{card.recipientLabel || "Gift to user"}</small>
+                    <code>{card.code}</code>
+                    {card.message ? <p>{card.message}</p> : null}
+                  </div>
+                  <strong>{card.amount.toLocaleString("en-US")} Onyx</strong>
+                  <em data-valid={card.valid ? "true" : "false"}>
+                    {card.valid ? "Valid" : card.status === "REDEEMED" ? "Used" : "Expired"}
+                  </em>
+                  <button
+                    type="button"
+                    disabled={!card.valid}
+                    aria-label={`Copy Gift Code ending in ${card.code.slice(-4)}`}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(card.code.replaceAll(" ", ""));
+                      setGiftStatus("Gift Code copied.");
+                    }}
+                  >
+                    <Copy size={17} /> Copy
+                  </button>
+                </article>
+              ))
+            ) : (
+              <EmptyState
+                title="No Gift Cards yet"
+                body="Gift Codes you create in the Store will appear here."
+                compact
+              />
+            )}
+          </div>
         </section>
       )}
     </div>
@@ -8461,7 +8779,14 @@ function OperationsView({
           <CaretDown size={17} />
         </label>
         {admin && activeSection === "Discussions" ? (
-          <ReactionLibraryPanel settingsPanel={<DiscussionSettingsPanel />} />
+          <ReactionLibraryPanel
+            settingsPanel={
+              <>
+                <DiscussionSettingsPanel />
+                <RewardSettingsPanel />
+              </>
+            }
+          />
         ) : admin && activeSection === "Appearance" ? (
           <AppearanceWorkspace
             initialTab={
@@ -9022,6 +9347,8 @@ export function NyaScansApp({
       <WalletView actor={actor} />
     ) : view === "orders" ? (
       <OrdersView actor={actor} />
+    ) : view === "roulette" ? (
+      <RouletteView signedIn={Boolean(actor)} showToast={setToast} />
     ) : view === "login" || view === "signup" ? (
       <AuthEntryView
         intent={view}

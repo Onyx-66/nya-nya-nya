@@ -98,6 +98,10 @@ function NewSeriesCover({ record }: { record: NewSeriesRecord }) {
         </span>
       )}
       <small>New</small>
+      <span className="new-series-badges">
+        <SeriesTypeLabel type={record.type} />
+        <SeriesStatusLabel status={record.status} />
+      </span>
     </span>
   );
 }
@@ -278,10 +282,6 @@ export function NewSeriesSection() {
               <NewSeriesCover record={record} />
               <span className="new-series-copy">
                 <strong>{record.title}</strong>
-                <span className="new-series-badges">
-                  <SeriesTypeLabel type={record.type} />
-                  <SeriesStatusLabel status={record.status} />
-                </span>
                 <small>
                   {record.genres.length
                     ? record.genres.join(" · ")
@@ -413,24 +413,6 @@ export function PublishingTeamsCarousel() {
         </div>
       ) : (
         <div className="teams-carousel-shell">
-          {records.length > 1 ? (
-            <div className="teams-carousel-controls">
-              <button
-                type="button"
-                aria-label="Previous publishing teams"
-                onClick={() => move(-1)}
-              >
-                <CaretLeft size={19} />
-              </button>
-              <button
-                type="button"
-                aria-label="Next publishing teams"
-                onClick={() => move(1)}
-              >
-                <CaretRight size={19} />
-              </button>
-            </div>
-          ) : null}
           <div
             className={`teams-carousel ${records.length === 1 ? "is-single" : ""}`}
             ref={railRef}

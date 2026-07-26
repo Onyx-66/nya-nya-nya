@@ -21,6 +21,8 @@ import {
   getCommercialSettingsDocument,
   saveCommercialSettings,
 } from "@/lib/server/commercial-settings";
+import { grantCurrencyReward } from "@/lib/server/economy";
+import { getRewardSettingsDocument } from "@/lib/server/reward-settings";
 import {
   getActor,
   requireActor,
@@ -2596,7 +2598,12 @@ export async function GET(request: Request, context: RouteContext) {
                     FROM series_genres sg
                     JOIN genres g ON g.id = sg.genre_id
                    WHERE sg.series_id = s.id
-                ), '') AS genres
+                ), '') AS genres,
+                COALESCE((
+                  SELECT GROUP_CONCAT(sa.title, '||')
+                    FROM series_aliases sa
+                   WHERE sa.series_id = s.id
+                ), '') AS alternativeTitles
            FROM editor_picks ep
            JOIN series s ON s.id = ep.series_id
           WHERE ep.is_published = 1
@@ -2622,6 +2629,7 @@ export async function GET(request: Request, context: RouteContext) {
         commentCount: number;
         latestChapterSlug: string | null;
         genres: string;
+        alternativeTitles: string;
       }>();
       return json(
         id,
@@ -2632,6 +2640,9 @@ export async function GET(request: Request, context: RouteContext) {
             bookmarkCount: Number(row.bookmarkCount ?? 0),
             commentCount: Number(row.commentCount ?? 0),
             genres: row.genres ? row.genres.split("||").filter(Boolean) : [],
+            alternativeTitles: row.alternativeTitles
+              ? row.alternativeTitles.split("||").filter(Boolean)
+              : [],
             cover: publicSeriesCover(row.slug, row.coverKey),
           })),
         },
@@ -5200,6 +5211,7 @@ export async function GET(request: Request, context: RouteContext) {
                   si.description,
                   si.category,
                   si.price_onyx AS priceOnyx,
+                  si.price_currency AS priceCurrency,
                   si.preview_key AS previewKey,
                   si.preview_config_json AS previewConfigJson,
                   si.is_published AS isPublished,
@@ -5234,6 +5246,7 @@ export async function GET(request: Request, context: RouteContext) {
           description: string;
           category: string;
           priceOnyx: number;
+          priceCurrency: "ONYX" | "SHARDS";
           previewKey: string | null;
           previewConfigJson: string;
           isPublished: number;
@@ -5913,6 +5926,7 @@ export async function PUT(request: Request, context: RouteContext) {
                 description,
                 category,
                 price_onyx AS priceOnyx,
+                price_currency AS priceCurrency,
                 preview_config_json AS previewConfigJson,
                 is_published AS isPublished,
                 is_hidden AS isHidden,
@@ -5938,6 +5952,7 @@ export async function PUT(request: Request, context: RouteContext) {
           description: string;
           category: string;
           priceOnyx: number;
+          priceCurrency: "ONYX" | "SHARDS";
           previewConfigJson: string;
           isPublished: number;
           isHidden: number;
@@ -5980,6 +5995,7 @@ export async function PUT(request: Request, context: RouteContext) {
                 description = ?,
                 category = ?,
                 price_onyx = ?,
+                price_currency = ?,
                 preview_config_json = ?,
                 is_published = ?,
                 is_hidden = ?,
@@ -6008,6 +6024,7 @@ export async function PUT(request: Request, context: RouteContext) {
           payload.description,
           payload.category,
           payload.priceOnyx,
+          payload.priceCurrency,
           JSON.stringify(payload.previewConfig),
           payload.isPublished ? 1 : 0,
           payload.isHidden ? 1 : 0,
@@ -8407,8 +8424,8 @@ export async function POST(request: Request, context: RouteContext) {
         env.DB.prepare(
           `INSERT INTO store_items
            (id, slug, collection_id, name, description, category, price_onyx,
-            preview_config_json, is_published, is_hidden, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            price_currency, preview_config_json, is_published, is_hidden, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).bind(
           itemId,
           payload.slug,
@@ -8417,6 +8434,7 @@ export async function POST(request: Request, context: RouteContext) {
           payload.description,
           payload.category,
           payload.priceOnyx,
+          payload.priceCurrency,
           JSON.stringify(payload.previewConfig),
           payload.isPublished ? 1 : 0,
           payload.isHidden ? 1 : 0,
@@ -9586,7 +9604,44 @@ export async function POST(request: Request, context: RouteContext) {
           "One or more attachments changed while the comment was being posted. Review the attachments and try again.",
         );
       }
-      return json(id, { id: commentId, status: "VISIBLE" }, { status: 201 });
+      let rewardAmount = 0;
+      try {
+        const rewardSettings = (await getRewardSettingsDocument()).settings;
+        const reward = await grantCurrencyReward(env.DB, {
+          userId: actor.id,
+          currency: "SHARDS",
+          amount: rewardSettings.commentCreatedShards,
+          kind: "COMMENT_REWARD",
+          referenceType: "COMMENT",
+          referenceId: commentId,
+          idempotencyKey: `reward:comment:${actor.id}:${commentId}`,
+          memo: `Comment reward · ${rewardSettings.commentCreatedShards} ${rewardSettings.shardPlural}`,
+        });
+        if (reward.transactionId) {
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO community_reward_claims
+             (beneficiary_user_id, reward_type, source_id, amount, transaction_id)
+             VALUES (?, 'COMMENT_CREATED', ?, ?, ?)`,
+          )
+            .bind(
+              actor.id,
+              commentId,
+              rewardSettings.commentCreatedShards,
+              reward.transactionId,
+            )
+            .run();
+        }
+        if (reward.created) {
+          rewardAmount = rewardSettings.commentCreatedShards;
+        }
+      } catch {
+        // The durable claim endpoint can safely retry without duplicating a reward.
+      }
+      return json(
+        id,
+        { id: commentId, status: "VISIBLE", rewardAmount },
+        { status: 201 },
+      );
     }
 
     if (path === "discussion-reactions") {
@@ -9631,13 +9686,13 @@ export async function POST(request: Request, context: RouteContext) {
         }
       }
       const comment = await env.DB.prepare(
-        `SELECT id, series_slug AS seriesSlug
+        `SELECT id, series_slug AS seriesSlug, user_id AS authorUserId
          FROM discussion_comments
          WHERE id = ? AND moderation_status = 'VISIBLE'
          LIMIT 1`,
       )
         .bind(payload.commentId)
-        .first<{ id: string; seriesSlug: string }>();
+        .first<{ id: string; seriesSlug: string; authorUserId: string }>();
       if (!comment) {
         throw new ApiError(
           404,
@@ -9752,13 +9807,13 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
       const comment = await env.DB.prepare(
-        `SELECT id, series_slug AS seriesSlug
+        `SELECT id, series_slug AS seriesSlug, user_id AS authorUserId
          FROM discussion_comments
          WHERE id = ? AND moderation_status = 'VISIBLE'
          LIMIT 1`,
       )
         .bind(payload.commentId)
-        .first<{ id: string; seriesSlug: string }>();
+        .first<{ id: string; seriesSlug: string; authorUserId: string }>();
       if (!comment) {
         throw new ApiError(
           404,
@@ -9792,6 +9847,38 @@ export async function POST(request: Request, context: RouteContext) {
       )
         .bind(payload.commentId)
         .first<{ score: number }>();
+      if (payload.value === 1 && comment.authorUserId !== actor.id) {
+        try {
+          const rewardSettings = (await getRewardSettingsDocument()).settings;
+          const sourceId = `${payload.commentId}:${actor.id}`;
+          const reward = await grantCurrencyReward(env.DB, {
+            userId: comment.authorUserId,
+            currency: "SHARDS",
+            amount: rewardSettings.upvoteReceivedShards,
+            kind: "COMMENT_UPVOTE_REWARD",
+            referenceType: "COMMENT_UPVOTE",
+            referenceId: sourceId,
+            idempotencyKey: `reward:upvote:${sourceId}`,
+            memo: `Comment upvote reward · ${rewardSettings.upvoteReceivedShards} ${rewardSettings.shardPlural}`,
+          });
+          if (reward.transactionId) {
+            await env.DB.prepare(
+              `INSERT OR IGNORE INTO community_reward_claims
+               (beneficiary_user_id, reward_type, source_id, amount, transaction_id)
+               VALUES (?, 'COMMENT_UPVOTE', ?, ?, ?)`,
+            )
+              .bind(
+                comment.authorUserId,
+                sourceId,
+                rewardSettings.upvoteReceivedShards,
+                reward.transactionId,
+              )
+              .run();
+          }
+        } catch {
+          // A verified reward claim may retry independently of the saved vote.
+        }
+      }
       return json(id, {
         viewerVote: payload.value,
         voteScore: Number(score?.score ?? 0),

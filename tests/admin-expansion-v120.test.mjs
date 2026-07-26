@@ -1192,8 +1192,9 @@ test("public APIs expose safe series metadata and isolate Store categories", asy
   assert.doesNotMatch(seriesRoute, /responseHash|lastImportedBy/);
   assert.match(
     storeRoute,
-    /enum\(\["coins", "memberships", "banners", "cosmetics", "logo-effects"\]\)/,
+    /enum\(\[[\s\S]*"coins"[\s\S]*"memberships"[\s\S]*"gifts"[\s\S]*"banners"[\s\S]*"cosmetics"[\s\S]*"logo-effects"[\s\S]*\]\)/,
   );
+  assert.match(app, /store\/gifts/);
   assert.match(app, /store\/logo-effects/);
   assert.match(app, /category=\$\{encodeURIComponent\(selectedCategory\)\}/);
 });

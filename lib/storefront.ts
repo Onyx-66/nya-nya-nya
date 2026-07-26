@@ -88,6 +88,7 @@ export const storeItemInputSchema = z.object({
   description: z.string().trim().min(8).max(500),
   category: z.enum(storeCategoryValues),
   priceOnyx: z.number().int().min(0).max(10_000_000),
+  priceCurrency: z.enum(["ONYX", "SHARDS"]).default("ONYX"),
   previewConfig: storePreviewConfigSchema,
   isPublished: z.boolean(),
   isHidden: z.boolean(),
