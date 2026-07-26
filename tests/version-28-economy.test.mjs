@@ -174,9 +174,10 @@ test("Shards rewards and Roulette are server-authoritative and replay-safe", asy
 });
 
 test("Version 28 UI keeps mobile editorial intact while adding the requested desktop and economy surfaces", async () => {
-  const [app, discovery, giftStore, roulette, rewardAdmin, styles] =
+  const [app, api, discovery, giftStore, roulette, rewardAdmin, styles] =
     await Promise.all([
       read("components/nyascans/NyaScansApp.tsx"),
+      read("app/api/v1/[...resource]/route.ts"),
       read("components/nyascans/PublicDiscoverySections.tsx"),
       read("components/nyascans/GiftStorePanel.tsx"),
       read("components/nyascans/RouletteView.tsx"),
@@ -184,6 +185,7 @@ test("Version 28 UI keeps mobile editorial intact while adding the requested des
       read("app/globals.css"),
     ]);
   assert.match(app, /alternativeTitles: string\[\]/u);
+  assert.match(api, /GROUP_CONCAT\(sa\.alias, '\|\|'\)/u);
   assert.match(app, /editors-pick-desktop-detail/u);
   assert.doesNotMatch(app, /className="notification-cta"/u);
   assert.match(app, /href="\/roulette"[\s\S]+Roulette/u);

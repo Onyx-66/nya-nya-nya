@@ -2600,7 +2600,7 @@ export async function GET(request: Request, context: RouteContext) {
                    WHERE sg.series_id = s.id
                 ), '') AS genres,
                 COALESCE((
-                  SELECT GROUP_CONCAT(sa.title, '||')
+                  SELECT GROUP_CONCAT(sa.alias, '||')
                     FROM series_aliases sa
                    WHERE sa.series_id = s.id
                 ), '') AS alternativeTitles
