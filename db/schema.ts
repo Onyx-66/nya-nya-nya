@@ -20,6 +20,8 @@ export const users = sqliteTable(
     displayName: text("display_name").notNull(),
     primaryRole: text("primary_role").notNull().default("USER"),
     status: text("status").notNull().default("ACTIVE"),
+    accessRevision: integer("access_revision").notNull().default(1),
+    accessUpdateToken: text("access_update_token"),
     emailVerifiedAt: text("email_verified_at"),
     createdAt,
     updatedAt,
@@ -28,6 +30,37 @@ export const users = sqliteTable(
     uniqueIndex("users_email_uidx").on(table.email),
     index("users_role_idx").on(table.primaryRole),
     index("users_created_idx").on(table.createdAt),
+  ],
+);
+
+export const userRoles = sqliteTable(
+  "user_roles",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    assignedByUserId: text("assigned_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.role] }),
+    index("user_roles_role_idx").on(table.role, table.userId),
+    check(
+      "user_roles_role_check",
+      sql`${table.role} IN (
+        'OWNER',
+        'ADMINISTRATOR',
+        'MANAGER',
+        'MODERATOR',
+        'TEAM_LEADER',
+        'UPLOADER',
+        'USER'
+      )`,
+    ),
   ],
 );
 
@@ -70,6 +103,18 @@ export const userProfiles = sqliteTable(
       .notNull()
       .default(false),
     showLibrarySummary: integer("show_library_summary", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    showFavorites: integer("show_favorites", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    showAchievements: integer("show_achievements", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    showBookmarks: integer("show_bookmarks", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    showComments: integer("show_comments", { mode: "boolean" })
       .notNull()
       .default(false),
     socialLinksJson: text("social_links_json").notNull().default("[]"),
@@ -289,6 +334,7 @@ export const series = sqliteTable(
     accessType: text("access_type").notNull().default("FREE"),
     coverKey: text("cover_key"),
     bannerKey: text("banner_key"),
+    sliderKey: text("slider_key"),
     ratingTenths: integer("rating_tenths").notNull().default(0),
     followerCount: integer("follower_count").notNull().default(0),
     viewCount: integer("view_count").notNull().default(0),
@@ -363,6 +409,83 @@ export const seriesTeamAssignments = sqliteTable(
     uniqueIndex("series_team_primary_uidx")
       .on(table.seriesId)
       .where(sql`${table.isPrimary} = 1`),
+  ],
+);
+
+export const profileFavoriteSeries = sqliteTable(
+  "profile_favorite_series",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.seriesId] }),
+    uniqueIndex("profile_favorite_series_position_uidx").on(
+      table.userId,
+      table.position,
+    ),
+    index("profile_favorite_series_series_idx").on(
+      table.seriesId,
+      table.createdAt,
+    ),
+    check(
+      "profile_favorite_series_position_check",
+      sql`${table.position} >= 1 AND ${table.position} <= 10`,
+    ),
+  ],
+);
+
+export const achievementDefinitions = sqliteTable(
+  "achievement_definitions",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    rarity: text("rarity").notNull().default("COMMON"),
+    iconKey: text("icon_key"),
+    isActive: integer("is_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("achievement_definitions_slug_uidx").on(table.slug),
+    index("achievement_definitions_public_idx").on(
+      table.isActive,
+      table.sortOrder,
+    ),
+    check(
+      "achievement_definitions_rarity_check",
+      sql`${table.rarity} IN ('COMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC', 'EXCLUSIVE')`,
+    ),
+  ],
+);
+
+export const userAchievements = sqliteTable(
+  "user_achievements",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    achievementId: text("achievement_id")
+      .notNull()
+      .references(() => achievementDefinitions.id, { onDelete: "cascade" }),
+    earnedAt: text("earned_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    metadataJson: text("metadata_json").notNull().default("{}"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.achievementId] }),
+    index("user_achievements_recent_idx").on(table.userId, table.earnedAt),
   ],
 );
 
@@ -838,6 +961,7 @@ export const chapters = sqliteTable(
     version: integer("version").notNull().default(1),
     releaseNotes: text("release_notes").notNull().default(""),
     creditsJson: text("credits_json").notNull().default("{}"),
+    thumbnailKey: text("thumbnail_key"),
     visibility: text("visibility").notNull().default("PUBLIC"),
     commentsEnabled: integer("comments_enabled", { mode: "boolean" })
       .notNull()
@@ -985,6 +1109,7 @@ export const analyticsEvents = sqliteTable(
   {
     id: text("id").primaryKey(),
     sessionId: text("session_id").notNull(),
+    visitorId: text("visitor_id"),
     eventType: text("event_type").notNull(),
     seriesSlug: text("series_slug"),
     chapterSlug: text("chapter_slug"),
@@ -1006,6 +1131,10 @@ export const analyticsEvents = sqliteTable(
     index("analytics_events_time_idx").on(table.createdAt, table.eventType),
     index("analytics_events_session_idx").on(
       table.sessionId,
+      table.createdAt,
+    ),
+    index("analytics_events_visitor_idx").on(
+      table.visitorId,
       table.createdAt,
     ),
     index("analytics_events_series_idx").on(
@@ -1092,6 +1221,9 @@ export const discussionComments = sqliteTable(
     affiliationTeamId: text("affiliation_team_id").references(() => teams.id, {
       onDelete: "set null",
     }),
+    cosmeticItemId: text("cosmetic_item_id").references(() => storeItems.id, {
+      onDelete: "set null",
+    }),
     moderationStatus: text("moderation_status").notNull().default("VISIBLE"),
     pinnedAt: text("pinned_at"),
     pinnedByUserId: text("pinned_by_user_id").references(() => users.id),
@@ -1163,6 +1295,7 @@ export const customReactions = sqliteTable(
       .default(false),
     displayOrder: integer("display_order").notNull().default(0),
     category: text("category"),
+    usageKind: text("usage_kind").notNull().default("REACTION"),
     availabilityJson: text("availability_json").notNull().default("{}"),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -1175,12 +1308,38 @@ export const customReactions = sqliteTable(
     updatedAt,
   },
   (table) => [
+    check(
+      "custom_reactions_usage_kind_check",
+      sql`${table.usageKind} IN ('REACTION', 'COMMENT_GIF')`,
+    ),
     uniqueIndex("custom_reactions_slug_uidx").on(table.slug),
     index("custom_reactions_public_idx").on(
       table.isActive,
       table.isArchived,
       table.displayOrder,
     ),
+  ],
+);
+
+export const discussionCommentGifs = sqliteTable(
+  "discussion_comment_gifs",
+  {
+    commentId: text("comment_id")
+      .notNull()
+      .references(() => discussionComments.id, { onDelete: "cascade" }),
+    gifId: text("gif_id")
+      .notNull()
+      .references(() => customReactions.id, { onDelete: "restrict" }),
+    displayOrder: integer("display_order").notNull().default(0),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.commentId, table.gifId] }),
+    index("discussion_comment_gifs_comment_idx").on(
+      table.commentId,
+      table.displayOrder,
+    ),
+    index("discussion_comment_gifs_gif_idx").on(table.gifId, table.createdAt),
   ],
 );
 
@@ -1732,6 +1891,7 @@ export const giftCards = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     purchaseIdempotencyKey: text("purchase_idempotency_key").notNull(),
     coinAmount: integer("coin_amount").notNull(),
+    recipientUserId: text("recipient_user_id").references(() => users.id),
     recipientLabel: text("recipient_label").notNull().default(""),
     message: text("message").notNull().default(""),
     status: text("status").notNull().default("ACTIVE"),
@@ -1763,6 +1923,10 @@ export const giftCards = sqliteTable(
       table.createdAt,
     ),
     index("gift_cards_status_idx").on(table.status, table.expiresAt),
+    index("gift_cards_recipient_status_idx").on(
+      table.recipientUserId,
+      table.status,
+    ),
     check("gift_cards_amount_check", sql`${table.coinAmount} > 0`),
     check(
       "gift_cards_status_check",
@@ -1804,6 +1968,26 @@ export const teamSupportReceipts = sqliteTable(
   ],
 );
 
+export const teamSupportReceiptSeries = sqliteTable(
+  "team_support_receipt_series",
+  {
+    receiptId: text("receipt_id")
+      .notNull()
+      .references(() => teamSupportReceipts.id, { onDelete: "cascade" }),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.receiptId, table.seriesId] }),
+    index("team_support_receipt_series_series_idx").on(
+      table.seriesId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const rouletteState = sqliteTable("roulette_state", {
   userId: text("user_id")
     .primaryKey()
@@ -1812,9 +1996,43 @@ export const rouletteState = sqliteTable("roulette_state", {
     .notNull()
     .default("1970-01-01T00:00:00.000Z"),
   lastSpinId: text("last_spin_id"),
+  freeSpinBalance: integer("free_spin_balance").notNull().default(0),
   revision: integer("revision").notNull().default(1),
   updatedAt,
 });
+
+export const roulettePoolCounters = sqliteTable("roulette_pool_counters", {
+  poolKey: text("pool_key").primaryKey(),
+  totalSpins: integer("total_spins").notNull().default(0),
+  lastSpinId: text("last_spin_id"),
+  revision: integer("revision").notNull().default(1),
+  updatedAt,
+});
+
+export const rouletteRewardCadence = sqliteTable(
+  "roulette_reward_cadence",
+  {
+    poolKey: text("pool_key").notNull(),
+    rewardKey: text("reward_key").notNull(),
+    intervalSpins: integer("interval_spins").notNull(),
+    nextDueSpin: integer("next_due_spin").notNull(),
+    lastAwardedSpin: integer("last_awarded_spin"),
+    lastSpinId: text("last_spin_id"),
+    revision: integer("revision").notNull().default(1),
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.poolKey, table.rewardKey] }),
+    index("roulette_reward_cadence_due_idx").on(
+      table.poolKey,
+      table.nextDueSpin,
+    ),
+    check(
+      "roulette_reward_cadence_interval_check",
+      sql`${table.intervalSpins} >= 2`,
+    ),
+  ],
+);
 
 export const rouletteSpins = sqliteTable(
   "roulette_spins",
@@ -1830,9 +2048,17 @@ export const rouletteSpins = sqliteTable(
     storeItemId: text("store_item_id").references(() => storeItems.id, {
       onDelete: "set null",
     }),
+    spinMode: text("spin_mode").notNull().default("DAILY"),
+    costShards: integer("cost_shards").notNull().default(0),
+    costCurrency: text("cost_currency"),
+    costAmount: integer("cost_amount").notNull().default(0),
+    chargeTransactionId: text("charge_transaction_id").references(
+      () => ledgerTransactions.id,
+    ),
     transactionId: text("transaction_id")
       .notNull()
       .references(() => ledgerTransactions.id),
+    globalSpinNumber: integer("global_spin_number").notNull().default(0),
     nextEligibleAt: text("next_eligible_at").notNull(),
     spunAt: text("spun_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -1850,6 +2076,111 @@ export const rouletteSpins = sqliteTable(
     check(
       "roulette_spins_reward_amount_check",
       sql`${table.rewardAmount} >= 0`,
+    ),
+    check(
+      "roulette_spins_mode_check",
+      sql`${table.spinMode} IN ('DAILY', 'TASK', 'PAID')`,
+    ),
+    check(
+      "roulette_spins_cost_check",
+      sql`${table.costShards} >= 0 AND ${table.costAmount} >= 0`,
+    ),
+    check(
+      "roulette_spins_cost_currency_check",
+      sql`${table.costCurrency} IS NULL OR ${table.costCurrency} IN ('SHARDS', 'ONYX')`,
+    ),
+  ],
+);
+
+export const rouletteTaskClaims = sqliteTable(
+  "roulette_task_claims",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    weekStart: text("week_start").notNull(),
+    awardedSpins: integer("awarded_spins").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    claimedAt: text("claimed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.taskId, table.weekStart] }),
+    uniqueIndex("roulette_task_claims_idempotency_uidx").on(
+      table.userId,
+      table.idempotencyKey,
+    ),
+    index("roulette_task_claims_user_week_idx").on(
+      table.userId,
+      table.weekStart,
+    ),
+    check(
+      "roulette_task_claims_spins_check",
+      sql`${table.awardedSpins} > 0`,
+    ),
+  ],
+);
+
+export const supportTickets = sqliteTable(
+  "support_tickets",
+  {
+    id: text("id").primaryKey(),
+    requesterUserId: text("requester_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    subject: text("subject").notNull(),
+    status: text("status").notNull().default("OPEN"),
+    priority: text("priority").notNull().default("NORMAL"),
+    lastMessageAt: text("last_message_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    closedAt: text("closed_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "support_tickets_category_check",
+      sql`${table.category} IN ('ACCOUNT', 'READING', 'PURCHASES', 'PUBLISHING', 'OTHER')`,
+    ),
+    check(
+      "support_tickets_status_check",
+      sql`${table.status} IN ('OPEN', 'IN_PROGRESS', 'WAITING_ON_USER', 'RESOLVED', 'CLOSED')`,
+    ),
+    check(
+      "support_tickets_priority_check",
+      sql`${table.priority} IN ('LOW', 'NORMAL', 'HIGH')`,
+    ),
+    index("support_tickets_requester_idx").on(
+      table.requesterUserId,
+      table.lastMessageAt,
+    ),
+    index("support_tickets_status_idx").on(table.status, table.lastMessageAt),
+  ],
+);
+
+export const supportTicketMessages = sqliteTable(
+  "support_ticket_messages",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => supportTickets.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    isStaffReply: integer("is_staff_reply", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt,
+  },
+  (table) => [
+    index("support_ticket_messages_ticket_idx").on(
+      table.ticketId,
+      table.createdAt,
     ),
   ],
 );
@@ -1967,6 +2298,10 @@ export const uploadJobItems = sqliteTable(
       .references(() => series.id),
     teamId: text("team_id").references(() => teams.id),
     chapterId: text("chapter_id").references(() => chapters.id),
+    replacementChapterId: text("replacement_chapter_id").references(
+      () => chapters.id,
+      { onDelete: "restrict" },
+    ),
     volume: text("volume"),
     chapterNumber: text("chapter_number").notNull(),
     title: text("title").notNull().default(""),
@@ -1974,6 +2309,7 @@ export const uploadJobItems = sqliteTable(
     version: integer("version").notNull().default(1),
     releaseNotes: text("release_notes").notNull().default(""),
     creditsJson: text("credits_json").notNull().default("{}"),
+    thumbnailKey: text("thumbnail_key"),
     accessType: text("access_type").notNull().default("FREE"),
     priceOnyx: integer("price_onyx").notNull().default(0),
     visibility: text("visibility").notNull().default("PUBLIC"),
@@ -2006,6 +2342,10 @@ export const uploadJobItems = sqliteTable(
       table.updatedAt,
     ),
     index("upload_job_items_chapter_idx").on(table.chapterId),
+    index("upload_job_items_replacement_idx").on(
+      table.replacementChapterId,
+      table.status,
+    ),
     check(
       "upload_job_items_status_check",
       sql`${table.status} IN (
@@ -2044,6 +2384,14 @@ export const uploadPublishGuards = sqliteTable(
     check("upload_publish_guards_verified_check", sql`${table.verified} = 1`),
   ],
 );
+
+export const uploadJobMediaGuards = sqliteTable("upload_job_media_guards", {
+  jobId: text("job_id")
+    .primaryKey()
+    .references(() => uploadJobs.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  createdAt,
+});
 
 export const uploadSessions = sqliteTable(
   "upload_sessions",

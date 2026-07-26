@@ -61,7 +61,15 @@ export async function getSiteThemeDocument(): Promise<SiteThemeDocument> {
 }
 
 export async function getSiteTheme(): Promise<SiteTheme> {
-  return (await getSiteThemeDocument()).settings;
+  try {
+    return (await getSiteThemeDocument()).settings;
+  } catch {
+    // Appearance storage must never take the public reader offline. The
+    // protected administrator document endpoint still surfaces the database
+    // failure, while public rendering safely falls back to the validated
+    // built-in theme.
+    return defaultSiteTheme;
+  }
 }
 
 export async function saveSiteTheme(

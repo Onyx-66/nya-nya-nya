@@ -69,12 +69,18 @@ export async function PUT(request: Request) {
       );
     }
     const current = await env.DB.prepare(
-      `SELECT name, asset_key AS assetKey, revision
+      `SELECT name, asset_key AS assetKey, revision,
+              usage_kind AS usageKind
        FROM custom_reactions
        WHERE id = ? AND is_archived = 0 LIMIT 1`,
     )
       .bind(payload.reactionId)
-      .first<{ name: string; assetKey: string | null; revision: number }>();
+      .first<{
+        name: string;
+        assetKey: string | null;
+        revision: number;
+        usageKind: "REACTION" | "COMMENT_GIF";
+      }>();
     if (!current) {
       throw new ApiError(
         404,
@@ -87,6 +93,16 @@ export async function PUT(request: Request) {
         409,
         "STALE_VERSION",
         "Another administrator changed this reaction. Reload it before replacing media.",
+      );
+    }
+    if (
+      current.usageKind === "COMMENT_GIF" &&
+      (!image.animated || image.contentType !== "image/gif")
+    ) {
+      throw new ApiError(
+        422,
+        "COMMENT_GIF_ANIMATION_REQUIRED",
+        "Comment GIF entries require a verified animated GIF file.",
       );
     }
     const digest = await sha256Hex(image.bytes);
@@ -209,9 +225,13 @@ export async function DELETE(request: Request) {
               cr.asset_key AS assetKey,
               cr.emoji_fallback AS emojiFallback,
               cr.is_active AS isActive,
+              cr.usage_kind AS usageKind,
               (SELECT COUNT(*)
                  FROM discussion_reactions dr
-                WHERE dr.reaction = cr.slug) AS usageCount
+                WHERE dr.reaction = cr.slug) AS reactionUsageCount,
+              (SELECT COUNT(*)
+                 FROM discussion_comment_gifs dcg
+                WHERE dcg.gif_id = cr.id) AS gifUsageCount
        FROM custom_reactions cr
        WHERE cr.id = ? AND cr.is_archived = 0
        LIMIT 1`,
@@ -222,7 +242,9 @@ export async function DELETE(request: Request) {
         assetKey: string | null;
         emojiFallback: string;
         isActive: number;
-        usageCount: number;
+        usageKind: "REACTION" | "COMMENT_GIF";
+        reactionUsageCount: number;
+        gifUsageCount: number;
       }>();
     if (!current) {
       throw new ApiError(
@@ -231,8 +253,16 @@ export async function DELETE(request: Request) {
         "This reaction is no longer editable.",
       );
     }
+    if (Number(current.gifUsageCount) > 0) {
+      throw new ApiError(
+        409,
+        "COMMENT_GIF_IN_USE",
+        "This GIF is used by existing comments and its media must be preserved.",
+      );
+    }
     if (
-      (Boolean(current.isActive) || Number(current.usageCount) > 0) &&
+      (Boolean(current.isActive) ||
+        Number(current.reactionUsageCount) > 0) &&
       !current.emojiFallback.trim()
     ) {
       throw new ApiError(
@@ -249,6 +279,11 @@ export async function DELETE(request: Request) {
            revision = revision + 1, updated_by_user_id = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND revision = ?
+         AND NOT EXISTS (
+           SELECT 1
+             FROM discussion_comment_gifs historical_gif
+            WHERE historical_gif.gif_id = custom_reactions.id
+         )
          AND (
            TRIM(COALESCE(emoji_fallback, '')) <> ''
            OR (
@@ -280,9 +315,13 @@ export async function DELETE(request: Request) {
       const safety = await env.DB.prepare(
         `SELECT cr.emoji_fallback AS emojiFallback,
                 cr.is_active AS isActive,
+                cr.usage_kind AS usageKind,
                 (SELECT COUNT(*)
                    FROM discussion_reactions dr
-                  WHERE dr.reaction = cr.slug) AS usageCount
+                  WHERE dr.reaction = cr.slug) AS reactionUsageCount,
+                (SELECT COUNT(*)
+                   FROM discussion_comment_gifs dcg
+                  WHERE dcg.gif_id = cr.id) AS gifUsageCount
            FROM custom_reactions cr
           WHERE cr.id = ?
           LIMIT 1`,
@@ -291,11 +330,20 @@ export async function DELETE(request: Request) {
         .first<{
           emojiFallback: string;
           isActive: number;
-          usageCount: number;
+          usageKind: "REACTION" | "COMMENT_GIF";
+          reactionUsageCount: number;
+          gifUsageCount: number;
         }>();
+      if (Number(safety?.gifUsageCount ?? 0) > 0) {
+        throw new ApiError(
+          409,
+          "COMMENT_GIF_IN_USE",
+          "This GIF is used by existing comments and its media must be preserved.",
+        );
+      }
       if (
         (Boolean(safety?.isActive) ||
-          Number(safety?.usageCount ?? 0) > 0) &&
+          Number(safety?.reactionUsageCount ?? 0) > 0) &&
         !safety?.emojiFallback.trim()
       ) {
         throw new ApiError(

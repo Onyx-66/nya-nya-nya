@@ -120,6 +120,62 @@
       "when": 1785071629676,
       "tag": "0016_parched_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1785074485900,
+      "tag": "0017_illegal_magik",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1785079533376,
+      "tag": "0018_zippy_nighthawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1785080932248,
+      "tag": "0019_bumpy_millenium_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1785086298224,
+      "tag": "0020_community_profiles_and_roulette",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1785089643861,
+      "tag": "0021_bored_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1785094605188,
+      "tag": "0022_peaceful_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1785096030672,
+      "tag": "0023_woozy_the_liberteens",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1785097200000,
+      "tag": "0024_manager_role_guard",
+      "breakpoints": true
     }
   ]
 }

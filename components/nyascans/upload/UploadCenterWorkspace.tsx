@@ -45,6 +45,9 @@ import {
   AddSeriesRequestPanel,
   SeriesRequestsPanel,
 } from "@/components/nyascans/upload/SeriesRequestWorkspace";
+import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type UploadMode =
   | "dashboard"
@@ -64,6 +67,7 @@ type UploadOptions = {
     id: string;
     slug: string;
     title: string;
+    coverUrl?: string | null;
     teamId?: string;
     teamName?: string;
     canPublish?: number;
@@ -104,6 +108,9 @@ type UploadItem = {
   seriesId: string;
   teamId: string | null;
   chapterId: string | null;
+  replacementChapterId: string | null;
+  thumbnailKey?: string | null;
+  thumbnailUrl?: string | null;
   volume: string | null;
   chapterNumber: string;
   title: string;
@@ -183,6 +190,7 @@ type ComposerItem = {
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
   scheduledAt: string;
   commentsEnabled: boolean;
+  replacementChapterId: string | null;
 };
 
 type LocalPage = {
@@ -194,8 +202,23 @@ type LocalPage = {
 };
 
 type ApiFailure = {
-  error?: { message?: string; fields?: Array<{ message?: string }> };
+  error?: {
+    code?: string;
+    message?: string;
+    fields?: Array<{ message?: string }>;
+    details?: Record<string, unknown> | null;
+  };
 };
+
+class UploadApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly details: Record<string, unknown> | null,
+  ) {
+    super(message);
+  }
+}
 
 const emptyCredits: Credits = {
   translator: "",
@@ -225,16 +248,19 @@ function newComposerItem(
     visibility: "PUBLIC",
     scheduledAt: "",
     commentsEnabled: true,
+    replacementChapterId: null,
   };
 }
 
 async function readJson<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as T & ApiFailure;
   if (!response.ok) {
-    throw new Error(
+    throw new UploadApiError(
       payload.error?.fields?.[0]?.message ??
         payload.error?.message ??
         "The upload request failed.",
+      payload.error?.code ?? "UPLOAD_REQUEST_FAILED",
+      payload.error?.details ?? null,
     );
   }
   return payload;
@@ -423,7 +449,10 @@ function UploadDashboard({
             </a>
             <a href={routeFor("multi")}>
               <FolderOpen size={20} /> <strong>Upload a batch</strong>
-              <span>Review up to ten chapter folders before publishing.</span>
+              <span>
+                Review up to {UPLOAD_LIMITS.maxChaptersPerJob} chapter folders
+                before publishing.
+              </span>
             </a>
           </>
         ) : null}
@@ -467,13 +496,26 @@ function ChapterMetadataFields({
   item,
   onChange,
   compact = false,
+  duplicateInvalid = false,
+  thumbnailFile = null,
+  thumbnailUrl = null,
+  onThumbnailChange,
+  coinName = "Paw Coin",
 }: {
   item: ComposerItem;
   onChange(next: ComposerItem): void;
   compact?: boolean;
+  duplicateInvalid?: boolean;
+  thumbnailFile?: File | null;
+  thumbnailUrl?: string | null;
+  onThumbnailChange?(file: File | null): void;
+  coinName?: string;
 }) {
   return (
-    <div className={compact ? "upload-batch-fields" : "upload-form-grid"}>
+    <div
+      className={compact ? "upload-batch-fields" : "upload-form-grid"}
+      data-upload-item={item.clientKey}
+    >
       <label>
         <span>Volume</span>
         <input
@@ -488,10 +530,21 @@ function ChapterMetadataFields({
           value={item.chapterNumber}
           maxLength={40}
           required
+          aria-invalid={duplicateInvalid || undefined}
+          aria-describedby={
+            duplicateInvalid
+              ? `duplicate-chapter-${item.clientKey}`
+              : undefined
+          }
           onChange={(event) =>
             onChange({ ...item, chapterNumber: event.target.value })
           }
         />
+        {duplicateInvalid ? (
+          <small id={`duplicate-chapter-${item.clientKey}`}>
+            Choose a different chapter number before continuing.
+          </small>
+        ) : null}
       </label>
       <label>
         <span>Chapter title</span>
@@ -544,7 +597,7 @@ function ChapterMetadataFields({
         </select>
       </label>
       <label>
-        <span>Onyx price</span>
+        <span>{coinName} price</span>
         <input
           type="number"
           min="1"
@@ -590,7 +643,7 @@ function ChapterMetadataFields({
             onChange({ ...item, commentsEnabled: event.target.checked })
           }
         />
-        Comments enabled
+        <span>Comments enabled</span>
       </label>
       {!compact ? (
         <>
@@ -633,6 +686,26 @@ function ChapterMetadataFields({
           </details>
         </>
       ) : null}
+      {onThumbnailChange ? (
+        <div className="upload-field-wide upload-thumbnail-field">
+          <AdminMediaField
+            label="Chapter thumbnail"
+            helperText="Optional square artwork used in chapter cards and release previews."
+            recommendedDimensions="Square · 600 × 600"
+            currentUrl={thumbnailUrl}
+            file={thumbnailFile}
+            accept="image/jpeg,image/png,image/webp"
+            cropProfile={{
+              aspect: 1,
+              outputWidth: 600,
+              outputHeight: 600,
+              maxBytes: 900_000,
+            }}
+            onSelect={onThumbnailChange}
+            onRemove={() => onThumbnailChange(null)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -644,6 +717,7 @@ function UploadComposer({
   kind: "SINGLE" | "BATCH";
   options: UploadOptions;
 }) {
+  const { settings: commercial } = useCommercialSettings();
   const initialQuery =
     typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.search);
   const initialSeries =
@@ -661,6 +735,10 @@ function UploadComposer({
     useState<SupportedUploadMethod>(kind === "BATCH" ? "DIRECT_FOLDER" : "DIRECT_IMAGES");
   const [items, setItems] = useState<ComposerItem[]>([newComposerItem()]);
   const [localPages, setLocalPages] = useState<LocalPage[]>([]);
+  const [thumbnailFiles, setThumbnailFiles] = useState<Record<string, File | null>>({});
+  const [thumbnailRemovals, setThumbnailRemovals] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [job, setJob] = useState<UploadJob | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -668,13 +746,24 @@ function UploadComposer({
   const [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [draggedId, setDraggedId] = useState("");
+  const [duplicateRejectedKey, setDuplicateRejectedKey] = useState("");
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    clientKey: string;
+    existingChapterId: string;
+    chapterNumber: string;
+  } | null>(null);
   const folderRef = useRef<HTMLInputElement | null>(null);
+  const localPagesRef = useRef<LocalPage[]>([]);
   const resumeJobId = initialQuery.get("job") ?? "";
 
   useEffect(() => {
-    if (folderRef.current) {
+    if (!folderRef.current) return;
+    if (sourceType === "DIRECT_FOLDER" || kind === "BATCH") {
       folderRef.current.setAttribute("webkitdirectory", "");
       folderRef.current.setAttribute("directory", "");
+    } else {
+      folderRef.current.removeAttribute("webkitdirectory");
+      folderRef.current.removeAttribute("directory");
     }
   }, [sourceType, kind]);
 
@@ -709,6 +798,7 @@ function UploadComposer({
               ? new Date(item.scheduledAt).toISOString().slice(0, 16)
               : "",
             commentsEnabled: item.commentsEnabled,
+            replacementChapterId: item.replacementChapterId ?? null,
           })),
         );
       })
@@ -724,19 +814,61 @@ function UploadComposer({
     };
   }, [resumeJobId]);
 
+  useEffect(() => {
+    localPagesRef.current = localPages;
+  }, [localPages]);
+
   useEffect(
-    () => () => localPages.forEach((page) => URL.revokeObjectURL(page.previewUrl)),
-    [localPages],
+    () => () =>
+      localPagesRef.current.forEach((page) =>
+        URL.revokeObjectURL(page.previewUrl),
+      ),
+    [],
   );
 
   function updateItem(clientKey: string, next: ComposerItem) {
+    const previous = items.find((entry) => entry.clientKey === clientKey);
     setItems((current) =>
-      current.map((entry) => (entry.clientKey === clientKey ? next : entry)),
+      current.map((entry) => {
+        if (entry.clientKey !== clientKey) return entry;
+        const identityChanged =
+          entry.chapterNumber !== next.chapterNumber ||
+          entry.language !== next.language ||
+          entry.version !== next.version;
+        return identityChanged
+          ? { ...next, replacementChapterId: null }
+          : next;
+      }),
     );
+    if (
+      duplicateRejectedKey === clientKey &&
+      previous?.chapterNumber !== next.chapterNumber
+    ) {
+      setDuplicateRejectedKey("");
+      setError("");
+    }
+  }
+
+  function changeThumbnail(clientKey: string, file: File | null) {
+    setThumbnailFiles((current) => ({ ...current, [clientKey]: file }));
+    setThumbnailRemovals((current) => {
+      const next = new Set(current);
+      if (file) {
+        next.delete(clientKey);
+      } else if (
+        job?.items?.find((item) => item.clientKey === clientKey)?.thumbnailUrl
+      ) {
+        next.add(clientKey);
+      } else {
+        next.delete(clientKey);
+      }
+      return next;
+    });
   }
 
   function choosePages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []).filter((file) => file.size > 0);
+    event.currentTarget.value = "";
     setError("");
     if (!files.length) return;
     if (files.some((file) => file.size > UPLOAD_LIMITS.maxPageBytes)) {
@@ -755,26 +887,105 @@ function UploadComposer({
         };
       })
       .sort((left, right) => naturalCompare(left.path, right.path));
+    const selectedBytesByGroup = selected.reduce<Map<string, number>>(
+      (totals, page) => {
+        totals.set(page.group, (totals.get(page.group) ?? 0) + page.file.size);
+        return totals;
+      },
+      new Map(),
+    );
+    if (
+      [...selectedBytesByGroup.values()].some(
+        (total) => total > UPLOAD_LIMITS.maxChapterBytes,
+      )
+    ) {
+      selected.forEach((page) => URL.revokeObjectURL(page.previewUrl));
+      setError("Each chapter must be 250 MB or smaller.");
+      return;
+    }
     if (kind === "BATCH") {
       const groups = [...new Set(selected.map((page) => page.group))];
-      if (groups.length > UPLOAD_LIMITS.maxChaptersPerJob) {
+      const existingItems =
+        !job &&
+        localPages.length === 0 &&
+        items.length === 1 &&
+        items[0]?.sourceLabel === "Chapter 1"
+          ? []
+          : items;
+      const allGroups = [
+        ...new Set([
+          ...existingItems.map((item) => item.sourceLabel),
+          ...groups,
+        ]),
+      ];
+      if (allGroups.length > UPLOAD_LIMITS.maxChaptersPerJob) {
         selected.forEach((page) => URL.revokeObjectURL(page.previewUrl));
         setError(`Select no more than ${UPLOAD_LIMITS.maxChaptersPerJob} chapter folders.`);
         return;
       }
-      const detected = groups.map((group, index) => {
-        const metadata = detectBatchChapter(group, index + 1);
-        return {
-          ...newComposerItem(metadata.chapterNumber, metadata.sourceLabel),
-          volume: metadata.volume,
-          title: metadata.title,
-        };
-      });
-      setItems(detected);
+      if (job) {
+        const knownGroups = new Set(items.map((item) => item.sourceLabel));
+        const unknownGroup = groups.find((group) => !knownGroups.has(group));
+        if (unknownGroup) {
+          selected.forEach((page) => URL.revokeObjectURL(page.previewUrl));
+          setError(
+            `${unknownGroup} is not part of this saved batch. Add pages inside one of the existing chapter folders.`,
+          );
+          return;
+        }
+      } else {
+        const existingByGroup = new Map(
+          existingItems.map((item) => [item.sourceLabel, item]),
+        );
+        const detected = allGroups.map((group, index) => {
+          const existing = existingByGroup.get(group);
+          if (existing) return existing;
+          const metadata = detectBatchChapter(group, index + 1);
+          return {
+            ...newComposerItem(metadata.chapterNumber, metadata.sourceLabel),
+            volume: metadata.volume,
+            title: metadata.title,
+          };
+        });
+        setItems(detected);
+      }
     }
     setLocalPages((current) => {
-      current.forEach((page) => URL.revokeObjectURL(page.previewUrl));
-      return selected;
+      const merged = new Map(current.map((page) => [page.path, page]));
+      const replaced: LocalPage[] = [];
+      for (const page of selected) {
+        const previous = merged.get(page.path);
+        if (previous) replaced.push(previous);
+        merged.set(page.path, page);
+      }
+      const next = [...merged.values()].sort((left, right) =>
+        naturalCompare(left.path, right.path),
+      );
+      const oversizedGroup = items.find((item) => {
+        const serverBytes =
+          job?.items
+            ?.find((stored) => stored.clientKey === item.clientKey)
+            ?.files.reduce(
+              (total, page) => total + Number(page.byteSize),
+              0,
+            ) ?? 0;
+        const localBytes = next
+          .filter(
+            (page) =>
+              kind === "SINGLE" || page.group === item.sourceLabel,
+          )
+          .reduce((total, page) => total + page.file.size, 0);
+        return serverBytes + localBytes > UPLOAD_LIMITS.maxChapterBytes;
+      });
+      if (oversizedGroup) {
+        selected.forEach((page) => URL.revokeObjectURL(page.previewUrl));
+        setError(
+          `${oversizedGroup.sourceLabel} exceeds the 250 MB chapter limit.`,
+        );
+        return current;
+      }
+      replaced.forEach((page) => URL.revokeObjectURL(page.previewUrl));
+      return next;
     });
   }
 
@@ -843,12 +1054,16 @@ function UploadComposer({
     return payload.data;
   }
 
-  async function saveAndUpload(event: FormEvent) {
-    event.preventDefault();
+  async function persistUpload(selectedItems: ComposerItem[] = items) {
     setBusy(true);
     setError("");
     setMessage("");
     try {
+      if (duplicateRejectedKey) {
+        throw new Error(
+          "Change the existing chapter number before saving this upload.",
+        );
+      }
       if (!seriesId) throw new Error("Choose an approved series.");
       if (!options.admin && !teamId) throw new Error("Choose your active team.");
       let current = job;
@@ -863,7 +1078,7 @@ function UploadComposer({
               seriesId,
               teamId: teamId || null,
               idempotencyKey: crypto.randomUUID(),
-              items: items.map(wireItem),
+              items: selectedItems.map(wireItem),
             }),
           }),
         );
@@ -879,7 +1094,7 @@ function UploadComposer({
         throw new Error("The upload draft could not be initialized.");
       }
       if (job) {
-        for (const item of items) {
+        for (const item of selectedItems) {
           const stored = current.items?.find(
             (entry) => entry.clientKey === item.clientKey,
           );
@@ -903,13 +1118,68 @@ function UploadComposer({
           setJob(current);
         }
       }
+      for (const clientKey of thumbnailRemovals) {
+        const stored = current.items?.find(
+          (entry) => entry.clientKey === clientKey,
+        );
+        if (!stored?.thumbnailUrl) continue;
+        const removed = await readJson<{ job: { revision: number } }>(
+          await fetch("/api/v1/upload-job-thumbnail", {
+            method: "DELETE",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              jobId: current.id,
+              itemId: stored.id,
+              expectedRevision: current.revision,
+            }),
+          }),
+        );
+        current = { ...current, revision: removed.job.revision };
+        current = await refreshJob(current.id);
+        setThumbnailRemovals((pending) => {
+          const next = new Set(pending);
+          next.delete(clientKey);
+          return next;
+        });
+      }
+      for (const [clientKey, file] of Object.entries(thumbnailFiles)) {
+        if (!file) continue;
+        const stored = current.items?.find(
+          (entry) => entry.clientKey === clientKey,
+        );
+        if (!stored) continue;
+        const thumbnail = new FormData();
+        thumbnail.set("jobId", current.id);
+        thumbnail.set("itemId", stored.id);
+        thumbnail.set("expectedRevision", String(current.revision));
+        thumbnail.set("file", file);
+        const uploaded = await readJson<{ job: { revision: number } }>(
+          await fetch("/api/v1/upload-job-thumbnail", {
+            method: "PUT",
+            body: thumbnail,
+          }),
+        );
+        current = {
+          ...current,
+          revision: uploaded.job.revision,
+        };
+        current = await refreshJob(current.id);
+        setJob(current);
+        setThumbnailFiles((files) => ({ ...files, [clientKey]: null }));
+      }
       if (!localPages.length) {
         setMessage("Private upload draft saved. Add pages when ready.");
         return;
       }
+      const priorFileIdsByClientKey = new Map(
+        (current.items ?? []).map((item) => [
+          item.clientKey,
+          new Set(item.files.map((file) => file.id)),
+        ]),
+      );
       const totalPages = localPages.length;
       setProgress({ done: 0, total: totalPages });
-      for (const item of items) {
+      for (const item of selectedItems) {
         const stored = current.items?.find(
           (entry) => entry.clientKey === item.clientKey,
         );
@@ -922,7 +1192,9 @@ function UploadComposer({
           form.set("itemId", stored.id);
           form.set("expectedRevision", String(current.revision));
           form.set("sourcePath", page.path);
-          form.set("pageIndex", String(pageIndex));
+          if (!stored.files.length) {
+            form.set("pageIndex", String(pageIndex));
+          }
           form.set("file", page.file);
           try {
             const uploaded = await readJson<{
@@ -950,16 +1222,77 @@ function UploadComposer({
         }
       }
       current = await refreshJob(current.id);
+      for (const item of current.items ?? []) {
+        const priorIds =
+          priorFileIdsByClientKey.get(item.clientKey) ?? new Set<string>();
+        const ordered = item.files
+          .filter((file) => priorIds.has(file.id))
+          .sort((left, right) => left.pageIndex - right.pageIndex);
+        const added = item.files
+          .filter((file) => !priorIds.has(file.id))
+          .sort((left, right) => {
+            const pathOrder = naturalCompare(left.sourcePath, right.sourcePath);
+            return pathOrder || left.pageIndex - right.pageIndex;
+          });
+        for (const file of added) {
+          const insertAt = ordered.findIndex(
+            (existing) =>
+              naturalCompare(file.sourcePath, existing.sourcePath) < 0,
+          );
+          ordered.splice(insertAt < 0 ? ordered.length : insertAt, 0, file);
+        }
+        const needsNaturalReorder = ordered.some(
+          (file, pageIndex) => file.pageIndex !== pageIndex,
+        );
+        if (!needsNaturalReorder || ordered.length === 0) continue;
+        const activeJob = current;
+        if (!activeJob) {
+          throw new Error("The upload draft could not be refreshed.");
+        }
+        const reordered: { data: UploadJob } = await readJson<{
+          data: UploadJob;
+        }>(
+          await fetch("/api/v1/upload-jobs", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              action: "REORDER",
+              jobId: activeJob.id,
+              itemId: item.id,
+              expectedRevision: activeJob.revision,
+              fileIds: ordered.map((file) => file.id),
+            }),
+          }),
+        );
+        current = reordered.data;
+        setJob(current);
+      }
       setLocalPages((pages) => {
         pages.forEach((page) => URL.revokeObjectURL(page.previewUrl));
         return [];
       });
+      if (!current) {
+        throw new Error("The upload draft could not be refreshed.");
+      }
       setMessage(
         current.status === "READY"
           ? "All pages are validated. Review the release summary before publishing."
           : "Successful pages were preserved. Resolve failed pages before publishing.",
       );
     } catch (saveError) {
+      if (
+        saveError instanceof UploadApiError &&
+        saveError.code === "DUPLICATE_RELEASE" &&
+        typeof saveError.details?.clientKey === "string" &&
+        typeof saveError.details?.existingChapterId === "string"
+      ) {
+        setDuplicatePrompt({
+          clientKey: saveError.details.clientKey,
+          existingChapterId: saveError.details.existingChapterId,
+          chapterNumber: String(saveError.details.chapterNumber ?? ""),
+        });
+        return;
+      }
       setError(
         saveError instanceof Error
           ? saveError.message
@@ -968,6 +1301,15 @@ function UploadComposer({
     } finally {
       setBusy(false);
     }
+  }
+
+  function saveAndUpload(event: FormEvent) {
+    event.preventDefault();
+    if (duplicateRejectedKey) {
+      setError("Change the existing chapter number before saving this upload.");
+      return;
+    }
+    void persistUpload();
   }
 
   async function reorderServer(item: UploadItem, nextFiles: UploadFileRecord[]) {
@@ -1111,13 +1453,16 @@ function UploadComposer({
   );
 
   return (
-    <section>
+    <>
+    <section className={`upload-workflow upload-workflow-${kind.toLowerCase()}`}>
       <header className="upload-section-heading">
         <div>
           <span>{kind === "BATCH" ? "Folder batch" : "One release"}</span>
           <h2>{kind === "BATCH" ? "Multi-chapter upload" : "Single chapter upload"}</h2>
           <p>
-            Pages stay private until the atomic publish or review submission succeeds.
+            {kind === "BATCH"
+              ? `Prepare up to ${UPLOAD_LIMITS.maxChaptersPerJob} chapter folders in one private batch, then review every release before submission.`
+              : "Build one release in a focused workspace. Add missing pages later without replacing files that already passed validation."}
           </p>
         </div>
         {job ? <StatusBadge status={job.status} /> : null}
@@ -1132,7 +1477,33 @@ function UploadComposer({
           <CheckCircle size={19} /> {message}
         </div>
       ) : null}
-      <form className="upload-composer" onSubmit={saveAndUpload}>
+      {kind === "SINGLE" ? (
+        <div className="upload-single-overview">
+          <FileImage size={28} />
+          <div>
+            <strong>Single-chapter studio</strong>
+            <span>Metadata, visual page order, and final release review in one focused lane.</span>
+          </div>
+          <span>250 MB chapter limit</span>
+        </div>
+      ) : (
+        <div className="upload-batch-overview">
+          <div>
+            <FolderOpen size={25} />
+            <strong>Folder-first batch</strong>
+            <span>One subfolder becomes one editable chapter row.</span>
+          </div>
+          <dl>
+            <div><dt>Maximum</dt><dd>{UPLOAD_LIMITS.maxChaptersPerJob} chapters</dd></div>
+            <div><dt>Per chapter</dt><dd>250 MB</dd></div>
+            <div><dt>Review</dt><dd>Row by row</dd></div>
+          </dl>
+        </div>
+      )}
+      <form
+        className={`upload-composer upload-composer-${kind.toLowerCase()}`}
+        onSubmit={saveAndUpload}
+      >
         <section className="upload-composer-card">
           <div className="upload-card-heading">
             <span>1</span>
@@ -1189,40 +1560,31 @@ function UploadComposer({
             </label>
           </div>
         </section>
-        <section className="upload-composer-card">
-          <div className="upload-card-heading">
-            <span>2</span>
-            <div>
-              <strong>{kind === "BATCH" ? "Chapter review table" : "Chapter metadata"}</strong>
-              <small>Detection is a suggestion; confirm every chapter</small>
+        {kind === "SINGLE" ? (
+          <section className="upload-composer-card">
+            <div className="upload-card-heading">
+              <span>2</span>
+              <div>
+                <strong>Chapter metadata</strong>
+                <small>Detection is a suggestion; confirm every chapter</small>
+              </div>
             </div>
-          </div>
-          {kind === "BATCH" ? (
-            <div className="upload-batch-table">
-              {items.map((item, index) => (
-                <article key={item.clientKey}>
-                  <header>
-                    <span>{index + 1}</span>
-                    <div><strong>{item.sourceLabel}</strong><small>{localPagesFor(item).length} selected pages</small></div>
-                  </header>
-                  <ChapterMetadataFields
-                    compact
-                    item={item}
-                    onChange={(next) => updateItem(item.clientKey, next)}
-                  />
-                </article>
-              ))}
-            </div>
-          ) : (
             <ChapterMetadataFields
+              coinName={commercial.economy.coinName}
               item={items[0]!}
+              duplicateInvalid={duplicateRejectedKey === items[0]!.clientKey}
               onChange={(next) => updateItem(items[0]!.clientKey, next)}
+              thumbnailFile={thumbnailFiles[items[0]!.clientKey] ?? null}
+              thumbnailUrl={job?.items?.[0]?.thumbnailUrl ?? null}
+              onThumbnailChange={(file) =>
+                changeThumbnail(items[0]!.clientKey, file)
+              }
             />
-          )}
-        </section>
+          </section>
+        ) : null}
         <section className="upload-composer-card">
           <div className="upload-card-heading">
-            <span>3</span>
+            <span>{kind === "BATCH" ? "2" : "3"}</span>
             <div><strong>Pages and ordering</strong><small>Natural order first, explicit order saved exactly</small></div>
           </div>
           {!job || ["DRAFT", "UPLOADING", "READY", "FAILED"].includes(job.status) ? (
@@ -1233,21 +1595,30 @@ function UploadComposer({
                 <FileImage size={35} />
               )}
               <strong>
-                {kind === "BATCH"
+                {job?.pageCount
+                  ? "Add missing pages to this saved draft"
+                  : kind === "BATCH"
                   ? "Choose a parent folder containing one folder per chapter"
                   : sourceType === "DIRECT_FOLDER"
                     ? "Choose the chapter folder"
                     : "Choose ordered chapter images"}
               </strong>
-              <span>Verified JPEG, PNG, or WebP only · 25 MB per page</span>
+              <span>
+                Verified JPEG, PNG, or WebP · 25 MB per page · 250 MB per chapter
+                {job?.pageCount
+                  ? " · existing validated pages stay in place"
+                  : ""}
+              </span>
               <span className="upload-file-cta">
-                {sourceType === "DIRECT_FOLDER" || kind === "BATCH"
+                {job?.pageCount
+                  ? "Add pages"
+                  : sourceType === "DIRECT_FOLDER" || kind === "BATCH"
                   ? "Choose folder"
                   : "Choose files"}
               </span>
               <input
                 className="upload-native-file"
-                ref={sourceType === "DIRECT_FOLDER" || kind === "BATCH" ? folderRef : undefined}
+                ref={folderRef}
                 type="file"
                 multiple
                 accept="image/jpeg,image/png,image/webp"
@@ -1359,6 +1730,64 @@ function UploadComposer({
             </div>
           ) : null}
         </section>
+        {kind === "BATCH" ? (
+          <section className="upload-composer-card">
+            <div className="upload-card-heading">
+              <span>3</span>
+              <div>
+                <strong>Chapter review table</strong>
+                <small>Detection is a suggestion; confirm every chapter</small>
+              </div>
+            </div>
+            {localPages.length ||
+            job?.items?.some((entry) => entry.files.length) ? (
+              <div className="upload-batch-table">
+                {items.map((item, index) => (
+                  <article key={item.clientKey}>
+                    <header>
+                      <span>{index + 1}</span>
+                      <div>
+                        <strong>{item.sourceLabel}</strong>
+                        <small>
+                          {localPagesFor(item).length} selected pages
+                        </small>
+                      </div>
+                    </header>
+                    <ChapterMetadataFields
+                      coinName={commercial.economy.coinName}
+                      compact={false}
+                      item={item}
+                      duplicateInvalid={
+                        duplicateRejectedKey === item.clientKey
+                      }
+                      onChange={(next) => updateItem(item.clientKey, next)}
+                      thumbnailFile={
+                        thumbnailFiles[item.clientKey] ?? null
+                      }
+                      thumbnailUrl={
+                        job?.items?.find(
+                          (stored) => stored.clientKey === item.clientKey,
+                        )?.thumbnailUrl ?? null
+                      }
+                      onThumbnailChange={(file) =>
+                        changeThumbnail(item.clientKey, file)
+                      }
+                    />
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="upload-empty upload-batch-settings-gate">
+                <FolderOpen size={26} />
+                <strong>Select chapter folders first</strong>
+                <p>
+                  Each detected chapter will receive its own access, schedule,
+                  credits, and square thumbnail settings.
+                </p>
+              </div>
+            )}
+          </section>
+        ) : null}
         {job?.status === "READY" ? (
           <section className="upload-composer-card upload-final-review">
             <div className="upload-card-heading">
@@ -1404,7 +1833,7 @@ function UploadComposer({
           <button
             type="submit"
             className="button button-primary"
-            disabled={busy || !seriesId}
+            disabled={busy || !seriesId || Boolean(duplicateRejectedKey)}
           >
             {busy ? <SpinnerGap className="spin" size={18} /> : <CloudArrowUp size={18} />}
             {job ? (localPages.length ? "Validate selected pages" : "Save metadata") : "Save draft and validate"}
@@ -1412,6 +1841,56 @@ function UploadComposer({
         </div>
       </form>
     </section>
+    <ConfirmActionDialog
+      open={Boolean(duplicatePrompt)}
+      title="Do you want to replace existing chapter?"
+      description={`Chapter ${duplicatePrompt?.chapterNumber || ""} already exists with the same team, language, and version. Replacing it creates a private request for an administrator; the published chapter stays unchanged until approval.`}
+      confirmLabel="Yes, request replacement"
+      cancelLabel="No, change chapter number"
+      destructive={false}
+      busy={busy}
+      onCancel={() => {
+        const clientKey = duplicatePrompt?.clientKey ?? "";
+        setDuplicatePrompt(null);
+        setDuplicateRejectedKey(clientKey);
+        setItems((current) =>
+          current.map((item) =>
+            item.clientKey === clientKey
+              ? { ...item, replacementChapterId: null }
+              : item,
+          ),
+        );
+        setError(
+          "Choose a different chapter number before saving this upload.",
+        );
+        window.requestAnimationFrame(() =>
+          document
+            .querySelector<HTMLInputElement>(
+              `[data-upload-item="${CSS.escape(clientKey)}"] input[aria-invalid="true"]`,
+            )
+            ?.focus(),
+        );
+      }}
+      onConfirm={() => {
+        if (!duplicatePrompt) return;
+        const nextItems = items.map((item) =>
+          item.clientKey === duplicatePrompt.clientKey
+            ? {
+                ...item,
+                replacementChapterId: duplicatePrompt.existingChapterId,
+              }
+            : item,
+        );
+        setItems(nextItems);
+        setDuplicateRejectedKey("");
+        setDuplicatePrompt(null);
+        setMessage(
+          "Replacement intent saved. It will be forced into administrator review after page validation.",
+        );
+        void persistUpload(nextItems);
+      }}
+    />
+    </>
   );
 }
 
@@ -1441,7 +1920,13 @@ function SeriesAccessPanel({ options }: { options: UploadOptions }) {
         <div className="upload-series-grid">
           {grouped.map((series) => (
             <article key={`${series.id}:${series.teamId ?? ""}`}>
-              <Books size={22} />
+              <span className="upload-series-cover" aria-hidden="true">
+                {series.coverUrl ? (
+                  <img src={series.coverUrl} alt="" loading="lazy" />
+                ) : (
+                  <Books size={22} />
+                )}
+              </span>
               <div><strong>{series.title}</strong><small>{series.teamName ?? "Platform-managed"}</small></div>
               <span>
                 {series.uploadRequiresReview
@@ -1546,7 +2031,8 @@ function UploadRules({ options }: { options: UploadOptions }) {
         <article><strong>{options.limits.maxChaptersPerJob}</strong><span>chapters per batch</span></article>
         <article><strong>{options.limits.maxPagesPerChapter}</strong><span>pages per chapter</span></article>
         <article><strong>25 MB</strong><span>per verified page</span></article>
-        <article><strong>2 GB</strong><span>per private upload job</span></article>
+        <article><strong>250 MB</strong><span>per chapter</span></article>
+        <article><strong>7 GB</strong><span>per private upload job</span></article>
       </div>
       <ul className="upload-rules-copy">
         <li>JPEG, PNG, and WebP signatures must match the actual file content.</li>

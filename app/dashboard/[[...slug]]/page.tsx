@@ -43,6 +43,8 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           displayName: user.displayName,
           email: user.email,
           role: actor?.primaryRole ?? "USER",
+          roles: actor?.roles ?? ["USER"],
+          avatarUrl: actor?.avatarUrl ?? null,
         }}
       />
     );
@@ -61,6 +63,8 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
         displayName: actor.displayName,
         email: actor.email,
         role: actor.primaryRole,
+        roles: actor.roles,
+        avatarUrl: actor.avatarUrl,
         canUseUploadCenter: actor.canUseUploadCenter,
         canUpload:
           ["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole) ||

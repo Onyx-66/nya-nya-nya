@@ -1,8 +1,9 @@
 export const UPLOAD_LIMITS = Object.freeze({
-  maxChaptersPerJob: 10,
+  maxChaptersPerJob: 25,
   maxPagesPerChapter: 500,
   maxPageBytes: 25 * 1024 * 1024,
-  maxJobBytes: 2 * 1024 * 1024 * 1024,
+  maxChapterBytes: 250 * 1024 * 1024,
+  maxJobBytes: 7 * 1024 * 1024 * 1024,
   maxPixelsPerPage: 64_000_000,
   maxWidth: 16_384,
   maxHeight: 32_768,

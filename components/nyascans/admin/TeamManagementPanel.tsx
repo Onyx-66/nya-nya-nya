@@ -621,6 +621,12 @@ export function TeamManagementPanel({
                 currentUrl={draft.logoUrl}
                 file={logoFile}
                 accept="image/png,image/jpeg,image/webp"
+                cropProfile={{
+                  aspect: 1,
+                  outputWidth: 800,
+                  outputHeight: 800,
+                  maxBytes: 1_500_000,
+                }}
                 disabledReason={!draft.id ? "Save the team identity before uploading media." : undefined}
                 busy={saving}
                 onSelect={(file) => selectMedia("logo", file)}
@@ -633,6 +639,12 @@ export function TeamManagementPanel({
                 currentUrl={draft.bannerUrl}
                 file={bannerFile}
                 accept="image/png,image/jpeg,image/webp"
+                cropProfile={{
+                  aspect: 3,
+                  outputWidth: 1920,
+                  outputHeight: 640,
+                  maxBytes: 2_500_000,
+                }}
                 disabledReason={!draft.id ? "Save the team identity before uploading media." : undefined}
                 busy={saving}
                 onSelect={(file) => selectMedia("banner", file)}
@@ -683,6 +695,12 @@ export function TeamManagementPanel({
                 currentUrl={draft.staffBadgeUrl}
                 file={badgeFile}
                 accept="image/png,image/jpeg,image/webp"
+                cropProfile={{
+                  aspect: 1,
+                  outputWidth: 128,
+                  outputHeight: 128,
+                  maxBytes: 300_000,
+                }}
                 disabledReason={!draft.id ? "Save the team identity before uploading media." : undefined}
                 busy={saving}
                 onSelect={(file) => selectMedia("badge", file)}

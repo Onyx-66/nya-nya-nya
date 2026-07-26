@@ -173,6 +173,100 @@ test("Shards rewards and Roulette are server-authoritative and replay-safe", asy
   assert.match(migration, /roulette_spins_idempotency_uidx/u);
 });
 
+test("Roulette counter reservation cannot advance for a replayed request key", async () => {
+  const [database, roulette] = await Promise.all([
+    migratedDatabase(),
+    read("app/api/v1/roulette/route.ts"),
+  ]);
+  database.exec("PRAGMA foreign_keys = ON");
+  database.exec(`
+    INSERT INTO users (id, email, display_name)
+    VALUES ('usr_v34_retry', 'v34-retry@example.com', 'Retry Reader');
+    INSERT INTO ledger_transactions
+      (id, kind, reference_type, reference_id, idempotency_key)
+    VALUES (
+      'tx_v34_retry_reward',
+      'ROULETTE_REWARD',
+      'ROULETTE_SPIN',
+      'spin_v34_first',
+      'roulette:usr_v34_retry:request-key-v34'
+    );
+    INSERT INTO roulette_spins
+      (id, user_id, idempotency_key, reward_key, reward_type, reward_amount,
+       spin_mode, transaction_id, next_eligible_at, global_spin_number)
+    VALUES (
+      'spin_v34_first',
+      'usr_v34_retry',
+      'request-key-v34',
+      'reward_v34',
+      'SHARDS',
+      10,
+      'PAID',
+      'tx_v34_retry_reward',
+      '1970-01-01T00:00:00.000Z',
+      1
+    );
+    INSERT INTO roulette_pool_counters
+      (pool_key, total_spins, last_spin_id)
+    VALUES ('PAID', 1, 'spin_v34_first');
+  `);
+
+  const reserve = database.prepare(
+    `UPDATE roulette_pool_counters
+        SET total_spins = total_spins + 1,
+            last_spin_id = ?
+      WHERE pool_key = 'PAID'
+        AND total_spins = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM roulette_spins prior_spin
+           WHERE prior_spin.user_id = ?
+             AND prior_spin.idempotency_key = ?
+        )`,
+  );
+  assert.equal(
+    reserve.run(
+      "spin_v34_replay",
+      "usr_v34_retry",
+      "request-key-v34",
+    ).changes,
+    0,
+  );
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT total_spins AS totalSpins, last_spin_id AS lastSpinId
+             FROM roulette_pool_counters
+            WHERE pool_key = 'PAID'`,
+        )
+        .get(),
+    },
+    { totalSpins: 1, lastSpinId: "spin_v34_first" },
+  );
+  assert.equal(
+    reserve.run(
+      "spin_v34_second",
+      "usr_v34_retry",
+      "different-request-key-v34",
+    ).changes,
+    1,
+  );
+
+  assert.equal(
+    (
+      roulette.match(
+        /SELECT 1 FROM roulette_spins prior_spin[\s\S]*?prior_spin\.idempotency_key = \?/gu,
+      ) ?? []
+    ).length,
+    3,
+  );
+  assert.match(
+    roulette,
+    /if \(replayedSpin\) \{[\s\S]*?replayedSpin\.spinMode !== payload\.mode[\s\S]*?IDEMPOTENCY_KEY_REUSED/u,
+  );
+  database.close();
+});
+
 test("Version 28 UI keeps mobile editorial intact while adding the requested desktop and economy surfaces", async () => {
   const [app, api, discovery, giftStore, roulette, rewardAdmin, styles] =
     await Promise.all([

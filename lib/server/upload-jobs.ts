@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
-import { can } from "@/lib/permissions.mjs";
+import { canAny } from "@/lib/permissions.mjs";
 import {
   normalizeUploadPath,
   UPLOAD_LIMITS,
@@ -59,20 +59,27 @@ export const uploadItemInputSchema = z
     visibility: z.enum(["PUBLIC", "UNLISTED", "HIDDEN"]).default("PUBLIC"),
     scheduledAt: z.string().datetime().nullable().default(null),
     commentsEnabled: z.boolean().default(true),
+    replacementChapterId: z
+      .string()
+      .trim()
+      .min(3)
+      .max(120)
+      .nullable()
+      .default(null),
   })
   .superRefine((value, context) => {
     if (value.accessType === "PAID" && value.priceOnyx < 1) {
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
-        message: "Paid chapters need an Onyx price of at least 1.",
+        message: "Paid chapters need a premium coin price of at least 1.",
       });
     }
     if (value.accessType === "FREE" && value.priceOnyx !== 0) {
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
-        message: "Free chapters cannot have an Onyx price.",
+        message: "Free chapters cannot have a premium coin price.",
       });
     }
   });
@@ -172,7 +179,8 @@ export const uploadFileMutationSchema = z.discriminatedUnion("action", [
 ]);
 
 export function isUploadAdmin(actor: Actor) {
-  return ["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole);
+  const roles = new Set([actor.primaryRole, ...(actor.roles ?? [])]);
+  return roles.has("OWNER") || roles.has("ADMINISTRATOR");
 }
 
 export async function assertUploadRateLimit(
@@ -219,7 +227,14 @@ function expiredDraftAuthorization(actor: Actor, alias = "expired_job") {
         SELECT 1 FROM users cleanup_actor
          WHERE cleanup_actor.id = ?
            AND cleanup_actor.status = 'ACTIVE'
-           AND cleanup_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+           AND (
+             cleanup_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+             OR EXISTS (
+               SELECT 1 FROM user_roles cleanup_role
+                WHERE cleanup_role.user_id = cleanup_actor.id
+                  AND cleanup_role.role IN ('OWNER', 'ADMINISTRATOR')
+             )
+           )
       )`,
       bindings: [actor.id] as unknown[],
     };
@@ -229,6 +244,14 @@ function expiredDraftAuthorization(actor: Actor, alias = "expired_job") {
       SELECT 1 FROM users cleanup_actor
        WHERE cleanup_actor.id = ?
          AND cleanup_actor.status = 'ACTIVE'
+         AND (
+           cleanup_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
+           OR EXISTS (
+             SELECT 1 FROM user_roles cleanup_role
+              WHERE cleanup_role.user_id = cleanup_actor.id
+                AND cleanup_role.role IN ('TEAM_LEADER', 'UPLOADER')
+           )
+         )
          AND (
            ${alias}.user_id = cleanup_actor.id
            OR EXISTS (
@@ -316,6 +339,16 @@ export async function cleanupExpiredUploadDrafts(
   let cleaned = 0;
   let queued = 0;
   for (const candidate of candidates.results) {
+    const thumbnails = await db
+      .prepare(
+        `SELECT id, thumbnail_key AS objectKey
+           FROM upload_job_items
+          WHERE job_id = ?
+            AND chapter_id IS NULL
+            AND thumbnail_key IS NOT NULL`,
+      )
+      .bind(candidate.id)
+      .all<{ id: string; objectKey: string }>();
     const commitAuthorization = expiredDraftAuthorization(
       actor,
       "upload_jobs",
@@ -344,6 +377,21 @@ export async function cleanupExpiredUploadDrafts(
             candidate.revision,
             ...commitAuthorization.bindings,
           ),
+        db
+          .prepare(
+            `UPDATE upload_job_items
+                SET thumbnail_key = NULL,
+                    revision = revision + 1,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE job_id = ?
+                AND chapter_id IS NULL
+                AND thumbnail_key IS NOT NULL
+                AND EXISTS (
+                  SELECT 1 FROM upload_publish_guards
+                   WHERE job_id = ? AND verified = 1
+                )`,
+          )
+          .bind(candidate.id, candidate.id),
         db
           .prepare(
             `UPDATE upload_sessions
@@ -410,6 +458,7 @@ export async function cleanupExpiredUploadDrafts(
           .prepare(
             `UPDATE upload_job_items
                 SET status = 'CANCELLED',
+                    thumbnail_key = NULL,
                     error_code = 'DRAFT_EXPIRED',
                     error_message =
                       'This draft expired before it was published.',
@@ -463,6 +512,15 @@ export async function cleanupExpiredUploadDrafts(
       continue;
     }
     if (!Number(results[0]?.meta.changes ?? 0)) continue;
+    for (const thumbnail of thumbnails.results) {
+      const removed = await deleteMediaObject(db, bucket, thumbnail.objectKey, {
+        mediaKind: "CHAPTER_THUMBNAIL",
+        targetType: "UPLOAD_JOB_ITEM",
+        targetId: thumbnail.id,
+        reason: "Expired upload draft",
+      });
+      if (!removed) queued += 1;
+    }
     const objects = await db
       .prepare(
         `SELECT pending_session.id,
@@ -553,6 +611,7 @@ export async function requireUploadScope(
   teamId: string | null,
   languages: string[] = [],
 ): Promise<UploadScope> {
+  requireUploadCapability(actor);
   const seriesRecord = await db
     .prepare(
       `SELECT id, slug, title
@@ -575,6 +634,31 @@ export async function requireUploadScope(
   }
 
   if (isUploadAdmin(actor)) {
+    const liveAdministrator = await db
+      .prepare(
+        `SELECT id
+           FROM users live_actor
+          WHERE live_actor.id = ?
+            AND live_actor.status = 'ACTIVE'
+            AND (
+              live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+              OR EXISTS (
+                SELECT 1 FROM user_roles live_role
+                 WHERE live_role.user_id = live_actor.id
+                   AND live_role.role IN ('OWNER', 'ADMINISTRATOR')
+              )
+            )
+          LIMIT 1`,
+      )
+      .bind(actor.id)
+      .first();
+    if (!liveAdministrator) {
+      throw new ApiError(
+        403,
+        "UPLOAD_PERMISSION_REQUIRED",
+        "This account no longer has administrator upload access.",
+      );
+    }
     if (!teamId) {
       return {
         seriesId: seriesRecord.id,
@@ -634,6 +718,8 @@ export async function requireUploadScope(
          FROM series_team_assignments sta
          JOIN team_memberships tm
            ON tm.team_id = sta.team_id
+         JOIN users live_actor
+           ON live_actor.id = tm.user_id
          JOIN teams t
            ON t.id = sta.team_id
         WHERE sta.series_id = ?
@@ -642,6 +728,15 @@ export async function requireUploadScope(
           AND sta.revoked_at IS NULL
           AND tm.user_id = ?
           AND tm.status = 'ACTIVE'
+          AND live_actor.status = 'ACTIVE'
+          AND (
+            live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
+            OR EXISTS (
+              SELECT 1 FROM user_roles live_role
+               WHERE live_role.user_id = live_actor.id
+                 AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
+            )
+          )
           AND UPPER(tm.membership_role) IN
             ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
           AND t.is_archived = 0
@@ -685,14 +780,23 @@ export async function requireUploadScope(
     seriesTitle: seriesRecord.title,
     teamId: assignment.teamId,
     teamName: assignment.teamName,
-    canPublish: Boolean(assignment.canPublish),
+    canPublish:
+      canAny(
+        [actor.primaryRole, ...(actor.roles ?? [])],
+        "chapter.publish.assigned",
+      ) && Boolean(assignment.canPublish),
     uploadRequiresReview: Boolean(assignment.uploadRequiresReview),
     allowedLanguages,
   };
 }
 
 export function requireUploadCapability(actor: Actor) {
-  if (!can(actor.primaryRole, "upload.create")) {
+  if (
+    !canAny(
+      [actor.primaryRole, ...(actor.roles ?? [])],
+      "upload.create",
+    )
+  ) {
     throw new ApiError(
       403,
       "UPLOAD_PERMISSION_REQUIRED",

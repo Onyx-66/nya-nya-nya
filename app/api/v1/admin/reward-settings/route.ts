@@ -64,12 +64,16 @@ export async function PUT(request: Request) {
         "Reward settings storage is unavailable.",
       );
     }
-    const itemIds = payload.settings.rouletteRewards
+    const itemIds = [
+      ...payload.settings.rouletteRewards,
+      ...payload.settings.roulettePaidRewards,
+    ]
       .filter((reward) => reward.enabled && reward.type === "STORE_ITEM")
       .map((reward) => reward.itemId)
       .filter((itemId): itemId is string => Boolean(itemId));
-    if (itemIds.length > 0) {
-      const placeholders = itemIds.map(() => "?").join(",");
+    const uniqueItemIds = [...new Set(itemIds)];
+    if (uniqueItemIds.length > 0) {
+      const placeholders = uniqueItemIds.map(() => "?").join(",");
       const available = await env.DB.prepare(
         `SELECT id
            FROM store_items
@@ -78,9 +82,12 @@ export async function PUT(request: Request) {
             AND is_hidden = 0
             AND archived_at IS NULL`,
       )
-        .bind(...itemIds)
+        .bind(...uniqueItemIds)
         .all<{ id: string }>();
-      if (new Set(available.results.map((item) => item.id)).size !== itemIds.length) {
+      if (
+        new Set(available.results.map((item) => item.id)).size !==
+        uniqueItemIds.length
+      ) {
         throw new ApiError(
           422,
           "ROULETTE_ITEM_UNAVAILABLE",

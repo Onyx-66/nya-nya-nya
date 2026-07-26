@@ -60,7 +60,14 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
           FROM users live_actor
          WHERE live_actor.id = ?
            AND live_actor.status = 'ACTIVE'
-           AND live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+           AND (
+             live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+             OR EXISTS (
+               SELECT 1 FROM user_roles live_role
+                WHERE live_role.user_id = live_actor.id
+                  AND live_role.role IN ('OWNER', 'ADMINISTRATOR')
+             )
+           )
       )
       AND ${seriesIsEligible}
       AND (
@@ -89,7 +96,14 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
         JOIN teams live_team ON live_team.id = live_assignment.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
-         AND live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
+         AND (
+           live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
+           OR EXISTS (
+             SELECT 1 FROM user_roles live_role
+              WHERE live_role.user_id = live_actor.id
+                AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
+           )
+         )
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
            ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
@@ -487,6 +501,16 @@ export async function POST(request: Request) {
         `A chapter can contain at most ${UPLOAD_LIMITS.maxPagesPerChapter} pages.`,
       );
     }
+    if (
+      Number(counts?.itemBytes ?? 0) + file.size >
+      UPLOAD_LIMITS.maxChapterBytes
+    ) {
+      throw new ApiError(
+        413,
+        "UPLOAD_CHAPTER_TOO_LARGE",
+        "This chapter exceeds the 250 MB upload limit.",
+      );
+    }
     const jobBytes = await env.DB.prepare(
       `SELECT COALESCE(SUM(byte_size), 0) AS totalBytes
          FROM upload_sessions
@@ -503,7 +527,7 @@ export async function POST(request: Request) {
       throw new ApiError(
         413,
         "UPLOAD_JOB_TOO_LARGE",
-        "This upload exceeds the 2 GB private-draft limit.",
+        "This upload exceeds the 7 GB private-draft limit.",
       );
     }
     const duplicate = await env.DB.prepare(

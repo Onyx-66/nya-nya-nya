@@ -14,8 +14,10 @@ import Link from "next/link";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
 type TeamOption = {
   id: string;
@@ -417,11 +419,16 @@ export function AddSeriesRequestPanel() {
     slot: "cover" | "banner",
     file: File,
   ) {
+    const prepared = await optimizeStaticMedia(file, {
+      maxWidth: slot === "cover" ? 1_600 : 2_400,
+      maxHeight: slot === "cover" ? 2_400 : 1_200,
+      maxBytes: slot === "cover" ? 3_000_000 : 4_000_000,
+    });
     const body = new FormData();
     body.set("requestId", request.id);
     body.set("slot", slot);
     body.set("revision", String(request.revision));
-    body.set("file", file);
+    body.set("file", prepared);
     const payload = await readJson<{
       data: { revision: number };
     }>(
@@ -1211,8 +1218,15 @@ export function SeriesRequestsPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [reason, setReason] = useState("");
+  const requestSequence = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
 
   async function load() {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setBusy(true);
     setError("");
     try {
@@ -1222,25 +1236,39 @@ export function SeriesRequestsPanel() {
       }>(
         await fetch(
           `/api/v1/series-requests?status=${encodeURIComponent(status)}&limit=30`,
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         ),
       );
+      if (controller.signal.aborted || sequence !== requestSequence.current) return;
       setRecords(payload.data ?? []);
       setEligibleTeamIds(
         new Set((payload.capabilities?.teams ?? []).map((team) => team.id)),
       );
-      if (selected) {
-        const refreshed = payload.data.find((entry) => entry.id === selected.id);
-        if (refreshed) setSelected(refreshed);
+      const preferred =
+        payload.data.find((entry) => entry.id === selected?.id) ??
+        payload.data[0] ??
+        null;
+      if (!preferred) {
+        setSelected(null);
+      } else {
+        const detail = await readJson<{ data: RequestRecord }>(
+          await fetch(
+            `/api/v1/series-requests?id=${encodeURIComponent(preferred.id)}`,
+            { cache: "no-store", signal: controller.signal },
+          ),
+        );
+        if (controller.signal.aborted || sequence !== requestSequence.current) return;
+        setSelected(detail.data);
       }
     } catch (loadError) {
+      if ((loadError as Error).name === "AbortError") return;
       setError(
         loadError instanceof Error
           ? loadError.message
           : "Series requests could not be loaded.",
       );
     } finally {
-      setBusy(false);
+      if (sequence === requestSequence.current) setBusy(false);
     }
   }
 
@@ -1248,30 +1276,40 @@ export function SeriesRequestsPanel() {
     const timeout = window.setTimeout(() => {
       void load();
     }, 0);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(timeout);
+      requestController.current?.abort();
+    };
     // The loader is intentionally re-run only when the server-side filter changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   async function open(record: RequestRecord) {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setBusy(true);
     setError("");
     try {
       const payload = await readJson<{ data: RequestRecord }>(
         await fetch(
           `/api/v1/series-requests?id=${encodeURIComponent(record.id)}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         ),
       );
+      if (controller.signal.aborted || sequence !== requestSequence.current) return;
       setSelected(payload.data);
     } catch (openError) {
+      if ((openError as Error).name === "AbortError") return;
       setError(
         openError instanceof Error
           ? openError.message
           : "The request detail could not be loaded.",
       );
     } finally {
-      setBusy(false);
+      if (sequence === requestSequence.current) setBusy(false);
     }
   }
 
@@ -1388,8 +1426,12 @@ export function SeriesRequestsPanel() {
                 className={selected?.id === record.id ? "is-selected" : ""}
                 onClick={() => void open(record)}
               >
-                <span>
-                  <FileText size={20} />
+                <span className="request-record-cover">
+                  {record.coverUrl ? (
+                    <img src={record.coverUrl} alt="" loading="lazy" />
+                  ) : (
+                    <FileText size={20} />
+                  )}
                 </span>
                 <div>
                   <strong>{record.primaryTitle}</strong>
@@ -1411,6 +1453,7 @@ export function SeriesRequestsPanel() {
             </div>
           )}
         </div>
+        {records.length ? (
         <aside className="request-detail">
           {selected ? (
             <>
@@ -1509,19 +1552,17 @@ export function SeriesRequestsPanel() {
                 </button>
               ) : null}
               {selected.approvedSeries ? (
-                <a href={`/title/${selected.approvedSeries.slug}`}>
+                <a
+                  className="button button-secondary request-approved-link"
+                  href={`/title/${selected.approvedSeries.slug}`}
+                >
                   Open approved series <ArrowRight size={16} />
                 </a>
               ) : null}
             </>
-          ) : (
-            <div className="upload-empty">
-              <FileText size={28} />
-              <strong>Select a request</strong>
-              <p>Status, feedback, and revision history will appear here.</p>
-            </div>
-          )}
+          ) : null}
         </aside>
+        ) : null}
       </div>
     </section>
   );

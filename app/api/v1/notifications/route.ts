@@ -5,6 +5,7 @@ import {
   assertSameOrigin,
   requestIdFor,
 } from "@/lib/server/admin-utils";
+import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,9 @@ export async function GET(request: Request) {
         "Notifications are temporarily unavailable.",
       );
     }
+    const commercial = await getCommercialSettingsDocument();
+    const premiumEconomyPublic =
+      commercial.settings.economy.premiumEconomyPublic;
     const url = new URL(request.url);
     const query = querySchema.parse({
       category: url.searchParams.get("category") ?? undefined,
@@ -89,6 +93,7 @@ export async function GET(request: Request) {
                ${categoryExpression} AS category
           FROM notifications
          WHERE user_id = ?
+           AND (? = 1 OR kind <> 'TEAM_SUPPORT')
       )
     `;
     const [records, totalRow, unreadRow] = await Promise.all([
@@ -103,6 +108,7 @@ export async function GET(request: Request) {
       )
         .bind(
           actor.id,
+          premiumEconomyPublic ? 1 : 0,
           ...filterBindings,
           query.pageSize,
           (query.page - 1) * query.pageSize,
@@ -114,14 +120,16 @@ export async function GET(request: Request) {
            FROM categorized
            ${where}`,
       )
-        .bind(actor.id, ...filterBindings)
+        .bind(actor.id, premiumEconomyPublic ? 1 : 0, ...filterBindings)
         .first<{ count: number }>(),
       env.DB.prepare(
         `SELECT COUNT(*) AS count
            FROM notifications
-          WHERE user_id = ? AND read_at IS NULL`,
+          WHERE user_id = ?
+            AND (? = 1 OR kind <> 'TEAM_SUPPORT')
+            AND read_at IS NULL`,
       )
-        .bind(actor.id)
+        .bind(actor.id, premiumEconomyPublic ? 1 : 0)
         .first<{ count: number }>(),
     ]);
     const total = Number(totalRow?.count ?? 0);

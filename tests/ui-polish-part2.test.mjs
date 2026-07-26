@@ -62,7 +62,10 @@ test("locked chapter media stays server-gated and the reader recovers per page",
     access,
     /\["LICENSED", "AUTHORIZED", "DEMO_ORIGINAL", "TEST_ORIGINAL"\]\.includes/,
   );
-  assert.match(reader, /Buy \{commercial\.economy\.coinPlural\}/);
+  assert.match(
+    reader,
+    /ConfiguredCoinMark[\s\S]+Buy\{" "\}[\s\S]+\{commercial\.economy\.coinPlural\}/,
+  );
   assert.match(reader, /Your balance/);
   assert.match(reader, /Retry chapter pages/);
   assert.match(app, /Try page again/);

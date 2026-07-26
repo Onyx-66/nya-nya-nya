@@ -59,6 +59,28 @@ const categories: Array<{
   },
 ];
 
+const categoryGroups: Array<{
+  key: string;
+  label: string;
+  summary: string;
+  categories: StoreAdminCategory[];
+}> = [
+  {
+    key: "commercial",
+    label: "Revenue and access",
+    summary:
+      "Customer-facing packages, recurring plans, pricing, and availability.",
+    categories: ["coins", "memberships"],
+  },
+  {
+    key: "personalization",
+    label: "Visual inventory",
+    summary:
+      "Profile, comment, and brand cosmetics grouped by where customers use them.",
+    categories: ["banners", "cosmetics", "logo-effects"],
+  },
+];
+
 export function StoreManagementWorkspace({
   initialCategory = "coins",
   onCategoryChange,
@@ -70,9 +92,6 @@ export function StoreManagementWorkspace({
   ) => void;
 }) {
   const [category, setCategory] = useState<StoreAdminCategory>(initialCategory);
-  const [expanded, setExpanded] = useState<StoreAdminCategory | null>(
-    initialCategory,
-  );
   const [dirtyState, setDirtyState] = useState({
     dirty: false,
     label: "Store changes",
@@ -104,7 +123,6 @@ export function StoreManagementWorkspace({
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setCategory(initialCategory);
-      setExpanded(initialCategory);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [initialCategory]);
@@ -137,19 +155,18 @@ export function StoreManagementWorkspace({
   }, []);
 
   function open(next: StoreAdminCategory) {
-    if (next === category) {
-      setExpanded(next);
-      return;
-    }
+    if (next === category) return;
     const confirmedDiscard =
       dirtyState.dirty &&
       window.confirm(`Discard unsaved ${dirtyState.label}?`);
     if (dirtyState.dirty && !confirmedDiscard) return;
     setCategory(next);
-    setExpanded(next);
     window.sessionStorage.setItem("nyascans-admin-store-category", next);
     onCategoryChange?.(next, confirmedDiscard);
   }
+
+  const selectedCategory =
+    categories.find((item) => item.key === category) ?? categories[0]!;
 
   return (
     <section className="store-management-workspace">
@@ -163,52 +180,51 @@ export function StoreManagementWorkspace({
           </p>
         </div>
       </header>
-      <div className="store-management-category-grid">
-        {categories.map((item) => (
-          <details
-            key={item.key}
-            open={expanded === item.key}
-            onToggle={(event) => {
-              if (event.currentTarget.open) {
-                open(item.key);
-              } else if (expanded === item.key) {
-                if (
-                  dirtyState.dirty &&
-                  !window.confirm(
-                    `Hide this category with unsaved ${dirtyState.label}? Your draft will stay available until you leave the category.`,
-                  )
-                ) {
-                  event.currentTarget.open = true;
-                  return;
-                }
-                setExpanded(null);
-              }
-            }}
-          >
-            <summary>
-              <span>
-                <strong>{item.label}</strong>
-                <small>{item.summary}</small>
-              </span>
-              <em>
-                {countsLoaded
-                  ? `${counts[item.key]} live`
-                  : "Count unavailable"}{" "}
-                ·{" "}
-                {expanded === item.key ? "Open" : "Collapsed"}
-              </em>
-            </summary>
-            <nav aria-label={`${item.label} tools`}>
-              {item.tools.map((tool) => <span key={tool}>{tool}</span>)}
-            </nav>
-            <button
-              className="button button-primary"
-              type="button"
-              onClick={() => open(item.key)}
-            >
-              Manage {item.label}
-            </button>
-          </details>
+      <div className="store-management-groups">
+        {categoryGroups.map((group) => (
+          <section key={group.key} className="store-management-group">
+            <header>
+              <span>{group.label}</span>
+              <p>{group.summary}</p>
+            </header>
+            <div className="store-management-category-grid">
+              {group.categories.map((categoryKey) => {
+                const item = categories.find(
+                  (candidate) => candidate.key === categoryKey,
+                )!;
+                const active = category === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    className={`store-management-category-card${
+                      active ? " is-active" : ""
+                    }`}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => open(item.key)}
+                  >
+                    <span className="store-management-category-title">
+                      <strong>{item.label}</strong>
+                      <em>
+                        {countsLoaded
+                          ? `${counts[item.key]} live`
+                          : "Count unavailable"}
+                      </em>
+                    </span>
+                    <small>{item.summary}</small>
+                    <span className="store-management-category-tools">
+                      {item.tools.map((tool) => (
+                        <i key={tool}>{tool}</i>
+                      ))}
+                    </span>
+                    <span className="store-management-category-action">
+                      {active ? "Editing now" : `Manage ${item.label}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         ))}
       </div>
       {summaryError ? (
@@ -216,10 +232,12 @@ export function StoreManagementWorkspace({
           {summaryError}
         </p>
       ) : null}
-      <div
-        className="store-management-active-panel"
-        hidden={expanded !== category}
-      >
+      <div className="store-management-selection" aria-live="polite">
+        <span>Editing workspace</span>
+        <strong>{selectedCategory.label}</strong>
+        <small>{selectedCategory.summary}</small>
+      </div>
+      <div className="store-management-active-panel">
         {category === "coins" ? (
           <CommerceOfferManager
             key="coins"

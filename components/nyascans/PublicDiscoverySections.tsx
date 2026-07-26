@@ -4,8 +4,6 @@
 import {
   ArrowRight,
   Books,
-  CaretLeft,
-  CaretRight,
   UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
@@ -232,16 +230,6 @@ export function NewSeriesSection() {
           <p>Recently published titles, newest additions first.</p>
         </div>
         <div className="new-series-heading-actions">
-          {records.length > 1 ? (
-            <div className="new-series-controls" aria-label="New series navigation">
-              <button type="button" onClick={() => move(-1)} aria-label="Previous new series">
-                <CaretLeft size={18} />
-              </button>
-              <button type="button" onClick={() => move(1)} aria-label="Next new series">
-                <CaretRight size={18} />
-              </button>
-            </div>
-          ) : null}
           <a href="/browse?sort=added">
             View all <ArrowRight size={17} />
           </a>

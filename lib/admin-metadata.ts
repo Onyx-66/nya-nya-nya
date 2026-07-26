@@ -373,6 +373,7 @@ export const seriesManagementSchema = z
     importApplied: z.boolean().default(false),
     removeCover: z.boolean().default(false),
     removeBanner: z.boolean().default(false),
+    removeSlider: z.boolean().default(false),
   })
   .superRefine((value, context) => {
     const duplicateSets: Array<

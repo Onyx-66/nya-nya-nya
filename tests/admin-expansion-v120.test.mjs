@@ -1105,7 +1105,10 @@ test("owner-only audit capability and protected routes agree", async () => {
   assert.match(auditRoute, /requireOwner/);
   assert.match(auditRoute, /audit\.access\.denied/);
   assert.match(page, /forbidden\(\)/);
-  assert.match(navigation, /actor\.role === "OWNER"/);
+  assert.match(
+    navigation,
+    /\(actor\.roles \?\? \[actor\.role\]\)\.includes\("OWNER"\)/,
+  );
 });
 
 test("series, reaction, commerce, and media operations are server protected", async () => {
@@ -1133,7 +1136,8 @@ test("series, reaction, commerce, and media operations are server protected", as
   assert.match(files[3], /lifecycleStatus/);
   assert.match(files[6], /export async function DELETE/);
   assert.match(files[6], /cr\.is_active AS isActive/);
-  assert.match(files[6], /Number\(current\.usageCount\) > 0/);
+  assert.match(files[6], /Number\(current\.reactionUsageCount\) > 0/);
+  assert.match(files[6], /Number\(current\.gifUsageCount\) > 0/);
   assert.match(files[6], /Deactivate unused reactions or add an emoji fallback/);
 });
 

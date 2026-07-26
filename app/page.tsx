@@ -23,6 +23,8 @@ export default async function Home() {
               displayName: user.displayName,
               email: user.email,
               role: actor?.primaryRole ?? "USER",
+              roles: actor?.roles ?? ["USER"],
+              avatarUrl: actor?.avatarUrl ?? null,
               canUseUploadCenter: actor?.canUseUploadCenter ?? false,
               canUpload: Boolean(
                 actor &&

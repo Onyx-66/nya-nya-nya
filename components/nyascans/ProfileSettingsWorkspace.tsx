@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  ArrowDown,
   ArrowSquareOut,
+  ArrowUp,
   Camera,
   CheckCircle,
   FloppyDisk,
@@ -17,6 +19,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
+
+type ProfileSeries = {
+  seriesId: string;
+  seriesSlug: string;
+  seriesTitle: string;
+  coverUrl?: string | null;
+};
 
 type OwnProfile = {
   username: string;
@@ -26,6 +36,8 @@ type OwnProfile = {
   socialLinks: Array<{ label?: string; url?: string }>;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
+  favorites?: ProfileSeries[];
+  favoriteCandidates?: ProfileSeries[];
   revision: number;
   privacy?: {
     profileVisibility?: "PUBLIC" | "PRIVATE";
@@ -33,6 +45,10 @@ type OwnProfile = {
     showReadingHistory?: boolean;
     showChapterNumbers?: boolean;
     showLibrarySummary?: boolean;
+    showFavorites?: boolean;
+    showAchievements?: boolean;
+    showBookmarks?: boolean;
+    showComments?: boolean;
   };
 };
 
@@ -477,6 +493,13 @@ function profileUpdatePayload(profile: OwnProfile) {
     showReadingHistory: Boolean(profile.privacy?.showReadingHistory),
     showChapterNumbers: Boolean(profile.privacy?.showChapterNumbers),
     showLibrarySummary: Boolean(profile.privacy?.showLibrarySummary),
+    showFavorites: Boolean(profile.privacy?.showFavorites),
+    showAchievements: Boolean(profile.privacy?.showAchievements),
+    showBookmarks: Boolean(profile.privacy?.showBookmarks),
+    showComments: Boolean(profile.privacy?.showComments),
+    favoriteSeriesIds: (profile.favorites ?? []).map(
+      (favorite) => favorite.seriesId,
+    ),
     socialLinks: profile.socialLinks
       .filter((entry) => entry.label?.trim() && entry.url?.trim())
       .map((entry) => ({
@@ -640,9 +663,17 @@ export function ProfileSettingsWorkspace({
         setInitial(JSON.stringify(uploadProfile));
       }
       const body = new FormData();
+      const preparedFile =
+        slot === "banner"
+          ? await optimizeStaticMedia(file, {
+              maxWidth: 2_400,
+              maxHeight: 1_200,
+              maxBytes: 3_000_000,
+            })
+          : file;
       body.set("slot", slot);
       body.set("revision", String(uploadProfile.revision));
-      body.set("file", file);
+      body.set("file", preparedFile);
       const response = await fetch("/api/v1/profile-media", {
         method: "PUT",
         body,
@@ -834,7 +865,7 @@ export function ProfileSettingsWorkspace({
             {profile.bannerUrl ? "Change banner" : "Upload banner"}
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/jpeg,image/png,image/webp"
               disabled={mediaBusy !== null}
               onChange={(event) => {
                 void uploadMedia("banner", event.target.files?.[0]);
@@ -943,6 +974,138 @@ export function ProfileSettingsWorkspace({
       </section>
       <section className="profile-settings-card">
         <div>
+          <h3>Favorite series</h3>
+          <p>
+            Pin and order up to 10 series on your public profile. Choices come
+            from your Library.
+          </p>
+        </div>
+        <div className="profile-favorites-editor">
+          <label>
+            <span>Add a series</span>
+            <select
+              value=""
+              disabled={(profile.favorites?.length ?? 0) >= 10}
+              onChange={(event) => {
+                const selected = profile.favoriteCandidates?.find(
+                  (candidate) => candidate.seriesId === event.target.value,
+                );
+                if (!selected) return;
+                setProfile((current) =>
+                  current &&
+                  !(current.favorites ?? []).some(
+                    (favorite) => favorite.seriesId === selected.seriesId,
+                  )
+                    ? {
+                        ...current,
+                        favorites: [...(current.favorites ?? []), selected],
+                      }
+                    : current,
+                );
+              }}
+            >
+              <option value="">
+                {(profile.favorites?.length ?? 0) >= 10
+                  ? "10 favorites selected"
+                  : "Choose from your Library"}
+              </option>
+              {(profile.favoriteCandidates ?? [])
+                .filter(
+                  (candidate) =>
+                    !(profile.favorites ?? []).some(
+                      (favorite) =>
+                        favorite.seriesId === candidate.seriesId,
+                    ),
+                )
+                .map((candidate) => (
+                  <option value={candidate.seriesId} key={candidate.seriesId}>
+                    {candidate.seriesTitle}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {(profile.favorites ?? []).length ? (
+            <ol>
+              {(profile.favorites ?? []).map((favorite, index, favorites) => (
+                <li key={favorite.seriesId}>
+                  <span>
+                    <small>#{index + 1}</small>
+                    <strong>{favorite.seriesTitle}</strong>
+                  </span>
+                  <span>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      aria-label={`Move ${favorite.seriesTitle} up`}
+                      onClick={() =>
+                        setProfile((current) => {
+                          if (!current || index === 0) return current;
+                          const next = [...(current.favorites ?? [])];
+                          [next[index - 1], next[index]] = [
+                            next[index]!,
+                            next[index - 1]!,
+                          ];
+                          return { ...current, favorites: next };
+                        })
+                      }
+                    >
+                      <ArrowUp size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === favorites.length - 1}
+                      aria-label={`Move ${favorite.seriesTitle} down`}
+                      onClick={() =>
+                        setProfile((current) => {
+                          if (
+                            !current ||
+                            index === (current.favorites?.length ?? 0) - 1
+                          ) {
+                            return current;
+                          }
+                          const next = [...(current.favorites ?? [])];
+                          [next[index], next[index + 1]] = [
+                            next[index + 1]!,
+                            next[index]!,
+                          ];
+                          return { ...current, favorites: next };
+                        })
+                      }
+                    >
+                      <ArrowDown size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${favorite.seriesTitle}`}
+                      onClick={() =>
+                        setProfile((current) =>
+                          current
+                            ? {
+                                ...current,
+                                favorites: (current.favorites ?? []).filter(
+                                  (entry) =>
+                                    entry.seriesId !== favorite.seriesId,
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      <Trash size={16} />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="field-help">
+              No favorites pinned yet. Add series above to build your top 10.
+            </p>
+          )}
+        </div>
+      </section>
+      <section className="profile-settings-card">
+        <div>
           <h3>Privacy</h3>
           <p>These settings are enforced by the public profile API.</p>
         </div>
@@ -999,8 +1162,8 @@ export function ProfileSettingsWorkspace({
             [
               [
                 "showReadingHistory",
-                "Share recent reading",
-                "Shows a limited list of recently read public chapters.",
+                "Share activity",
+                "Shows a limited list of recently read public chapters and their dates.",
               ],
               [
                 "showChapterNumbers",
@@ -1011,6 +1174,26 @@ export function ProfileSettingsWorkspace({
                 "showLibrarySummary",
                 "Share Library summary",
                 "Shows counts by reading status, never individual private entries.",
+              ],
+              [
+                "showFavorites",
+                "Share favorite series",
+                "Shows your ordered top 10 favorite series.",
+              ],
+              [
+                "showAchievements",
+                "Share achievements",
+                "Shows badges and achievements earned on NyaScans.",
+              ],
+              [
+                "showBookmarks",
+                "Share bookmarks",
+                "Shows public series saved in your Library.",
+              ],
+              [
+                "showComments",
+                "Share comments",
+                "Shows recent visible comments with chapter and engagement details.",
               ],
             ] as const
           ).map(([key, title, body]) => (

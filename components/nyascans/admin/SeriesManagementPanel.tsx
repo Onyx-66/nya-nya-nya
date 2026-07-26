@@ -3,6 +3,7 @@
 
 import {
   ArrowClockwise,
+  Books,
   CaretLeft,
   CaretRight,
   Check,
@@ -60,6 +61,7 @@ type SeriesRecord = {
   archivedAt: string | null;
   coverUrl: string | null;
   bannerUrl: string | null;
+  sliderUrl: string | null;
   externalSources: Array<{
     source: "MANGADEX" | "MANGAUPDATES";
     externalId: string;
@@ -129,8 +131,10 @@ type FormState = {
   externalSources: SeriesRecord["externalSources"];
   coverUrl: string | null;
   bannerUrl: string | null;
+  sliderUrl: string | null;
   removeCover: boolean;
   removeBanner: boolean;
+  removeSlider: boolean;
 };
 
 const emptyForm: FormState = {
@@ -157,8 +161,10 @@ const emptyForm: FormState = {
   externalSources: [],
   coverUrl: null,
   bannerUrl: null,
+  sliderUrl: null,
   removeCover: false,
   removeBanner: false,
+  removeSlider: false,
 };
 
 async function api<T>(response: Response) {
@@ -210,8 +216,10 @@ function fromRecord(record: SeriesRecord): FormState {
     externalSources: record.externalSources,
     coverUrl: record.coverUrl,
     bannerUrl: record.bannerUrl,
+    sliderUrl: record.sliderUrl,
     removeCover: false,
     removeBanner: false,
+    removeSlider: false,
   };
 }
 
@@ -409,6 +417,7 @@ export function SeriesManagementPanel() {
   const [teamSearchResults, setTeamSearchResults] = useState<TeamOption[]>([]);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [sliderFile, setSliderFile] = useState<File | null>(null);
   const [importSource, setImportSource] =
     useState<"MANGADEX" | "MANGAUPDATES">("MANGADEX");
   const [importInput, setImportInput] = useState("");
@@ -419,7 +428,7 @@ export function SeriesManagementPanel() {
   const [importApplied, setImportApplied] = useState(false);
   const dirty =
     JSON.stringify(form) !== JSON.stringify(savedForm) ||
-    Boolean(coverFile || bannerFile);
+    Boolean(coverFile || bannerFile || sliderFile);
   useUnsavedChanges(dirty, "series changes");
 
   async function load(search = query, requestedPage = page) {
@@ -440,6 +449,11 @@ export function SeriesManagementPanel() {
         ),
       ]);
       setRecords(seriesPayload.data);
+      if (!form.id && seriesPayload.data[0]) {
+        const next = fromRecord(seriesPayload.data[0]);
+        setForm(next);
+        setSavedForm(next);
+      }
       setPage(seriesPayload.pagination.page);
       setTotal(seriesPayload.pagination.total);
       setOptions(optionsPayload.data);
@@ -458,6 +472,7 @@ export function SeriesManagementPanel() {
           setSavedForm(next);
           setCoverFile(null);
           setBannerFile(null);
+          setSliderFile(null);
           setRecords((items) => [
             refreshed.data,
             ...items.filter((item) => item.id !== refreshed.data.id),
@@ -520,20 +535,6 @@ export function SeriesManagementPanel() {
     ? teamSearchResults
     : [];
 
-  function startNew() {
-    if (dirty && !window.confirm("Discard the unsaved series changes?")) return;
-    setForm(emptyForm);
-    setSavedForm(emptyForm);
-    setCoverFile(null);
-    setBannerFile(null);
-    setImported(null);
-    setImportDuplicate(null);
-    setImportApplied(false);
-    setAltEditIndex(null);
-    setAltEditValue("");
-    setMessage(null);
-  }
-
   function selectRecord(record: SeriesRecord) {
     if (dirty && !window.confirm("Discard the unsaved series changes?")) return;
     const next = fromRecord(record);
@@ -541,12 +542,12 @@ export function SeriesManagementPanel() {
     setSavedForm(next);
     setCoverFile(null);
     setBannerFile(null);
+    setSliderFile(null);
     setImported(null);
     setImportDuplicate(null);
     setImportApplied(false);
     setAltEditIndex(null);
     setAltEditValue("");
-    setActiveTab("basic");
   }
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -588,6 +589,13 @@ export function SeriesManagementPanel() {
 
   async function save(event?: FormEvent) {
     event?.preventDefault();
+    if (!form.id) {
+      setMessage({
+        kind: "error",
+        text: "Choose an existing series before editing it.",
+      });
+      return;
+    }
     setSaving(true);
     setMessage(null);
     let persistedRecord: SeriesRecord | null = null;
@@ -609,9 +617,8 @@ export function SeriesManagementPanel() {
         !coverFile
           ? imported
           : null;
-      const method = form.id ? "PUT" : "POST";
       const saved = await fetch("/api/v1/admin/series-management", {
-        method,
+        method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...form,
@@ -620,6 +627,7 @@ export function SeriesManagementPanel() {
             : null,
           coverUrl: undefined,
           bannerUrl: undefined,
+          sliderUrl: undefined,
           externalSources: form.externalSources,
           importApplied,
         }),
@@ -655,6 +663,7 @@ export function SeriesManagementPanel() {
       for (const [slot, file] of [
         ["cover", coverFile] as const,
         ["banner", bannerFile] as const,
+        ["slider", sliderFile] as const,
       ]) {
         if (!file) continue;
         const upload = new FormData();
@@ -671,12 +680,19 @@ export function SeriesManagementPanel() {
         current = {
           ...current,
           revision: media.data.revision,
-          [slot === "cover" ? "coverUrl" : "bannerUrl"]: media.data.url,
+          [
+            slot === "cover"
+              ? "coverUrl"
+              : slot === "banner"
+                ? "bannerUrl"
+                : "sliderUrl"
+          ]: media.data.url,
         };
         persistedRecord = current;
         applyPersistedRecord(current);
         if (slot === "cover") setCoverFile(null);
-        else setBannerFile(null);
+        else if (slot === "banner") setBannerFile(null);
+        else setSliderFile(null);
       }
       setMessage({
         kind: "success",
@@ -849,12 +865,7 @@ export function SeriesManagementPanel() {
       breadcrumbs={["Administration", "Catalogue", "Series"]}
       kicker="Catalogue control"
       title="Series management"
-      description="Create and maintain complete series records, canonical credits, publishing teams, media, and external metadata."
-      primaryAction={
-        <button className="button button-primary" type="button" onClick={startNew}>
-          <Plus size={17} /> New series
-        </button>
-      }
+      description="Select and edit an existing series, including canonical credits, publishing teams, media, and external metadata. New titles enter through the reviewed series-request queue."
       state={state}
       message={message}
     >
@@ -928,6 +939,7 @@ export function SeriesManagementPanel() {
             </button>
           </footer>
         </aside>
+        {form.id ? (
         <form className="admin-editor-form" onSubmit={save}>
           <details className="admin-editor-box" open>
             <summary>Basic information</summary>
@@ -1348,10 +1360,10 @@ export function SeriesManagementPanel() {
           </details>
 
           <details className="admin-editor-box" open>
-            <summary>Cover &amp; banner</summary>
+            <summary>Cover, banner &amp; slider</summary>
             <section className="admin-form-section">
               <header>
-                <h3>Cover and banner</h3>
+                <h3>Cover, banner, and slider artwork</h3>
                 <p>Images upload through the verified storage pipeline after metadata saves successfully.</p>
               </header>
               <AdminMediaField
@@ -1361,6 +1373,12 @@ export function SeriesManagementPanel() {
                 currentUrl={form.removeCover ? null : form.coverUrl}
                 file={coverFile}
                 accept="image/jpeg,image/png,image/webp"
+                cropProfile={{
+                  aspect: 2 / 3,
+                  outputWidth: 1200,
+                  outputHeight: 1800,
+                  maxBytes: 3_000_000,
+                }}
                 busy={saving}
                 onSelect={(file) => {
                   setCoverFile(file);
@@ -1378,6 +1396,12 @@ export function SeriesManagementPanel() {
                 currentUrl={form.removeBanner ? null : form.bannerUrl}
                 file={bannerFile}
                 accept="image/jpeg,image/png,image/webp"
+                cropProfile={{
+                  aspect: 8 / 3,
+                  outputWidth: 2400,
+                  outputHeight: 900,
+                  maxBytes: 4_000_000,
+                }}
                 busy={saving}
                 onSelect={(file) => {
                   setBannerFile(file);
@@ -1386,6 +1410,29 @@ export function SeriesManagementPanel() {
                 onRemove={() => {
                   setBannerFile(null);
                   setField("removeBanner", true);
+                }}
+              />
+              <AdminMediaField
+                label="Featured slider image"
+                helperText="Optional square artwork for homepage slider styles. The cover is used automatically when this is empty."
+                recommendedDimensions="1200 × 1200 px (1:1)"
+                currentUrl={form.removeSlider ? null : form.sliderUrl}
+                file={sliderFile}
+                accept="image/jpeg,image/png,image/webp"
+                cropProfile={{
+                  aspect: 1,
+                  outputWidth: 1200,
+                  outputHeight: 1200,
+                  maxBytes: 3_000_000,
+                }}
+                busy={saving}
+                onSelect={(file) => {
+                  setSliderFile(file);
+                  setField("removeSlider", false);
+                }}
+                onRemove={() => {
+                  setSliderFile(null);
+                  setField("removeSlider", true);
                 }}
               />
             </section>
@@ -1679,6 +1726,16 @@ export function SeriesManagementPanel() {
             </button>
           </footer>
         </form>
+        ) : (
+          <section className="admin-editor-empty">
+            <Books size={28} />
+            <h2>No series selected</h2>
+            <p>
+              Choose an existing series from the catalogue browser. New series
+              are created only after an approved request.
+            </p>
+          </section>
+        )}
       </div>
     </AdminPageScaffold>
   );

@@ -6,7 +6,6 @@ import {
   ArrowUp,
   CaretLeft,
   CaretRight,
-  Coins,
   Eye,
   EyeSlash,
   Image as ImageIcon,
@@ -25,7 +24,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
+import { optimizeReactionAsset } from "@/lib/client/reaction-media";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type StoreCollection = {
   id: string;
@@ -55,6 +57,7 @@ type PreviewConfig = {
   from: string;
   to: string;
   accent: string;
+  commentOpacity: number;
   symbol:
     | "SUN"
     | "RING"
@@ -102,6 +105,7 @@ const defaultPreview: PreviewConfig = {
   from: "#0b4f7d",
   to: "#07111f",
   accent: "#68d5ff",
+  commentOpacity: 65,
   symbol: "STAR",
 };
 
@@ -239,13 +243,13 @@ export function StoreManagementPanel({
   categoryFilter,
   defaultCategory = categoryFilter?.[0] ?? "PROFILE_BANNER",
   title = "Store Management",
-  showTestingBalance = false,
 }: {
   categoryFilter?: readonly StoreItem["category"][];
   defaultCategory?: StoreItem["category"];
   title?: string;
-  showTestingBalance?: boolean;
 }) {
+  const { settings: commercial } = useCommercialSettings();
+  const coinPlural = commercial.economy.coinPlural;
   const [collections, setCollections] = useState<StoreCollection[]>([]);
   const [items, setItems] = useState<StoreItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -264,11 +268,6 @@ export function StoreManagementPanel({
   );
   const [collectionEditDraft, setCollectionEditDraft] =
     useState<CollectionFormDraft | null>(null);
-  const [grant, setGrant] = useState({
-    email: "",
-    amount: 1000,
-    reason: "Development Store testing balance",
-  });
   const [itemQuery, setItemQuery] = useState("");
   const [itemStatus, setItemStatus] = useState<
     "ALL" | "DRAFT" | "PUBLISHED" | "HIDDEN"
@@ -547,10 +546,18 @@ export function StoreManagementPanel({
     item: StoreItem,
     file: File,
   ) {
+    const prepared =
+      file.type === "image/gif"
+        ? (await optimizeReactionAsset(file)).file
+        : await optimizeStaticMedia(file, {
+            maxWidth: 1_800,
+            maxHeight: 1_800,
+            maxBytes: 2_500_000,
+          });
     const form = new FormData();
     form.set("itemId", item.id);
     form.set("expectedRevision", String(item.revision));
-    form.set("file", file);
+    form.set("file", prepared);
     setBusy(item.id);
     try {
       const result = await readJson<{
@@ -765,31 +772,6 @@ export function StoreManagementPanel({
         createError instanceof Error
           ? createError.message
           : "The collection was not created.",
-      );
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function grantTestCoins(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy("grant");
-    try {
-      const result = await readJson<{ wallet: { balance: number } }>(
-        await fetch("/api/v1/admin/test-coins", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(grant),
-        }),
-      );
-      setMessage(
-        `${grant.amount.toLocaleString("en-US")} test Onyx Coins granted. New balance: ${result.wallet.balance.toLocaleString("en-US")}.`,
-      );
-    } catch (grantError) {
-      setError(
-        grantError instanceof Error
-          ? grantError.message
-          : "The test balance was not granted.",
       );
     } finally {
       setBusy("");
@@ -1322,7 +1304,7 @@ export function StoreManagementPanel({
                         <strong>{item.name}</strong>
                         <small>
                           {categoryLabel(item.category)} · {item.priceOnyx}{" "}
-                          {item.priceCurrency === "SHARDS" ? "Shards" : "Onyx"}
+                          {item.priceCurrency === "SHARDS" ? "Shards" : coinPlural}
                         </small>
                       </div>
                       <em>
@@ -1565,7 +1547,7 @@ export function StoreManagementPanel({
                     })
                   }
                 >
-                  <option value="ONYX">Onyx Coins</option>
+                  <option value="ONYX">{coinPlural}</option>
                   <option value="SHARDS">Shards</option>
                 </select>
               </label>
@@ -1628,6 +1610,28 @@ export function StoreManagementPanel({
                   }
                 />
               </label>
+              {["COMMENT_EFFECT", "COMMENT_GRADIENT"].includes(
+                draft.category,
+              ) ? (
+                <label>
+                  Comment background opacity (%)
+                  <input
+                    type="number"
+                    min={10}
+                    max={100}
+                    value={draft.previewConfig.commentOpacity}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        previewConfig: {
+                          ...draft.previewConfig,
+                          commentOpacity: Number(event.target.value),
+                        },
+                      })
+                    }
+                  />
+                </label>
+              ) : null}
               <label>
                 Preview symbol
                 <select
@@ -1708,61 +1712,6 @@ export function StoreManagementPanel({
           </div>
         )}
       </div>
-
-      {showTestingBalance ? (
-      <form className="store-test-coins" onSubmit={grantTestCoins}>
-        <div>
-          <Coins size={22} />
-          <span>
-            <strong>Testing balance</strong>
-            Grant audited, ledger-balanced Onyx Coins to an existing test account.
-          </span>
-        </div>
-        <label>
-          Account email
-          <input
-            type="email"
-            required
-            value={grant.email}
-            onChange={(event) =>
-              setGrant((current) => ({ ...current, email: event.target.value }))
-            }
-          />
-        </label>
-        <label>
-          Amount
-          <input
-            type="number"
-            min={1}
-            max={10_000}
-            value={grant.amount}
-            onChange={(event) =>
-              setGrant((current) => ({
-                ...current,
-                amount: Number(event.target.value),
-              }))
-            }
-          />
-        </label>
-        <label>
-          Reason
-          <input
-            required
-            minLength={8}
-            value={grant.reason}
-            onChange={(event) =>
-              setGrant((current) => ({ ...current, reason: event.target.value }))
-            }
-          />
-        </label>
-        <button
-          className="button button-secondary"
-          disabled={busy === "grant"}
-        >
-          {busy === "grant" ? "Granting…" : "Grant test balance"}
-        </button>
-      </form>
-      ) : null}
     </section>
   );
 }

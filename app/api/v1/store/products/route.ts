@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
+import { configuredCoinCopy } from "@/lib/commercial-settings";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
@@ -57,6 +58,8 @@ export async function storeProductsResponse(request: Request) {
     );
     const actor = await getActor().catch(() => null);
     const commercial = await getCommercialSettingsDocument();
+    const premiumEconomyPublic =
+      commercial.settings.economy.premiumEconomyPublic;
     const nowClause = `
       active = 1
       AND archived_at IS NULL
@@ -65,7 +68,9 @@ export async function storeProductsResponse(request: Request) {
       AND (ends_at IS NULL OR datetime(ends_at) > datetime('now'))
     `;
     const productKind =
-      category === "coins"
+      !premiumEconomyPublic
+        ? null
+        : category === "coins"
         ? "CURRENCY_PACKAGE"
         : category === "memberships"
           ? "MEMBERSHIP"
@@ -252,19 +257,29 @@ export async function storeProductsResponse(request: Request) {
         string,
         unknown
       >;
+      const benefits = parseJson(product.benefitsJson, []);
       const base = {
         id: product.id,
         slug: product.slug,
-        name: product.name,
-        description: product.shortDescription,
-        detailedDescription: product.detailedDescription,
+        name: configuredCoinCopy(product.name, commercial.settings),
+        description: configuredCoinCopy(
+          product.shortDescription,
+          commercial.settings,
+        ),
+        detailedDescription: configuredCoinCopy(
+          product.detailedDescription,
+          commercial.settings,
+        ),
         priceMinor: Number(product.priceMinor),
         billingCurrency: product.billingCurrency,
         discountPercent: Number(product.discountPercent),
-        promotionLabel: product.promotionalBadge,
+        promotionLabel: configuredCoinCopy(
+          product.promotionalBadge,
+          commercial.settings,
+        ),
         featured: Boolean(product.isFeatured),
-        ctaText: product.ctaText,
-        altText: product.altText,
+        ctaText: configuredCoinCopy(product.ctaText, commercial.settings),
+        altText: configuredCoinCopy(product.altText, commercial.settings),
         themeKey: product.themeKey,
         media: {
           primary: productMedia(
@@ -302,7 +317,13 @@ export async function storeProductsResponse(request: Request) {
               metadata.monthlyCoins ?? product.onyxBonus,
             ),
             chapterDiscountPercent: Number(product.discountPercent),
-            benefits: parseJson(product.benefitsJson, []),
+            benefits: Array.isArray(benefits)
+              ? benefits.map((benefit) =>
+                  typeof benefit === "string"
+                    ? configuredCoinCopy(benefit, commercial.settings)
+                    : benefit,
+                )
+              : [],
             active: true,
           };
     });
@@ -319,9 +340,9 @@ export async function storeProductsResponse(request: Request) {
       {
         selectedCategory: category,
         categoryCounts: {
-          coins: countValue(0),
-          memberships: countValue(1),
-          gifts: 2,
+          coins: premiumEconomyPublic ? countValue(0) : 0,
+          memberships: premiumEconomyPublic ? countValue(1) : 0,
+          gifts: premiumEconomyPublic ? 2 : 0,
           banners: countValue(2),
           cosmetics: countValue(3),
           "logo-effects": countValue(4),
@@ -332,7 +353,12 @@ export async function storeProductsResponse(request: Request) {
           ...collection,
           isSeasonal: Boolean(collection.isSeasonal),
         })),
-        cosmetics: itemRows.results.map((item) => ({
+        cosmetics: itemRows.results
+          .filter(
+            (item) =>
+              premiumEconomyPublic || item.priceCurrency === "SHARDS",
+          )
+          .map((item) => ({
           ...item,
           priceOnyx: Number(item.priceOnyx),
           priceCurrency: item.priceCurrency,
@@ -343,19 +369,31 @@ export async function storeProductsResponse(request: Request) {
           owned: owned.has(item.id),
           purchasedAt: owned.get(item.id) ?? null,
           equipped: equipped.get(item.category) === item.id,
-        })),
-        coin: {
-          name: commercial.settings.economy.coinName,
-          plural: commercial.settings.economy.coinPlural,
-          icon: commercial.settings.economy.coinIcon,
-        },
-        viewer: actor
+          })),
+        coin: premiumEconomyPublic
+          ? {
+              name: commercial.settings.economy.coinName,
+              plural: commercial.settings.economy.coinPlural,
+              icon: commercial.settings.economy.coinIcon,
+              iconUrl: commercial.settings.economy.coinIconKey
+                ? `/api/v1/coin-icon?v=${commercial.settings.economy.coinIconRevision}`
+                : null,
+            }
+          : null,
+        viewer: actor && premiumEconomyPublic
           ? await walletSnapshot(env.DB, actor.id, "ONYX")
           : null,
-        balances: actor ? await economySnapshot(env.DB, actor.id) : null,
+        balances: actor
+          ? premiumEconomyPublic
+            ? await economySnapshot(env.DB, actor.id)
+            : { shards: await walletSnapshot(env.DB, actor.id, "SHARDS") }
+          : null,
+        premiumEconomyPublic,
         checkoutEnabled: false,
         checkoutStatus:
-          "Coin checkout requires a verified payment provider. Cosmetics can be unlocked with an existing Onyx balance.",
+          premiumEconomyPublic
+            ? `Checkout requires a verified payment provider. Cosmetics can be unlocked with an existing ${commercial.settings.economy.coinName} balance.`
+            : "Premium purchases are private. Free Shard rewards remain available.",
       },
       {
         headers: {

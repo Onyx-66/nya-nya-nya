@@ -1,5 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
+/* eslint-disable @next/next/no-img-element */
 
 import {
   ArrowClockwise,
@@ -8,6 +9,7 @@ import {
   Coins,
   Gift,
   Sparkle,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import {
   useEffect,
@@ -24,7 +26,22 @@ type RouletteReward = {
   amount: number;
   weight: number;
   itemId: string | null;
+  imageKey: string | null;
+  imageUrl?: string | null;
   enabled: boolean;
+};
+
+type RouletteTask = {
+  id: string;
+  label: string;
+  description: string;
+  metric: "CHAPTERS_READ" | "COMMENTS_POSTED" | "UPVOTES_RECEIVED";
+  target: number;
+  rewardSpins: number;
+  progress: number;
+  complete: boolean;
+  claimed: boolean;
+  claimedAt: string | null;
 };
 
 type Spin = {
@@ -33,19 +50,48 @@ type Spin = {
   rewardType: "SHARDS" | "ONYX" | "STORE_ITEM";
   rewardAmount: number;
   storeItemId: string | null;
+  spinMode: "DAILY" | "TASK" | "PAID";
+  costShards: number;
+  costCurrency: "SHARDS" | "ONYX" | null;
+  costAmount: number;
   label: string | null;
   nextEligibleAt: string;
   spunAt: string;
 };
 
 type RouletteState = {
+  premiumEconomyPublic?: boolean;
+  coin?: {
+    name: string;
+    plural: string;
+    icon: string;
+    iconUrl: string | null;
+  } | null;
   settings?: {
     shardIcon: string;
     shardPlural: string;
     rouletteCooldownHours: number;
+    roulettePaidSpinsEnabled: boolean;
+    roulettePaidSpinShardCost: number;
+    roulettePaidSpinOnyxCost: number;
+    roulettePaidCurrencies: Array<"SHARDS" | "ONYX">;
     rouletteRewards: RouletteReward[];
+    roulettePaidRewards: RouletteReward[];
   };
   eligible?: boolean;
+  canSpin?: boolean;
+  canDailySpin?: boolean;
+  canTaskSpin?: boolean;
+  canPaidSpin?: boolean;
+  freeSpinBalance?: number;
+  paidSpinCosts?: { SHARDS: number; ONYX: number };
+  paidSpinCurrencies?: Array<"SHARDS" | "ONYX">;
+  paidSpinCostShards?: number;
+  unavailableReason?: string | null;
+  availableRewards?: RouletteReward[];
+  freeRewards?: RouletteReward[];
+  paidRewards?: RouletteReward[];
+  weekly?: { weekStart: string; tasks: RouletteTask[] };
   nextEligibleAt?: string;
   history?: Spin[];
   balances?: {
@@ -54,8 +100,31 @@ type RouletteState = {
   };
   spin?: Spin;
   state?: RouletteState;
+  claimedTaskId?: string;
   error?: { message?: string };
 };
+
+function RouletteCoinMark({
+  coin,
+  size = 18,
+}: {
+  coin: RouletteState["coin"];
+  size?: number;
+}) {
+  return (
+    <span
+      className="roulette-coin-mark"
+      style={{ "--roulette-coin-size": `${size}px` } as CSSProperties}
+      aria-hidden="true"
+    >
+      {coin?.iconUrl ? (
+        <img src={coin.iconUrl} alt="" />
+      ) : (
+        coin?.icon ?? <Coins size={size} weight="fill" />
+      )}
+    </span>
+  );
+}
 
 function clientId() {
   const values = crypto.getRandomValues(new Uint32Array(3));
@@ -79,11 +148,23 @@ export function RouletteView({
 }) {
   const [data, setData] = useState<RouletteState | null>(null);
   const [loading, setLoading] = useState(signedIn);
+  const [loadError, setLoadError] = useState("");
+  const [loadRevision, setLoadRevision] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [lastSpin, setLastSpin] = useState<Spin | null>(null);
+  const [track, setTrack] = useState<"FREE" | "PAID">("FREE");
+  const [paidCurrency, setPaidCurrency] = useState<"SHARDS" | "ONYX">(
+    "SHARDS",
+  );
+  const [claimingTask, setClaimingTask] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const animationTimer = useRef<number | null>(null);
+  const spinKeys = useRef<Record<"DAILY" | "TASK" | "PAID", string | null>>({
+    DAILY: null,
+    TASK: null,
+    PAID: null,
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -113,39 +194,96 @@ export function RouletteView({
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
-          showToast(
+          const message =
             error instanceof Error
               ? error.message
-              : "Roulette could not be loaded.",
-          );
+              : "Roulette could not be loaded.";
+          setLoadError(message);
+          showToast(message);
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [showToast, signedIn]);
+  }, [loadRevision, showToast, signedIn]);
 
-  const rewards = useMemo(
-    () => data?.settings?.rouletteRewards.filter((reward) => reward.enabled) ?? [],
-    [data?.settings?.rouletteRewards],
+  const freeRewards = useMemo(
+    () =>
+      data?.freeRewards ??
+      data?.availableRewards ??
+      data?.settings?.rouletteRewards.filter((reward) => reward.enabled) ??
+      [],
+    [data?.availableRewards, data?.freeRewards, data?.settings?.rouletteRewards],
   );
+  const paidRewards = useMemo(
+    () =>
+      data?.paidRewards ??
+      data?.settings?.roulettePaidRewards?.filter((reward) => reward.enabled) ??
+      [],
+    [data?.paidRewards, data?.settings?.roulettePaidRewards],
+  );
+  const rewards = track === "FREE" ? freeRewards : paidRewards;
   const nextEligibleAt = Date.parse(
     data?.nextEligibleAt ?? "1970-01-01T00:00:00.000Z",
   );
-  const eligible =
+  const cooldownReady =
     Boolean(data) &&
     Number.isFinite(nextEligibleAt) &&
     nextEligibleAt <= now;
+  const canDailySpin =
+    Boolean(data?.canDailySpin ?? data?.canSpin) &&
+    cooldownReady &&
+    freeRewards.length > 0;
+  const canTaskSpin =
+    Boolean(data?.canTaskSpin) &&
+    Number(data?.freeSpinBalance ?? 0) > 0 &&
+    freeRewards.length > 0;
+  const paidCurrencies =
+    data?.paidSpinCurrencies ?? data?.settings?.roulettePaidCurrencies ?? [];
+  const selectedPaidCurrency = paidCurrencies.includes(paidCurrency)
+    ? paidCurrency
+    : paidCurrencies[0] ?? paidCurrency;
+  const paidCost =
+    data?.paidSpinCosts?.[selectedPaidCurrency] ??
+    (selectedPaidCurrency === "SHARDS"
+      ? data?.settings?.roulettePaidSpinShardCost ?? 0
+      : data?.settings?.roulettePaidSpinOnyxCost ?? 0);
+  const paidBalance =
+    selectedPaidCurrency === "SHARDS"
+      ? Number(data?.balances?.shards?.balance ?? 0)
+      : Number(data?.balances?.onyx?.balance ?? 0);
+  const canPaidSpin =
+    Boolean(data?.settings?.roulettePaidSpinsEnabled) &&
+    paidRewards.length > 0 &&
+    paidBalance >= paidCost;
+  const mutationBusy = spinning || claimingTask !== null;
+  const premiumEconomyPublic = data?.premiumEconomyPublic !== false;
+  const coinPlural = data?.coin?.plural ?? "Premium coins";
 
-  async function spin() {
-    if (!eligible || spinning) return;
+  async function spin(mode: "DAILY" | "TASK" | "PAID") {
+    if (
+      mutationBusy ||
+      (mode === "DAILY"
+        ? !canDailySpin
+        : mode === "TASK"
+          ? !canTaskSpin
+          : !canPaidSpin)
+    ) {
+      return;
+    }
     setSpinning(true);
+    const idempotencyKey = spinKeys.current[mode] ?? clientId();
+    spinKeys.current[mode] = idempotencyKey;
     try {
       const response = await fetch("/api/v1/roulette", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idempotencyKey: clientId() }),
+        body: JSON.stringify({
+          idempotencyKey,
+          mode,
+          currency: mode === "PAID" ? selectedPaidCurrency : undefined,
+        }),
       });
       const payload = (await response.json()) as RouletteState;
       if (!response.ok || !payload.spin || !payload.state) {
@@ -153,20 +291,29 @@ export function RouletteView({
           payload.error?.message ?? "The Roulette spin could not be completed.",
         );
       }
-      const selectedIndex = Math.max(
-        0,
-        rewards.findIndex((reward) => reward.id === payload.spin?.rewardKey),
+      const selectedIndex = rewards.findIndex(
+        (reward) => reward.id === payload.spin?.rewardKey,
       );
       const slice = rewards.length ? 360 / rewards.length : 360;
-      const target = 360 - (selectedIndex * slice + slice / 2);
-      setRotation((current) => current + 1_800 + target - (current % 360));
-      animationTimer.current = window.setTimeout(() => {
+      const finish = () => {
+        spinKeys.current[mode] = null;
         setLastSpin(payload.spin ?? null);
         setData(payload.state ?? null);
         setSpinning(false);
-        showToast(`Roulette reward: ${payload.spin?.label ?? "Prize"}.`);
         animationTimer.current = null;
-      }, 1_850);
+      };
+      const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      if (selectedIndex < 0 || reduceMotion) {
+        finish();
+      } else {
+        const target = 360 - (selectedIndex * slice + slice / 2);
+        setRotation(
+          (current) => current + 1_800 + target - (current % 360),
+        );
+        animationTimer.current = window.setTimeout(finish, 1_850);
+      }
     } catch (error) {
       setSpinning(false);
       showToast(
@@ -174,6 +321,38 @@ export function RouletteView({
           ? error.message
           : "The Roulette spin could not be completed.",
       );
+    }
+  }
+
+  async function claimTask(taskId: string) {
+    if (mutationBusy) return;
+    setClaimingTask(taskId);
+    try {
+      const response = await fetch("/api/v1/roulette", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "CLAIM_TASK",
+          taskId,
+          idempotencyKey: clientId(),
+        }),
+      });
+      const payload = (await response.json()) as RouletteState;
+      if (!response.ok || !payload.state) {
+        throw new Error(
+          payload.error?.message ?? "The free spin could not be claimed.",
+        );
+      }
+      setData(payload.state);
+      showToast("Free spin added to your balance.");
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "The free spin could not be claimed.",
+      );
+    } finally {
+      setClaimingTask(null);
     }
   }
 
@@ -192,7 +371,7 @@ export function RouletteView({
     );
   }
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <main className="page-main page-wrap roulette-page">
         <div className="settings-loading" role="status">Loading Roulette…</div>
@@ -200,80 +379,356 @@ export function RouletteView({
     );
   }
 
+  if (loadError || !data) {
+    return (
+      <main className="page-main page-wrap roulette-page">
+        <section className="roulette-signin" role="alert">
+          <WarningCircle size={38} weight="duotone" />
+          <h1>Roulette unavailable</h1>
+          <p>{loadError || "Roulette could not be loaded."}</p>
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setLoadError("");
+              setLoadRevision((value) => value + 1);
+            }}
+          >
+            <ArrowClockwise size={18} />
+            Try again
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="page-main page-wrap roulette-page">
-      <section className="roulette-hero">
-        <div className="roulette-copy">
-          <p className="eyebrow">One server-verified spin every 24 hours</p>
-          <h1>Your daily plot twist.</h1>
+      <header className="roulette-page-header">
+        <div>
+          <p className="eyebrow">NyaScans reward arcade</p>
+          <h1>Roulette</h1>
           <p>
-            Win {data.settings?.shardPlural ?? "Shards"}, Onyx Coins, or a
-            published Store cosmetic. The server chooses the reward before the
-            wheel animates.
+            {premiumEconomyPublic
+              ? "Earn free chances every week or choose a paid draw with a separate premium reward pool."
+              : "Earn free chances every week or spend collected Shards on a separate reward draw."}
           </p>
-          <div className="roulette-balances">
+        </div>
+        <div className="roulette-balances" aria-label="Wallet balances">
+          {premiumEconomyPublic ? (
             <span>
-              <Coins size={18} weight="fill" />
+              <RouletteCoinMark coin={data.coin} />
               <strong>{Number(data.balances?.onyx?.balance ?? 0).toLocaleString("en-US")}</strong>
-              Onyx
+              {coinPlural}
             </span>
-            <span>
-              <Sparkle size={18} weight="fill" />
-              <strong>{Number(data.balances?.shards?.balance ?? 0).toLocaleString("en-US")}</strong>
-              {data.settings?.shardPlural ?? "Shards"}
-            </span>
+          ) : null}
+          <span>
+            <Sparkle size={18} weight="fill" />
+            <strong>{Number(data.balances?.shards?.balance ?? 0).toLocaleString("en-US")}</strong>
+            {data.settings?.shardPlural ?? "Shards"}
+          </span>
+        </div>
+      </header>
+
+      <div className="roulette-mode-tabs" role="group" aria-label="Roulette mode">
+        <button
+          type="button"
+          aria-pressed={track === "FREE"}
+          className={track === "FREE" ? "active" : ""}
+          disabled={mutationBusy}
+          onClick={() => setTrack("FREE")}
+        >
+          <Gift size={19} weight="duotone" />
+          <span><strong>Free Spins</strong><small>Daily reward + weekly tasks</small></span>
+          <b>{Number(data.freeSpinBalance ?? 0)} banked</b>
+        </button>
+        <button
+          type="button"
+          aria-pressed={track === "PAID"}
+          className={track === "PAID" ? "active" : ""}
+          disabled={mutationBusy}
+          onClick={() => setTrack("PAID")}
+        >
+          {premiumEconomyPublic ? (
+            <RouletteCoinMark coin={data.coin} size={19} />
+          ) : (
+            <Sparkle size={19} weight="duotone" />
+          )}
+          <span>
+            <strong>{premiumEconomyPublic ? "Pay to Spin" : "Shard Spins"}</strong>
+            <small>{premiumEconomyPublic ? "Premium reward pool" : "Earned Shard draw"}</small>
+          </span>
+          <b>{premiumEconomyPublic ? `${coinPlural} or Shards` : "Shards"}</b>
+        </button>
+      </div>
+
+      <section className="roulette-hero" aria-busy={mutationBusy}>
+        <div className="roulette-copy">
+          <p className="eyebrow">
+            {track === "FREE"
+              ? "Free reward track"
+              : premiumEconomyPublic
+                ? "Premium reward track"
+                : "Shard reward track"}
+          </p>
+          <h2>
+            {track === "FREE"
+              ? "Play for free"
+              : premiumEconomyPublic
+                ? "Choose how to pay"
+                : "Spend earned Shards"}
+          </h2>
+          <p>
+            {track === "FREE"
+              ? "Use your daily draw, then finish weekly community tasks to bank more free spins."
+              : premiumEconomyPublic
+                ? "Paid spins use a distinct administrator-curated reward pool. Pick the wallet that works for you."
+                : "Shard spins use a distinct administrator-curated reward pool funded only with Shards earned on the site."}{" "}
+            The server chooses the reward before the wheel animates.
+          </p>
+
+          {track === "PAID" ? (
+            <div className="roulette-currency-picker" role="group" aria-label="Payment currency">
+              {paidCurrencies.map((currency) => (
+                <button
+                  type="button"
+                  aria-pressed={selectedPaidCurrency === currency}
+                  className={selectedPaidCurrency === currency ? "active" : ""}
+                  disabled={mutationBusy}
+                  key={currency}
+                  onClick={() => setPaidCurrency(currency)}
+                >
+                  {currency === "SHARDS" ? (
+                    <Sparkle size={18} />
+                  ) : (
+                    <RouletteCoinMark coin={data.coin} />
+                  )}
+                  <span>
+                    <strong>{Number(data.paidSpinCosts?.[currency] ?? (currency === "SHARDS" ? data.settings?.roulettePaidSpinShardCost : data.settings?.roulettePaidSpinOnyxCost) ?? 0).toLocaleString("en-US")}</strong>
+                    <small>{currency === "SHARDS" ? data.settings?.shardPlural ?? "Shards" : coinPlural}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <section className="roulette-reward-list" aria-labelledby="roulette-rewards-title">
+            <header>
+              <strong id="roulette-rewards-title">
+                {track === "FREE"
+                  ? "Free-spin rewards"
+                  : premiumEconomyPublic
+                    ? "Paid-spin rewards"
+                    : "Shard-spin rewards"}
+              </strong>
+              <span>{rewards.length}</span>
+            </header>
+            {rewards.length ? (
+              <ul>
+                {rewards.map((reward, index) => (
+                  <li key={reward.id}>
+                    <span>
+                      {reward.imageUrl ? (
+                        <img src={reward.imageUrl} alt="" />
+                      ) : reward.type === "STORE_ITEM" ? (
+                        <Gift size={18} />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
+                    <strong>{reward.label}</strong>
+                    <small>
+                      {reward.type === "STORE_ITEM"
+                        ? "Cosmetic"
+                        : `${reward.amount.toLocaleString("en-US")} ${
+                            reward.type === "ONYX"
+                              ? coinPlural
+                              : data.settings?.shardPlural ?? "Shards"
+                          }`}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No unowned rewards are available right now.</p>
+            )}
+          </section>
+          <div className="roulette-spin-actions">
+            {track === "FREE" ? (
+              <>
+                <button
+                  className="button button-primary roulette-spin-button"
+                  type="button"
+                  disabled={!canDailySpin || mutationBusy}
+                  onClick={() => void spin("DAILY")}
+                >
+                  <ArrowClockwise size={19} className={spinning ? "is-spinning" : ""} />
+                  {spinning
+                    ? "Spinning…"
+                    : canDailySpin
+                      ? "Use daily spin"
+                      : `Daily spin in ${remainingTime(data.nextEligibleAt, now)}`}
+                </button>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={!canTaskSpin || mutationBusy}
+                  onClick={() => void spin("TASK")}
+                >
+                  <Gift size={18} />
+                  Use banked spin · {Number(data.freeSpinBalance ?? 0)}
+                </button>
+              </>
+            ) : data.settings?.roulettePaidSpinsEnabled ? (
+              <button
+                className="button button-primary roulette-paid-spin-button"
+                type="button"
+                disabled={!canPaidSpin || mutationBusy}
+                onClick={() => void spin("PAID")}
+              >
+                <Sparkle size={18} weight="fill" />
+                {spinning ? "Spinning…" : `Spin for ${paidCost.toLocaleString("en-US")} ${
+                  selectedPaidCurrency === "SHARDS"
+                    ? data.settings.shardPlural
+                    : coinPlural
+                }`}
+              </button>
+            ) : null}
           </div>
-          <button
-            className="button button-primary roulette-spin-button"
-            type="button"
-            disabled={!eligible || spinning || rewards.length === 0}
-            onClick={() => void spin()}
-          >
-            <ArrowClockwise size={19} className={spinning ? "is-spinning" : ""} />
-            {spinning
-              ? "Spinning…"
-              : eligible
-                ? "Spin the Roulette"
-                : `Next spin in ${remainingTime(data.nextEligibleAt, now)}`}
-          </button>
-          {!eligible ? (
+          {track === "FREE" && !canDailySpin ? (
             <small className="roulette-cooldown">
-              <Clock size={15} /> Available{" "}
-              {new Date(data.nextEligibleAt ?? "").toLocaleString()}
+              <Clock size={15} />
+              {data.unavailableReason ??
+                `Available ${new Date(data.nextEligibleAt ?? "").toLocaleString()}`}
             </small>
           ) : null}
         </div>
 
-        <div className="roulette-stage">
-          <span className="roulette-pointer" aria-hidden="true" />
-          <div
-            className="roulette-wheel"
-            style={
-              {
-                "--roulette-count": Math.max(rewards.length, 1),
-                "--roulette-rotation": `${rotation}deg`,
-              } as CSSProperties
-            }
-            aria-label="Roulette reward wheel"
-          >
-            {rewards.map((reward, index) => (
-              <span
-                className="roulette-segment-label"
-                key={reward.id}
-                style={
-                  {
-                    "--segment-index": index,
-                  } as CSSProperties
-                }
-              >
-                {reward.type === "STORE_ITEM" ? <Gift size={16} /> : null}
-                {reward.label}
+        <div className="roulette-stage-card">
+          <header>
+            <span>
+              {track === "FREE"
+                ? "Free draw"
+                : premiumEconomyPublic
+                  ? "Premium draw"
+                  : "Shard draw"}
+            </span>
+            <strong>
+              {track === "FREE"
+                ? canDailySpin || canTaskSpin
+                  ? "Ready"
+                  : remainingTime(data.nextEligibleAt, now)
+                : canPaidSpin
+                  ? "Ready"
+                  : "Wallet balance required"}
+            </strong>
+          </header>
+          <div className="roulette-stage">
+            <span className="roulette-pointer" aria-hidden="true" />
+            <div
+              className="roulette-wheel"
+              role="img"
+              style={
+                {
+                  "--roulette-count": Math.max(rewards.length, 1),
+                  "--roulette-slice": `${360 / Math.max(rewards.length, 1)}deg`,
+                  "--roulette-rotation": `${rotation}deg`,
+                } as CSSProperties
+              }
+              aria-label={`Roulette wheel with ${rewards.length} available rewards`}
+            >
+              {rewards.map((reward, index) => (
+                <span
+                  className="roulette-segment-label"
+                  key={reward.id}
+                  title={reward.label}
+                  aria-hidden="true"
+                  style={
+                    {
+                      "--segment-index": index,
+                    } as CSSProperties
+                  }
+                >
+                  {reward.imageUrl ? (
+                    <img src={reward.imageUrl} alt="" />
+                  ) : reward.type === "STORE_ITEM" ? (
+                    <Gift size={17} />
+                  ) : (
+                    <>
+                      <strong>{reward.amount.toLocaleString("en-US")}</strong>
+                      <small>
+                        {reward.type === "ONYX"
+                          ? <RouletteCoinMark coin={data.coin} size={14} />
+                          : data.settings?.shardIcon ?? "✦"}
+                      </small>
+                    </>
+                  )}
+                </span>
+              ))}
+              <span className="roulette-hub" aria-hidden="true">
+                <Sparkle size={30} weight="fill" />
               </span>
-            ))}
-            <span className="roulette-hub"><Sparkle size={30} weight="fill" /></span>
+            </div>
           </div>
+          <p>{spinning ? "Recording your verified result…" : "The pointer marks the winning segment."}</p>
         </div>
       </section>
+
+      {track === "FREE" ? (
+        <section className="roulette-tasks" aria-labelledby="weekly-spin-tasks">
+          <header>
+            <div>
+              <p className="eyebrow">Refreshes every Monday</p>
+              <h2 id="weekly-spin-tasks">Finish tasks, earn free spins</h2>
+            </div>
+            <span>Week of {data.weekly?.weekStart ? new Date(`${data.weekly.weekStart}T00:00:00Z`).toLocaleDateString() : "this week"}</span>
+          </header>
+          <div>
+            {data.weekly?.tasks?.map((task) => {
+              const percent = Math.min(100, Math.round((task.progress / task.target) * 100));
+              return (
+                <article
+                  key={task.id}
+                  className={
+                    task.claimed
+                      ? "is-claimed"
+                      : task.complete
+                        ? "is-ready"
+                        : "is-progress"
+                  }
+                >
+                  <span className={task.claimed ? "complete" : ""}>
+                    {task.claimed ? <CheckCircle size={22} weight="fill" /> : <Sparkle size={22} />}
+                  </span>
+                  <div>
+                    <strong>{task.label}</strong>
+                    <p>{task.description}</p>
+                    <div
+                      className="roulette-task-progress"
+                      role="progressbar"
+                      aria-label={`${task.label} progress`}
+                      aria-valuemin={0}
+                      aria-valuemax={task.target}
+                      aria-valuenow={Math.min(task.progress, task.target)}
+                    >
+                      <span style={{ width: `${percent}%` }} />
+                    </div>
+                    <small>{task.progress}/{task.target} · {task.rewardSpins} free spin{task.rewardSpins === 1 ? "" : "s"}</small>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!task.complete || task.claimed || mutationBusy}
+                    onClick={() => void claimTask(task.id)}
+                  >
+                    {task.claimed ? "Claimed" : claimingTask === task.id ? "Claiming…" : task.complete ? "Claim" : "In progress"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {lastSpin ? (
         <section className="roulette-result" role="status">
@@ -302,7 +757,18 @@ export function RouletteView({
                   )}
                 </span>
                 <strong>{spinItem.label ?? spinItem.rewardKey}</strong>
-                <time>{new Date(spinItem.spunAt).toLocaleString()}</time>
+                <span>
+                  {spinItem.spinMode === "PAID"
+                    ? `${spinItem.costAmount || spinItem.costShards} ${
+                        spinItem.costCurrency === "ONYX" ? coinPlural : "Shards"
+                      }`
+                    : spinItem.spinMode === "TASK"
+                      ? "Weekly-task spin"
+                      : "Daily free spin"}
+                </span>
+                <time dateTime={spinItem.spunAt}>
+                  {new Date(spinItem.spunAt).toLocaleString()}
+                </time>
               </article>
             ))}
           </div>

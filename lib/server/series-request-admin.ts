@@ -487,7 +487,11 @@ export async function assignSeriesRequestReviewer(
         `SELECT id FROM users
           WHERE id = ?
             AND status = 'ACTIVE'
-            AND primary_role IN ('OWNER', 'ADMINISTRATOR')
+            AND EXISTS (
+              SELECT 1 FROM user_roles ur
+               WHERE ur.user_id = users.id
+                 AND ur.role IN ('OWNER', 'ADMINISTRATOR', 'MANAGER')
+            )
           LIMIT 1`,
       )
       .bind(input.reviewerUserId)

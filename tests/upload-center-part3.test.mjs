@@ -130,10 +130,11 @@ test("upload policy limits methods, paths, media, batches, and paid metadata", a
     read("app/api/v1/[...resource]/route.ts"),
   ]);
 
-  assert.match(policy, /maxChaptersPerJob:\s*10/);
+  assert.match(policy, /maxChaptersPerJob:\s*25/);
   assert.match(policy, /maxPagesPerChapter:\s*500/);
   assert.match(policy, /maxPageBytes:\s*25 \* 1024 \* 1024/);
-  assert.match(policy, /maxJobBytes:\s*2 \* 1024 \* 1024 \* 1024/);
+  assert.match(policy, /maxChapterBytes:\s*250 \* 1024 \* 1024/);
+  assert.match(policy, /maxJobBytes:\s*7 \* 1024 \* 1024 \* 1024/);
   assert.match(policy, /segment === "\.\."/);
   assert.match(policy, /segment\.startsWith\("\."\)/);
   assert.match(policy, /id: "ZIP"[\s\S]*supported: false/);
@@ -141,8 +142,12 @@ test("upload policy limits methods, paths, media, batches, and paid metadata", a
   assert.match(policy, /id: "GOOGLE_DRIVE"[\s\S]*supported: false/);
 
   assert.match(server, /z\.enum\(\["DIRECT_IMAGES", "DIRECT_FOLDER"\]\)/);
-  assert.match(server, /Paid chapters need an Onyx price of at least 1/);
-  assert.match(server, /Free chapters cannot have an Onyx price/);
+  assert.match(
+    server,
+    /Paid chapters need a premium coin price of at least 1/,
+  );
+  assert.match(server, /Free chapters cannot have a premium coin price/);
+  assert.doesNotMatch(server, /Onyx price/);
   assert.match(server, /APPROVED_SERIES_REQUIRED/);
   assert.match(server, /UPLOAD_PERMISSION_REQUIRED/);
   assert.match(server, /RELEASE_LANGUAGE_NOT_ALLOWED/);

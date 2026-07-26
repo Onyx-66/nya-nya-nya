@@ -51,6 +51,8 @@ type UploadItemRow = {
   seriesId: string;
   teamId: string | null;
   chapterId: string | null;
+  replacementChapterId: string | null;
+  thumbnailKey: string | null;
   volume: string | null;
   chapterNumber: string;
   title: string;
@@ -128,7 +130,14 @@ function liveJobAuthorization(
           FROM users live_actor
          WHERE live_actor.id = ?
            AND live_actor.status = 'ACTIVE'
-           AND live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+           AND (
+             live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+             OR EXISTS (
+               SELECT 1 FROM user_roles live_role
+                WHERE live_role.user_id = live_actor.id
+                  AND live_role.role IN ('OWNER', 'ADMINISTRATOR')
+             )
+           )
       )
       AND ${seriesIsEligible}
       AND (
@@ -183,7 +192,14 @@ function liveJobAuthorization(
         JOIN teams live_team ON live_team.id = live_assignment.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
-         AND live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
+         AND (
+           live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
+           OR EXISTS (
+             SELECT 1 FROM user_roles live_role
+              WHERE live_role.user_id = live_actor.id
+                AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
+           )
+         )
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
            ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
@@ -194,7 +210,15 @@ function liveJobAuthorization(
          ${languagePolicy}
          ${
            input.requirePublish
-             ? `AND live_assignment.can_publish = 1
+             ? `AND (
+                  live_actor.primary_role = 'TEAM_LEADER'
+                  OR EXISTS (
+                    SELECT 1 FROM user_roles live_publish_role
+                     WHERE live_publish_role.user_id = live_actor.id
+                       AND live_publish_role.role = 'TEAM_LEADER'
+                  )
+                )
+                AND live_assignment.can_publish = 1
                 AND live_assignment.upload_requires_review = 0`
              : ""
          }
@@ -273,6 +297,8 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
                 series_id AS seriesId,
                 team_id AS teamId,
                 chapter_id AS chapterId,
+                replacement_chapter_id AS replacementChapterId,
+                thumbnail_key AS thumbnailKey,
                 volume,
                 chapter_number AS chapterNumber,
                 title,
@@ -340,6 +366,9 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
       ...item,
       credits: parseJson(item.creditsJson, {}),
       commentsEnabled: Boolean(item.commentsEnabled),
+      thumbnailUrl: item.thumbnailKey
+        ? `/api/v1/upload-job-thumbnail?jobId=${encodeURIComponent(jobId)}&itemId=${encodeURIComponent(item.id)}&v=${item.revision}`
+        : null,
       files: filesByItem.get(item.id) ?? [],
     })),
   };
@@ -351,7 +380,11 @@ async function uploadOptions(db: D1Database, actor: Actor) {
     ? await Promise.all([
         db
           .prepare(
-            `SELECT id, slug, title
+            `SELECT id, slug, title,
+                    CASE WHEN cover_key IS NULL THEN NULL
+                      ELSE '/api/v1/series-media?id=' || id ||
+                           '&slot=cover&v=' || revision
+                    END AS coverUrl
                FROM series
               WHERE is_published = 1
                 AND archived_at IS NULL
@@ -376,6 +409,10 @@ async function uploadOptions(db: D1Database, actor: Actor) {
             `SELECT DISTINCT s.id,
                     s.slug,
                     s.title,
+                    CASE WHEN s.cover_key IS NULL THEN NULL
+                      ELSE '/api/v1/series-media?id=' || s.id ||
+                           '&slot=cover&v=' || s.revision
+                    END AS coverUrl,
                     sta.team_id AS teamId,
                     t.name AS teamName,
                     sta.can_publish AS canPublish,
@@ -613,12 +650,28 @@ export async function POST(request: Request) {
           scope.teamId,
           item.version,
         )
-        .first();
-      if (duplicate) {
+        .first<{ id: string; state: string }>();
+      if (
+        duplicate &&
+        item.replacementChapterId !== duplicate.id
+      ) {
         throw new ApiError(
           409,
           "DUPLICATE_RELEASE",
           `Chapter ${item.chapterNumber} already has this team, language, and version.`,
+          undefined,
+          {
+            clientKey: item.clientKey,
+            existingChapterId: duplicate.id,
+            chapterNumber: item.chapterNumber,
+          },
+        );
+      }
+      if (item.replacementChapterId && !duplicate) {
+        throw new ApiError(
+          409,
+          "REPLACEMENT_TARGET_CHANGED",
+          "The chapter selected for replacement no longer matches this release.",
         );
       }
     }
@@ -648,10 +701,11 @@ export async function POST(request: Request) {
         env.DB!.prepare(
           `INSERT INTO upload_job_items
            (id, job_id, client_key, source_label, series_id, team_id,
-            volume, chapter_number, title, language, version, release_notes,
+            replacement_chapter_id, volume, chapter_number, title, language,
+            version, release_notes,
             credits_json, access_type, price_onyx, visibility, scheduled_at,
             comments_enabled, status, page_count, revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    'DRAFT', 0, 1)`,
         ).bind(
           item.id,
@@ -660,6 +714,7 @@ export async function POST(request: Request) {
           item.sourceLabel,
           payload.seriesId,
           scope.teamId,
+          item.replacementChapterId,
           item.volume || null,
           item.chapterNumber,
           item.title,
@@ -791,12 +846,28 @@ export async function PATCH(request: Request) {
           job.teamId,
           payload.item.version,
         )
-        .first();
-      if (duplicate) {
+        .first<{ id: string }>();
+      if (
+        duplicate &&
+        payload.item.replacementChapterId !== duplicate.id
+      ) {
         throw new ApiError(
           409,
           "DUPLICATE_RELEASE",
           "This exact release already exists.",
+          undefined,
+          {
+            clientKey: payload.item.clientKey,
+            existingChapterId: duplicate.id,
+            chapterNumber: payload.item.chapterNumber,
+          },
+        );
+      }
+      if (payload.item.replacementChapterId && !duplicate) {
+        throw new ApiError(
+          409,
+          "REPLACEMENT_TARGET_CHANGED",
+          "The chapter selected for replacement no longer matches this release.",
         );
       }
       const authorization = liveJobAuthorization(actor, {
@@ -820,6 +891,7 @@ export async function PATCH(request: Request) {
         env.DB.prepare(
           `UPDATE upload_job_items
               SET source_label = ?,
+                  replacement_chapter_id = ?,
                   volume = ?,
                   chapter_number = ?,
                   title = ?,
@@ -852,7 +924,9 @@ export async function PATCH(request: Request) {
                    AND duplicate_item.language = ?
                    AND duplicate_item.version = ?
               )
-              AND NOT EXISTS (
+              AND (
+                ? IS NOT NULL
+                OR NOT EXISTS (
                 SELECT 1
                   FROM chapters duplicate_chapter
                  WHERE duplicate_chapter.series_id = upload_job_items.series_id
@@ -864,9 +938,11 @@ export async function PATCH(request: Request) {
                    AND duplicate_chapter.version = ?
                    AND duplicate_chapter.state IN
                      ('READY_FOR_REVIEW', 'PUBLISHED')
+                )
               )`,
         ).bind(
           payload.item.sourceLabel,
+          payload.item.replacementChapterId,
           payload.item.volume || null,
           payload.item.chapterNumber,
           payload.item.title,
@@ -886,6 +962,7 @@ export async function PATCH(request: Request) {
           payload.item.chapterNumber,
           payload.item.language,
           payload.item.version,
+          payload.item.replacementChapterId,
           payload.item.chapterNumber,
           payload.item.language,
           payload.item.version,
@@ -1050,6 +1127,15 @@ export async function PATCH(request: Request) {
       )
         .bind(payload.jobId)
         .all<{ id: string; objectKey: string }>();
+      const thumbnails = await env.DB.prepare(
+        `SELECT id, thumbnail_key AS objectKey
+           FROM upload_job_items
+          WHERE job_id = ?
+            AND chapter_id IS NULL
+            AND thumbnail_key IS NOT NULL`,
+      )
+        .bind(payload.jobId)
+        .all<{ id: string; objectKey: string }>();
       const discarded = await env.DB.batch([
         env.DB.prepare(
           `UPDATE upload_jobs
@@ -1068,6 +1154,7 @@ export async function PATCH(request: Request) {
         env.DB.prepare(
           `UPDATE upload_job_items
               SET status = 'CANCELLED',
+                  thumbnail_key = NULL,
                   revision = revision + 1,
                   updated_at = CURRENT_TIMESTAMP
             WHERE job_id = ?
@@ -1128,6 +1215,19 @@ export async function PATCH(request: Request) {
               .bind(object.id)
               .run();
           }
+        }
+        for (const thumbnail of thumbnails.results) {
+          await deleteMediaObject(
+            env.DB,
+            env.BUCKET,
+            thumbnail.objectKey,
+            {
+              mediaKind: "CHAPTER_THUMBNAIL",
+              targetType: "UPLOAD_JOB_ITEM",
+              targetId: thumbnail.id,
+              reason: "Discarded upload draft",
+            },
+          );
         }
       }
       return json(
@@ -1228,16 +1328,35 @@ export async function PATCH(request: Request) {
           job.teamId,
           item.version,
         )
-        .first();
-      if (duplicate) {
+        .first<{ id: string }>();
+      if (
+        duplicate &&
+        item.replacementChapterId !== duplicate.id
+      ) {
         throw new ApiError(
           409,
           "DUPLICATE_RELEASE",
           `Chapter ${item.chapterNumber} already has this team, language, and version.`,
+          undefined,
+          {
+            clientKey: item.clientKey,
+            existingChapterId: duplicate.id,
+            chapterNumber: item.chapterNumber,
+          },
+        );
+      }
+      if (item.replacementChapterId && !duplicate) {
+        throw new ApiError(
+          409,
+          "REPLACEMENT_TARGET_CHANGED",
+          "The chapter selected for replacement no longer matches this release.",
         );
       }
     }
-    const needsReview = scope.uploadRequiresReview || !scope.canPublish;
+    const needsReview =
+      scope.uploadRequiresReview ||
+      !scope.canPublish ||
+      items.some((item) => Boolean(item.replacementChapterId));
     const now = Date.now();
     const allScheduled =
       !needsReview &&
@@ -1287,13 +1406,13 @@ export async function PATCH(request: Request) {
            (id, series_id, team_id, uploader_user_id, slug, volume,
             chapter_number, title, language, format, state, access_type,
             price_onyx, page_count, published_at, free_at, version,
-            release_notes, credits_json, visibility, comments_enabled,
+            release_notes, credits_json, thumbnail_key, visibility, comments_enabled,
             revision)
            SELECT ?, uji.series_id, uji.team_id, ?, ?, uji.volume,
                   uji.chapter_number, uji.title, uji.language, 'VERTICAL',
                   ?, uji.access_type, uji.price_onyx, uji.page_count, ?,
                   NULL, uji.version, uji.release_notes, uji.credits_json,
-                  uji.visibility, uji.comments_enabled, 1
+                  uji.thumbnail_key, uji.visibility, uji.comments_enabled, 1
              FROM upload_job_items uji
              JOIN upload_jobs uj ON uj.id = uji.job_id
             WHERE uji.id = ?
@@ -1302,7 +1421,9 @@ export async function PATCH(request: Request) {
               AND uji.page_count > 0
               AND uj.status = 'PUBLISHING'
               AND uj.revision = ?
-              AND NOT EXISTS (
+              AND (
+                uji.replacement_chapter_id IS NOT NULL
+                OR NOT EXISTS (
                 SELECT 1
                   FROM chapters duplicate
                  WHERE duplicate.series_id = uji.series_id
@@ -1313,6 +1434,7 @@ export async function PATCH(request: Request) {
                        COALESCE(uji.team_id, '')
                    AND duplicate.version = uji.version
                    AND duplicate.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
+                )
               )`,
         ).bind(
           newChapterId,

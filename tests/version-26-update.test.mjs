@@ -26,7 +26,7 @@ test("chapter numbers normalize leading zeroes and sort decimals numerically", a
   );
 });
 
-test("discussion GIF uploads optimize before sending and handle plain-text size errors", async () => {
+test("discussion media compresses static images and only uses curated GIFs", async () => {
   const discussion = await read(
     "components/nyascans/EnhancedDiscussionSection.tsx",
   );
@@ -35,7 +35,13 @@ test("discussion GIF uploads optimize before sending and handle plain-text size 
     discussion.indexOf("async function removePendingMedia"),
   );
 
-  assert.match(uploadMedia, /optimizeReactionAsset\(typedFile\)/);
+  assert.match(uploadMedia, /optimizeStaticMedia\(typedFile/);
+  assert.match(discussion, /rawSettings\?\.gifs/);
+  assert.match(discussion, /gifIds:\s*selectedGifIds/);
+  assert.match(
+    uploadMedia,
+    /Choose a GIF from the NyaScans GIF library instead/,
+  );
   assert.match(uploadMedia, /const responseText = await response\.text\(\)/);
   assert.match(uploadMedia, /response\.status === 413/);
   assert.match(uploadMedia, /payload too large/i);
@@ -53,8 +59,11 @@ test("desktop discovery uses an expanded shortcut search and a wider dotless car
   );
 
   assert.doesNotMatch(navigation, /label: "Completed"/);
-  assert.match(app, /data-visible-count=\{showFiveCards \? "5" : "3"\}/);
-  assert.match(app, /<span>Search<\/span>\s*<kbd>\/<\/kbd>/);
+  assert.match(
+    app,
+    /showNineCards \? "9" : showFiveCards \? "5" : "3"/,
+  );
+  assert.match(app, /<span>Search<\/span>\s*<kbd>Ctrl K<\/kbd>/);
   assert.match(styles, /\.featured-slider-dots\s*\{[^}]*display:\s*none/s);
   assert.match(styles, /\.header-search\s+kbd\s*\{/);
 });

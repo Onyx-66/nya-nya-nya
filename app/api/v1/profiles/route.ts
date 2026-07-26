@@ -40,6 +40,15 @@ const patchSchema = z.object({
   showReadingHistory: z.boolean().default(false),
   showChapterNumbers: z.boolean().default(false),
   showLibrarySummary: z.boolean().default(false),
+  showFavorites: z.boolean().default(false),
+  showAchievements: z.boolean().default(false),
+  showBookmarks: z.boolean().default(false),
+  showComments: z.boolean().default(false),
+  favoriteSeriesIds: z
+    .array(z.string().trim().min(1).max(100))
+    .max(10)
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
   socialLinks: z.array(socialLinkSchema).max(5).default([]),
   revision: z.number().int().min(0),
 });
@@ -51,6 +60,21 @@ function safeArray(value: string) {
   } catch {
     return [];
   }
+}
+
+function seriesCoverUrl(series: {
+  seriesId: string;
+  revision: number;
+  coverKey: string | null;
+}) {
+  if (!series.coverKey) return null;
+  if (
+    series.coverKey.startsWith("/") ||
+    /^https?:\/\//i.test(series.coverKey)
+  ) {
+    return series.coverKey;
+  }
+  return `/api/v1/series-media?id=${encodeURIComponent(series.seriesId)}&slot=cover&v=${series.revision}`;
 }
 
 export async function GET(request: Request) {
@@ -80,6 +104,10 @@ export async function GET(request: Request) {
               up.show_reading_history AS showReadingHistory,
               up.show_chapter_numbers AS showChapterNumbers,
               up.show_library_summary AS showLibrarySummary,
+              up.show_favorites AS showFavorites,
+              up.show_achievements AS showAchievements,
+              up.show_bookmarks AS showBookmarks,
+              up.show_comments AS showComments,
               up.social_links_json AS socialLinksJson,
               up.avatar_key AS avatarKey, up.banner_key AS bannerKey,
               up.revision, up.created_at AS createdAt,
@@ -103,6 +131,10 @@ export async function GET(request: Request) {
         showReadingHistory: number;
         showChapterNumbers: number;
         showLibrarySummary: number;
+        showFavorites: number;
+        showAchievements: number;
+        showBookmarks: number;
+        showComments: number;
         socialLinksJson: string;
         avatarKey: string | null;
         bannerKey: string | null;
@@ -116,6 +148,28 @@ export async function GET(request: Request) {
         .replace(/[^a-zA-Z0-9_]+/g, "_")
         .replace(/^_+|_+$/g, "")
         .slice(0, 30);
+      const favoriteCandidates = await env.DB.prepare(
+        `SELECT s.id AS seriesId, s.slug AS seriesSlug,
+                s.title AS seriesTitle, s.revision,
+                s.cover_key AS coverKey
+           FROM library_entries le
+           JOIN series s ON s.id = le.series_id
+          WHERE le.user_id = ?
+            AND s.is_published = 1
+            AND s.archived_at IS NULL
+            AND s.rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+          ORDER BY datetime(le.updated_at) DESC, s.title COLLATE NOCASE
+          LIMIT 200`,
+      )
+        .bind(actor.id)
+        .all<{
+          seriesId: string;
+          seriesSlug: string;
+          seriesTitle: string;
+          revision: number;
+          coverKey: string | null;
+        }>();
       return json(
         requestId,
         {
@@ -135,6 +189,17 @@ export async function GET(request: Request) {
             followingCount: 0,
             teams: [],
             readingActivity: [],
+            activity: [],
+            favorites: [],
+            favoriteCandidates: favoriteCandidates.results.map(
+              (candidate) => ({
+                ...candidate,
+                coverUrl: seriesCoverUrl(candidate),
+              }),
+            ),
+            achievements: [],
+            bookmarks: [],
+            comments: [],
             librarySummary: [],
             avatarUrl: null,
             bannerUrl: null,
@@ -144,6 +209,10 @@ export async function GET(request: Request) {
               showReadingHistory: false,
               showChapterNumbers: false,
               showLibrarySummary: false,
+              showFavorites: false,
+              showAchievements: false,
+              showBookmarks: false,
+              showComments: false,
             },
           },
         },
@@ -249,6 +318,152 @@ export async function GET(request: Request) {
             .bind(profile.userId)
             .all()
         : { results: [] };
+    type SeriesRow = {
+      seriesId: string;
+      seriesSlug: string;
+      seriesTitle: string;
+      revision: number;
+      coverKey: string | null;
+      position?: number;
+      listType?: string;
+      savedAt?: string;
+    };
+    const [
+      favorites,
+      achievements,
+      bookmarks,
+      comments,
+      favoriteCandidates,
+    ] = await Promise.all([
+      isSelf || Boolean(profile.showFavorites)
+        ? env.DB.prepare(
+            `SELECT s.id AS seriesId, s.slug AS seriesSlug,
+                    s.title AS seriesTitle, s.revision,
+                    s.cover_key AS coverKey, pfs.position
+               FROM profile_favorite_series pfs
+               JOIN series s ON s.id = pfs.series_id
+              WHERE pfs.user_id = ?
+                AND s.is_published = 1
+                AND s.archived_at IS NULL
+                AND s.rights_status IN
+                  ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+              ORDER BY pfs.position
+              LIMIT 10`,
+          )
+            .bind(profile.userId)
+            .all<SeriesRow>()
+            .then((result) => result.results)
+        : Promise.resolve([] as SeriesRow[]),
+      isSelf || Boolean(profile.showAchievements)
+        ? env.DB.prepare(
+            `SELECT ad.slug, ad.name, ad.description, ad.rarity,
+                    ad.icon_key AS iconKey, ua.earned_at AS earnedAt,
+                    ua.metadata_json AS metadataJson
+               FROM user_achievements ua
+               JOIN achievement_definitions ad ON ad.id = ua.achievement_id
+              WHERE ua.user_id = ? AND ad.is_active = 1
+              ORDER BY datetime(ua.earned_at) DESC, ad.sort_order, ad.name
+              LIMIT 50`,
+          )
+            .bind(profile.userId)
+            .all<{
+              slug: string;
+              name: string;
+              description: string;
+              rarity: string;
+              iconKey: string | null;
+              earnedAt: string;
+              metadataJson: string;
+            }>()
+            .then((result) => result.results)
+        : Promise.resolve([]),
+      isSelf || Boolean(profile.showBookmarks)
+        ? env.DB.prepare(
+            `SELECT s.id AS seriesId, s.slug AS seriesSlug,
+                    s.title AS seriesTitle, s.revision,
+                    s.cover_key AS coverKey, le.list_type AS listType,
+                    le.updated_at AS savedAt
+               FROM library_entries le
+               JOIN series s ON s.id = le.series_id
+              WHERE le.user_id = ?
+                AND s.is_published = 1
+                AND s.archived_at IS NULL
+                AND s.rights_status IN
+                  ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+              ORDER BY datetime(le.updated_at) DESC, s.title COLLATE NOCASE
+              LIMIT 30`,
+          )
+            .bind(profile.userId)
+            .all<SeriesRow>()
+            .then((result) => result.results)
+        : Promise.resolve([] as SeriesRow[]),
+      isSelf || Boolean(profile.showComments)
+        ? env.DB.prepare(
+            `SELECT dc.id, dc.body, dc.series_slug AS seriesSlug,
+                    s.title AS seriesTitle, dc.chapter_slug AS chapterSlug,
+                    c.chapter_number AS chapterNumber,
+                    dc.created_at AS createdAt,
+                    (SELECT COUNT(*) FROM discussion_votes dv
+                      WHERE dv.comment_id = dc.id AND dv.value = 1) AS upvotes,
+                    (SELECT COUNT(*) FROM discussion_votes dv
+                      WHERE dv.comment_id = dc.id AND dv.value = -1) AS downvotes,
+                    (SELECT COUNT(*) FROM discussion_reactions dr
+                      WHERE dr.comment_id = dc.id) AS reactionCount
+               FROM discussion_comments dc
+               JOIN series s ON s.slug = dc.series_slug
+               LEFT JOIN chapters c
+                 ON c.series_id = s.id AND c.slug = dc.chapter_slug
+              WHERE dc.user_id = ?
+                AND dc.moderation_status = 'VISIBLE'
+                AND dc.deleted_at IS NULL
+                AND s.is_published = 1
+                AND s.archived_at IS NULL
+                AND s.rights_status IN
+                  ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+              ORDER BY datetime(dc.created_at) DESC, dc.id DESC
+              LIMIT 30`,
+          )
+            .bind(profile.userId)
+            .all<{
+              id: string;
+              body: string;
+              seriesSlug: string;
+              seriesTitle: string;
+              chapterSlug: string | null;
+              chapterNumber: string | null;
+              createdAt: string;
+              upvotes: number;
+              downvotes: number;
+              reactionCount: number;
+            }>()
+            .then((result) => result.results)
+        : Promise.resolve([]),
+      isSelf
+        ? env.DB.prepare(
+            `SELECT s.id AS seriesId, s.slug AS seriesSlug,
+                    s.title AS seriesTitle, s.revision,
+                    s.cover_key AS coverKey,
+                    COALESCE(pfs.position, 0) AS position
+               FROM series s
+               LEFT JOIN library_entries le
+                 ON le.series_id = s.id AND le.user_id = ?
+               LEFT JOIN profile_favorite_series pfs
+                 ON pfs.series_id = s.id AND pfs.user_id = ?
+              WHERE s.is_published = 1
+                AND s.archived_at IS NULL
+                AND s.rights_status IN
+                  ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+                AND (le.user_id IS NOT NULL OR pfs.user_id IS NOT NULL)
+              ORDER BY CASE WHEN pfs.position IS NULL THEN 1 ELSE 0 END,
+                       pfs.position, datetime(le.updated_at) DESC,
+                       s.title COLLATE NOCASE
+              LIMIT 200`,
+          )
+            .bind(profile.userId, profile.userId)
+            .all<SeriesRow>()
+            .then((result) => result.results)
+        : Promise.resolve([] as SeriesRow[]),
+    ]);
     const followerCount = Number(
       (followers.results[0] as { count?: number } | undefined)?.count ?? 0,
     );
@@ -271,7 +486,10 @@ export async function GET(request: Request) {
             (relation.results[0] as { following?: number } | undefined)
               ?.following,
           ),
-          followerCount,
+          followerCount:
+            isSelf || profile.followersVisibility === "PUBLIC"
+              ? followerCount
+              : null,
           followingCount:
             isSelf || profile.followersVisibility === "PUBLIC"
               ? followingCount
@@ -290,20 +508,69 @@ export async function GET(request: Request) {
                 showReadingHistory: Boolean(profile.showReadingHistory),
                 showChapterNumbers: Boolean(profile.showChapterNumbers),
                 showLibrarySummary: Boolean(profile.showLibrarySummary),
+                showFavorites: Boolean(profile.showFavorites),
+                showAchievements: Boolean(profile.showAchievements),
+                showBookmarks: Boolean(profile.showBookmarks),
+                showComments: Boolean(profile.showComments),
               }
             : undefined,
           readingActivity: readingActivity.results.map((activity) => ({
             ...activity,
+            chapterSlug:
+              isSelf || profile.showChapterNumbers
+                ? activity.chapterSlug
+                : null,
             chapterNumber:
               isSelf || profile.showChapterNumbers
                 ? activity.chapterNumber
                 : null,
-            coverUrl: activity.coverKey
-              ? activity.coverKey.startsWith("/") ||
-                /^https?:\/\//i.test(activity.coverKey)
-                ? activity.coverKey
-                : `/api/v1/series-media?id=${encodeURIComponent(activity.seriesId)}&slot=cover&v=${activity.revision}`
-              : null,
+            coverUrl: seriesCoverUrl(activity),
+          })),
+          activity: readingActivity.results.map((activity) => ({
+            ...activity,
+            chapterSlug:
+              isSelf || profile.showChapterNumbers
+                ? activity.chapterSlug
+                : null,
+            chapterNumber:
+              isSelf || profile.showChapterNumbers
+                ? activity.chapterNumber
+                : null,
+            coverUrl: seriesCoverUrl(activity),
+          })),
+          favorites: favorites.map((favorite) => ({
+            ...favorite,
+            coverUrl: seriesCoverUrl(favorite),
+          })),
+          favoriteCandidates: favoriteCandidates.map((candidate) => ({
+            ...candidate,
+            coverUrl: seriesCoverUrl(candidate),
+          })),
+          achievements: achievements.map((achievement) => ({
+            ...achievement,
+            metadata: (() => {
+              try {
+                return JSON.parse(achievement.metadataJson) as unknown;
+              } catch {
+                return {};
+              }
+            })(),
+            metadataJson: undefined,
+          })),
+          bookmarks: bookmarks.map((bookmark) => ({
+            ...bookmark,
+            coverUrl: seriesCoverUrl(bookmark),
+          })),
+          comments: comments.map((comment) => ({
+            ...comment,
+            chapterSlug:
+              isSelf || profile.showChapterNumbers
+                ? comment.chapterSlug
+                : null,
+            chapterNumber:
+              isSelf || profile.showChapterNumbers
+                ? comment.chapterNumber
+                : null,
           })),
           librarySummary: librarySummary.results,
         },
@@ -336,6 +603,27 @@ export async function PATCH(request: Request) {
       );
     }
     const normalizedUsername = payload.username.toLowerCase();
+    if (payload.favoriteSeriesIds.length) {
+      const placeholders = payload.favoriteSeriesIds.map(() => "?").join(", ");
+      const eligible = await env.DB.prepare(
+        `SELECT id
+           FROM series
+          WHERE id IN (${placeholders})
+            AND is_published = 1
+            AND archived_at IS NULL
+            AND rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')`,
+      )
+        .bind(...payload.favoriteSeriesIds)
+        .all<{ id: string }>();
+      if (eligible.results.length !== payload.favoriteSeriesIds.length) {
+        throw new ApiError(
+          400,
+          "INVALID_FAVORITE_SERIES",
+          "One or more favorite series are unavailable.",
+        );
+      }
+    }
     const current = await env.DB.prepare(
       "SELECT revision FROM user_profiles WHERE user_id = ? LIMIT 1",
     )
@@ -354,8 +642,9 @@ export async function PATCH(request: Request) {
           `INSERT INTO user_profiles
            (user_id, username, normalized_username, bio, preferred_language,
             profile_visibility, followers_visibility, show_reading_history,
-            show_chapter_numbers, show_library_summary, social_links_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            show_chapter_numbers, show_library_summary, show_favorites,
+            show_achievements, show_bookmarks, show_comments, social_links_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).bind(
           actor.id,
           payload.username,
@@ -367,6 +656,10 @@ export async function PATCH(request: Request) {
           payload.showReadingHistory ? 1 : 0,
           payload.showChapterNumbers ? 1 : 0,
           payload.showLibrarySummary ? 1 : 0,
+          payload.showFavorites ? 1 : 0,
+          payload.showAchievements ? 1 : 0,
+          payload.showBookmarks ? 1 : 0,
+          payload.showComments ? 1 : 0,
           JSON.stringify(payload.socialLinks),
         ),
         env.DB.prepare(
@@ -382,6 +675,13 @@ export async function PATCH(request: Request) {
           requestId,
           JSON.stringify({ username: payload.username }),
         ),
+        ...payload.favoriteSeriesIds.map((seriesId, index) =>
+          env.DB.prepare(
+            `INSERT INTO profile_favorite_series
+             (user_id, series_id, position)
+             VALUES (?, ?, ?)`,
+          ).bind(actor.id, seriesId, index + 1),
+        ),
       ]);
     } else {
       const result = await env.DB.prepare(
@@ -390,6 +690,8 @@ export async function PATCH(request: Request) {
                 preferred_language = ?, profile_visibility = ?,
                 followers_visibility = ?, show_reading_history = ?,
                 show_chapter_numbers = ?, show_library_summary = ?,
+                show_favorites = ?, show_achievements = ?,
+                show_bookmarks = ?, show_comments = ?,
                 social_links_json = ?, revision = revision + 1,
                 updated_at = CURRENT_TIMESTAMP
           WHERE user_id = ? AND revision = ?`,
@@ -404,6 +706,10 @@ export async function PATCH(request: Request) {
           payload.showReadingHistory ? 1 : 0,
           payload.showChapterNumbers ? 1 : 0,
           payload.showLibrarySummary ? 1 : 0,
+          payload.showFavorites ? 1 : 0,
+          payload.showAchievements ? 1 : 0,
+          payload.showBookmarks ? 1 : 0,
+          payload.showComments ? 1 : 0,
           JSON.stringify(payload.socialLinks),
           actor.id,
           payload.revision,
@@ -416,6 +722,18 @@ export async function PATCH(request: Request) {
           "This profile changed in another session. Reload before saving.",
         );
       }
+      await env.DB.batch([
+        env.DB.prepare(
+          "DELETE FROM profile_favorite_series WHERE user_id = ?",
+        ).bind(actor.id),
+        ...payload.favoriteSeriesIds.map((seriesId, index) =>
+          env.DB.prepare(
+            `INSERT INTO profile_favorite_series
+             (user_id, series_id, position)
+             VALUES (?, ?, ?)`,
+          ).bind(actor.id, seriesId, index + 1),
+        ),
+      ]);
     }
     return json(requestId, {
       saved: true,

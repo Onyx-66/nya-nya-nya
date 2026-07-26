@@ -22,6 +22,7 @@ export async function GET(request: Request) {
               category, revision, availability_json AS availabilityJson
        FROM custom_reactions
        WHERE is_active = 1 AND is_archived = 0
+         AND usage_kind = 'REACTION'
        ORDER BY display_order, name COLLATE NOCASE`,
     ).all<{
       id: string;

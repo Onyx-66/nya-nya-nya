@@ -26,6 +26,7 @@ import {
   type FormEvent,
 } from "react";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type Credits = {
   translator: string;
@@ -156,6 +157,7 @@ export function ChapterManagementWorkspace({
   actor: { displayName: string; role: string };
   administration: boolean;
 }) {
+  const { settings: commercial } = useCommercialSettings();
   const [chapter, setChapter] = useState<ManagedChapter | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [pages, setPages] = useState<ManagedPage[]>([]);
@@ -666,7 +668,7 @@ export function ChapterManagementWorkspace({
             </label>
             {form.accessType === "PAID" ? (
               <label>
-                <span>Onyx price</span>
+                <span>{commercial.economy.coinName} price</span>
                 <div className="chapter-price-input">
                   <Coins size={17} />
                   <input

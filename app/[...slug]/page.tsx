@@ -42,7 +42,9 @@ function resolveView(slug: string[]): {
   if (root === "roulette") return { view: "roulette" };
   if (root === "notifications") return { view: "notifications" };
   if (root === "latest") return { view: "latest" };
-  if (root === "rankings") return { view: "rankings" };
+  if (root === "rankings" || root === "leaderboard") {
+    return { view: "rankings" };
+  }
   if (root === "team") return { view: "team", resourceSlug: second };
   if (root === "status") return { view: "status" };
   if (root === "support" || root === "report") return { view: "support" };
@@ -86,7 +88,7 @@ export async function generateMetadata({
     orders: "Orders",
     notifications: "Notifications",
     latest: "Latest Updates",
-    rankings: "Rankings",
+    rankings: "Reader Leaderboard",
     roulette: "Daily Roulette",
     status: "System Status",
     support: "Support",
@@ -149,6 +151,8 @@ export default async function CatchAllPage({
               displayName: actor.displayName,
               email: actor.email,
               role: actor.primaryRole,
+              roles: actor.roles,
+              avatarUrl: actor.avatarUrl,
               canUseUploadCenter: actor.canUseUploadCenter,
               canUpload:
                 ["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole) ||

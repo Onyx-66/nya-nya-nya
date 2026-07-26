@@ -90,6 +90,14 @@ export async function GET(request: Request) {
     const username = usernameSchema.parse(url.searchParams.get("username"));
     const slot = slotSchema.parse(url.searchParams.get("slot"));
     const actor = await getActor().catch(() => null);
+    const adminAccess =
+      url.searchParams.get("admin") === "1" &&
+      Boolean(
+        actor &&
+          ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(
+            actor.primaryRole,
+          ),
+      );
     const profile = await env.DB.prepare(
       `SELECT up.user_id AS userId, up.profile_visibility AS visibility,
               CASE WHEN ? = 'avatar' THEN up.avatar_key ELSE up.banner_key END
@@ -112,7 +120,7 @@ export async function GET(request: Request) {
       !profile ||
       !profile.objectKey ||
       profile.status !== "ACTIVE" ||
-      (!isSelf && profile.visibility !== "PUBLIC")
+      (!isSelf && !adminAccess && profile.visibility !== "PUBLIC")
     ) {
       throw new ApiError(404, "MEDIA_NOT_FOUND", "Profile media was not found.");
     }
@@ -124,13 +132,13 @@ export async function GET(request: Request) {
     object.writeHttpMetadata(headers);
     headers.set(
       "cache-control",
-      isSelf
+      isSelf || adminAccess
         ? "private, no-store"
         : "public, max-age=3600, stale-while-revalidate=86400",
     );
     headers.set("x-content-type-options", "nosniff");
     headers.set("x-request-id", requestId);
-    if (isSelf) headers.set("vary", "cookie");
+    if (isSelf || adminAccess) headers.set("vary", "cookie");
     return new Response(object.body, { headers });
   } catch (error) {
     return errorResponse(requestId, error);

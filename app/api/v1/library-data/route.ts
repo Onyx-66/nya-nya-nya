@@ -6,6 +6,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { requireActor } from "@/lib/server/policy";
+import { seriesReadingProgress } from "@/lib/reading-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -78,21 +79,29 @@ export async function GET(request: Request) {
                    LIMIT 1
                 ) AS lastActivity,
                 (
-                  SELECT COUNT(*)
+                  SELECT COUNT(DISTINCT c.chapter_number)
                     FROM chapters c
                    WHERE c.series_id = s.id
                      AND c.state = 'PUBLISHED'
-                     AND c.visibility = 'PUBLIC'
+                     AND c.visibility IN ('PUBLIC', 'UNLISTED')
                      AND c.published_at IS NOT NULL
                      AND datetime(c.published_at) <= datetime('now')
-                     AND NOT EXISTS (
-                       SELECT 1
-                         FROM reading_progress rp
-                        WHERE rp.user_id = l.user_id
-                          AND rp.chapter_id = c.id
-                          AND rp.progress_basis_points >= 9200
+                ) AS chaptersTotal,
+                (
+                  SELECT COUNT(DISTINCT c.chapter_number)
+                    FROM reading_progress rp
+                    JOIN chapters c ON c.id = rp.chapter_id
+                   WHERE rp.user_id = l.user_id
+                     AND c.series_id = l.series_id
+                     AND c.state = 'PUBLISHED'
+                     AND c.visibility IN ('PUBLIC', 'UNLISTED')
+                     AND c.published_at IS NOT NULL
+                     AND datetime(c.published_at) <= datetime('now')
+                     AND (
+                       rp.completed_at IS NOT NULL
+                       OR rp.progress_basis_points >= 9200
                      )
-                ) AS unreadCount
+                ) AS chaptersRead
            FROM library_entries l
            JOIN series s ON s.id = l.series_id
           WHERE l.user_id = ?
@@ -131,13 +140,22 @@ export async function GET(request: Request) {
             lastReadChapter: string | null;
             progressBasisPoints: number | null;
             lastActivity: string | null;
-            unreadCount: number;
+            chaptersRead: number;
+            chaptersTotal: number;
           };
+          const chaptersRead = Number(row.chaptersRead);
+          const chaptersTotal = Number(row.chaptersTotal);
           return {
             ...row,
             favorite: Boolean(row.favorite),
-            unreadCount: Number(row.unreadCount),
-            progress: Number(row.progressBasisPoints ?? 0) / 100,
+            chaptersRead,
+            chaptersTotal,
+            unreadCount: Math.max(0, chaptersTotal - chaptersRead),
+            progress: seriesReadingProgress(chaptersRead, chaptersTotal),
+            chapterProgress: Math.min(
+              100,
+              Math.max(0, Number(row.progressBasisPoints ?? 0) / 100),
+            ),
             coverUrl: row.coverKey
               ? row.coverKey.startsWith("/") ||
                 /^https?:\/\//i.test(row.coverKey)

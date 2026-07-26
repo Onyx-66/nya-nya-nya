@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const querySchema = z.object({
   id: z.string().trim().min(3).max(160),
-  slot: z.enum(["cover", "banner"]),
+  slot: z.enum(["cover", "banner", "slider"]),
 });
 
 export async function GET(request: Request) {
@@ -26,7 +26,12 @@ export async function GET(request: Request) {
       id: url.searchParams.get("id"),
       slot: url.searchParams.get("slot"),
     });
-    const column = query.slot === "cover" ? "cover_key" : "banner_key";
+    const column =
+      query.slot === "cover"
+        ? "cover_key"
+        : query.slot === "banner"
+          ? "banner_key"
+          : "slider_key";
     const series = await env.DB.prepare(
       `SELECT ${column} AS objectKey, is_published AS isPublished,
               archived_at AS archivedAt, rights_status AS rightsStatus

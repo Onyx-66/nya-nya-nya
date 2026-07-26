@@ -539,5 +539,6 @@ test("client and worker identifiers remain available without randomUUID", async 
   assert.match(randomId, /Math\.random/);
   assert.match(footer, /className="footer-group-toggle"/);
   assert.match(footer, /window\.sessionStorage\.setItem/);
-  assert.match(footer, /aria-expanded=\{open\}/);
+  assert.match(footer, /aria-expanded=\{expanded\}/);
+  assert.match(footer, /disabled=\{desktop\}/);
 });

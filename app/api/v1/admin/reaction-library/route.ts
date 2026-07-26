@@ -22,6 +22,7 @@ const reactionSchema = z.object({
   isActive: z.boolean().default(true),
   displayOrder: z.coerce.number().int().min(0).max(10_000),
   category: z.string().trim().max(80).nullable().default(null),
+  usageKind: z.enum(["REACTION", "COMMENT_GIF"]).default("REACTION"),
   availability: z
     .object({
       scope: z.enum(["GLOBAL", "SIGNED_IN", "TEAM"]).default("GLOBAL"),
@@ -57,6 +58,7 @@ type ReactionRow = {
   isArchived: number;
   displayOrder: number;
   category: string | null;
+  usageKind: "REACTION" | "COMMENT_GIF";
   availabilityJson: string;
   revision: number;
   createdAt: string;
@@ -102,6 +104,7 @@ function mapReaction(row: ReactionRow) {
     isArchived: Boolean(row.isArchived),
     displayOrder: Number(row.displayOrder),
     category: row.category,
+    usageKind: row.usageKind,
     availability: parseAvailability(row.availabilityJson),
     revision: Number(row.revision),
     usageCount: Number(row.usageCount),
@@ -118,10 +121,16 @@ const reactionSelect = `
          cr.width, cr.height, cr.byte_size AS byteSize,
          cr.is_animated AS isAnimated, cr.is_active AS isActive,
          cr.is_archived AS isArchived, cr.display_order AS displayOrder,
-         cr.category, cr.availability_json AS availabilityJson,
+         cr.category, cr.usage_kind AS usageKind,
+         cr.availability_json AS availabilityJson,
          cr.revision, cr.created_at AS createdAt, cr.updated_at AS updatedAt,
-         (SELECT COUNT(*) FROM discussion_reactions dr
-           WHERE dr.reaction = cr.slug) AS usageCount
+         (
+           (SELECT COUNT(*) FROM discussion_reactions dr
+             WHERE dr.reaction = cr.slug)
+           +
+           (SELECT COUNT(*) FROM discussion_comment_gifs dcg
+             WHERE dcg.gif_id = cr.id)
+         ) AS usageCount
   FROM custom_reactions cr
 `;
 
@@ -152,6 +161,10 @@ export async function GET(request: Request) {
       .enum(["ALL", "ACTIVE", "INACTIVE", "ARCHIVED"])
       .catch("ALL")
       .parse(url.searchParams.get("state"));
+    const usageKind = z
+      .enum(["ALL", "REACTION", "COMMENT_GIF"])
+      .catch("ALL")
+      .parse(url.searchParams.get("usageKind"));
     const page = z.coerce
       .number()
       .int()
@@ -175,25 +188,37 @@ export async function GET(request: Request) {
           : state === "ARCHIVED"
             ? "AND cr.is_archived = 1"
             : "";
+    const usageClause =
+      usageKind === "ALL" ? "" : "AND cr.usage_kind = ?";
+    const usageBindings = usageKind === "ALL" ? [] : [usageKind];
     const [rows, count] = await Promise.all([
       db
         .prepare(
           `${reactionSelect}
            WHERE (? = '%%' OR LOWER(cr.name) LIKE ? OR cr.slug LIKE ?)
            ${stateClause}
+           ${usageClause}
            ORDER BY cr.is_archived, cr.display_order, cr.name COLLATE NOCASE
            LIMIT ? OFFSET ?`,
         )
-        .bind(term, term, term, limit, (page - 1) * limit)
+        .bind(
+          term,
+          term,
+          term,
+          ...usageBindings,
+          limit,
+          (page - 1) * limit,
+        )
         .all<ReactionRow>(),
       db
         .prepare(
           `SELECT COUNT(*) AS count
              FROM custom_reactions cr
             WHERE (? = '%%' OR LOWER(cr.name) LIKE ? OR cr.slug LIKE ?)
-            ${stateClause}`,
+            ${stateClause}
+            ${usageClause}`,
         )
-        .bind(term, term, term)
+        .bind(term, term, term, ...usageBindings)
         .first<{ count: number }>(),
     ]);
     return json(
@@ -223,14 +248,28 @@ async function saveReaction(
   const current = payload.id
     ? await db
         .prepare(
-          `SELECT name, slug, asset_key AS assetKey, revision
-             FROM custom_reactions WHERE id = ? LIMIT 1`,
+          `SELECT cr.name, cr.slug, cr.asset_key AS assetKey,
+                  cr.is_animated AS isAnimated, cr.usage_kind AS usageKind,
+                  cr.revision,
+                  (
+                    SELECT COUNT(*) FROM discussion_reactions dr
+                     WHERE dr.reaction = cr.slug
+                  ) AS reactionUsageCount,
+                  (
+                    SELECT COUNT(*) FROM discussion_comment_gifs dcg
+                     WHERE dcg.gif_id = cr.id
+                  ) AS gifUsageCount
+             FROM custom_reactions cr WHERE cr.id = ? LIMIT 1`,
         )
         .bind(payload.id)
         .first<{
           name: string;
           slug: string;
           assetKey: string | null;
+          isAnimated: number;
+          usageKind: "REACTION" | "COMMENT_GIF";
+          reactionUsageCount: number;
+          gifUsageCount: number;
           revision: number;
         }>()
     : null;
@@ -256,6 +295,18 @@ async function saveReaction(
     );
   }
   if (
+    current &&
+    current.usageKind !== payload.usageKind &&
+    (Number(current.reactionUsageCount) > 0 ||
+      Number(current.gifUsageCount) > 0)
+  ) {
+    throw new ApiError(
+      409,
+      "REACTION_USAGE_KIND_IMMUTABLE",
+      "A reaction or comment GIF type cannot change after readers have used it.",
+    );
+  }
+  if (
     payload.isActive &&
     !payload.emojiFallback.trim() &&
     !current?.assetKey
@@ -264,6 +315,17 @@ async function saveReaction(
       422,
       "REACTION_VISUAL_REQUIRED",
       "Add an image or emoji fallback before activating this reaction.",
+    );
+  }
+  if (
+    payload.isActive &&
+    payload.usageKind === "COMMENT_GIF" &&
+    !Boolean(current?.isAnimated)
+  ) {
+    throw new ApiError(
+      422,
+      "COMMENT_GIF_ANIMATION_REQUIRED",
+      "An active comment GIF must use an animated GIF asset.",
     );
   }
   if (payload.availability.scope === "TEAM") {
@@ -293,7 +355,7 @@ async function saveReaction(
           `UPDATE custom_reactions
            SET slug = ?, name = ?, accessible_label = ?,
                emoji_fallback = ?, is_active = ?, display_order = ?,
-               category = ?, availability_json = ?,
+               category = ?, usage_kind = ?, availability_json = ?,
                revision = revision + 1, updated_by_user_id = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND revision = ?`,
@@ -306,6 +368,7 @@ async function saveReaction(
           payload.isActive ? 1 : 0,
           payload.displayOrder,
           payload.category,
+          payload.usageKind,
           availability,
           actor.id,
           id,
@@ -315,9 +378,10 @@ async function saveReaction(
         .prepare(
           `INSERT INTO custom_reactions
            (id, slug, name, accessible_label, emoji_fallback, is_active,
-            display_order, category, availability_json, created_by_user_id,
+            display_order, category, usage_kind, availability_json,
+            created_by_user_id,
             updated_by_user_id, revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         )
         .bind(
           id,
@@ -328,6 +392,7 @@ async function saveReaction(
           payload.isActive ? 1 : 0,
           payload.displayOrder,
           payload.category,
+          payload.usageKind,
           availability,
           actor.id,
           actor.id,

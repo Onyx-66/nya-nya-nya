@@ -1,16 +1,19 @@
 "use client";
 
 import { CheckCircle, FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   defaultSiteTheme,
+  featuredSliderStyleOptions,
   newSeriesLayoutOptions,
   parseSiteTheme,
   sliderSizeOptions,
   sliderStyleOptions,
+  siteAppearanceSavedEvent,
   siteThemeDataAttributes,
   siteThemeVariables,
   templateStyleOptions,
+  type SiteAppearanceSavedDetail,
   type SiteTheme,
 } from "@/lib/site-theme";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
@@ -30,6 +33,36 @@ function applyPreview(settings: SiteTheme) {
     siteThemeDataAttributes(settings),
   )) {
     root.setAttribute(name, value);
+  }
+}
+
+type RootPreviewSnapshot = {
+  styles: Array<[string, string]>;
+  attributes: Array<[string, string | null]>;
+};
+
+function captureRootPreview(): RootPreviewSnapshot {
+  const root = document.documentElement;
+  return {
+    styles: Object.keys(siteThemeVariables(defaultSiteTheme)).map((name) => [
+      name,
+      root.style.getPropertyValue(name),
+    ]),
+    attributes: Object.keys(siteThemeDataAttributes(defaultSiteTheme)).map(
+      (name) => [name, root.getAttribute(name)],
+    ),
+  };
+}
+
+function restoreRootPreview(snapshot: RootPreviewSnapshot) {
+  const root = document.documentElement;
+  for (const [name, value] of snapshot.styles) {
+    if (value) root.style.setProperty(name, value);
+    else root.style.removeProperty(name);
+  }
+  for (const [name, value] of snapshot.attributes) {
+    if (value === null) root.removeAttribute(name);
+    else root.setAttribute(name, value);
   }
 }
 
@@ -109,6 +142,7 @@ export function ThemeSettingsPanel() {
   const [message, setMessage] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false);
+  const savedPreview = useRef<SiteTheme | null>(null);
   const dirty = JSON.stringify(settings) !== JSON.stringify(saved);
   useUnsavedChanges(dirty, "appearance token changes");
   const contrastWarnings = [
@@ -128,6 +162,7 @@ export function ThemeSettingsPanel() {
 
   useEffect(() => {
     let active = true;
+    const rootSnapshot = captureRootPreview();
     void fetch("/api/v1/admin/appearance")
       .then(async (response) => {
         if (!response.ok) throw new Error("Appearance settings could not be loaded.");
@@ -139,6 +174,7 @@ export function ThemeSettingsPanel() {
         const next = parseSiteTheme(document.settings);
         setSettings(next);
         setSaved(next);
+        savedPreview.current = next;
         setRevision(Number(document.revision ?? 0));
         setRecoveredFromInvalid(Boolean(document.recoveredFromInvalid));
         setHasLoaded(true);
@@ -152,12 +188,33 @@ export function ThemeSettingsPanel() {
       });
     return () => {
       active = false;
+      if (savedPreview.current) applyPreview(savedPreview.current);
+      else restoreRootPreview(rootSnapshot);
     };
   }, []);
 
   useEffect(() => {
-    if (status !== "loading") applyPreview(settings);
-  }, [settings, status]);
+    if (hasLoaded) applyPreview(settings);
+  }, [hasLoaded, settings]);
+
+  useEffect(() => {
+    function syncSavedAppearance(event: Event) {
+      const detail = (event as CustomEvent<SiteAppearanceSavedDetail>).detail;
+      if (!detail?.settings || !Number.isFinite(detail.revision)) return;
+      const next = parseSiteTheme(detail.settings);
+      setSettings(next);
+      setSaved(next);
+      savedPreview.current = next;
+      setRevision(detail.revision);
+      setRecoveredFromInvalid(false);
+      setStatus("saved");
+      setMessage("Appearance synchronized with the saved site theme.");
+      applyPreview(next);
+    }
+    window.addEventListener(siteAppearanceSavedEvent, syncSavedAppearance);
+    return () =>
+      window.removeEventListener(siteAppearanceSavedEvent, syncSavedAppearance);
+  }, []);
 
   async function save() {
     setStatus("saving");
@@ -181,8 +238,15 @@ export function ThemeSettingsPanel() {
       const next = parseSiteTheme(payload.data?.settings ?? settings);
       setSettings(next);
       setSaved(next);
-      setRevision(Number(payload.data?.revision ?? revision + 1));
+      savedPreview.current = next;
+      const nextRevision = Number(payload.data?.revision ?? revision + 1);
+      setRevision(nextRevision);
       setRecoveredFromInvalid(false);
+      window.dispatchEvent(
+        new CustomEvent<SiteAppearanceSavedDetail>(siteAppearanceSavedEvent, {
+          detail: { settings: next, revision: nextRevision },
+        }),
+      );
       setStatus("saved");
       setMessage("Appearance saved and applied site-wide.");
     } catch (error) {
@@ -315,7 +379,50 @@ export function ThemeSettingsPanel() {
           </fieldset>
 
           <fieldset className="experience-control">
-            <legend>Discovery sliders</legend>
+            <legend>Desktop featured carousel</legend>
+            <p>
+              Choose the large homepage carousel used on PC. Phone and tablet
+              keep the existing touch-first composition.
+            </p>
+            <div className="slider-option-grid featured-slider-option-grid">
+              {featuredSliderStyleOptions.map((option, index) => (
+                <button
+                  type="button"
+                  key={option.value}
+                  className={
+                    settings.experience.featuredSliderStyle === option.value
+                      ? "is-selected"
+                      : ""
+                  }
+                  aria-pressed={
+                    settings.experience.featuredSliderStyle === option.value
+                  }
+                  onClick={() =>
+                    update("experience", {
+                      ...settings.experience,
+                      featuredSliderStyle: option.value,
+                    })
+                  }
+                >
+                  <span
+                    className={`featured-slider-mini featured-slider-mini-${index + 1}`}
+                    aria-hidden="true"
+                  >
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <strong>{option.label}</strong>
+                  <small>{option.detail}</small>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="experience-control">
+            <legend>Trending and discovery shelves</legend>
             <p>
               Select how Trending and curated shelves behave. Cover artwork
               always remains in a fixed 2:3 frame.

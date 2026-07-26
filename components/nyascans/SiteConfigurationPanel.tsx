@@ -29,6 +29,7 @@ import {
   type SiteSocialLink,
 } from "@/lib/site-configuration";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
 type SiteConfigurationResponse = {
   settings: SiteConfiguration;
@@ -201,12 +202,18 @@ export function SiteConfigurationPanel({
         setUploading(slot);
         const response = pending
           ? await (() => {
+              return optimizeStaticMedia(pending.file, {
+                maxWidth: slot === "logo" ? 2_400 : 1_200,
+                maxHeight: slot === "logo" ? 1_200 : 1_200,
+                maxBytes: 2_500_000,
+              }).then((prepared) => {
               const body = new FormData();
-              body.set("file", pending.file);
+              body.set("file", prepared);
               body.set("expectedRevision", String(currentRevision));
               return fetch(`/api/v1/admin/site-media?slot=${slot}`, {
                 method: "POST",
                 body,
+              });
               });
             })()
           : await fetch(

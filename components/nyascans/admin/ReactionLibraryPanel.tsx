@@ -15,6 +15,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
@@ -44,6 +45,7 @@ type Reaction = {
   isArchived: boolean;
   displayOrder: number;
   category: string | null;
+  usageKind: "REACTION" | "COMMENT_GIF";
   availability: {
     scope: "GLOBAL" | "SIGNED_IN" | "TEAM";
     teamIds: string[];
@@ -65,6 +67,7 @@ type Draft = Pick<
   | "isActive"
   | "displayOrder"
   | "category"
+  | "usageKind"
   | "availability"
   | "isArchived"
   | "usageCount"
@@ -87,6 +90,7 @@ const emptyDraft: Draft = {
   isActive: false,
   displayOrder: 100,
   category: null,
+  usageKind: "REACTION",
   availability: { scope: "GLOBAL", teamIds: [] },
   isArchived: false,
   usageCount: 0,
@@ -123,6 +127,9 @@ export function ReactionLibraryPanel({
   const [removeAsset, setRemoveAsset] = useState(false);
   const [query, setQuery] = useState("");
   const [state, setState] = useState("ALL");
+  const [usageFilter, setUsageFilter] = useState<
+    "ALL" | "REACTION" | "COMMENT_GIF"
+  >("ALL");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
@@ -135,6 +142,8 @@ export function ReactionLibraryPanel({
     kind: "success" | "error" | "neutral";
     text: string;
   } | null>(null);
+  const loadSequence = useRef(0);
+  const optimizationSequence = useRef(0);
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(saved) ||
     Boolean(assetFile) ||
@@ -142,6 +151,7 @@ export function ReactionLibraryPanel({
   useUnsavedChanges(dirty, "custom reaction changes");
 
   async function load(preferredId?: string, requestedPage = page) {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     try {
       const [payload, options] = await Promise.all([
@@ -149,7 +159,7 @@ export function ReactionLibraryPanel({
           data: Reaction[];
           pagination: { page: number; total: number };
         }>(
-          `/api/v1/admin/reaction-library?query=${encodeURIComponent(query)}&state=${encodeURIComponent(state)}&page=${requestedPage}&limit=24`,
+          `/api/v1/admin/reaction-library?query=${encodeURIComponent(query)}&state=${encodeURIComponent(state)}&usageKind=${encodeURIComponent(usageFilter)}&page=${requestedPage}&limit=24`,
           { cache: "no-store" },
         ),
         api<{ data: { teams: TeamOption[] } }>(
@@ -157,6 +167,7 @@ export function ReactionLibraryPanel({
           { cache: "no-store" },
         ),
       ]);
+      if (sequence !== loadSequence.current) return;
       setTeamOptions(options.data.teams);
       setReactions(payload.data);
       setPage(payload.pagination.page);
@@ -178,6 +189,7 @@ export function ReactionLibraryPanel({
       setMessage(null);
       setHasLoaded(true);
     } catch (error) {
+      if (sequence !== loadSequence.current) return;
       setMessage({
         kind: "error",
         text:
@@ -186,7 +198,7 @@ export function ReactionLibraryPanel({
             : "The reaction library could not be loaded.",
       });
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   }
 
@@ -194,9 +206,18 @@ export function ReactionLibraryPanel({
     const timer = window.setTimeout(() => void load(), 160);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query, state]);
+  }, [page, query, state, usageFilter]);
+
+  useEffect(
+    () => () => {
+      loadSequence.current += 1;
+      optimizationSequence.current += 1;
+    },
+    [],
+  );
 
   function select(reaction: Reaction) {
+    if (optimizing) return;
     if (dirty && !window.confirm("Discard unsaved reaction changes?")) return;
     setDraft(reaction);
     setSaved(reaction);
@@ -207,16 +228,20 @@ export function ReactionLibraryPanel({
   }
 
   function createReaction() {
+    if (optimizing) return;
     if (dirty && !window.confirm("Discard unsaved reaction changes?")) return;
-    setDraft({
+    const nextDraft: Draft = {
       ...emptyDraft,
+      usageKind:
+        usageFilter === "COMMENT_GIF" ? "COMMENT_GIF" : "REACTION",
       displayOrder:
         reactions.reduce(
           (maximum, reaction) => Math.max(maximum, reaction.displayOrder),
           0,
         ) + 10,
-    });
-    setSaved(emptyDraft);
+    };
+    setDraft(nextDraft);
+    setSaved(nextDraft);
     setAssetFile(null);
     setOptimizationNote("");
     setRemoveAsset(false);
@@ -248,6 +273,7 @@ export function ReactionLibraryPanel({
             isActive: draft.isActive,
             displayOrder: draft.displayOrder,
             category: draft.category || null,
+            usageKind: draft.usageKind,
             availability: draft.availability,
           }),
         },
@@ -342,9 +368,10 @@ export function ReactionLibraryPanel({
     () => (assetFile ? URL.createObjectURL(assetFile) : draft.assetUrl),
     [assetFile, draft.assetUrl],
   );
-  const hasSavedVisual = Boolean(
-    assetFile || draft.assetUrl || draft.emojiFallback.trim(),
-  );
+  const hasSavedVisual =
+    draft.usageKind === "COMMENT_GIF"
+      ? Boolean(assetFile || draft.assetUrl)
+      : Boolean(assetFile || draft.assetUrl || draft.emojiFallback.trim());
   useEffect(
     () => () => {
       if (assetFile && assetPreviewUrl) URL.revokeObjectURL(assetPreviewUrl);
@@ -357,10 +384,10 @@ export function ReactionLibraryPanel({
       <AdminPageScaffold
         breadcrumbs={["Administration", "Discussions"]}
         kicker="Community systems"
-        title="Discussions & reactions"
-        description="Configure discussion behavior and manage a safe, database-backed custom reaction library."
+        title="Discussions, reactions & GIFs"
+        description="Configure discussion behavior and manage safe reaction buttons and curated comment GIFs."
         tabs={[
-          { key: "library", label: "Reaction library", count: reactions.length },
+          { key: "library", label: "Media library", count: reactions.length },
           { key: "settings", label: "Discussion settings" },
         ]}
         activeTab={workspaceTab}
@@ -387,9 +414,11 @@ export function ReactionLibraryPanel({
             <button
               className="button button-primary"
               type="button"
+              disabled={optimizing}
               onClick={createReaction}
             >
-              <Plus size={17} /> New reaction
+              <Plus size={17} />{" "}
+              {usageFilter === "COMMENT_GIF" ? "New GIF" : "New reaction"}
             </button>
           ) : null
         }
@@ -408,7 +437,7 @@ export function ReactionLibraryPanel({
                 <span>Search library</span>
                 <input
                   value={query}
-                  disabled={dirty}
+                  disabled={dirty || optimizing}
                   title={
                     dirty
                       ? "Save or reset the current reaction before searching."
@@ -425,7 +454,7 @@ export function ReactionLibraryPanel({
                 <span>Status</span>
                 <select
                   value={state}
-                  disabled={dirty}
+                  disabled={dirty || optimizing}
                   title={
                     dirty
                       ? "Save or reset the current reaction before filtering."
@@ -442,10 +471,30 @@ export function ReactionLibraryPanel({
                   <option value="ARCHIVED">Archived</option>
                 </select>
               </label>
+              <label className="admin-search-field">
+                <span>Library type</span>
+                <select
+                  value={usageFilter}
+                  disabled={dirty || optimizing}
+                  onChange={(event) => {
+                    setUsageFilter(
+                      event.target.value as
+                        | "ALL"
+                        | "REACTION"
+                        | "COMMENT_GIF",
+                    );
+                    setPage(1);
+                  }}
+                >
+                  <option value="ALL">Reactions and GIFs</option>
+                  <option value="REACTION">Reaction buttons</option>
+                  <option value="COMMENT_GIF">Comment GIFs</option>
+                </select>
+              </label>
               <button
                 className="button button-ghost"
                 type="button"
-                disabled={dirty}
+                disabled={dirty || optimizing}
                 title={
                   dirty
                     ? "Save or reset the current reaction before refreshing."
@@ -464,6 +513,7 @@ export function ReactionLibraryPanel({
                 <button
                   type="button"
                   key={reaction.id}
+                  disabled={optimizing}
                   aria-current={draft.id === reaction.id ? "true" : undefined}
                   onClick={() => select(reaction)}
                 >
@@ -476,7 +526,13 @@ export function ReactionLibraryPanel({
                   </span>
                   <span>
                     <strong>{reaction.name}</strong>
-                    <small>{reaction.usageCount} uses · order {reaction.displayOrder}</small>
+                    <small>
+                      {reaction.usageKind === "COMMENT_GIF"
+                        ? "Comment GIF"
+                        : "Reaction"}{" "}
+                      · {reaction.usageCount} uses · order{" "}
+                      {reaction.displayOrder}
+                    </small>
                   </span>
                   <em>
                     {reaction.isArchived
@@ -494,7 +550,7 @@ export function ReactionLibraryPanel({
                 </span>
                 <button
                   type="button"
-                  disabled={page <= 1 || dirty}
+                  disabled={page <= 1 || dirty || optimizing}
                   title={
                     dirty
                       ? "Save or reset this reaction before changing pages."
@@ -506,7 +562,7 @@ export function ReactionLibraryPanel({
                 </button>
                 <button
                   type="button"
-                  disabled={page * 24 >= total || dirty}
+                  disabled={page * 24 >= total || dirty || optimizing}
                   title={
                     dirty
                       ? "Save or reset this reaction before changing pages."
@@ -524,8 +580,12 @@ export function ReactionLibraryPanel({
                 <summary className="admin-section-heading">
                   <ArrowsDownUp size={22} />
                   <div>
-                    <h3>Reaction details</h3>
-                    <p>Names, accessible labels, availability, and display order are stored centrally.</p>
+                    <h3>
+                      {draft.usageKind === "COMMENT_GIF"
+                        ? "GIF details"
+                        : "Reaction details"}
+                    </h3>
+                    <p>Names, accessible labels, availability, category, and display order are stored centrally.</p>
                   </div>
                 </summary>
                 <div className="admin-editor-box-body">
@@ -620,6 +680,30 @@ export function ReactionLibraryPanel({
                     />
                   </label>
                   <label>
+                    Library use
+                    <select
+                      value={draft.usageKind}
+                      disabled={saving || optimizing}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          usageKind: event.target.value as Draft["usageKind"],
+                          emojiFallback:
+                            event.target.value === "COMMENT_GIF"
+                              ? ""
+                              : current.emojiFallback,
+                          isActive:
+                            event.target.value === "COMMENT_GIF"
+                              ? false
+                              : current.isActive,
+                        }))
+                      }
+                    >
+                      <option value="REACTION">Reaction button</option>
+                      <option value="COMMENT_GIF">Comment GIF library</option>
+                    </select>
+                  </label>
+                  <label>
                     Display order
                     <input
                       type="number"
@@ -711,7 +795,10 @@ export function ReactionLibraryPanel({
                       }))
                     }
                   />
-                  Active and available in the reader reaction picker
+                  Active and available in the reader{" "}
+                  {draft.usageKind === "COMMENT_GIF"
+                    ? "GIF picker"
+                    : "reaction picker"}
                   </label>
                 </div>
               </details>
@@ -720,8 +807,16 @@ export function ReactionLibraryPanel({
                 <summary className="admin-section-heading">
                   <ImageIcon size={22} />
                   <div>
-                    <h3>Reaction asset &amp; preview</h3>
-                    <p>Images and GIFs are optimized automatically before upload.</p>
+                    <h3>
+                      {draft.usageKind === "COMMENT_GIF"
+                        ? "GIF asset & preview"
+                        : "Reaction asset & preview"}
+                    </h3>
+                    <p>
+                      {draft.usageKind === "COMMENT_GIF"
+                        ? "Use an animated GIF; it is optimized and verified before readers can select it."
+                        : "Images and animations are optimized automatically before upload."}
+                    </p>
                   </div>
                 </summary>
                 <div className="admin-editor-box-body">
@@ -734,15 +829,27 @@ export function ReactionLibraryPanel({
                     accept="image/png,image/webp,image/gif,image/jpeg"
                     busy={saving || optimizing}
                     onSelect={(file) => {
+                      const sequence = ++optimizationSequence.current;
                       if (!file) {
+                        setOptimizing(false);
                         setAssetFile(null);
                         setOptimizationNote("");
                         return;
                       }
+                      const usageKind = draft.usageKind;
                       setOptimizing(true);
                       setOptimizationNote("Optimizing image…");
                       void optimizeReactionAsset(file)
                         .then((optimized) => {
+                          if (sequence !== optimizationSequence.current) return;
+                          if (
+                            usageKind === "COMMENT_GIF" &&
+                            !optimized.animated
+                          ) {
+                            throw new Error(
+                              "Comment GIF entries require an animated GIF file.",
+                            );
+                          }
                           if (optimized.optimizedBytes > REACTION_ASSET_LIMIT) {
                             throw new Error("The optimized asset is still larger than 1.25 MB.");
                           }
@@ -753,6 +860,7 @@ export function ReactionLibraryPanel({
                           );
                         })
                         .catch((error) => {
+                          if (sequence !== optimizationSequence.current) return;
                           setAssetFile(null);
                           setOptimizationNote("");
                           setMessage({
@@ -763,7 +871,11 @@ export function ReactionLibraryPanel({
                                 : "The reaction image could not be optimized.",
                           });
                         })
-                        .finally(() => setOptimizing(false));
+                        .finally(() => {
+                          if (sequence === optimizationSequence.current) {
+                            setOptimizing(false);
+                          }
+                        });
                     }}
                     onRemove={() => {
                       setOptimizationNote("");
@@ -805,7 +917,7 @@ export function ReactionLibraryPanel({
                   <button
                     className="button button-danger"
                     type="button"
-                    disabled={saving}
+                    disabled={saving || optimizing}
                     onClick={() =>
                       setRemoveTarget(
                         reactions.find((reaction) => reaction.id === draft.id) ?? null,
@@ -825,10 +937,12 @@ export function ReactionLibraryPanel({
                 <button
                   className="button button-secondary"
                   type="button"
-                  disabled={!dirty || saving}
+                  disabled={!dirty || saving || optimizing}
                   onClick={() => {
                     setDraft(saved);
                     setAssetFile(null);
+                    setRemoveAsset(false);
+                    setOptimizationNote("");
                   }}
                 >
                   Reset
@@ -844,7 +958,15 @@ export function ReactionLibraryPanel({
                     draft.accessibleLabel.length < 2
                   }
                 >
-                  {saving ? "Saving…" : draft.id ? "Save reaction" : "Create reaction"}
+                  {saving
+                    ? "Saving…"
+                    : draft.id
+                      ? draft.usageKind === "COMMENT_GIF"
+                        ? "Save GIF"
+                        : "Save reaction"
+                      : draft.usageKind === "COMMENT_GIF"
+                        ? "Create GIF"
+                        : "Create reaction"}
                 </button>
               </footer>
             </form>

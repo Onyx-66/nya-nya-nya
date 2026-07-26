@@ -26,6 +26,7 @@ export const storePreviewConfigSchema = z.object({
   from: hexColor,
   to: hexColor,
   accent: hexColor,
+  commentOpacity: z.number().int().min(10).max(100).default(65),
   symbol: z
     .enum([
       "SUN",

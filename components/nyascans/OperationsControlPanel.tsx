@@ -34,6 +34,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { CommercialSettingsPanel } from "@/components/nyascans/CommercialSettingsPanel";
@@ -43,6 +44,7 @@ import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold
 import { CommerceOfferManager } from "@/components/nyascans/admin/CommerceOfferManager";
 import { NewSeriesQueuePanel } from "@/components/nyascans/admin/NewSeriesQueuePanel";
 import { SeriesManagementPanel } from "@/components/nyascans/admin/SeriesManagementPanel";
+import { SupportTicketsAdminPanel } from "@/components/nyascans/admin/SupportTicketsAdminPanel";
 import {
   StoreManagementWorkspace,
   type StoreAdminCategory,
@@ -82,9 +84,11 @@ type AnalyticsData = {
   endAt: string;
   generatedAt: string;
   refreshAfterSeconds: number;
+  selectedRegion: string;
   summary: {
     activeSessions5m: number;
     uniqueSessions: number;
+    uniqueVisitors: number;
     views: number;
     chapterStarts: number;
     chapterCompletions: number;
@@ -100,6 +104,11 @@ type AnalyticsData = {
     newChapters: number;
     uploadSessions: number;
     storePurchases: number;
+    registeredUsers: number;
+    newVisitors: number;
+    shardsCollected: number;
+    shardsSpent: number;
+    shardsOutstanding: number;
   };
   timeline: Array<{
     bucket: string;
@@ -144,6 +153,25 @@ type AnalyticsData = {
     totalMinor: number;
     isTest: boolean;
   }>;
+  purchaseRankedSeries: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    purchases: number;
+    pawCoinsSpent: number;
+  }>;
+  topUsers: Array<{
+    id: string;
+    displayName: string;
+    email: string;
+    comments: number;
+    spins: number;
+    purchases: number;
+  }>;
+  regionScope: {
+    region: string;
+    metrics: string[];
+  } | null;
 };
 
 type HealthData = {
@@ -196,6 +224,7 @@ type AdminChapter = {
   seriesId: string;
   seriesSlug: string;
   seriesTitle: string;
+  teamName: string | null;
   entitlementCount: number;
 };
 
@@ -234,12 +263,16 @@ type AdminUser = {
   primaryRole:
     | "OWNER"
     | "ADMINISTRATOR"
+    | "MANAGER"
     | "MODERATOR"
     | "TEAM_LEADER"
     | "UPLOADER"
     | "USER";
+  roles: AdminUser["primaryRole"][];
+  accessRevision: number;
   status: "ACTIVE" | "SUSPENDED";
   teamCount: number;
+  avatarUrl: string | null;
   updatedAt: string;
 };
 
@@ -264,6 +297,7 @@ type PanelProps = {
   section: string;
   subsection?: string;
   actorRole: string;
+  actorRoles: string[];
   canUpload: boolean;
   canRequestSeries: boolean;
   canManageTeam: boolean;
@@ -501,7 +535,7 @@ function AdminOverview({
               </div>
               {[
                 ["Upload chapters", "Upload center", CloudArrowUp],
-                ["Add a series", "Series", Plus],
+                ["Edit existing series", "Series", Books],
                 ["Control teams", "Teams", UsersThree],
                 ["Set colors & gradients", "Appearance", Pulse],
               ].map(([label, section, Icon]) => (
@@ -1302,7 +1336,33 @@ function TeamsManager() {
   );
 }
 
-function UsersManager({ actorRole }: { actorRole: string }) {
+const assignableRoles: ReadonlyArray<{
+  value: AdminUser["primaryRole"];
+  label: string;
+  description: string;
+}> = [
+  { value: "OWNER", label: "Owner", description: "Full access, including ownership controls." },
+  { value: "ADMINISTRATOR", label: "Administrator", description: "Full administrative access." },
+  { value: "MANAGER", label: "Manager", description: "Series request queue and support tickets only." },
+  { value: "MODERATOR", label: "Moderator", description: "Community moderation tools." },
+  { value: "TEAM_LEADER", label: "Team leader", description: "Assigned-team publishing controls." },
+  { value: "UPLOADER", label: "Uploader", description: "Assigned-team chapter uploads." },
+  { value: "USER", label: "Reader", description: "Reader account access." },
+];
+
+const ownerManagedRoles = new Set<AdminUser["primaryRole"]>([
+  "OWNER",
+  "ADMINISTRATOR",
+  "MANAGER",
+]);
+
+function UsersManager({
+  actorRole,
+  actorRoles,
+}: {
+  actorRole: string;
+  actorRoles: string[];
+}) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [currentActorId, setCurrentActorId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1310,6 +1370,7 @@ function UsersManager({ actorRole }: { actorRole: string }) {
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [kind, setKind] = useState<"success" | "error">("success");
+  const ownerActor = actorRoles.includes("OWNER") || actorRole === "OWNER";
 
   async function load() {
     setLoading(true);
@@ -1338,8 +1399,21 @@ function UsersManager({ actorRole }: { actorRole: string }) {
 
   async function update(
     user: AdminUser,
-    patch: Partial<Pick<AdminUser, "primaryRole" | "status">>,
+    patch: Partial<Pick<AdminUser, "roles" | "status">>,
   ) {
+    const nextRoles = patch.roles ?? user.roles;
+    if (
+      !ownerActor &&
+      ([...user.roles, ...nextRoles].some((role) =>
+        ownerManagedRoles.has(role),
+      ))
+    ) {
+      setMessage(
+        "Only an Owner can assign Owner, Administrator, or Manager roles or change an account that holds one.",
+      );
+      setKind("error");
+      return;
+    }
     setBusy(user.id);
     setMessage("");
     try {
@@ -1348,7 +1422,7 @@ function UsersManager({ actorRole }: { actorRole: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id: user.id,
-          expectedPrimaryRole: user.primaryRole,
+          expectedAccessRevision: user.accessRevision,
           expectedStatus: user.status,
           ...patch,
         }),
@@ -1369,7 +1443,7 @@ function UsersManager({ actorRole }: { actorRole: string }) {
   }
 
   const visible = users.filter((user) =>
-    `${user.displayName} ${user.email} ${user.primaryRole} ${user.status}`
+    `${user.displayName} ${user.email} ${user.roles.join(" ")} ${user.status}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -1380,7 +1454,11 @@ function UsersManager({ actorRole }: { actorRole: string }) {
         icon={<UserGear size={18} />}
         kicker="Access control"
         title="Users and roles"
-        description="Search accounts, assign the minimum required role, and suspend access. Every change is server-authorized and written to the audit log."
+        description={
+          ownerActor
+            ? "Search accounts, assign the minimum required roles, and suspend access. Every change is server-authorized and written to the audit log."
+            : "Assign operational roles and suspend eligible accounts. Owner, Administrator, and Manager roles and accounts are owner-only."
+        }
         actions={
           <label className="control-search">
             <MagnifyingGlass size={17} />
@@ -1399,14 +1477,24 @@ function UsersManager({ actorRole }: { actorRole: string }) {
         <div className="user-admin-list">
           {visible.map((user) => {
             const isSelf = user.id === currentActorId;
-            const protectedRole = ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(
-              user.primaryRole,
+            const protectedRole = user.roles.some((role) =>
+              ownerManagedRoles.has(role),
             );
-            const protectedForActor = actorRole !== "OWNER" && protectedRole;
+            const protectedForActor = !ownerActor && protectedRole;
+            const accessDisabled =
+              isSelf || protectedForActor || busy === user.id;
             return (
               <article key={user.id}>
-                <span className="user-admin-avatar">
-                  {user.displayName.slice(0, 1).toUpperCase()}
+                <span className="user-admin-avatar" aria-hidden="true">
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt=""
+                      loading="lazy"
+                    />
+                  ) : (
+                    user.displayName.slice(0, 1).toUpperCase()
+                  )}
                 </span>
                 <div>
                   <strong>
@@ -1416,36 +1504,69 @@ function UsersManager({ actorRole }: { actorRole: string }) {
                   <small>{user.email}</small>
                   <span>{Number(user.teamCount)} team assignment{Number(user.teamCount) === 1 ? "" : "s"}</span>
                 </div>
-                <label>
-                  <span>Role</span>
-                  <select
-                    value={user.primaryRole}
-                    disabled={isSelf || protectedForActor || busy === user.id}
-                    title={
-                      protectedForActor
-                        ? "Only the owner may change a protected administrative role."
+                <fieldset
+                  className="user-role-picker"
+                  disabled={accessDisabled}
+                  title={
+                    isSelf
+                      ? "Use a second authorized account to change your own access."
+                      : protectedForActor
+                        ? "Only an Owner may change an Owner, Administrator, or Manager account."
+                      : undefined
+                  }
+                >
+                  <legend>Roles</legend>
+                  <div className="user-role-chips" aria-label={`Roles for ${user.displayName}`}>
+                    {assignableRoles.map((role) => {
+                      const checked = user.roles.includes(role.value);
+                      const ownerOnlyRole =
+                        !ownerActor && ownerManagedRoles.has(role.value);
+                      return (
+                        <label
+                          key={role.value}
+                          title={
+                            ownerOnlyRole
+                              ? `${role.description} Owner-only assignment.`
+                              : role.description
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={ownerOnlyRole}
+                            onChange={(event) => {
+                              const roles = event.target.checked
+                                ? [...new Set([...user.roles, role.value])]
+                                : user.roles.filter((entry) => entry !== role.value);
+                              if (!roles.length) return;
+                              void update(user, { roles });
+                            }}
+                          />
+                          <span>{role.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {!ownerActor ? (
+                    <small>
+                      Owner, Administrator, and Manager roles—and accounts that
+                      hold them—can only be changed by an Owner.
+                    </small>
+                  ) : null}
+                </fieldset>
+                <label
+                  title={
+                    isSelf
+                      ? "Use a second authorized account to change your own status."
+                      : protectedForActor
+                        ? "Only an Owner may change this protected account."
                         : undefined
-                    }
-                    onChange={(event) =>
-                      void update(user, {
-                        primaryRole: event.target
-                          .value as AdminUser["primaryRole"],
-                      })
-                    }
-                  >
-                    <option value="OWNER">Owner</option>
-                    <option value="MODERATOR">Moderator</option>
-                    <option value="USER">Reader</option>
-                    <option value="UPLOADER">Uploader</option>
-                    <option value="TEAM_LEADER">Team leader</option>
-                    <option value="ADMINISTRATOR">Administrator</option>
-                  </select>
-                </label>
-                <label>
+                  }
+                >
                   <span>Status</span>
                   <select
                     value={user.status}
-                    disabled={isSelf || protectedForActor || busy === user.id}
+                    disabled={accessDisabled}
                     onChange={(event) =>
                       void update(user, {
                         status: event.target.value as AdminUser["status"],
@@ -1471,6 +1592,415 @@ function UsersManager({ actorRole }: { actorRole: string }) {
   );
 }
 
+type UsersControlView = "overview" | "activity" | "purchases" | "balances";
+
+type UsersControlPayload = {
+  view: UsersControlView;
+  summary: {
+    registeredUsers: number;
+    newUsers30d: number;
+    suspendedUsers: number;
+    activeReaders30d: number;
+    purchasedChapters: number;
+  };
+  rows: Array<Record<string, unknown>>;
+  ownerCanAdjust: boolean;
+};
+
+function UsersControlPanel({
+  view,
+  actorRoles,
+}: {
+  view: UsersControlView;
+  actorRoles: string[];
+}) {
+  const { settings: commercial } = useCommercialSettings();
+  const coinPlural = commercial.economy.coinPlural;
+  const [payload, setPayload] = useState<UsersControlPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState(false);
+  const [adjustingUser, setAdjustingUser] = useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [adjustment, setAdjustment] = useState({
+    currency: "SHARDS" as "SHARDS" | "ONYX",
+    delta: 0,
+    reason: "",
+  });
+  const [adjustmentBusy, setAdjustmentBusy] = useState(false);
+  const loadSequenceRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const adjustmentKeyRef = useRef("");
+  const adjustmentSubmittingRef = useRef(false);
+  const ownerActor = actorRoles.includes("OWNER");
+
+  async function load(
+    search = query,
+    options: { clearMessage?: boolean } = {},
+  ) {
+    const sequence = loadSequenceRef.current + 1;
+    loadSequenceRef.current = sequence;
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    setLoading(true);
+    if (options.clearMessage !== false) setMessage("");
+    try {
+      const response = await fetch(
+        `/api/v1/admin/user-control?view=${view}&query=${encodeURIComponent(search)}`,
+        { cache: "no-store", signal: controller.signal },
+      );
+      const next = await readJson<UsersControlPayload>(response);
+      if (sequence !== loadSequenceRef.current) return;
+      setPayload(next);
+      setError(false);
+    } catch (reason) {
+      if (
+        controller.signal.aborted ||
+        sequence !== loadSequenceRef.current
+      ) {
+        return;
+      }
+      setMessage(
+        reason instanceof Error ? reason.message : "Users Control could not be loaded.",
+      );
+      setError(true);
+    } finally {
+      if (sequence === loadSequenceRef.current) {
+        if (loadControllerRef.current === controller) {
+          loadControllerRef.current = null;
+        }
+        setLoading(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setPayload(null);
+      void load("");
+    }, 0);
+    return () => {
+      window.clearTimeout(timeout);
+      loadSequenceRef.current += 1;
+      loadControllerRef.current?.abort();
+      loadControllerRef.current = null;
+    };
+    // Reload only when the selected Users Control page changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  function updateAdjustment(
+    patch: Partial<typeof adjustment>,
+  ) {
+    if (adjustmentSubmittingRef.current) return;
+    adjustmentKeyRef.current = "";
+    setAdjustment((current) => ({ ...current, ...patch }));
+  }
+
+  function openAdjustment(row: Record<string, unknown>) {
+    if (adjustmentSubmittingRef.current) return;
+    adjustmentKeyRef.current = "";
+    setAdjustment({ currency: "SHARDS", delta: 0, reason: "" });
+    setAdjustingUser(row);
+    setMessage("");
+  }
+
+  function closeAdjustment() {
+    if (adjustmentSubmittingRef.current) return;
+    adjustmentKeyRef.current = "";
+    setAdjustment({ currency: "SHARDS", delta: 0, reason: "" });
+    setAdjustingUser(null);
+  }
+
+  async function applyAdjustment(event: FormEvent) {
+    event.preventDefault();
+    if (
+      adjustmentSubmittingRef.current ||
+      !ownerActor ||
+      !payload?.ownerCanAdjust ||
+      !adjustingUser ||
+      !Number(adjustment.delta) ||
+      adjustment.reason.trim().length < 8
+    ) {
+      return;
+    }
+    adjustmentSubmittingRef.current = true;
+    setAdjustmentBusy(true);
+    setMessage("");
+    const idempotencyKey =
+      adjustmentKeyRef.current || crypto.randomUUID();
+    adjustmentKeyRef.current = idempotencyKey;
+    try {
+      const response = await fetch("/api/v1/admin/balance-adjustments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userId: String(adjustingUser.id),
+          currency: adjustment.currency,
+          delta: Number(adjustment.delta),
+          reason: adjustment.reason,
+          idempotencyKey,
+        }),
+      });
+      const result = await readJson<{ created: boolean }>(response);
+      adjustmentKeyRef.current = "";
+      setMessage(
+        result.created
+          ? "The balanced ledger adjustment was posted and audited."
+          : "The previous adjustment request was confirmed without posting it twice.",
+      );
+      setError(false);
+      setAdjustingUser(null);
+      setAdjustment({ currency: "SHARDS", delta: 0, reason: "" });
+      await load(query, { clearMessage: false });
+    } catch (reason) {
+      setMessage(
+        reason instanceof Error ? reason.message : "The balance could not be adjusted.",
+      );
+      setError(true);
+    } finally {
+      adjustmentSubmittingRef.current = false;
+      setAdjustmentBusy(false);
+    }
+  }
+
+  const labels: Record<UsersControlView, [string, string]> = {
+    overview: [
+      "User overview",
+      "Account health, engagement, chapter purchases, and the readers who need attention.",
+    ],
+    activity: [
+      "User activity",
+      "Audited account, publishing, moderation, and economy events in one timeline.",
+    ],
+    purchases: [
+      "Purchases & unlocks",
+      "Real-money orders and chapter unlock activity without mixing fiat and internal currencies.",
+    ],
+    balances: [
+      "Balances & adjustments",
+      `${coinPlural} and Shard balances with owner-only, append-only ledger corrections.`,
+    ],
+  };
+  const [title, description] = labels[view];
+
+  return (
+    <section className="control-panel users-control-panel">
+      <PanelHeader
+        icon={view === "activity" ? <Pulse size={18} /> : <Database size={18} />}
+        kicker="Users Control"
+        title={title}
+        description={description}
+        actions={
+          <form
+            className="control-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void load(query);
+            }}
+          >
+            <MagnifyingGlass size={17} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search users or references"
+            />
+            <button type="submit" disabled={loading}>Search</button>
+          </form>
+        }
+      />
+      {payload ? (
+        <div className="users-control-metrics">
+          {[
+            ["Registered", payload.summary.registeredUsers],
+            ["New · 30d", payload.summary.newUsers30d],
+            ["Active readers · 30d", payload.summary.activeReaders30d],
+            ["Purchased chapters", payload.summary.purchasedChapters],
+            ["Suspended", payload.summary.suspendedUsers],
+          ].map(([label, value]) => (
+            <article key={String(label)}>
+              <span>{label}</span>
+              <strong>{Number(value).toLocaleString()}</strong>
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {loading ? (
+        <LoadingPanel />
+      ) : payload?.rows.length ? (
+        <div className="users-control-table-wrap">
+          <table className="users-control-table">
+            <thead>
+              <tr>
+                {view === "balances" ? (
+                  <>
+                    <th>User</th>
+                    <th>{coinPlural}</th>
+                    <th>Shards</th>
+                    <th>Status</th>
+                    <th><span className="sr-only">Actions</span></th>
+                  </>
+                ) : view === "overview" ? (
+                  <>
+                    <th>User</th>
+                    <th>Comments</th>
+                    <th>Spins</th>
+                    <th>Chapters read</th>
+                    <th>Purchases</th>
+                  </>
+                ) : (
+                  <>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Type</th>
+                    <th>Reference</th>
+                    <th>Amount / result</th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {payload.rows.map((row, index) => (
+                <tr key={String(row.id ?? index)}>
+                  {view === "balances" ? (
+                    <>
+                      <td>
+                        <span className="user-control-identity">
+                          {row.avatarUrl ? (
+                            <img src={String(row.avatarUrl)} alt="" />
+                          ) : (
+                            <i>{String(row.displayName ?? "?").slice(0, 1)}</i>
+                          )}
+                          <span>
+                            <strong>{String(row.displayName ?? "Reader")}</strong>
+                            <small>{String(row.email ?? "")}</small>
+                          </span>
+                        </span>
+                      </td>
+                      <td>{Number(row.onyxBalance ?? 0).toLocaleString()}</td>
+                      <td>{Number(row.shardsBalance ?? 0).toLocaleString()}</td>
+                      <td>{String(row.status ?? "")}</td>
+                      <td>
+                        {payload.ownerCanAdjust && actorRoles.includes("OWNER") ? (
+                          <button
+                            type="button"
+                            className="button button-secondary button-compact"
+                            disabled={adjustmentBusy}
+                            onClick={() => openAdjustment(row)}
+                          >
+                            Adjust
+                          </button>
+                        ) : null}
+                      </td>
+                    </>
+                  ) : view === "overview" ? (
+                    <>
+                      <td><strong>{String(row.displayName ?? "Reader")}</strong><small>{String(row.email ?? "")}</small></td>
+                      <td>{Number(row.comments ?? 0).toLocaleString()}</td>
+                      <td>{Number(row.spins ?? 0).toLocaleString()}</td>
+                      <td>{Number(row.chaptersRead ?? 0).toLocaleString()}</td>
+                      <td>{Number(row.purchases ?? 0).toLocaleString()}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
+                      <td><strong>{String(row.displayName ?? "System")}</strong><small>{String(row.email ?? "")}</small></td>
+                      <td>{String(row.activityType ?? row.kind ?? "Activity").replaceAll("_", " ")}</td>
+                      <td>{String(row.targetId ?? row.id ?? "—")}</td>
+                      <td>{row.amount !== undefined ? `${Number(row.amount).toLocaleString()} ${String(row.currency ?? "")}` : String(row.result ?? row.status ?? "—")}</td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyPanel
+          title="No matching user records"
+          body="Change the filter or search term and try again."
+        />
+      )}
+      {adjustingUser ? (
+        <form className="balance-adjustment-card" onSubmit={applyAdjustment}>
+          <header>
+            <div>
+              <span>Owner action</span>
+              <h3>Adjust {String(adjustingUser.displayName)}’s balance</h3>
+            </div>
+            <button
+              type="button"
+              disabled={adjustmentBusy}
+              aria-label="Close balance adjustment"
+              onClick={closeAdjustment}
+            >
+              <X size={16} />
+            </button>
+          </header>
+          <label>
+            <span>Currency</span>
+            <select
+              value={adjustment.currency}
+              disabled={adjustmentBusy}
+              onChange={(event) =>
+                updateAdjustment({
+                  currency: event.target.value as "SHARDS" | "ONYX",
+                })
+              }
+            >
+              <option value="SHARDS">Shards</option>
+              <option value="ONYX">{coinPlural}</option>
+            </select>
+          </label>
+          <label>
+            <span>Signed amount</span>
+            <input
+              type="number"
+              required
+              value={adjustment.delta}
+              disabled={adjustmentBusy}
+              onChange={(event) =>
+                updateAdjustment({
+                  delta: Number(event.target.value),
+                })
+              }
+            />
+            <small>Use a negative value to remove balance.</small>
+          </label>
+          <label className="balance-adjustment-reason">
+            <span>Reason for audit log</span>
+            <textarea
+              minLength={8}
+              required
+              value={adjustment.reason}
+              disabled={adjustmentBusy}
+              onChange={(event) =>
+                updateAdjustment({
+                  reason: event.target.value,
+                })
+              }
+            />
+          </label>
+          <button
+            className="button button-primary"
+            disabled={
+              adjustmentBusy ||
+              !adjustment.delta ||
+              adjustment.reason.trim().length < 8
+            }
+          >
+            {adjustmentBusy ? "Posting adjustment…" : "Post balanced adjustment"}
+          </button>
+        </form>
+      ) : null}
+      {message ? <PanelMessage kind={error ? "error" : "success"}>{message}</PanelMessage> : null}
+    </section>
+  );
+}
+
 type ReviewChapter = {
   id: string;
   slug: string;
@@ -1485,6 +2015,9 @@ type ReviewChapter = {
   seriesSlug: string;
   seriesTitle: string;
   teamName: string | null;
+  replacementChapterId: string | null;
+  replacementChapterNumber: string | null;
+  replacementChapterTitle: string | null;
 };
 
 function ReviewQueue({ admin }: { admin: boolean }) {
@@ -1608,6 +2141,15 @@ function ReviewQueue({ admin }: { admin: boolean }) {
                     {chapter.language.toUpperCase()} · v{chapter.version} ·{" "}
                     {formatDate(chapter.createdAt)}
                   </small>
+                  {chapter.replacementChapterId ? (
+                    <span className="review-replacement-note">
+                      Replacement request · existing chapter{" "}
+                      {chapter.replacementChapterNumber}
+                      {chapter.replacementChapterTitle
+                        ? ` · ${chapter.replacementChapterTitle}`
+                        : ""}
+                    </span>
+                  ) : null}
                 </div>
                 <div>
                   <span className={`control-status status-${chapter.state.toLowerCase()}`}>
@@ -1639,7 +2181,11 @@ function ReviewQueue({ admin }: { admin: boolean }) {
                           disabled={busy === chapter.id}
                           onClick={() => void transition(chapter, "PUBLISH")}
                         >
-                          {admin ? "Publish" : "Request publish"}
+                          {chapter.replacementChapterId
+                            ? "Approve replacement"
+                            : admin
+                              ? "Publish"
+                              : "Request publish"}
                         </button>
                         <button
                           type="button"
@@ -1819,6 +2365,7 @@ function ChapterAccessPanel() {
       return (
         !term ||
         chapter.seriesTitle.toLowerCase().includes(term) ||
+        (chapter.teamName ?? "").toLowerCase().includes(term) ||
         chapter.chapterNumber.toLowerCase().includes(term) ||
         chapter.title.toLowerCase().includes(term)
       );
@@ -2033,6 +2580,9 @@ function ChapterAccessPanel() {
                     <small>
                       Chapter {chapter.chapterNumber}
                       {chapter.title ? ` · ${chapter.title}` : ""}
+                      {" · "}
+                      {chapter.teamName ?? "Independent release"} · v
+                      {chapter.version}
                     </small>
                   </span>
                   <span>
@@ -2194,35 +2744,37 @@ function ChapterAccessPanel() {
                     <h4>Publication</h4>
                   </div>
                 </div>
-              <label>
-                <span>Publication state</span>
-                <select
-                  value={form.state}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      state: event.target.value as AdminChapter["state"],
-                    }))
-                  }
-                >
-                  <option value="DRAFT">Draft</option>
-                  <option value="READY_FOR_REVIEW">Ready for review</option>
-                  <option value="PUBLISHED">Published</option>
-                </select>
-              </label>
-                <label>
-                  <span>Release date</span>
-                  <input
-                    type="datetime-local"
-                    value={form.publishedAt}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        publishedAt: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                <div className="chapter-editor-grid">
+                  <label>
+                    <span>Publication state</span>
+                    <select
+                      value={form.state}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          state: event.target.value as AdminChapter["state"],
+                        }))
+                      }
+                    >
+                      <option value="DRAFT">Draft</option>
+                      <option value="READY_FOR_REVIEW">Ready for review</option>
+                      <option value="PUBLISHED">Published</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Release date</span>
+                    <input
+                      type="datetime-local"
+                      value={form.publishedAt}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          publishedAt: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
               </section>
               <section className="chapter-editor-section">
                 <div className="chapter-editor-heading">
@@ -2231,40 +2783,42 @@ function ChapterAccessPanel() {
                     <h4>Access &amp; price</h4>
                   </div>
                 </div>
-              <label>
-                <span>Reader access</span>
-                <select
-                  value={form.accessType}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      accessType: event.target
-                        .value as AdminChapter["accessType"],
-                    }))
-                  }
-                >
-                  <option value="FREE">Free</option>
-                  <option value="PAID">Paid</option>
-                </select>
-              </label>
-              {form.accessType === "PAID" ? (
-                <label>
-                  <span>{commercial.economy.coinPlural} price</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100000}
-                    value={form.priceOnyx}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        priceOnyx: Number(event.target.value),
-                      }))
-                    }
-                    required
-                  />
-                </label>
-              ) : null}
+                <div className="chapter-editor-grid">
+                  <label>
+                    <span>Reader access</span>
+                    <select
+                      value={form.accessType}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          accessType: event.target
+                            .value as AdminChapter["accessType"],
+                        }))
+                      }
+                    >
+                      <option value="FREE">Free</option>
+                      <option value="PAID">Paid</option>
+                    </select>
+                  </label>
+                  {form.accessType === "PAID" ? (
+                    <label>
+                      <span>{commercial.economy.coinPlural} price</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100000}
+                        value={form.priceOnyx}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            priceOnyx: Number(event.target.value),
+                          }))
+                        }
+                        required
+                      />
+                    </label>
+                  ) : null}
+                </div>
               </section>
               <section className="chapter-editor-section">
                 <div className="chapter-editor-heading">
@@ -2444,6 +2998,7 @@ function AnalyticsPanel() {
     return date.toISOString().slice(0, 10);
   });
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [region, setRegion] = useState("ALL");
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -2454,10 +3009,11 @@ function AnalyticsPanel() {
       if (running || document.visibilityState !== "visible") return;
       running = true;
       try {
-        const query =
+        const rangeQuery =
           range === "custom"
             ? `range=custom&start=${encodeURIComponent(customStart)}&end=${encodeURIComponent(customEnd)}`
             : `range=${range}`;
+        const query = `${rangeQuery}&region=${encodeURIComponent(region)}`;
         const payload = await fetch(
           `/api/v1/admin/analytics?${query}`,
           { signal: controller.signal, cache: "no-store" },
@@ -2487,9 +3043,16 @@ function AnalyticsPanel() {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [customEnd, customStart, range, refreshKey]);
+  }, [customEnd, customStart, range, refreshKey, region]);
 
-  const activeData = data?.range === range ? data : null;
+  const expectedRegion =
+    region.trim().toUpperCase() === "UNKNOWN"
+      ? "Unknown"
+      : region.trim().toUpperCase();
+  const activeData =
+    data?.range === range && data.selectedRegion === expectedRegion
+      ? data
+      : null;
   const timeline = activeData?.timeline ?? [];
   const chartMaximum = Math.max(
     1,
@@ -2566,6 +3129,17 @@ function AnalyticsPanel() {
             {label}
           </button>
         ))}
+        <label className="analytics-region-filter">
+          <span>Country</span>
+          <select value={region} onChange={(event) => setRegion(event.target.value)}>
+            <option value="ALL">All countries</option>
+            {(data?.regions ?? []).map((entry) => (
+              <option key={entry.regionCode} value={entry.regionCode}>
+                {entry.regionCode}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       {range === "custom" ? (
         <div className="analytics-custom-range">
@@ -2610,7 +3184,7 @@ function AnalyticsPanel() {
               [
                 "Unique sessions",
                 activeData.summary.uniqueSessions,
-                `Measured in the selected ${range} range`,
+                `${activeData.summary.uniqueVisitors.toLocaleString("en-US")} persistent visitors in the selected ${range} range`,
               ],
               [
                 "Page views",
@@ -2635,7 +3209,17 @@ function AnalyticsPanel() {
               [
                 "New users",
                 activeData.summary.newUsers,
-                "Accounts created in this period",
+                `${activeData.summary.registeredUsers.toLocaleString("en-US")} registered total`,
+              ],
+              [
+                "New visitors",
+                activeData.summary.newVisitors,
+                "Privacy-safe browsers first seen in this period",
+              ],
+              [
+                "Shards collected",
+                activeData.summary.shardsCollected,
+                `${activeData.summary.shardsSpent.toLocaleString("en-US")} spent · ${activeData.summary.shardsOutstanding.toLocaleString("en-US")} outstanding`,
               ],
               [
                 "Store purchases",
@@ -2662,6 +3246,14 @@ function AnalyticsPanel() {
               </article>
             ))}
           </div>
+          {activeData.regionScope ? (
+            <p className="analytics-scope-note" role="note">
+              Country filter <strong>{activeData.regionScope.region}</strong>{" "}
+              applies to visit, reader, timeline, chapter, and series activity.
+              Account, community, purchase, and economy totals remain global
+              because those canonical records do not store a visitor country.
+            </p>
+          ) : null}
           <section className="analytics-chart-card">
             <div className="control-section-heading">
               <div>
@@ -2673,12 +3265,18 @@ function AnalyticsPanel() {
                 <span><i className="starts" /> Chapter starts</span>
               </div>
             </div>
-            <svg
-              className="analytics-line-chart"
-              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-              role="img"
-              aria-label="Line chart of page views and chapter starts"
+            <div
+              className="analytics-chart-scroll"
+              role="region"
+              aria-label="Scrollable activity chart"
+              tabIndex={0}
             >
+              <svg
+                className="analytics-line-chart"
+                viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                role="img"
+                aria-label="Line chart of page views and chapter starts"
+              >
               {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
                 const y = top + plotHeight - ratio * plotHeight;
                 return (
@@ -2695,6 +3293,45 @@ function AnalyticsPanel() {
                 className="starts-line"
                 points={linePoints("chapterStarts")}
               />
+              {timeline.map((point, index) => {
+                const x =
+                  left +
+                  (timeline.length > 1
+                    ? (index / (timeline.length - 1)) * plotWidth
+                    : plotWidth / 2);
+                const viewsY =
+                  top +
+                  plotHeight -
+                  (point.views / chartMaximum) * plotHeight;
+                const startsY =
+                  top +
+                  plotHeight -
+                  (point.chapterStarts / chartMaximum) * plotHeight;
+                return (
+                  <g key={`${point.bucket}:${index}`}>
+                    <circle
+                      className="views-point"
+                      cx={x}
+                      cy={viewsY}
+                      r={3.5}
+                    >
+                      <title>
+                        {point.bucket}: {point.views} views
+                      </title>
+                    </circle>
+                    <circle
+                      className="starts-point"
+                      cx={x}
+                      cy={startsY}
+                      r={3.5}
+                    >
+                      <title>
+                        {point.bucket}: {point.chapterStarts} chapter starts
+                      </title>
+                    </circle>
+                  </g>
+                );
+              })}
               {labelIndexes.map((index) => {
                 const point = timeline[index]!;
                 const x =
@@ -2712,7 +3349,31 @@ function AnalyticsPanel() {
                   </text>
                 );
               })}
-            </svg>
+              </svg>
+            </div>
+            <details className="analytics-data-fallback">
+              <summary>View chart data</summary>
+              <div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">UTC period</th>
+                      <th scope="col">Views</th>
+                      <th scope="col">Chapter starts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timeline.map((point) => (
+                      <tr key={point.bucket}>
+                        <th scope="row">{point.bucket.replace("T", " ")}</th>
+                        <td>{point.views}</td>
+                        <td>{point.chapterStarts}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           </section>
           <div className="analytics-detail-grid">
             <section className="analytics-ranking">
@@ -2865,6 +3526,66 @@ function AnalyticsPanel() {
               ) : null}
             </section>
           </div>
+          <div className="analytics-detail-grid analytics-decision-grid">
+            <section className="analytics-ranking">
+              <div className="control-section-heading">
+                <div>
+                  <span>Purchase decisions</span>
+                  <h3>Series ranked by chapter purchases</h3>
+                </div>
+              </div>
+              {activeData.purchaseRankedSeries.length ? (
+                activeData.purchaseRankedSeries.map((series, index) => (
+                  <article key={series.id}>
+                    <b>{String(index + 1).padStart(2, "0")}</b>
+                    <div>
+                      <span>
+                        <strong>{series.title}</strong>
+                        <small>
+                          {coinLabel(series.pawCoinsSpent, commercial)} spent
+                        </small>
+                      </span>
+                    </div>
+                    <em>{series.purchases}</em>
+                  </article>
+                ))
+              ) : (
+                <EmptyPanel
+                  title="No chapter purchases yet"
+                  body="Paid chapter decisions will rank series here."
+                />
+              )}
+            </section>
+            <section className="analytics-ranking">
+              <div className="control-section-heading">
+                <div>
+                  <span>Community & economy</span>
+                  <h3>Top users</h3>
+                </div>
+              </div>
+              {activeData.topUsers.length ? (
+                activeData.topUsers.map((user, index) => (
+                  <article key={user.id}>
+                    <b>{String(index + 1).padStart(2, "0")}</b>
+                    <div>
+                      <span>
+                        <strong>{user.displayName}</strong>
+                        <small>
+                          {user.comments} comments · {user.spins} spins
+                        </small>
+                      </span>
+                    </div>
+                    <em>{user.purchases} buys</em>
+                  </article>
+                ))
+              ) : (
+                <EmptyPanel
+                  title="No ranked users yet"
+                  body="Comments, spins, and purchases appear here as activity arrives."
+                />
+              )}
+            </section>
+          </div>
           <div className="analytics-integrity-strip">
             <span>
               <ChatCircle size={16} />
@@ -2876,8 +3597,8 @@ function AnalyticsPanel() {
             </span>
             <span>
               <CheckCircle size={16} />
-              {activeData.summary.paidOrders.toLocaleString("en-US")} test checkouts ·{" "}
-              ${(activeData.summary.testCheckoutValueMinor / 100).toFixed(2)}
+              {activeData.summary.paidOrders.toLocaleString("en-US")} paid
+              orders · monetary totals stay separated by currency above
             </span>
             <small>
               Checkout totals are labeled test data and are not reported as
@@ -3808,7 +4529,7 @@ function WorkspacePanel({
               ["Comments", workspaceAnalyticsSummary.comments ?? 0],
               ["Reactions", workspaceAnalyticsSummary.reactions ?? 0],
               ["Purchases", workspaceAnalyticsSummary.purchases ?? 0],
-              ["Onyx spent", workspaceAnalyticsSummary.onyxSpent ?? 0],
+              ["Premium coins spent", workspaceAnalyticsSummary.onyxSpent ?? 0],
               ["New series", workspaceAnalyticsSummary.newSeries ?? 0],
               ["New chapters", workspaceAnalyticsSummary.newChapters ?? 0],
               [
@@ -3988,6 +4709,7 @@ export function OperationsControlPanel({
   section,
   subsection,
   actorRole,
+  actorRoles,
   canUpload,
   canRequestSeries,
   canManageTeam,
@@ -4018,7 +4740,10 @@ export function OperationsControlPanel({
   }
   if (section === "Overview") {
     return (
-      <AdminOverview onNavigate={onNavigate} actorRole={actorRole} />
+      <>
+        <AdminOverview onNavigate={onNavigate} actorRole={actorRole} />
+        <AnalyticsPanel />
+      </>
     );
   }
   if (section === "Series") return <SeriesManagementPanel />;
@@ -4027,11 +4752,25 @@ export function OperationsControlPanel({
   if (section === "Teams") {
     return <TeamManagementPanel membersPanel={<TeamsManager />} />;
   }
-  if (section === "Users") return <UsersManager actorRole={actorRole} />;
+  if (section === "Users & roles") {
+    return <UsersManager actorRole={actorRole} actorRoles={actorRoles} />;
+  }
+  if (section === "User activity") {
+    return <UsersControlPanel view="activity" actorRoles={actorRoles} />;
+  }
+  if (section === "Purchases") {
+    return <UsersControlPanel view="purchases" actorRoles={actorRoles} />;
+  }
+  if (section === "Balances") {
+    return <UsersControlPanel view="balances" actorRoles={actorRoles} />;
+  }
+  if (section === "Support tickets") return <SupportTicketsAdminPanel />;
   if (section === "Analytics") return <AnalyticsPanel />;
   if (section === "Commerce") {
     return (
-      <CommerceOfferManager settingsPanel={<CommercialSettingsPanel />} />
+      <CommerceOfferManager
+        settingsPanel={<CommercialSettingsPanel actorRole={actorRole} />}
+      />
     );
   }
   if (section === "Store Management") {

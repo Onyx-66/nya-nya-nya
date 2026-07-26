@@ -4,12 +4,14 @@ import Link from "next/link";
 import { SiteConfigurationPanel } from "@/components/nyascans/SiteConfigurationPanel";
 import { ThemeSettingsPanel } from "@/components/nyascans/ThemeSettingsPanel";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
+import { ThemePalettePresetsPanel } from "@/components/nyascans/admin/ThemePalettePresetsPanel";
 
 type AppearanceTab =
   | "branding"
   | "reader"
   | "footer"
   | "theme"
+  | "palettes"
   | "preview";
 
 export function AppearanceWorkspace({
@@ -39,6 +41,7 @@ export function AppearanceWorkspace({
         { key: "reader", label: "Reader assets" },
         { key: "footer", label: "Footer & social" },
         { key: "theme", label: "Colors, typography & layout" },
+        { key: "palettes", label: "Ready-to-use palettes" },
         { key: "preview", label: "Advanced preview" },
       ]}
       activeTab={tab}
@@ -50,10 +53,13 @@ export function AppearanceWorkspace({
             section={tab as "branding" | "reader" | "footer"}
           />
         ) : null}
-        <div hidden={tab !== "theme"}>
+        <div hidden={tab !== "theme"} aria-hidden={tab !== "theme"}>
           <ThemeSettingsPanel />
         </div>
-        <div hidden={tab !== "preview"}>
+        <div hidden={tab !== "palettes"} aria-hidden={tab !== "palettes"}>
+          <ThemePalettePresetsPanel />
+        </div>
+        {tab === "preview" ? (
           <section className="appearance-component-preview">
             <header>
               <div>
@@ -113,7 +119,7 @@ export function AppearanceWorkspace({
               </article>
             </div>
           </section>
-        </div>
+        ) : null}
       </div>
     </AdminPageScaffold>
   );

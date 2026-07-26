@@ -7,8 +7,10 @@ import {
   Sparkle,
   Trash,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import {
   defaultRewardSettings,
   parseRewardSettings,
@@ -34,6 +36,8 @@ function rewardId() {
 }
 
 export function RewardSettingsPanel() {
+  const { settings: commercial } = useCommercialSettings();
+  const coinPlural = commercial.economy.coinPlural;
   const [settings, setSettings] = useState(defaultRewardSettings);
   const [saved, setSaved] = useState(defaultRewardSettings);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
@@ -43,7 +47,10 @@ export function RewardSettingsPanel() {
     "loading" | "idle" | "saving" | "saved" | "error"
   >("loading");
   const [message, setMessage] = useState("");
+  const [mediaBusy, setMediaBusy] = useState("");
+  const uploadedMediaKeys = useRef(new Set<string>());
   const dirty = JSON.stringify(settings) !== JSON.stringify(saved);
+  const editingLocked = status === "saving" || Boolean(mediaBusy);
   useUnsavedChanges(dirty, "community economy settings");
 
   async function load() {
@@ -97,6 +104,26 @@ export function RewardSettingsPanel() {
         );
       }
       const next = parseRewardSettings(payload.settings);
+      const keepKeys = new Set(
+        [...next.rouletteRewards, ...next.roulettePaidRewards]
+          .map((reward) => reward.imageKey)
+          .filter((key): key is string => Boolean(key)),
+      );
+      const staleKeys = new Set(
+        [
+          ...saved.rouletteRewards,
+          ...saved.roulettePaidRewards,
+        ]
+          .map((reward) => reward.imageKey)
+          .filter(
+            (key): key is string => Boolean(key && !keepKeys.has(key)),
+          ),
+      );
+      for (const key of uploadedMediaKeys.current) {
+        if (!keepKeys.has(key)) staleKeys.add(key);
+      }
+      uploadedMediaKeys.current.clear();
+      if (staleKeys.size) void deleteRewardMedia([...staleKeys]);
       setSettings(next);
       setSaved(next);
       setRevision(Number(payload.revision ?? revision + 1));
@@ -111,6 +138,97 @@ export function RewardSettingsPanel() {
           : "Reward settings could not be saved.",
       );
     }
+  }
+
+  async function deleteRewardMedia(keys: string[]) {
+    await Promise.allSettled(
+      keys.map((key) =>
+        fetch("/api/v1/admin/roulette-reward-media", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key }),
+        }),
+      ),
+    );
+  }
+
+  function discardChanges() {
+    const savedKeys = new Set(
+      [...saved.rouletteRewards, ...saved.roulettePaidRewards]
+        .map((reward) => reward.imageKey)
+        .filter((key): key is string => Boolean(key)),
+    );
+    const orphanKeys = [...uploadedMediaKeys.current].filter(
+      (key) => !savedKeys.has(key),
+    );
+    uploadedMediaKeys.current.clear();
+    if (orphanKeys.length) void deleteRewardMedia(orphanKeys);
+    setSettings(saved);
+    setMessage("");
+    setStatus("idle");
+  }
+
+  async function setRewardImage(
+    pool: "rouletteRewards" | "roulettePaidRewards",
+    rewardId: string,
+    file: File | null,
+  ) {
+    if (!file || editingLocked) return;
+    const reward = settings[pool].find((entry) => entry.id === rewardId);
+    if (!reward) return;
+    const busyKey = `${pool}:${reward.id}`;
+    setMediaBusy(busyKey);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.set("rewardId", reward.id);
+      form.set("file", file);
+      const response = await fetch("/api/v1/admin/roulette-reward-media", {
+        method: "PUT",
+        body: form,
+      });
+      const payload = (await response.json()) as {
+        key?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.key) {
+        throw new Error(
+          payload.error?.message ?? "The reward image could not be uploaded.",
+        );
+      }
+      uploadedMediaKeys.current.add(payload.key);
+      setSettings((current) => ({
+        ...current,
+        [pool]: current[pool].map((entry) =>
+          entry.id === rewardId
+            ? { ...entry, imageKey: payload.key ?? null }
+            : entry,
+        ),
+      }));
+    } catch (error) {
+      setStatus("error");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "The reward image could not be uploaded.",
+      );
+    } finally {
+      setMediaBusy("");
+    }
+  }
+
+  function removeRewardImage(
+    pool: "rouletteRewards" | "roulettePaidRewards",
+    rewardId: string,
+  ) {
+    const reward = settings[pool].find((entry) => entry.id === rewardId);
+    if (!reward?.imageKey) return;
+    setSettings((current) => ({
+      ...current,
+      [pool]: current[pool].map((entry) =>
+        entry.id === rewardId ? { ...entry, imageKey: null } : entry,
+      ),
+    }));
   }
 
   if (!hasLoaded) {
@@ -154,7 +272,8 @@ export function RewardSettingsPanel() {
           <h2>Shards and daily Roulette</h2>
           <p>
             Configure reader rewards, the verified chapter dwell time, and the
-            weighted reward pool used by the once-per-cooldown Roulette.
+            weighted percentages and site-wide interval drops used by each
+            Roulette pool.
           </p>
         </div>
         <div className="discussion-settings-actions">
@@ -164,13 +283,10 @@ export function RewardSettingsPanel() {
               !hasLoaded ||
               status === "loading" ||
               status === "saving" ||
+              Boolean(mediaBusy) ||
               !dirty
             }
-            onClick={() => {
-              setSettings(saved);
-              setMessage("");
-              setStatus("idle");
-            }}
+            onClick={discardChanges}
           >
             Discard changes
           </button>
@@ -181,6 +297,7 @@ export function RewardSettingsPanel() {
               !hasLoaded ||
               status === "loading" ||
               status === "saving" ||
+              Boolean(mediaBusy) ||
               !dirty
             }
             onClick={() => void save()}
@@ -194,7 +311,11 @@ export function RewardSettingsPanel() {
       {status === "loading" ? (
         <div className="settings-loading">Loading community economy…</div>
       ) : (
-        <div className="reward-settings-content">
+        <fieldset
+          className="reward-settings-content"
+          disabled={editingLocked}
+          aria-busy={editingLocked}
+        >
           <details open>
             <summary>Shard identity and earning rules</summary>
             <div className="reward-settings-grid">
@@ -287,8 +408,12 @@ export function RewardSettingsPanel() {
           </details>
 
           <details open>
-            <summary>Roulette cooldown and weighted rewards</summary>
+            <summary>Free spins, cooldown, and reward pool</summary>
             <div className="roulette-admin-toolbar">
+              <p>
+                Keep at least eight enabled rewards so the free wheel remains
+                balanced and readable.
+              </p>
               <label>
                 <span>Cooldown (hours)</span>
                 <input
@@ -306,6 +431,14 @@ export function RewardSettingsPanel() {
               </label>
               <button
                 type="button"
+                disabled={
+                  editingLocked || settings.rouletteRewards.length >= 24
+                }
+                title={
+                  settings.rouletteRewards.length >= 24
+                    ? "A Roulette pool can contain at most 24 rewards."
+                    : undefined
+                }
                 onClick={() =>
                   setSettings({
                     ...settings,
@@ -318,6 +451,7 @@ export function RewardSettingsPanel() {
                         amount: 10,
                         weight: 10,
                         itemId: null,
+                        imageKey: null,
                         enabled: true,
                       },
                     ],
@@ -374,7 +508,7 @@ export function RewardSettingsPanel() {
                       }}
                     >
                       <option value="SHARDS">Shards</option>
-                      <option value="ONYX">Onyx</option>
+                      <option value="ONYX">{coinPlural}</option>
                       <option value="STORE_ITEM">Store item</option>
                     </select>
                   </label>
@@ -424,28 +558,132 @@ export function RewardSettingsPanel() {
                     </label>
                   )}
                   <label>
-                    <span>Weight</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={reward.weight}
+                    <span>Drop rule</span>
+                    <select
+                      value={reward.distributionMode ?? "WEIGHT"}
                       onChange={(event) =>
                         setSettings({
                           ...settings,
                           rouletteRewards: settings.rouletteRewards.map(
                             (entry, entryIndex) =>
                               entryIndex === index
-                                ? { ...entry, weight: Number(event.target.value) }
+                                ? {
+                                    ...entry,
+                                    distributionMode: event.target.value as
+                                      | "WEIGHT"
+                                      | "GLOBAL_INTERVAL",
+                                    globalIntervalSpins:
+                                      event.target.value === "GLOBAL_INTERVAL"
+                                        ? entry.globalIntervalSpins ?? 250
+                                        : null,
+                                  }
                                 : entry,
                           ),
                         })
                       }
-                    />
+                    >
+                      <option value="WEIGHT">Weighted percentage</option>
+                      <option value="GLOBAL_INTERVAL">Global spin interval</option>
+                    </select>
                   </label>
+                  {(reward.distributionMode ?? "WEIGHT") === "GLOBAL_INTERVAL" ? (
+                    <label>
+                      <span>Guaranteed once per</span>
+                      <input
+                        type="number"
+                        min={2}
+                        max={10_000_000}
+                        value={reward.globalIntervalSpins ?? 250}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            rouletteRewards: settings.rouletteRewards.map(
+                              (entry, entryIndex) =>
+                                entryIndex === index
+                                  ? {
+                                      ...entry,
+                                      globalIntervalSpins: Math.max(
+                                        2,
+                                        Number(event.target.value),
+                                      ),
+                                    }
+                                  : entry,
+                            ),
+                          })
+                        }
+                      />
+                      <small>global free spins</small>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Drop ratio</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={reward.weight}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            rouletteRewards: settings.rouletteRewards.map(
+                              (entry, entryIndex) =>
+                                entryIndex === index
+                                  ? { ...entry, weight: Number(event.target.value) }
+                                  : entry,
+                            ),
+                          })
+                        }
+                      />
+                      <small>
+                        {(
+                          (reward.weight /
+                            Math.max(1, settings.rouletteRewards
+                              .filter(
+                                (entry) =>
+                                  entry.enabled &&
+                                  (entry.distributionMode ?? "WEIGHT") === "WEIGHT",
+                              )
+                              .reduce((sum, entry) => sum + entry.weight, 0))) *
+                          100
+                        ).toFixed(2)}
+                        % of weighted spins
+                      </small>
+                    </label>
+                  )}
+                  <AdminMediaField
+                    label="Wheel image"
+                    helperText="Shown inside the reward segment and reward list."
+                    recommendedDimensions="Square · 256 × 256"
+                    accept="image/png,image/jpeg,image/webp"
+                    currentUrl={
+                      reward.imageKey
+                        ? `/api/v1/roulette-reward-media?key=${encodeURIComponent(reward.imageKey)}`
+                        : null
+                    }
+                    busy={editingLocked}
+                    cropProfile={{
+                      aspect: 1,
+                      outputWidth: 256,
+                      outputHeight: 256,
+                      maxBytes: 900_000,
+                    }}
+                    onSelect={(file) =>
+                      void setRewardImage("rouletteRewards", reward.id, file)
+                    }
+                    onRemove={() =>
+                      removeRewardImage("rouletteRewards", reward.id)
+                    }
+                  />
                   <label className="theme-switch">
                     <input
                       type="checkbox"
                       checked={reward.enabled}
+                      disabled={
+                        editingLocked ||
+                        (reward.enabled &&
+                          settings.rouletteRewards.filter(
+                            (entry) => entry.enabled,
+                          ).length <= 8)
+                      }
                       onChange={(event) =>
                         setSettings({
                           ...settings,
@@ -463,7 +701,10 @@ export function RewardSettingsPanel() {
                   <button
                     type="button"
                     aria-label={`Delete ${reward.label}`}
-                    disabled={settings.rouletteRewards.length === 1}
+                    disabled={
+                      settings.rouletteRewards.length <= 8 ||
+                      editingLocked
+                    }
                     onClick={() =>
                       setSettings({
                         ...settings,
@@ -479,7 +720,566 @@ export function RewardSettingsPanel() {
               ))}
             </div>
           </details>
-        </div>
+
+          <details open>
+            <summary>Paid spins and premium reward pool</summary>
+            <div className="roulette-admin-toolbar">
+              <p>
+                Paid spins use a separate pool with at least eight enabled
+                rewards.
+              </p>
+              <label className="theme-switch">
+                <input
+                  type="checkbox"
+                  checked={settings.roulettePaidSpinsEnabled}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      roulettePaidSpinsEnabled: event.target.checked,
+                    })
+                  }
+                />
+                <span>Allow extra spins paid with Shards or {coinPlural}</span>
+              </label>
+              <label>
+                <span>Shards per paid spin</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={1_000_000}
+                  value={settings.roulettePaidSpinShardCost}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      roulettePaidSpinShardCost: Number(event.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <span>{coinPlural} per paid spin</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={1_000_000}
+                  value={settings.roulettePaidSpinOnyxCost}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      roulettePaidSpinOnyxCost: Number(event.target.value),
+                    })
+                  }
+                />
+              </label>
+              {(["SHARDS", "ONYX"] as const).map((currency) => (
+                <label className="theme-switch" key={currency}>
+                  <input
+                    type="checkbox"
+                    checked={settings.roulettePaidCurrencies.includes(currency)}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                        ? [...new Set([...settings.roulettePaidCurrencies, currency])]
+                        : settings.roulettePaidCurrencies.filter(
+                            (entry) => entry !== currency,
+                          );
+                      if (next.length) {
+                        setSettings({
+                          ...settings,
+                          roulettePaidCurrencies: next,
+                        });
+                      }
+                    }}
+                  />
+                  <span>Accept {currency === "SHARDS" ? settings.shardPlural : coinPlural}</span>
+                </label>
+              ))}
+              <button
+                type="button"
+                disabled={
+                  editingLocked ||
+                  settings.roulettePaidRewards.length >= 24
+                }
+                title={
+                  settings.roulettePaidRewards.length >= 24
+                    ? "A Roulette pool can contain at most 24 rewards."
+                    : undefined
+                }
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    roulettePaidRewards: [
+                      ...settings.roulettePaidRewards,
+                      {
+                        id: `paid-${rewardId()}`,
+                        label: "New premium reward",
+                        type: "SHARDS",
+                        amount: 50,
+                        weight: 10,
+                        itemId: null,
+                        imageKey: null,
+                        enabled: true,
+                      },
+                    ],
+                  })
+                }
+              >
+                <Plus size={16} /> Add paid reward
+              </button>
+            </div>
+            <div className="roulette-admin-list">
+              {settings.roulettePaidRewards.map((reward, index) => (
+                <article key={reward.id}>
+                  <label>
+                    <span>Label</span>
+                    <input
+                      value={reward.label}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          roulettePaidRewards: settings.roulettePaidRewards.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, label: event.target.value }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Type</span>
+                    <select
+                      value={reward.type}
+                      onChange={(event) => {
+                        const type = event.target.value as typeof reward.type;
+                        setSettings({
+                          ...settings,
+                          roulettePaidRewards: settings.roulettePaidRewards.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? {
+                                    ...entry,
+                                    type,
+                                    itemId:
+                                      type === "STORE_ITEM"
+                                        ? storeItems[0]?.id ?? null
+                                        : null,
+                                    amount:
+                                      type === "STORE_ITEM"
+                                        ? 0
+                                        : Math.max(1, entry.amount),
+                                  }
+                                : entry,
+                          ),
+                        });
+                      }}
+                    >
+                      <option value="SHARDS">Shards</option>
+                      <option value="ONYX">{coinPlural}</option>
+                      <option value="STORE_ITEM">Store item</option>
+                    </select>
+                  </label>
+                  {reward.type === "STORE_ITEM" ? (
+                    <label>
+                      <span>Store item</span>
+                      <select
+                        value={reward.itemId ?? ""}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            roulettePaidRewards:
+                              settings.roulettePaidRewards.map(
+                                (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? { ...entry, itemId: event.target.value }
+                                    : entry,
+                              ),
+                          })
+                        }
+                      >
+                        {storeItems.map((item) => (
+                          <option value={item.id} key={item.id}>
+                            {item.name} · {item.category.replaceAll("_", " ")}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Amount</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={reward.amount}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            roulettePaidRewards:
+                              settings.roulettePaidRewards.map(
+                                (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? {
+                                        ...entry,
+                                        amount: Number(event.target.value),
+                                      }
+                                    : entry,
+                              ),
+                          })
+                        }
+                      />
+                    </label>
+                  )}
+                  <label>
+                    <span>Drop rule</span>
+                    <select
+                      value={reward.distributionMode ?? "WEIGHT"}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          roulettePaidRewards: settings.roulettePaidRewards.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? {
+                                    ...entry,
+                                    distributionMode: event.target.value as
+                                      | "WEIGHT"
+                                      | "GLOBAL_INTERVAL",
+                                    globalIntervalSpins:
+                                      event.target.value === "GLOBAL_INTERVAL"
+                                        ? entry.globalIntervalSpins ?? 250
+                                        : null,
+                                  }
+                                : entry,
+                          ),
+                        })
+                      }
+                    >
+                      <option value="WEIGHT">Weighted percentage</option>
+                      <option value="GLOBAL_INTERVAL">Global spin interval</option>
+                    </select>
+                  </label>
+                  {(reward.distributionMode ?? "WEIGHT") === "GLOBAL_INTERVAL" ? (
+                    <label>
+                      <span>Guaranteed once per</span>
+                      <input
+                        type="number"
+                        min={2}
+                        max={10_000_000}
+                        value={reward.globalIntervalSpins ?? 250}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            roulettePaidRewards:
+                              settings.roulettePaidRewards.map(
+                                (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? {
+                                        ...entry,
+                                        globalIntervalSpins: Math.max(
+                                          2,
+                                          Number(event.target.value),
+                                        ),
+                                      }
+                                    : entry,
+                              ),
+                          })
+                        }
+                      />
+                      <small>global paid spins</small>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Drop ratio</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={reward.weight}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            roulettePaidRewards:
+                              settings.roulettePaidRewards.map(
+                                (entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? {
+                                        ...entry,
+                                        weight: Number(event.target.value),
+                                      }
+                                    : entry,
+                              ),
+                          })
+                        }
+                      />
+                      <small>
+                        {(
+                          (reward.weight /
+                            Math.max(1, settings.roulettePaidRewards
+                              .filter(
+                                (entry) =>
+                                  entry.enabled &&
+                                  (entry.distributionMode ?? "WEIGHT") === "WEIGHT",
+                              )
+                              .reduce((sum, entry) => sum + entry.weight, 0))) *
+                          100
+                        ).toFixed(2)}
+                        % of weighted spins
+                      </small>
+                    </label>
+                  )}
+                  <AdminMediaField
+                    label="Wheel image"
+                    helperText="Square artwork for this premium segment."
+                    recommendedDimensions="Square · 256 × 256"
+                    accept="image/png,image/jpeg,image/webp"
+                    currentUrl={
+                      reward.imageKey
+                        ? `/api/v1/roulette-reward-media?key=${encodeURIComponent(reward.imageKey)}`
+                        : null
+                    }
+                    busy={editingLocked}
+                    cropProfile={{
+                      aspect: 1,
+                      outputWidth: 256,
+                      outputHeight: 256,
+                      maxBytes: 900_000,
+                    }}
+                    onSelect={(file) =>
+                      void setRewardImage(
+                        "roulettePaidRewards",
+                        reward.id,
+                        file,
+                      )
+                    }
+                    onRemove={() =>
+                      removeRewardImage("roulettePaidRewards", reward.id)
+                    }
+                  />
+                  <label className="theme-switch">
+                    <input
+                      type="checkbox"
+                      checked={reward.enabled}
+                      disabled={
+                        editingLocked ||
+                        (reward.enabled &&
+                          settings.roulettePaidRewards.filter(
+                            (entry) => entry.enabled,
+                          ).length <= 8)
+                      }
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          roulettePaidRewards: settings.roulettePaidRewards.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, enabled: event.target.checked }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                    <span>Enabled</span>
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${reward.label}`}
+                    disabled={
+                      settings.roulettePaidRewards.length <= 8 ||
+                      editingLocked
+                    }
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        roulettePaidRewards: settings.roulettePaidRewards.filter(
+                          (_, entryIndex) => entryIndex !== index,
+                        ),
+                      })
+                    }
+                  >
+                    <Trash size={17} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </details>
+
+          <details open>
+            <summary>Weekly free-spin tasks</summary>
+            <div className="roulette-admin-toolbar">
+              <p>
+                Progress resets every Monday at 00:00 UTC. Completed tasks add
+                banked free spins after the reader claims them.
+              </p>
+              <button
+                type="button"
+                disabled={
+                  editingLocked || settings.rouletteTasks.length >= 24
+                }
+                title={
+                  settings.rouletteTasks.length >= 24
+                    ? "Roulette supports at most 24 weekly tasks."
+                    : undefined
+                }
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    rouletteTasks: [
+                      ...settings.rouletteTasks,
+                      {
+                        id: `task-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`,
+                        label: "New weekly task",
+                        description: "Describe what the reader needs to finish.",
+                        metric: "CHAPTERS_READ",
+                        target: 5,
+                        rewardSpins: 1,
+                        enabled: true,
+                      },
+                    ],
+                  })
+                }
+              >
+                <Plus size={16} /> Add weekly task
+              </button>
+            </div>
+            <div className="roulette-admin-list roulette-task-admin-list">
+              {settings.rouletteTasks.map((task, index) => (
+                <article key={task.id}>
+                  <label>
+                    <span>Task title</span>
+                    <input
+                      value={task.label}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          rouletteTasks: settings.rouletteTasks.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, label: event.target.value }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Description</span>
+                    <input
+                      value={task.description}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          rouletteTasks: settings.rouletteTasks.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, description: event.target.value }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Metric</span>
+                    <select
+                      value={task.metric}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          rouletteTasks: settings.rouletteTasks.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? {
+                                    ...entry,
+                                    metric: event.target.value as typeof task.metric,
+                                  }
+                                : entry,
+                          ),
+                        })
+                      }
+                    >
+                      <option value="CHAPTERS_READ">Chapters read</option>
+                      <option value="COMMENTS_POSTED">Comments posted</option>
+                      <option value="UPVOTES_RECEIVED">Upvotes received</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Target</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={task.target}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          rouletteTasks: settings.rouletteTasks.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, target: Number(event.target.value) }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Free spins</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={task.rewardSpins}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          rouletteTasks: settings.rouletteTasks.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? {
+                                    ...entry,
+                                    rewardSpins: Number(event.target.value),
+                                  }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="theme-switch">
+                    <input
+                      type="checkbox"
+                      checked={task.enabled}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          rouletteTasks: settings.rouletteTasks.map(
+                            (entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, enabled: event.target.checked }
+                                : entry,
+                          ),
+                        })
+                      }
+                    />
+                    <span>Enabled</span>
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${task.label}`}
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        rouletteTasks: settings.rouletteTasks.filter(
+                          (_, entryIndex) => entryIndex !== index,
+                        ),
+                      })
+                    }
+                  >
+                    <Trash size={17} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </details>
+        </fieldset>
       )}
       {message ? (
         <p className={`settings-status settings-status-${status}`}>{message}</p>

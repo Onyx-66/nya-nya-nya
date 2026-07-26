@@ -6,6 +6,7 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly fields?: Array<{ path: string; message: string }>,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -160,6 +161,7 @@ export function errorResponse(requestId: string, error: unknown) {
           code: error.code,
           message: error.message,
           fields: error.fields ?? [],
+          details: error.details ?? null,
           requestId,
         },
       },

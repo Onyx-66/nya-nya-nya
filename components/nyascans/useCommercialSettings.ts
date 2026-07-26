@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import {
-  defaultCommercialSettings,
+  commercialSettingsSchema,
+  failClosedCommercialSettings,
   type CommercialSettings,
 } from "@/lib/commercial-settings";
 
 export function useCommercialSettings() {
   const [settings, setSettings] = useState<CommercialSettings>(
-    defaultCommercialSettings,
+    failClosedCommercialSettings,
   );
   const [revision, setRevision] = useState(0);
 
@@ -20,14 +21,16 @@ export function useCommercialSettings() {
       .then(async (response) => {
         if (!response.ok) return;
         const payload = (await response.json()) as {
-          settings?: CommercialSettings;
+          settings?: unknown;
           revision?: number;
         };
-        if (payload.settings) setSettings(payload.settings);
+        const parsed = commercialSettingsSchema.safeParse(payload.settings);
+        if (!parsed.success) return;
+        setSettings(parsed.data);
         setRevision(Number(payload.revision ?? 0));
       })
       .catch(() => {
-        // Safe defaults keep the reader and store usable during recovery.
+        // The paid economy remains private until valid settings load.
       });
     return () => controller.abort();
   }, []);

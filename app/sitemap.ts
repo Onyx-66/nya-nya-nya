@@ -8,7 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/browse",
     "/store",
     "/latest",
-    "/rankings",
+    "/leaderboard",
     "/status",
     "/support",
     "/legal/terms",

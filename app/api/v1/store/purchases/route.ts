@@ -9,6 +9,7 @@ import {
   platformAccountId,
   walletSnapshot,
 } from "@/lib/server/economy";
+import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { storePurchaseSchema } from "@/lib/storefront";
@@ -35,6 +36,9 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const actor = await requireActor();
     const payload = storePurchaseSchema.parse(await request.json());
+    const commercial = await getCommercialSettingsDocument();
+    const premiumEconomyPublic =
+      commercial.settings.economy.premiumEconomyPublic;
     if (!env.DB) {
       throw new ApiError(
         503,
@@ -73,6 +77,13 @@ export async function POST(request: Request) {
         "This cosmetic is not currently available.",
       );
     }
+    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic) {
+      throw new ApiError(
+        403,
+        "PAID_ECONOMY_HIDDEN",
+        "Premium coin purchases are currently private.",
+      );
+    }
     const existingOwnership = await env.DB.prepare(
       `SELECT created_at AS purchasedAt
          FROM user_store_items
@@ -89,7 +100,9 @@ export async function POST(request: Request) {
           alreadyOwned: true,
           itemId: item.id,
           purchasedAt: existingOwnership.purchasedAt,
-          balances: await economySnapshot(env.DB, actor.id),
+          balances: premiumEconomyPublic
+            ? await economySnapshot(env.DB, actor.id)
+            : { shards: await walletSnapshot(env.DB, actor.id, "SHARDS") },
         },
         { headers: { "cache-control": "private, no-store", vary: "Cookie" } },
       );
@@ -106,7 +119,11 @@ export async function POST(request: Request) {
         item.priceCurrency === "SHARDS"
           ? "INSUFFICIENT_SHARDS"
           : "INSUFFICIENT_ONYX",
-        `Your ${item.priceCurrency === "SHARDS" ? "Shard" : "Onyx"} balance is too low for this cosmetic.`,
+        `Your ${
+          item.priceCurrency === "SHARDS"
+            ? "Shard"
+            : commercial.settings.economy.coinName
+        } balance is too low for this cosmetic.`,
       );
     }
     const platformId = platformAccountId("store", item.priceCurrency);
@@ -155,7 +172,11 @@ export async function POST(request: Request) {
         transactionId,
         item.id,
         idempotencyKey,
-        `Store purchase: ${item.name} · ${amount} ${item.priceCurrency}`,
+        `Store purchase: ${item.name} · ${amount} ${
+          item.priceCurrency === "SHARDS"
+            ? "Shards"
+            : commercial.settings.economy.coinPlural
+        }`,
         wallet.accountId,
         amount,
         item.id,
@@ -239,7 +260,9 @@ export async function POST(request: Request) {
         alreadyOwned: !created,
         itemId: item.id,
         currency: item.priceCurrency,
-        balances: await economySnapshot(env.DB, actor.id),
+        balances: premiumEconomyPublic
+          ? await economySnapshot(env.DB, actor.id)
+          : { shards: await walletSnapshot(env.DB, actor.id, "SHARDS") },
       },
       {
         status: created ? 201 : 200,

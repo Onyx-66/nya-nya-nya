@@ -66,7 +66,7 @@ export const membershipOfferSchema = z.object({
 
 export const commercialSettingsSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.union([z.literal(1), z.literal(2)]),
     announcement: z.object({
       id: z
         .string()
@@ -87,6 +87,9 @@ export const commercialSettingsSchema = z
       coinName: z.string().trim().min(2).max(40),
       coinPlural: z.string().trim().min(2).max(48),
       coinIcon: z.string().trim().min(1).max(8),
+      coinIconKey: z.string().trim().max(320).nullable().default(null),
+      coinIconRevision: z.number().int().min(1).default(1),
+      premiumEconomyPublic: z.boolean().default(true),
       defaultChapterPrice: z.number().int().min(0).max(1_000_000),
       defaultSeriesPrice: z.number().int().min(0).max(10_000_000),
       permanentChapterUnlocks: z.boolean(),
@@ -152,12 +155,12 @@ export type CoinPackage = z.infer<typeof coinPackageSchema>;
 export type MembershipOffer = z.infer<typeof membershipOfferSchema>;
 
 export const defaultCommercialSettings: CommercialSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   announcement: {
     id: "nya-plus-launch",
     enabled: true,
     label: "Nya+",
-    text: "Discover paid chapters and premium profile cosmetics with Onyx Coins.",
+    text: "Discover paid chapters and premium profile cosmetics with Paw Coins.",
     buttonLabel: "Open Store",
     destinationUrl: "/store",
     startsAt: null,
@@ -165,9 +168,12 @@ export const defaultCommercialSettings: CommercialSettings = {
     resetKey: 1,
   },
   economy: {
-    coinName: "Onyx Coin",
-    coinPlural: "Onyx Coins",
-    coinIcon: "◆",
+    coinName: "Paw Coin",
+    coinPlural: "Paw Coins",
+    coinIcon: "🐾",
+    coinIconKey: null,
+    coinIconRevision: 1,
+    premiumEconomyPublic: true,
     defaultChapterPrice: 30,
     defaultSeriesPrice: 300,
     permanentChapterUnlocks: true,
@@ -177,7 +183,7 @@ export const defaultCommercialSettings: CommercialSettings = {
     packages: [
       {
         id: "onyx-240",
-        name: "Onyx 240",
+        name: "Paw 240",
         description: "A small balance for occasional paid chapters and cosmetics.",
         baseCoins: 220,
         bonusCoins: 20,
@@ -190,7 +196,7 @@ export const defaultCommercialSettings: CommercialSettings = {
       },
       {
         id: "onyx-720",
-        name: "Onyx 720",
+        name: "Paw 720",
         description: "A balanced package for regular weekly reading.",
         baseCoins: 620,
         bonusCoins: 100,
@@ -203,7 +209,7 @@ export const defaultCommercialSettings: CommercialSettings = {
       },
       {
         id: "onyx-1600",
-        name: "Onyx 1,600",
+        name: "Paw 1,600",
         description: "A larger balance with the strongest standard bonus.",
         baseCoins: 1300,
         bonusCoins: 300,
@@ -238,9 +244,118 @@ export const defaultCommercialSettings: CommercialSettings = {
   },
 };
 
+export const failClosedCommercialSettings: CommercialSettings = {
+  schemaVersion: 2,
+  announcement: {
+    id: "premium-hidden",
+    enabled: false,
+    label: "",
+    text: "Commercial features are currently unavailable.",
+    buttonLabel: "Home",
+    destinationUrl: "/",
+    startsAt: null,
+    endsAt: null,
+    resetKey: 1,
+  },
+  economy: {
+    coinName: "Private",
+    coinPlural: "Private",
+    coinIcon: "•",
+    coinIconKey: null,
+    coinIconRevision: 1,
+    premiumEconomyPublic: false,
+    defaultChapterPrice: 0,
+    defaultSeriesPrice: 0,
+    permanentChapterUnlocks: false,
+    temporaryChapterUnlockHours: 1,
+    seriesUnlocksEnabled: false,
+    membershipDiscountsEnabled: false,
+    packages: [],
+    memberships: [],
+  },
+};
+
+export function sanitizeCommercialSettingsForPublic(
+  settings: CommercialSettings,
+): CommercialSettings {
+  if (!settings.economy.premiumEconomyPublic) {
+    return failClosedCommercialSettings;
+  }
+  return {
+    ...settings,
+    economy: {
+      ...settings.economy,
+      coinIconKey: settings.economy.coinIconKey ? "configured" : null,
+    },
+  };
+}
+
 export function parseCommercialSettings(value: unknown): CommercialSettings {
   const parsed = commercialSettingsSchema.safeParse(value);
-  return parsed.success ? parsed.data : defaultCommercialSettings;
+  if (!parsed.success) return defaultCommercialSettings;
+  const legacyCoinName = /^(?:onyx|onyx coin)$/i.test(
+    parsed.data.economy.coinName,
+  );
+  const legacyCoinPlural = /^onyx coins?$/i.test(
+    parsed.data.economy.coinPlural,
+  );
+  const legacyIcon = parsed.data.economy.coinIcon === "◆";
+  const coinName = legacyCoinName
+    ? defaultCommercialSettings.economy.coinName
+    : parsed.data.economy.coinName;
+  const coinPlural = legacyCoinPlural
+    ? defaultCommercialSettings.economy.coinPlural
+    : parsed.data.economy.coinPlural;
+  const normalizedEconomy = {
+    ...parsed.data.economy,
+    coinName,
+    coinPlural,
+    coinIcon: legacyIcon
+      ? defaultCommercialSettings.economy.coinIcon
+      : parsed.data.economy.coinIcon,
+  };
+  const copySettings = {
+    ...parsed.data,
+    economy: normalizedEconomy,
+  };
+  return {
+    ...parsed.data,
+    schemaVersion: 2,
+    announcement: {
+      ...parsed.data.announcement,
+      text: configuredCoinCopy(
+        parsed.data.announcement.text,
+        copySettings,
+      ),
+    },
+    economy: {
+      ...normalizedEconomy,
+      packages: parsed.data.economy.packages.map((offer) => ({
+        ...offer,
+        name: configuredCoinCopy(offer.name, copySettings),
+      })),
+    },
+  };
+}
+
+export function configuredCoinCopy(
+  value: string,
+  settings: CommercialSettings,
+) {
+  const family =
+    settings.economy.coinName.replace(/\s+coins?$/iu, "").trim() ||
+    settings.economy.coinName;
+  return value
+    .replace(
+      /\b(?:Onyx|Paw)\s+Coins?\b/giu,
+      () => settings.economy.coinPlural,
+    )
+    .replace(/\bONYX\b/gu, () => settings.economy.coinPlural)
+    .replace(/\b(?:Onyx|onyx|Paw|paw)\b/gu, () => family);
+}
+
+export function paidEconomyIsPublic(settings: CommercialSettings) {
+  return settings.economy.premiumEconomyPublic;
 }
 
 export function coinLabel(

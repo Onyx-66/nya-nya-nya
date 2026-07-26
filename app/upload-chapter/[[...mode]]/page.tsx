@@ -68,6 +68,8 @@ export default async function UploadChapterPage({
           displayName: identity.displayName,
           email: identity.email,
           role: actor?.primaryRole ?? "USER",
+          roles: actor?.roles ?? ["USER"],
+          avatarUrl: actor?.avatarUrl ?? null,
         }}
       />
     );
@@ -83,6 +85,8 @@ export default async function UploadChapterPage({
         displayName: actor.displayName,
         email: actor.email,
         role: actor.primaryRole,
+        roles: actor.roles,
+        avatarUrl: actor.avatarUrl,
         canUseUploadCenter: actor.canUseUploadCenter,
         canUpload:
           ["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole) ||

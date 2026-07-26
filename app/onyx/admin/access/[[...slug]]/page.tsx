@@ -45,11 +45,13 @@ export default async function AdminPage({ params }: AdminPageProps) {
           displayName: identity.displayName,
           email: identity.email,
           role: "USER",
+          roles: ["USER"],
+          avatarUrl: null,
         }}
       />
     );
   }
-  if (slug?.[0] === "audit-log" && actor.primaryRole !== "OWNER") {
+  if (slug?.[0] === "audit-log" && !actor.roles.includes("OWNER")) {
     await writeAudit(actor, randomId(), {
       action: "audit.access.denied",
       category: "AUTHENTICATION_SECURITY",
@@ -61,7 +63,15 @@ export default async function AdminPage({ params }: AdminPageProps) {
     }).catch(() => undefined);
     forbidden();
   }
-  if (!["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole)) {
+  const fullAdministrator = actor.roles.some((role) =>
+    ["OWNER", "ADMINISTRATOR"].includes(role),
+  );
+  const manager = actor.roles.includes("MANAGER");
+  const managerSections = new Set(["new-series-queue", "support-tickets"]);
+  if (
+    !fullAdministrator &&
+    (!manager || (slug?.[0] && !managerSections.has(slug[0])))
+  ) {
     forbidden();
   }
 
@@ -74,10 +84,12 @@ export default async function AdminPage({ params }: AdminPageProps) {
         displayName: actor.displayName,
         email: actor.email,
         role: actor.primaryRole,
+        roles: actor.roles,
+        avatarUrl: actor.avatarUrl,
         canUseUploadCenter: true,
-        canUpload: true,
-        canRequestSeries: true,
-        canManageTeam: true,
+        canUpload: fullAdministrator,
+        canRequestSeries: fullAdministrator,
+        canManageTeam: fullAdministrator,
       }}
     />
   );

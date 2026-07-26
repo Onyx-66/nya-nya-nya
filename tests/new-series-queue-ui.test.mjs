@@ -59,9 +59,17 @@ test("queue list uses server pagination and the complete operational filter set"
   assert.match(queue, /window\.history\.replaceState/);
   assert.match(queue, /request\.assignedReviewer/);
   assert.match(queue, /request\.duplicateRiskScore/);
-  assert.match(apiRoute, /requireAdmin\(actor\)/);
+  assert.match(apiRoute, /requireAdminConsole\(actor\)/);
+  assert.match(apiRoute, /queueCapabilities\(actor\)/);
+  assert.match(apiRoute, /canApprove:\s*reviewer/);
+  assert.match(apiRoute, /canReject:\s*reviewer/);
+  assert.match(apiRoute, /canReply:\s*reviewer/);
+  assert.match(apiRoute, /canStartReview:\s*fullAdministrator/);
   assert.match(apiRoute, /listAdminSeriesRequests/);
-  assert.match(apiRoute, /options: await queueOptions\(\)/);
+  assert.match(
+    apiRoute,
+    /options: await queueOptions\(capabilities\.canReassign\)/,
+  );
 });
 
 test("request detail renders reviewed media, metadata, teams, sources, duplicates, feedback, and revisions", async () => {

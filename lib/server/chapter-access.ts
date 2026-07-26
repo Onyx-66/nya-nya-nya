@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
-import { can } from "@/lib/permissions.mjs";
+import { canAny } from "@/lib/permissions.mjs";
 import { ApiError } from "@/lib/server/api";
 import type { Actor } from "@/lib/server/policy";
 
@@ -175,14 +175,19 @@ export function decideChapterAccess(
       reason: "UNAVAILABLE",
     };
   }
-  const administratorPreview = Boolean(
-    actor && ["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole),
+  const actorRoles = actor?.roles?.length
+    ? actor.roles
+    : actor
+      ? [actor.primaryRole]
+      : [];
+  const administratorPreview = actorRoles.some((role) =>
+    ["OWNER", "ADMINISTRATOR"].includes(role),
   );
   const assignedTeamPreview = Boolean(
     chapter.teamId &&
       chapter.teamPreviewAllowed &&
       actor?.teamIds.includes(chapter.teamId) &&
-      can(actor.primaryRole, "chapter.preview.assigned"),
+      canAny(actorRoles, "chapter.preview.assigned"),
   );
   const privilegedPreview = administratorPreview || assignedTeamPreview;
   const publicationReady =

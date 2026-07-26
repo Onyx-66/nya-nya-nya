@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { ApiError } from "@/lib/server/api";
 import {
-  assertCapability,
+  assertAnyCapability,
+  highestRole,
   hasRoleAtLeast,
   ROLES,
 } from "@/lib/permissions.mjs";
@@ -13,6 +14,8 @@ export type Actor = {
   email: string;
   displayName: string;
   primaryRole: keyof typeof ROLES;
+  roles: Array<keyof typeof ROLES>;
+  avatarUrl: string | null;
   teamIds: string[];
   managedTeamIds: string[];
   requestTeamIds: string[];
@@ -79,7 +82,12 @@ export async function getActor(): Promise<Actor | null> {
       ? ROLES.ADMINISTRATOR
       : ROLES.USER;
   let row = await env.DB.prepare(
-    "SELECT id, email, display_name, primary_role, status FROM users WHERE email = ? LIMIT 1",
+    `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
+            p.avatar_key, p.revision AS profile_revision
+       FROM users u
+       LEFT JOIN user_profiles p ON p.user_id = u.id
+      WHERE u.email = ?
+      LIMIT 1`,
   )
     .bind(email)
     .first<{
@@ -88,6 +96,8 @@ export async function getActor(): Promise<Actor | null> {
       display_name: string;
       primary_role: keyof typeof ROLES;
       status: string;
+      avatar_key: string | null;
+      profile_revision: number | null;
     }>();
 
   if (!row) {
@@ -98,6 +108,11 @@ export async function getActor(): Promise<Actor | null> {
          (id, email, display_name, primary_role, status)
          VALUES (?, ?, ?, ?, 'ACTIVE')`,
       ).bind(id, email, identity.displayName, provisionedRole),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO user_roles
+         (user_id, role, assigned_by_user_id)
+         VALUES (?, ?, NULL)`,
+      ).bind(id, provisionedRole),
       env.DB.prepare(
         `INSERT INTO audit_logs
          (id, actor_user_id, action, category, source_area, result, actor_role,
@@ -121,7 +136,12 @@ export async function getActor(): Promise<Actor | null> {
       ),
     ]);
     row = await env.DB.prepare(
-      "SELECT id, email, display_name, primary_role, status FROM users WHERE email = ? LIMIT 1",
+      `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
+              p.avatar_key, p.revision AS profile_revision
+         FROM users u
+         LEFT JOIN user_profiles p ON p.user_id = u.id
+        WHERE u.email = ?
+        LIMIT 1`,
     )
       .bind(email)
       .first<{
@@ -130,6 +150,8 @@ export async function getActor(): Promise<Actor | null> {
         display_name: string;
         primary_role: keyof typeof ROLES;
         status: string;
+        avatar_key: string | null;
+        profile_revision: number | null;
       }>();
   }
 
@@ -151,6 +173,11 @@ export async function getActor(): Promise<Actor | null> {
     const previousRole = row.primary_role;
     const promotionRequestId = `auth-${randomId()}`;
     const promotionResults = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO user_roles
+         (user_id, role, assigned_by_user_id)
+         VALUES (?, ?, NULL)`,
+      ).bind(row.id, provisionedRole),
       env.DB.prepare(
         `UPDATE users
             SET primary_role = ?,
@@ -180,11 +207,16 @@ export async function getActor(): Promise<Actor | null> {
         JSON.stringify({ primaryRole: provisionedRole }),
       ),
     ]);
-    if (promotionResults[0]?.meta.changes) {
+    if (promotionResults[1]?.meta.changes) {
       row.primary_role = provisionedRole;
     } else {
       const refreshed = await env.DB.prepare(
-        "SELECT id, email, display_name, primary_role, status FROM users WHERE id = ? LIMIT 1",
+        `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
+                p.avatar_key, p.revision AS profile_revision
+           FROM users u
+           LEFT JOIN user_profiles p ON p.user_id = u.id
+          WHERE u.id = ?
+          LIMIT 1`,
       )
         .bind(row.id)
         .first<{
@@ -193,6 +225,8 @@ export async function getActor(): Promise<Actor | null> {
           display_name: string;
           primary_role: keyof typeof ROLES;
           status: string;
+          avatar_key: string | null;
+          profile_revision: number | null;
         }>();
       if (!refreshed) {
         throw new ApiError(
@@ -218,6 +252,51 @@ export async function getActor(): Promise<Actor | null> {
       "ROLE_INVALID",
       "This account has an unsupported authorization role.",
     );
+  }
+
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO user_roles
+     (user_id, role, assigned_by_user_id)
+     VALUES (?, ?, NULL)`,
+  )
+    .bind(row.id, row.primary_role)
+    .run();
+  const roleRows = await env.DB.prepare(
+    `SELECT role
+       FROM user_roles
+      WHERE user_id = ?
+      ORDER BY CASE role
+        WHEN 'OWNER' THEN 6
+        WHEN 'ADMINISTRATOR' THEN 5
+        WHEN 'MANAGER' THEN 4
+        WHEN 'MODERATOR' THEN 3
+        WHEN 'TEAM_LEADER' THEN 2
+        WHEN 'UPLOADER' THEN 1
+        ELSE 0
+      END DESC`,
+  )
+    .bind(row.id)
+    .all<{ role: keyof typeof ROLES }>();
+  const roles = [
+    ...new Set(
+      (roleRows.results ?? [])
+        .map((entry) => entry.role)
+        .filter((role) => validRoles.has(role)),
+    ),
+  ] as Array<keyof typeof ROLES>;
+  const resolvedPrimaryRole = highestRole(
+    roles.length ? roles : [row.primary_role],
+  ) as keyof typeof ROLES;
+  if (resolvedPrimaryRole !== row.primary_role) {
+    await env.DB.prepare(
+      `UPDATE users
+          SET primary_role = ?,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+    )
+      .bind(resolvedPrimaryRole, row.id)
+      .run();
+    row.primary_role = resolvedPrimaryRole;
   }
 
   const membershipRows = await env.DB.prepare(
@@ -252,12 +331,12 @@ export async function getActor(): Promise<Actor | null> {
     )
     .map((membership) => membership.team_id);
   const administrator =
-    row.primary_role === ROLES.OWNER ||
-    row.primary_role === ROLES.ADMINISTRATOR;
+    roles.includes(ROLES.OWNER) ||
+    roles.includes(ROLES.ADMINISTRATOR);
   const uploadTeamIds =
     administrator ||
-    row.primary_role === ROLES.TEAM_LEADER ||
-    row.primary_role === ROLES.UPLOADER
+    roles.includes(ROLES.TEAM_LEADER) ||
+    roles.includes(ROLES.UPLOADER)
       ? memberships
           .filter((membership) =>
             ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER"].includes(
@@ -272,6 +351,10 @@ export async function getActor(): Promise<Actor | null> {
     email: row.email,
     displayName: row.display_name,
     primaryRole: row.primary_role,
+    roles,
+    avatarUrl: row.avatar_key
+      ? `/api/v1/profile-media?slot=avatar&revision=${Number(row.profile_revision ?? 1)}`
+      : null,
     teamIds: memberships.map((membership) => membership.team_id),
     managedTeamIds,
     requestTeamIds,
@@ -289,21 +372,31 @@ export async function requireActor(capability?: string): Promise<Actor> {
   if (!actor) {
     throw new ApiError(401, "AUTHENTICATION_REQUIRED", "Sign in to continue.");
   }
-  if (capability) assertCapability(actor.primaryRole, capability);
+  if (capability) assertAnyCapability(actor.roles, capability);
   return actor;
+}
+
+export function requireAdminConsole(actor: Actor) {
+  if (
+    !actor.roles.some((role) =>
+      [ROLES.OWNER, ROLES.ADMINISTRATOR, ROLES.MANAGER].includes(role),
+    )
+  ) {
+    throw new ApiError(403, "ADMIN_REQUIRED", "Staff authorization is required.");
+  }
 }
 
 export function requireAdmin(actor: Actor) {
   if (
-    actor.primaryRole !== ROLES.OWNER &&
-    actor.primaryRole !== ROLES.ADMINISTRATOR
+    !actor.roles.includes(ROLES.OWNER) &&
+    !actor.roles.includes(ROLES.ADMINISTRATOR)
   ) {
     throw new ApiError(403, "ADMIN_REQUIRED", "Administrator authorization is required.");
   }
 }
 
 export function requireOwner(actor: Actor) {
-  if (actor.primaryRole !== ROLES.OWNER) {
+  if (!actor.roles.includes(ROLES.OWNER)) {
     throw new ApiError(
       403,
       "OWNER_REQUIRED",

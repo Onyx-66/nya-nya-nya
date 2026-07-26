@@ -293,8 +293,8 @@ export async function assertSeriesRequestTeamPermission(
   teamId: string,
 ) {
   if (
-    actor.primaryRole === "OWNER" ||
-    actor.primaryRole === "ADMINISTRATOR"
+    actor.roles.includes("OWNER") ||
+    actor.roles.includes("ADMINISTRATOR")
   ) {
     const team = await db
       .prepare(
@@ -553,7 +553,11 @@ export function requestNotificationStatements(
                   u.id, ?, ?, ?, ?, ?, ?
              FROM users u
             WHERE u.status = 'ACTIVE'
-              AND u.primary_role IN ('OWNER', 'ADMINISTRATOR')
+              AND EXISTS (
+                SELECT 1 FROM user_roles ur
+                 WHERE ur.user_id = u.id
+                   AND ur.role IN ('OWNER', 'ADMINISTRATOR', 'MANAGER')
+              )
               AND (${condition})
               AND NOT EXISTS (
                 SELECT 1 FROM notifications existing

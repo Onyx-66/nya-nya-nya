@@ -41,6 +41,7 @@ type SeriesRow = {
   rightsStatus: SeriesManagementInput["rightsStatus"];
   coverKey: string | null;
   bannerKey: string | null;
+  sliderKey: string | null;
   isPublished: number;
   archivedAt: string | null;
   revision: number;
@@ -99,7 +100,7 @@ function parseJsonObject<T>(value: string) {
 
 function publicMediaUrl(
   seriesId: string,
-  slot: "cover" | "banner",
+  slot: "cover" | "banner" | "slider",
   key: string | null,
   revision: number,
 ) {
@@ -156,6 +157,7 @@ function mapSeries(row: SeriesRow) {
     archivedAt: row.archivedAt,
     coverUrl: publicMediaUrl(row.id, "cover", row.coverKey, row.revision),
     bannerUrl: publicMediaUrl(row.id, "banner", row.bannerKey, row.revision),
+    sliderUrl: publicMediaUrl(row.id, "slider", row.sliderKey, row.revision),
     externalSources: parseJsonArray<{
       source: string;
       externalId: string;
@@ -187,6 +189,7 @@ const seriesSelect = `
     s.rights_status AS rightsStatus,
     s.cover_key AS coverKey,
     s.banner_key AS bannerKey,
+    s.slider_key AS sliderKey,
     s.is_published AS isPublished,
     s.archived_at AS archivedAt,
     s.revision,
@@ -656,7 +659,8 @@ async function saveSeries(
         .prepare(
           `SELECT id, title, native_title AS nativeTitle, revision,
                   cover_key AS coverKey,
-                  banner_key AS bannerKey, archived_at AS archivedAt
+                  banner_key AS bannerKey, slider_key AS sliderKey,
+                  archived_at AS archivedAt
            FROM series WHERE id = ? LIMIT 1`,
         )
         .bind(input.id)
@@ -667,6 +671,7 @@ async function saveSeries(
           revision: number;
           coverKey: string | null;
           bannerKey: string | null;
+          sliderKey: string | null;
           archivedAt: string | null;
         }>()
     : null;
@@ -686,7 +691,8 @@ async function saveSeries(
   }
   if (
     ((input.removeCover && current?.coverKey) ||
-      (input.removeBanner && current?.bannerKey)) &&
+      (input.removeBanner && current?.bannerKey) ||
+      (input.removeSlider && current?.sliderKey)) &&
     !env.BUCKET
   ) {
     throw new ApiError(
@@ -754,6 +760,7 @@ async function saveSeries(
                is_published = ?,
                cover_key = CASE WHEN ? = 1 THEN NULL ELSE cover_key END,
                banner_key = CASE WHEN ? = 1 THEN NULL ELSE banner_key END,
+               slider_key = CASE WHEN ? = 1 THEN NULL ELSE slider_key END,
                archived_at = ?, revision = ?,
                updated_at = ?
            WHERE id = ? AND revision = ?`,
@@ -776,6 +783,7 @@ async function saveSeries(
           input.isPublished ? 1 : 0,
           input.removeCover ? 1 : 0,
           input.removeBanner ? 1 : 0,
+          input.removeSlider ? 1 : 0,
           current.archivedAt,
           nextRevision,
           operationTime,
@@ -1021,6 +1029,7 @@ async function saveSeries(
           isPublished: input.isPublished,
           removeCover: input.removeCover,
           removeBanner: input.removeBanner,
+          removeSlider: input.removeSlider,
           teamIds: input.teamIds,
           externalSources: input.externalSources.map((source) => ({
             source: source.source,
@@ -1079,6 +1088,14 @@ async function saveSeries(
       targetType: "SERIES",
       targetId: id,
       reason: "Removed series banner",
+    });
+  }
+  if (input.removeSlider && current?.sliderKey && env.BUCKET) {
+    await deleteMediaObject(db, env.BUCKET, current.sliderKey, {
+      mediaKind: "SERIES_SLIDER",
+      targetType: "SERIES",
+      targetId: id,
+      reason: "Removed series slider artwork",
     });
   }
   return getSeriesById(db, id);

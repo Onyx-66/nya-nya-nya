@@ -9,7 +9,9 @@ import { requireReadableChapter } from "@/lib/server/chapter-access";
 import {
   economySnapshot,
   grantCurrencyReward,
+  walletSnapshot,
 } from "@/lib/server/economy";
+import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
 import { getRewardSettingsDocument } from "@/lib/server/reward-settings";
 
@@ -91,9 +93,16 @@ export async function GET(request: Request) {
     const actor = await requireActor();
     const url = new URL(request.url);
     const chapterId = url.searchParams.get("chapterId")?.trim();
+    const commercial = await getCommercialSettingsDocument();
+    const premiumEconomyPublic =
+      commercial.settings.economy.premiumEconomyPublic;
     const [document, balances, chapter] = await Promise.all([
       getRewardSettingsDocument(),
-      economySnapshot(database(), actor.id),
+      premiumEconomyPublic
+        ? economySnapshot(database(), actor.id)
+        : walletSnapshot(database(), actor.id, "SHARDS").then((shards) => ({
+            shards,
+          })),
       chapterId ? sessionStatus(actor.id, chapterId) : null,
     ]);
     return json(
@@ -103,6 +112,7 @@ export async function GET(request: Request) {
         settingsRevision: document.revision,
         balances,
         chapter,
+        premiumEconomyPublic,
       },
       { headers: privateHeaders },
     );

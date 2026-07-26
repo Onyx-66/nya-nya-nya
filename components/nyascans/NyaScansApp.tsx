@@ -36,6 +36,7 @@ import {
   Image as ImageIcon,
   Key,
   List,
+  Lifebuoy,
   LockSimple,
   MagnifyingGlass,
   Moon,
@@ -43,6 +44,7 @@ import {
   Plus,
   Pulse,
   ShieldCheck,
+  SidebarSimple,
   SignIn,
   SignOut,
   SlidersHorizontal,
@@ -53,7 +55,6 @@ import {
   Storefront,
   Sun,
   Trash,
-  TrendUp,
   UploadSimple,
   UserCircle,
   UsersThree,
@@ -76,6 +77,8 @@ import {
 import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
+import { KeyboardShortcutsDialog } from "@/components/nyascans/KeyboardShortcutsDialog";
+import { SupportTicketPanel } from "@/components/nyascans/SupportTicketPanel";
 import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
 import { NotificationsView } from "@/components/nyascans/NotificationsView";
 import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
@@ -86,6 +89,7 @@ import {
 import { PublicProfileView } from "@/components/nyascans/PublicProfileView";
 import { PublicTeamView } from "@/components/nyascans/PublicTeamView";
 import { RouletteView } from "@/components/nyascans/RouletteView";
+import { UserLeaderboardView } from "@/components/nyascans/UserLeaderboardView";
 import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 import { ReactionLibraryPanel } from "@/components/nyascans/admin/ReactionLibraryPanel";
@@ -99,6 +103,7 @@ import { useCommercialSettings } from "@/components/nyascans/useCommercialSettin
 import { useSiteConfiguration } from "@/components/nyascans/useSiteConfiguration";
 import {
   coinLabel,
+  configuredCoinCopy,
   formatMoney,
   type CommercialSettings,
 } from "@/lib/commercial-settings";
@@ -110,6 +115,12 @@ import {
   compareChapterNumbers,
   normalizeChapterNumber,
 } from "@/lib/chapter-number";
+import {
+  LEGAL_DOCUMENTS,
+  LEGAL_DOCUMENTS_BY_SLUG,
+} from "@/lib/legal-documents";
+import { readingProgressTone } from "@/lib/reading-progress";
+import { SITE_NAVIGATION_CHORDS } from "@/lib/site-shortcuts";
 
 const OperationsControlPanel = lazy(() =>
   import("@/components/nyascans/OperationsControlPanel").then((module) => ({
@@ -148,6 +159,8 @@ type Actor = {
   displayName: string;
   email: string;
   role: string;
+  roles?: string[];
+  avatarUrl?: string | null;
   canUseUploadCenter?: boolean;
   canUpload?: boolean;
   canRequestSeries?: boolean;
@@ -194,6 +207,7 @@ type AnalyticsEventType =
   | "CHAPTER_COMPLETE";
 
 let memoryAnalyticsSession = "";
+let memoryAnalyticsVisitor = "";
 
 function clientRandomId() {
   const browserCrypto =
@@ -233,6 +247,26 @@ function analyticsSessionId() {
   }
 }
 
+function analyticsVisitorId() {
+  if (memoryAnalyticsVisitor) return memoryAnalyticsVisitor;
+  try {
+    const stored = window.localStorage.getItem("nyascans-analytics-visitor");
+    if (stored) {
+      memoryAnalyticsVisitor = stored;
+      return stored;
+    }
+    memoryAnalyticsVisitor = clientRandomId();
+    window.localStorage.setItem(
+      "nyascans-analytics-visitor",
+      memoryAnalyticsVisitor,
+    );
+    return memoryAnalyticsVisitor;
+  } catch {
+    memoryAnalyticsVisitor = clientRandomId();
+    return memoryAnalyticsVisitor;
+  }
+}
+
 function recordAnalyticsEvent(
   eventType: AnalyticsEventType,
   scope: { seriesSlug?: string; chapterSlug?: string } = {},
@@ -240,6 +274,7 @@ function recordAnalyticsEvent(
   const payload = {
     eventId: clientRandomId(),
     sessionId: analyticsSessionId(),
+    visitorId: analyticsVisitorId(),
     eventType,
     ...scope,
   };
@@ -291,6 +326,31 @@ function ResilientCoverImage({
   );
 }
 
+function ConfiguredCoinMark({
+  settings,
+  size = 18,
+}: {
+  settings: CommercialSettings;
+  size?: number;
+}) {
+  return (
+    <span
+      className="configured-coin-mark"
+      style={{ "--coin-mark-size": `${size}px` } as CSSProperties}
+      aria-hidden="true"
+    >
+      {settings.economy.coinIconKey ? (
+        <img
+          src={`/api/v1/coin-icon?v=${settings.economy.coinIconRevision}`}
+          alt=""
+        />
+      ) : (
+        <span>{settings.economy.coinIcon}</span>
+      )}
+    </span>
+  );
+}
+
 const navItems = [
   { label: "Home", href: "/", icon: House },
   { label: "Latest Updates", href: "/latest", icon: Pulse },
@@ -300,7 +360,11 @@ const navItems = [
 ];
 
 function elevatedDestination(actor: Actor | null) {
-  if (actor && ["OWNER", "ADMINISTRATOR"].includes(actor.role)) {
+  const roles = actor?.roles?.length ? actor.roles : actor ? [actor.role] : [];
+  if (
+    actor &&
+    roles.some((role) => ["OWNER", "ADMINISTRATOR", "MANAGER"].includes(role))
+  ) {
     return {
       href: "/onyx/admin/access",
       label: "Admin",
@@ -328,6 +392,7 @@ function elevatedDestination(actor: Actor | null) {
 function roleLabel(role: string) {
   if (role === "OWNER") return "Owner";
   if (role === "ADMINISTRATOR") return "Administrator";
+  if (role === "MANAGER") return "Manager";
   if (role === "MODERATOR") return "Moderator";
   if (role === "TEAM_LEADER") return "Team leader";
   if (role === "UPLOADER") return "Uploader";
@@ -755,8 +820,12 @@ function SiteHeader({
 
   useEffect(() => {
     if (!actor) return;
-    const controller = new AbortController();
+    const profileController = new AbortController();
+    let notificationController: AbortController | null = null;
     async function loadNotifications() {
+      notificationController?.abort();
+      const controller = new AbortController();
+      notificationController = controller;
       setNotificationsError("");
       try {
         const response = await fetch(
@@ -784,14 +853,17 @@ function SiteHeader({
           );
         }
       } finally {
-        if (!controller.signal.aborted) setNotificationsLoading(false);
+        if (notificationController === controller) {
+          if (!controller.signal.aborted) setNotificationsLoading(false);
+          notificationController = null;
+        }
       }
     }
     async function loadProfileAvatar() {
       try {
         const response = await fetch("/api/v1/profiles", {
           cache: "no-store",
-          signal: controller.signal,
+          signal: profileController.signal,
         });
         const payload = (await response.json()) as {
           data?: { avatarUrl?: string | null };
@@ -807,18 +879,28 @@ function SiteHeader({
     void loadProfileAvatar();
     const refreshNotifications = () => void loadNotifications();
     const refreshProfile = () => void loadProfileAvatar();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void loadNotifications();
+    };
+    const notificationPoll = window.setInterval(refreshWhenVisible, 20_000);
     window.addEventListener(
       "nyascans:notifications-changed",
       refreshNotifications,
     );
     window.addEventListener("nyascans:profile-changed", refreshProfile);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
-      controller.abort();
+      notificationController?.abort();
+      profileController.abort();
+      window.clearInterval(notificationPoll);
       window.removeEventListener(
         "nyascans:notifications-changed",
         refreshNotifications,
       );
       window.removeEventListener("nyascans:profile-changed", refreshProfile);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [actor]);
 
@@ -910,10 +992,11 @@ function SiteHeader({
             type="button"
             onClick={onSearch}
             aria-label="Open search"
+            aria-keyshortcuts="Control+K Meta+K"
           >
             <MagnifyingGlass size={18} />
             <span>Search</span>
-            <kbd>/</kbd>
+            <kbd>Ctrl K</kbd>
           </button>
           {actor ? (
             <>
@@ -1882,6 +1965,9 @@ function LatestUpdatesGrid({
   period?: "today" | "week" | "month" | "all";
   pageSize?: 6 | 20;
 }) {
+  const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercial.economy.premiumEconomyPublic;
   const [page, setPage] = useState(1);
   const [records, setRecords] = useState<LatestRelease[]>([]);
   const [pageCount, setPageCount] = useState(1);
@@ -2053,12 +2139,14 @@ function LatestUpdatesGrid({
                       <small>Cover pending</small>
                     </span>
                   )}
+                  <span className="latest-cover-type">
+                    <SeriesTypeBadge type={update.type} />
+                  </span>
                 </a>
                 <div className="latest-card-copy">
                   <div className="latest-card-head">
                     <div>
                       <div className="latest-series-badges">
-                        <SeriesTypeBadge type={update.type} />
                         <SeriesStatusBadge status={update.status} />
                       </div>
                       <a href={`/title/${update.slug}`}>
@@ -2082,11 +2170,15 @@ function LatestUpdatesGrid({
                         <time dateTime={chapter.publishedAt}>
                           {releaseTime(chapter.publishedAt)} ago
                         </time>
-                        <ChapterAccessBadge
-                          accessType={
-                            chapter.effectiveAccessType ?? chapter.accessType
-                          }
-                        />
+                        {premiumEconomyPublic ||
+                        (chapter.effectiveAccessType ?? chapter.accessType) !==
+                          "PAID" ? (
+                          <ChapterAccessBadge
+                            accessType={
+                              chapter.effectiveAccessType ?? chapter.accessType
+                            }
+                          />
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -2137,6 +2229,7 @@ function LatestUpdatesGrid({
 }
 
 function LatestUpdatesView() {
+  const { settings: commercial } = useCommercialSettings();
   const [period, setPeriod] = useState<
     "today" | "week" | "month" | "all"
   >("week");
@@ -2146,8 +2239,9 @@ function LatestUpdatesView() {
         <p className="eyebrow">Fresh chapters</p>
         <h1>Latest Updates</h1>
         <p>
-          Paid and free chapter releases, sorted newest first in one
-          easy-to-scan feed.
+          {commercial.economy.premiumEconomyPublic
+            ? "Paid and free chapter releases, sorted newest first in one easy-to-scan feed."
+            : "New chapter releases, sorted newest first in one easy-to-scan feed."}
         </p>
         <div
           className="latest-periods"
@@ -2231,7 +2325,7 @@ function TrendingShowcase({
           <h2>Trending</h2>
         </div>
         <div className="trending-actions">
-          <a href="/rankings">
+          <a href="/leaderboard">
             Full ranking <ArrowRight size={17} />
           </a>
         </div>
@@ -2451,6 +2545,279 @@ function AnnouncementBanner({
   );
 }
 
+type ContinueReadingRecord = {
+  seriesId: string;
+  seriesSlug: string;
+  seriesTitle: string;
+  coverUrl: string | null;
+  chapterId: string;
+  chapterSlug: string;
+  chapterNumber: string;
+  chapterTitle: string;
+  pageIndex: number;
+  pageCount: number;
+  progress: number;
+  chapterProgress: number;
+  chaptersRead: number;
+  chaptersTotal: number;
+  lastOpenedAt: string;
+  resumeUrl: string;
+};
+
+function continueReadingRelativeTime(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "Recently opened";
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "Opened just now";
+  if (minutes < 60) return `Opened ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Opened ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "Opened yesterday" : `Opened ${days}d ago`;
+}
+
+function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
+  const [records, setRecords] = useState<ContinueReadingRecord[]>([]);
+  const [viewMode, setViewMode] = useState<"LIST" | "SHELF">("LIST");
+  const [loading, setLoading] = useState(signedIn);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [savingViewMode, setSavingViewMode] = useState(false);
+  const [preferenceError, setPreferenceError] = useState("");
+  const viewModeRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    const controller = new AbortController();
+    void fetch("/api/v1/continue-reading", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: ContinueReadingRecord[];
+          preferences?: { viewMode?: "LIST" | "SHELF" };
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "Continue Reading could not be loaded.",
+          );
+        }
+        setRecords(payload.data ?? []);
+        setViewMode(
+          payload.preferences?.viewMode === "SHELF" ? "SHELF" : "LIST",
+        );
+      })
+      .catch((loadError: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Continue Reading could not be loaded.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [revision, signedIn]);
+
+  useEffect(
+    () => () => {
+      viewModeRequest.current?.abort();
+    },
+    [],
+  );
+
+  async function chooseViewMode(next: "LIST" | "SHELF") {
+    if (next === viewMode || loading || savingViewMode) return;
+    const previous = viewMode;
+    const controller = new AbortController();
+    viewModeRequest.current?.abort();
+    viewModeRequest.current = controller;
+    setPreferenceError("");
+    setSavingViewMode(true);
+    setViewMode(next);
+    try {
+      const response = await fetch("/api/v1/continue-reading", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ viewMode: next }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Preference was not saved.");
+    } catch (saveError) {
+      if (!controller.signal.aborted) {
+        setViewMode(previous);
+        setPreferenceError(
+          saveError instanceof Error
+            ? saveError.message
+            : "View preference was not saved.",
+        );
+      }
+    } finally {
+      if (viewModeRequest.current === controller) {
+        viewModeRequest.current = null;
+        setSavingViewMode(false);
+      }
+    }
+  }
+
+  return (
+    <section
+      className={`continue-reading-section page-wrap is-${viewMode.toLowerCase()}`}
+      aria-labelledby="continue-reading-title"
+    >
+      <header className="continue-reading-heading">
+        <div>
+          <p className="eyebrow">Your recent stories</p>
+          <h2 id="continue-reading-title">Continue reading</h2>
+          <p>Resume one of the last 12 series you opened.</p>
+          {preferenceError ? (
+            <p className="continue-reading-preference-error" role="alert">
+              {preferenceError}
+            </p>
+          ) : null}
+        </div>
+        {signedIn ? (
+          <div className="continue-reading-actions">
+            <div
+              role="group"
+              aria-label="Continue Reading view"
+              aria-busy={savingViewMode}
+            >
+              <button
+                type="button"
+                aria-label="List view"
+                title="List view"
+                disabled={loading || savingViewMode}
+                aria-pressed={viewMode === "LIST"}
+                onClick={() => void chooseViewMode("LIST")}
+              >
+                <List size={18} />
+              </button>
+              <button
+                type="button"
+                aria-label="Cover shelf"
+                title="Cover shelf"
+                disabled={loading || savingViewMode}
+                aria-pressed={viewMode === "SHELF"}
+                onClick={() => void chooseViewMode("SHELF")}
+              >
+                <SquaresFour size={18} />
+              </button>
+            </div>
+            <a href="/library">
+              View library <ArrowRight size={15} />
+            </a>
+          </div>
+        ) : null}
+      </header>
+
+      {!signedIn ? (
+        <div className="continue-reading-guest">
+          <span><BookmarkSimple size={23} /></span>
+          <div>
+            <strong>Keep every chapter in sync.</strong>
+            <p>Sign in to resume from the exact page on any device.</p>
+          </div>
+          <a className="button button-secondary" href={authEntryPath("login", "/")}>
+            Sign in
+          </a>
+        </div>
+      ) : loading ? (
+        <div className="continue-reading-skeleton" aria-label="Loading recent series" aria-busy="true">
+          {Array.from({ length: 6 }, (_, index) => (
+            <span key={index}><i /><b /><small /></span>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="continue-reading-state" role="alert">
+          <WarningCircle size={22} />
+          <div>
+            <strong>Recent series unavailable</strong>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setError("");
+              setRevision((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      ) : records.length ? (
+        <div className="continue-reading-list">
+          {records.map((record) => (
+            <a
+              className="continue-reading-item"
+              href={record.resumeUrl}
+              key={record.seriesId}
+            >
+              <span className="continue-reading-cover">
+                {record.coverUrl ? (
+                  <img
+                    src={record.coverUrl}
+                    alt={`Cover art for ${record.seriesTitle}`}
+                    width={96}
+                    height={144}
+                    loading="lazy"
+                  />
+                ) : (
+                  <Books size={24} />
+                )}
+              </span>
+              <span className="continue-reading-copy">
+                <strong>{record.seriesTitle}</strong>
+                <small>
+                  Chapter {normalizeChapterNumber(record.chapterNumber)}
+                  {record.pageCount > 0
+                    ? ` · Page ${Math.min(record.pageIndex + 1, record.pageCount)} of ${record.pageCount}`
+                    : ""}
+                </small>
+                <small className="continue-reading-chapter-count">
+                  {record.chaptersRead}/{record.chaptersTotal} chapters read
+                </small>
+                <span>{continueReadingRelativeTime(record.lastOpenedAt)}</span>
+                <i
+                  className="continue-reading-progress"
+                  data-progress-tone={readingProgressTone(record.progress)}
+                  role="progressbar"
+                  aria-label={`${record.seriesTitle} reading progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(record.progress)}
+                  aria-valuetext={`${record.chaptersRead} of ${record.chaptersTotal} chapters read`}
+                >
+                  <b style={{ width: `${Math.min(100, record.progress)}%` }} />
+                </i>
+              </span>
+              <span className="continue-reading-resume" aria-hidden="true">
+                <Play size={17} weight="fill" />
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div className="continue-reading-state">
+          <Books size={22} />
+          <div>
+            <strong>Your recent series will appear here.</strong>
+            <span>Open a chapter to start a synced reading trail.</span>
+          </div>
+          <a href="/browse">Browse series</a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 type EditorPick = {
   id: string;
   seriesId: string;
@@ -2463,6 +2830,8 @@ type EditorPick = {
   shortDescription: string;
   categoryLabel: string;
   cover: string | null;
+  banner: string | null;
+  slider: string | null;
   ratingTenths: number;
   latestChapterSlug: string | null;
   chapterCount: number;
@@ -2472,11 +2841,63 @@ type EditorPick = {
   alternativeTitles: string[];
 };
 
+function featuredAlternativeTitles(item: EditorPick) {
+  const seen = new Set([item.title.trim().toLocaleLowerCase()]);
+  return [item.nativeTitle, ...(item.alternativeTitles ?? [])]
+    .map((title) => title?.trim() ?? "")
+    .filter((title) => {
+      if (!title) return false;
+      const normalized = title.toLocaleLowerCase();
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+}
+
+function FeaturedSliderArtwork({
+  item,
+  main = false,
+}: {
+  item: EditorPick;
+  main?: boolean;
+}) {
+  const artwork = item.slider ?? item.cover;
+  if (!artwork && !item.banner) {
+    return <Books size={main ? 42 : 28} />;
+  }
+  return (
+    <>
+      {artwork ? (
+        <ResilientCoverImage
+          className="featured-card-cover"
+          src={artwork}
+          alt={main ? `Cover art for ${item.title}` : ""}
+          width={main ? 630 : undefined}
+          height={main ? 630 : undefined}
+          loading={main ? "eager" : "lazy"}
+          decorative={!main}
+        />
+      ) : null}
+      {!artwork && item.banner ? (
+        <ResilientCoverImage
+          className="featured-card-banner featured-card-fallback"
+          src={item.banner}
+          alt=""
+          decorative
+          loading={main ? "eager" : "lazy"}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function FeaturedSeriesSlider() {
   const [picks, setPicks] = useState<EditorPick[]>([]);
   const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [pointerPaused, setPointerPaused] = useState(false);
+  const [focusPaused, setFocusPaused] = useState(false);
   const swipeStart = useRef<number | null>(null);
+  const paused = pointerPaused || focusPaused;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2496,6 +2917,7 @@ function FeaturedSeriesSlider() {
 
   useEffect(() => {
     if (picks.length < 2 || paused) return;
+    if (document.documentElement.dataset.sliderAutoplay === "false") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const seconds = Math.min(
       15,
@@ -2542,14 +2964,25 @@ function FeaturedSeriesSlider() {
   const safeActive = active < picks.length ? active : 0;
   const item = picks[safeActive]!;
   const farPreviousIndex = (safeActive - 2 + picks.length) % picks.length;
+  const outerPreviousIndex = (safeActive - 3 + picks.length) % picks.length;
+  const outermostPreviousIndex =
+    (safeActive - 4 + picks.length) % picks.length;
   const previousIndex = (safeActive - 1 + picks.length) % picks.length;
   const nextIndex = (safeActive + 1) % picks.length;
   const farNextIndex = (safeActive + 2) % picks.length;
+  const outerNextIndex = (safeActive + 3) % picks.length;
+  const outermostNextIndex = (safeActive + 4) % picks.length;
   const farPreviousItem = picks[farPreviousIndex]!;
+  const outerPreviousItem = picks[outerPreviousIndex]!;
+  const outermostPreviousItem = picks[outermostPreviousIndex]!;
   const previousItem = picks[previousIndex]!;
   const nextItem = picks[nextIndex]!;
   const farNextItem = picks[farNextIndex]!;
+  const outerNextItem = picks[outerNextIndex]!;
+  const outermostNextItem = picks[outermostNextIndex]!;
   const showFiveCards = picks.length >= 5;
+  const showNineCards = picks.length >= 9;
+  const alternativeTitle = featuredAlternativeTitles(item).join(" · ");
   const move = (direction: -1 | 1) =>
     setActive(
       (current) => (current + direction + picks.length) % picks.length,
@@ -2560,10 +2993,17 @@ function FeaturedSeriesSlider() {
       className="featured-slider"
       aria-roledescription="carousel"
       aria-label="Featured series"
-      onPointerEnter={() => setPaused(true)}
-      onPointerLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={() => setPaused(false)}
+      onPointerEnter={() => setPointerPaused(true)}
+      onPointerLeave={() => setPointerPaused(false)}
+      onFocusCapture={() => setFocusPaused(true)}
+      onBlurCapture={(event) => {
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        ) {
+          setFocusPaused(false);
+        }
+      }}
       onPointerDown={(event) => {
         swipeStart.current = event.clientX;
       }}
@@ -2574,10 +3014,10 @@ function FeaturedSeriesSlider() {
         move(event.clientX < start ? 1 : -1);
       }}
     >
-      {item.cover ? (
+      {item.banner || item.slider || item.cover ? (
         <ResilientCoverImage
           className="featured-slider-backdrop"
-          src={item.cover}
+          src={item.banner ?? item.slider ?? item.cover!}
           alt=""
           decorative
           loading="eager"
@@ -2587,8 +3027,30 @@ function FeaturedSeriesSlider() {
       <div className="featured-slider-inner page-wrap">
         <div
           className="featured-slider-stage"
-          data-visible-count={showFiveCards ? "5" : "3"}
+          data-visible-count={
+            showNineCards ? "9" : showFiveCards ? "5" : "3"
+          }
         >
+          {showNineCards ? (
+            <>
+              <button
+                className="featured-side-card featured-outer-card featured-outermost-card-left"
+                type="button"
+                aria-label={`Show ${outermostPreviousItem.title}`}
+                onClick={() => setActive(outermostPreviousIndex)}
+              >
+                <FeaturedSliderArtwork item={outermostPreviousItem} />
+              </button>
+              <button
+                className="featured-side-card featured-outer-card featured-outer-card-left"
+                type="button"
+                aria-label={`Show ${outerPreviousItem.title}`}
+                onClick={() => setActive(outerPreviousIndex)}
+              >
+                <FeaturedSliderArtwork item={outerPreviousItem} />
+              </button>
+            </>
+          ) : null}
           {showFiveCards ? (
             <button
               className="featured-side-card featured-edge-card featured-edge-card-left"
@@ -2596,15 +3058,7 @@ function FeaturedSeriesSlider() {
               aria-label={`Show ${farPreviousItem.title}`}
               onClick={() => setActive(farPreviousIndex)}
             >
-              {farPreviousItem.cover ? (
-                <ResilientCoverImage
-                  src={farPreviousItem.cover}
-                  alt=""
-                  decorative
-                />
-              ) : (
-                <Books size={26} />
-              )}
+              <FeaturedSliderArtwork item={farPreviousItem} />
             </button>
           ) : null}
           {picks.length > 1 ? (
@@ -2614,15 +3068,7 @@ function FeaturedSeriesSlider() {
               aria-label={`Show ${previousItem.title}`}
               onClick={() => setActive(previousIndex)}
             >
-              {previousItem.cover ? (
-                <ResilientCoverImage
-                  src={previousItem.cover}
-                  alt=""
-                  decorative
-                />
-              ) : (
-                <Books size={30} />
-              )}
+              <FeaturedSliderArtwork item={previousItem} />
             </button>
           ) : null}
           <a
@@ -2630,24 +3076,32 @@ function FeaturedSeriesSlider() {
             href={`/title/${item.slug}`}
             key={item.id}
           >
-            {item.cover ? (
-              <ResilientCoverImage
-                src={item.cover}
-                alt={`Cover art for ${item.title}`}
-                width={420}
-                height={630}
-                loading="eager"
-              />
-            ) : (
-              <Books size={42} />
-            )}
+            <FeaturedSliderArtwork item={item} main />
             <span className="featured-main-details">
               <strong>{item.title}</strong>
-              <SeriesStatusBadge status={item.status} />
-              <small>
-                <span>{item.chapterCount} chapters</span>
-                <span><BookmarkSimple size={14} /> {item.bookmarkCount}</span>
-              </small>
+              {alternativeTitle ? (
+                <span
+                  className="featured-main-alternatives"
+                  title={alternativeTitle}
+                >
+                  {alternativeTitle}
+                </span>
+              ) : null}
+              <span className="featured-main-meta">
+                <SeriesStatusBadge status={item.status} />
+                <span aria-label={`${item.bookmarkCount} bookmarks`}>
+                  <BookmarkSimple size={14} />
+                  {item.bookmarkCount}
+                </span>
+                <span aria-label={`${item.chapterCount} chapters`}>
+                  <Books size={14} />
+                  {item.chapterCount}
+                </span>
+                <span aria-label={`${item.commentCount} comments`}>
+                  <ChatCircle size={14} />
+                  {item.commentCount}
+                </span>
+              </span>
             </span>
           </a>
           {picks.length > 1 ? (
@@ -2657,11 +3111,7 @@ function FeaturedSeriesSlider() {
               aria-label={`Show ${nextItem.title}`}
               onClick={() => setActive(nextIndex)}
             >
-              {nextItem.cover ? (
-                <ResilientCoverImage src={nextItem.cover} alt="" decorative />
-              ) : (
-                <Books size={30} />
-              )}
+              <FeaturedSliderArtwork item={nextItem} />
             </button>
           ) : null}
           {showFiveCards ? (
@@ -2671,16 +3121,28 @@ function FeaturedSeriesSlider() {
               aria-label={`Show ${farNextItem.title}`}
               onClick={() => setActive(farNextIndex)}
             >
-              {farNextItem.cover ? (
-                <ResilientCoverImage
-                  src={farNextItem.cover}
-                  alt=""
-                  decorative
-                />
-              ) : (
-                <Books size={26} />
-              )}
+              <FeaturedSliderArtwork item={farNextItem} />
             </button>
+          ) : null}
+          {showNineCards ? (
+            <>
+              <button
+                className="featured-side-card featured-outer-card featured-outer-card-right"
+                type="button"
+                aria-label={`Show ${outerNextItem.title}`}
+                onClick={() => setActive(outerNextIndex)}
+              >
+                <FeaturedSliderArtwork item={outerNextItem} />
+              </button>
+              <button
+                className="featured-side-card featured-outer-card featured-outermost-card-right"
+                type="button"
+                aria-label={`Show ${outermostNextItem.title}`}
+                onClick={() => setActive(outermostNextIndex)}
+              >
+                <FeaturedSliderArtwork item={outermostNextItem} />
+              </button>
+            </>
           ) : null}
           {picks.length > 1 ? (
             <div className="featured-slider-arrows">
@@ -3024,45 +3486,10 @@ function HomeView({
 
       <FeaturedSeriesSlider />
 
-      <main>
+      <main className="home-main">
         <TrendingShowcase ordered={demoSeries} />
 
-        <section className="home-continue page-wrap">
-          {actor ? (
-            <a className="continue-card" href="/title/the-glass-orchard/chapter/episode-30">
-              <img
-                src="/art/cover-glass-orchard.png"
-                alt=""
-                width={96}
-                height={144}
-              />
-              <div>
-                <span>Continue reading</span>
-                <h2>The Glass Orchard</h2>
-                <p>Episode 30 • Page 42 of 68</p>
-                <div className="mini-progress" aria-label="62 percent complete">
-                  <i style={{ width: "62%" }} />
-                </div>
-              </div>
-              <span className="continue-play">
-                <Play size={20} weight="fill" />
-              </span>
-            </a>
-          ) : (
-            <div className="continue-guest">
-              <div>
-                <BookmarkSimple size={22} />
-                <span>
-                  <strong>Keep every chapter in sync.</strong>
-                  Sign in to resume from the exact page on any device.
-                </span>
-              </div>
-              <a className="button button-quiet" href={authEntryPath("login", "/")}>
-                Sign in
-              </a>
-            </div>
-          )}
-        </section>
+        <ContinueReadingSection signedIn={Boolean(actor)} />
 
         <section className="updates-section">
           <div className="page-wrap">
@@ -3139,6 +3566,9 @@ function CatalogCover({
 }
 
 function BrowseView({ showToast }: { showToast: (text: string) => void }) {
+  const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercial.economy.premiumEconomyPublic;
   const [query, setQuery] = useState("");
   const [type, setType] = useState("All");
   const [access, setAccess] = useState("All");
@@ -3195,7 +3625,15 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           : "latest",
       );
       setPage(Number.isInteger(nextPage) && nextPage > 0 ? nextPage : 1);
-      setPageSize([12, 24, 36, 48].includes(nextPageSize) ? nextPageSize : 24);
+      setPageSize(
+        nextPageSize === 12
+          ? 16
+          : nextPageSize === 36
+            ? 32
+            : [16, 24, 32, 48].includes(nextPageSize)
+              ? nextPageSize
+              : 24,
+      );
       setMoreOpen(nextStatus !== "ALL");
     }
     const timeout = window.setTimeout(() => {
@@ -3222,7 +3660,9 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
       });
       if (query.trim()) params.set("q", query.trim());
       if (type !== "All") params.set("type", type);
-      if (access !== "All") params.set("access", access);
+      if (premiumEconomyPublic && access !== "All") {
+        params.set("access", access);
+      }
       if (status !== "All") params.set("status", status);
       try {
         const response = await fetch(`/api/v1/catalog?${params.toString()}`, {
@@ -3273,6 +3713,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
     page,
     pageSize,
     query,
+    premiumEconomyPublic,
     sort,
     status,
     type,
@@ -3303,7 +3744,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
     const params = new URLSearchParams();
     if (next.query.trim()) params.set("q", next.query.trim());
     if (next.type !== "All") params.set("type", next.type.toLowerCase());
-    if (next.access !== "All") {
+    if (premiumEconomyPublic && next.access !== "All") {
       params.set("access", next.access.toLowerCase());
     }
     if (next.status !== "All") {
@@ -3375,20 +3816,22 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           </select>
           <CaretDown size={15} />
         </label>
-        <label>
-          <span>Access</span>
-          <select
-            value={access}
-            onChange={(event) =>
-              navigate({ access: event.target.value, page: 1 })
-            }
-          >
-            <option value="All">All access</option>
-            <option value="FREE">Free</option>
-            <option value="PAID">Paid</option>
-          </select>
-          <CaretDown size={15} />
-        </label>
+        {premiumEconomyPublic ? (
+          <label>
+            <span>Access</span>
+            <select
+              value={access}
+              onChange={(event) =>
+                navigate({ access: event.target.value, page: 1 })
+              }
+            >
+              <option value="All">All access</option>
+              <option value="FREE">Free</option>
+              <option value="PAID">Paid</option>
+            </select>
+            <CaretDown size={15} />
+          </label>
+        ) : null}
         <button
           className="filter-button"
           type="button"
@@ -3420,6 +3863,25 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
               <option value="followed">Most Followed</option>
               <option value="rated">Highest Rated</option>
               <option value="title">Alphabetical</option>
+            </select>
+          </label>
+          <label>
+            Per page
+            <select
+              aria-label="Results per page"
+              value={pageSize}
+              onChange={(event) =>
+                navigate({
+                  pageSize: Number(event.target.value),
+                  page: 1,
+                })
+              }
+            >
+              {[16, 24, 32, 48].map((value) => (
+                <option value={value} key={value}>
+                  {value}
+                </option>
+              ))}
             </select>
           </label>
           <button
@@ -3490,7 +3952,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           aria-label="Loading catalog"
           aria-busy="true"
         >
-          {Array.from({ length: Math.min(pageSize, 12) }, (_, index) => (
+          {Array.from({ length: Math.min(pageSize, 16) }, (_, index) => (
             <span key={index}>
               <i />
               <b />
@@ -3613,24 +4075,6 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           >
             Next <CaretRight size={16} />
           </button>
-          <label>
-            <span>Per page</span>
-            <select
-              value={pageSize}
-              onChange={(event) =>
-                navigate({
-                  pageSize: Number(event.target.value),
-                  page: 1,
-                })
-              }
-            >
-              {[12, 24, 36, 48].map((value) => (
-                <option value={value} key={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
         </nav>
       ) : null}
     </main>
@@ -3783,7 +4227,13 @@ function StoreView({
   showToast: (text: string) => void;
 }) {
   const { settings: commercial } = useCommercialSettings();
-  const selectedCategory = normalizeStoreCategory(category);
+  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
+  const requestedCategory = normalizeStoreCategory(category);
+  const selectedCategory =
+    !premiumEconomyPublic &&
+    ["coins", "memberships", "gifts"].includes(requestedCategory)
+      ? "cosmetics"
+      : requestedCategory;
   const [busy, setBusy] = useState<string | null>(null);
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [balance, setBalance] = useState<number | null>(null);
@@ -3882,7 +4332,7 @@ function StoreView({
         setStoreError("The cosmetic marketplace could not be loaded.");
         setLoadedStoreRequest(storeRequestKey);
       });
-    if (actor) void fetch("/api/v1/wallet", { signal: controller.signal })
+    if (actor && premiumEconomyPublic) void fetch("/api/v1/wallet", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Wallet unavailable");
         return (await response.json()) as { balance?: number };
@@ -3892,7 +4342,7 @@ function StoreView({
         if (!controller.signal.aborted) setBalance(null);
       });
     return () => controller.abort();
-  }, [actor, selectedCategory, storeRequestKey]);
+  }, [actor, premiumEconomyPublic, selectedCategory, storeRequestKey]);
 
   async function unlockCosmetic(item: StoreCosmetic) {
     if (!actor) {
@@ -3909,7 +4359,7 @@ function StoreView({
       item.priceCurrency === "SHARDS" ? shardBalance : balance;
     const currentBalance = Number(currencyBalance ?? 0);
     const currencyLabel =
-      item.priceCurrency === "SHARDS" ? "Shards" : "Onyx";
+      item.priceCurrency === "SHARDS" ? "Shards" : commercial.economy.coinPlural;
     if (currencyBalance !== null && currentBalance < item.priceOnyx) {
       showToast(
         `You need ${(item.priceOnyx - currentBalance).toLocaleString("en-US")} more ${currencyLabel} to unlock ${item.name}.`,
@@ -4132,7 +4582,7 @@ function StoreView({
                     <span className="store-preview-avatar">
                       <UserCircle size={38} weight="fill" />
                     </span>
-                    <strong>{item.previewConfig.symbol ?? "ONYX"}</strong>
+                    <strong>{item.previewConfig.symbol ?? "NYA"}</strong>
                     <i />
                   </>
                 )}
@@ -4147,7 +4597,7 @@ function StoreView({
                     {item.priceCurrency === "SHARDS" ? (
                       <Sparkle size={16} weight="fill" />
                     ) : (
-                      <Coins size={16} weight="fill" />
+                      <ConfiguredCoinMark settings={commercial} size={16} />
                     )}
                     {item.priceOnyx.toLocaleString("en-US")}
                   </strong>
@@ -4183,15 +4633,18 @@ function StoreView({
           <p className="eyebrow">NyaScans store</p>
           <h1>Choose what you unlock.</h1>
           <p>
-            Onyx, Shards, memberships, gifts, and cosmetics are shown clearly
-            before confirmation.
+            {premiumEconomyPublic
+              ? `${commercial.economy.coinPlural}, Shards, memberships, gifts, and cosmetics are shown clearly before confirmation.`
+              : "Shard cosmetics and earned rewards are shown clearly before confirmation."}
           </p>
         </div>
         <a className="wallet-chip wallet-chip-multi" href="/wallet">
-          <span>
-            <Coins size={19} weight="fill" />
-            <b>{actor ? (balance ?? "...") : "Sign in"}</b> Onyx
-          </span>
+          {premiumEconomyPublic ? (
+            <span>
+              <ConfiguredCoinMark settings={commercial} size={19} />
+              <b>{actor ? (balance ?? "...") : "Sign in"}</b> {commercial.economy.coinPlural}
+            </span>
+          ) : null}
           <span>
             <Sparkle size={18} weight="fill" />
             <b>{actor ? (shardBalance ?? "...") : "Sign in"}</b> Shards
@@ -4201,27 +4654,32 @@ function StoreView({
       </section>
 
       <nav className="store-section-nav page-wrap" aria-label="Store sections">
-        <a
-          href="/store/coins"
-          aria-current={selectedCategory === "coins" ? "page" : undefined}
-        >
-          <Coins size={17} /> Coins
-          <small>{categoryCounts.coins}</small>
-        </a>
-        <a
-          href="/store/memberships"
-          aria-current={selectedCategory === "memberships" ? "page" : undefined}
-        >
-          <CrownSimple size={17} /> Memberships
-          <small>{categoryCounts.memberships}</small>
-        </a>
-        <a
-          href="/store/gifts"
-          aria-current={selectedCategory === "gifts" ? "page" : undefined}
-        >
-          <Gift size={17} /> Gifts
-          <small>{categoryCounts.gifts}</small>
-        </a>
+        {premiumEconomyPublic ? (
+          <>
+            <a
+              href="/store/coins"
+              aria-current={selectedCategory === "coins" ? "page" : undefined}
+            >
+              <ConfiguredCoinMark settings={commercial} size={17} />
+              {commercial.economy.coinPlural}
+              <small>{categoryCounts.coins}</small>
+            </a>
+            <a
+              href="/store/memberships"
+              aria-current={selectedCategory === "memberships" ? "page" : undefined}
+            >
+              <CrownSimple size={17} /> Memberships
+              <small>{categoryCounts.memberships}</small>
+            </a>
+            <a
+              href="/store/gifts"
+              aria-current={selectedCategory === "gifts" ? "page" : undefined}
+            >
+              <Gift size={17} /> Gifts
+              <small>{categoryCounts.gifts}</small>
+            </a>
+          </>
+        ) : null}
         <a
           href="/store/banners"
           aria-current={selectedCategory === "banners" ? "page" : undefined}
@@ -4275,7 +4733,7 @@ function StoreView({
         </div>
       ) : null}
 
-      {selectedCategory === "gifts" ? (
+      {premiumEconomyPublic && selectedCategory === "gifts" ? (
         <GiftStorePanel
           signedIn={Boolean(actor)}
           showToast={showToast}
@@ -4404,7 +4862,7 @@ function StoreView({
                   {product.media.icon ? (
                     <img src={product.media.icon} alt="" />
                   ) : (
-                    commercial.economy.coinIcon
+                    <ConfiguredCoinMark settings={commercial} size={24} />
                   )}
                 </span>
                 <h2>{product.name}</h2>
@@ -4451,7 +4909,7 @@ function StoreView({
             <CrownSimple size={34} weight="fill" />
             <h2>Memberships for every reading rhythm.</h2>
             <p>
-              Compare every active offer, its recurring Onyx allowance, and
+              Compare every active offer, its recurring {commercial.economy.coinName} allowance, and
               chapter benefits before choosing.
             </p>
             <div className="billing-toggle" aria-label="Billing period">
@@ -5144,6 +5602,7 @@ type SeriesChapterAccess = {
   language: string;
   version: number;
   teamName: string | null;
+  thumbnailUrl?: string | null;
   publishedAt: string | null;
   isFresh?: boolean;
   accessType: "FREE" | "PAID";
@@ -5297,6 +5756,7 @@ function TitleView({
   showToast: (text: string) => void;
 }) {
   const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
   const [fetchedPublicDetail, setPublicDetail] = useState<PublicSeriesDetail | null>(
     null,
   );
@@ -5758,7 +6218,12 @@ function TitleView({
             <div className="chapter-list">
               {visibleChapters.length > 0 ? (
                 visibleChapters.map((chapter, index) => {
-                  const access = chapter.accessType === "FREE" ? "Free" : "Paid";
+                  const access =
+                    chapter.accessType === "FREE"
+                      ? "Free"
+                      : premiumEconomyPublic
+                        ? "Paid"
+                        : "Unavailable";
                   const number = chapterDisplayNumber(chapter);
                   return (
                     <a
@@ -5767,6 +6232,14 @@ function TitleView({
                       key={`${chapter.chapterSlug}:${chapter.version}:${chapter.language}`}
                     >
                       <span className="chapter-number">
+                        {chapter.thumbnailUrl ? (
+                          <img
+                            className="chapter-thumbnail"
+                            src={chapter.thumbnailUrl}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : null}
                         <FreshChapterMark fresh={chapter.isFresh} />
                         <span>#{number}</span>
                       </span>
@@ -5788,7 +6261,9 @@ function TitleView({
                       <span className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}>
                         {access === "Free" ? <Check size={14} /> : <LockSimple size={14} />}
                         {access}
-                        {chapter.priceOnyx > 0 && access === "Paid"
+                        {premiumEconomyPublic &&
+                        chapter.priceOnyx > 0 &&
+                        access === "Paid"
                           ? ` · ${coinLabel(chapter.priceOnyx, commercial)}`
                           : ""}
                       </span>
@@ -5944,9 +6419,22 @@ function initialReaderSettings(): ReaderSettings {
       "nyascans:reader-settings:v1",
     );
     if (!stored) return defaultReaderSettings;
+    const parsed = JSON.parse(stored) as Partial<ReaderSettings>;
+    const allowedImageFits: ReaderSettings["imageFit"][] = [
+      "width",
+      "height",
+      "page",
+      "original",
+      "smart",
+    ];
     return {
       ...defaultReaderSettings,
-      ...(JSON.parse(stored) as Partial<ReaderSettings>),
+      ...parsed,
+      imageFit: allowedImageFits.includes(
+        parsed.imageFit as ReaderSettings["imageFit"],
+      )
+        ? (parsed.imageFit as ReaderSettings["imageFit"])
+        : defaultReaderSettings.imageFit,
       volumeNavigation: false,
     };
   } catch {
@@ -6064,6 +6552,7 @@ function ReaderView({
   const catalogItem =
     demoSeries.find((entry) => entry.slug === routeSeriesSlug) ?? null;
   const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
   const [readerContext, setReaderContext] =
     useState<ReaderContextData | null>(null);
   const [contextRevision, setContextRevision] = useState(0);
@@ -6542,7 +7031,11 @@ function ReaderView({
   }, [readerSettings.keepAwake, showToast, wakeLockSupported]);
 
   useEffect(() => {
-    if (!actor || access?.reason !== "PURCHASE_REQUIRED") {
+    if (
+      !actor ||
+      !premiumEconomyPublic ||
+      access?.reason !== "PURCHASE_REQUIRED"
+    ) {
       return;
     }
     const controller = new AbortController();
@@ -6560,7 +7053,7 @@ function ReaderView({
         setWalletError("Balance is temporarily unavailable.");
       });
     return () => controller.abort();
-  }, [access?.reason, actor]);
+  }, [access?.reason, actor, premiumEconomyPublic]);
 
   useEffect(() => {
     if (
@@ -6840,7 +7333,9 @@ function ReaderView({
 
   if (!access.canRead) {
     const title =
-      access.reason === "UNAVAILABLE"
+      !premiumEconomyPublic && access.accessType === "PAID"
+        ? "This chapter is temporarily unavailable"
+        : access.reason === "UNAVAILABLE"
           ? "This chapter is not published yet"
           : access.reason === "SIGN_IN_REQUIRED"
             ? "Sign in before unlocking this paid chapter"
@@ -6872,27 +7367,29 @@ function ReaderView({
             <p className="eyebrow">{access.chapterLabel}</p>
             <h1>{title}</h1>
             <p>
-              {access.reason === "UNAVAILABLE"
+              {!premiumEconomyPublic && access.accessType === "PAID"
+                ? "Premium chapter access is private right now. Existing unlocks remain attached to their owners and no purchase is required or offered on this page."
+                : access.reason === "UNAVAILABLE"
                   ? "The publishing team is still preparing this release."
                   : access.reason === "SIGN_IN_REQUIRED"
                     ? "Create or use your NyaScans account to check your balance and keep the chapter in your library."
-                    : "No chapter pages are requested until the secure Onyx unlock is complete."}
+                    : `No chapter pages are requested until the secure ${commercial.economy.coinName} unlock is complete.`}
             </p>
             <dl>
               <div>
                 <dt>Access</dt>
                 <dd>{access.accessType === "FREE" ? "Free" : "Paid"}</dd>
               </div>
-              {access.priceOnyx > 0 ? (
+              {premiumEconomyPublic && access.priceOnyx > 0 ? (
                 <div>
                   <dt>Required</dt>
                   <dd>
-                    <Coins size={16} weight="fill" />{" "}
+                    <ConfiguredCoinMark settings={commercial} size={16} />{" "}
                     {coinLabel(access.priceOnyx, commercial)}
                   </dd>
                 </div>
               ) : null}
-              {access.reason === "PURCHASE_REQUIRED" ? (
+              {premiumEconomyPublic && access.reason === "PURCHASE_REQUIRED" ? (
                 <div>
                   <dt>Your balance</dt>
                   <dd>
@@ -6908,7 +7405,7 @@ function ReaderView({
                 <WarningCircle size={17} /> {accessError}
               </p>
             ) : null}
-            {access.reason === "SIGN_IN_REQUIRED" ? (
+            {premiumEconomyPublic && access.reason === "SIGN_IN_REQUIRED" ? (
               <div className="reader-unlock-actions">
                 <a
                   className="button button-primary"
@@ -6929,7 +7426,7 @@ function ReaderView({
                   <UserCircle size={18} /> Create Account
                 </a>
               </div>
-            ) : access.reason === "PURCHASE_REQUIRED" ? (
+            ) : premiumEconomyPublic && access.reason === "PURCHASE_REQUIRED" ? (
               <div className="reader-unlock-actions">
                 <button
                   className="button button-primary"
@@ -6950,11 +7447,12 @@ function ReaderView({
                   className="button button-secondary"
                   href="/store/coins#coin-packages"
                 >
-                  <Coins size={18} /> Buy {commercial.economy.coinPlural}
+                  <ConfiguredCoinMark settings={commercial} size={18} /> Buy{" "}
+                  {commercial.economy.coinPlural}
                 </a>
               </div>
             ) : null}
-            {actor ? (
+            {actor && premiumEconomyPublic ? (
               <a className="reader-wallet-link" href="/wallet">
                 View wallet and owned chapters <ArrowRight size={16} />
               </a>
@@ -6967,7 +7465,7 @@ function ReaderView({
 
   return (
     <main
-      className={`reader-page reader-mode-${mode} reader-fit-${readerSettings.imageFit} reader-theme-${readerSettings.readerTheme}`}
+      className={`reader-page reader-mode-${mode} reader-fit-${readerSettings.imageFit} reader-theme-${readerSettings.readerTheme} ${ui ? "reader-ui-visible" : "reader-ui-hidden"}`}
       id="reader-start"
       style={readerStyle}
     >
@@ -7014,32 +7512,10 @@ function ReaderView({
               <List size={20} />
               <span>Chapters</span>
             </button>
-            {actor ? (
-              <>
-                <a href="/account" aria-label="Open account" title="Open account">
-                  <UserCircle size={19} />
-                  <span>Account</span>
-                </a>
-                <a
-                  href="/signout-with-chatgpt?return_to=%2F"
-                  aria-label="Logout"
-                  title="Logout"
-                >
-                  <SignOut size={19} />
-                  <span>Logout</span>
-                </a>
-              </>
-            ) : (
-              <a
-                href={authEntryPath(
-                  "login",
-                  `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`,
-                )}
-              >
-                <SignIn size={19} />
-                <span>Login</span>
-              </a>
-            )}
+            <a href="/" aria-label="Go to NyaScans home" title="Home">
+              <House size={19} />
+              <span>Home</span>
+            </a>
           </div>
         </header>
       ) : (
@@ -7145,9 +7621,12 @@ function ReaderView({
                           {chapterDisplayLabel(chapter)}
                         </strong>
                         <small>
-                          {chapter.accessType === "PAID"
+                          {chapter.accessType === "PAID" &&
+                          premiumEconomyPublic
                             ? `${coinLabel(chapter.priceOnyx, commercial)}`
-                            : "Free"}
+                            : chapter.accessType === "PAID"
+                              ? "Unavailable"
+                              : "Free"}
                           {" · "}
                           Version {chapter.version}
                         </small>
@@ -7461,7 +7940,10 @@ type GiftCardData = {
   createdAt: string;
 };
 
-function useCommerceData(actor: Actor) {
+function useCommerceData(
+  actor: Actor,
+  premiumEconomyPublic: boolean,
+) {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [shardWallet, setShardWallet] = useState<WalletData | null>(null);
   const [orders, setOrders] = useState<OrderData[]>([]);
@@ -7472,10 +7954,51 @@ function useCommerceData(actor: Actor) {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    if (!premiumEconomyPublic) {
+      void fetch("/api/v1/rewards", {
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const payload = (await response.json()) as {
+            balances?: { shards?: WalletData };
+            error?: { message?: string };
+          };
+          if (!response.ok) {
+            throw new Error(
+              payload.error?.message ?? "Shard rewards could not be loaded.",
+            );
+          }
+          if (!active) return;
+          setWallet(null);
+          setShardWallet(payload.balances?.shards ?? null);
+          setOrders([]);
+          setGiftCards([]);
+          setError("");
+          setLoading(false);
+        })
+        .catch((reason: unknown) => {
+          if (!active || controller.signal.aborted) return;
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Shard rewards could not be loaded.",
+          );
+          setLoading(false);
+        });
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    }
     void Promise.all([
-      fetch("/api/v1/wallet"),
-      fetch("/api/v1/orders"),
-      fetch("/api/v1/gifts", { cache: "no-store" }),
+      fetch("/api/v1/wallet", { signal: controller.signal }),
+      fetch("/api/v1/orders", { signal: controller.signal }),
+      fetch("/api/v1/gifts", {
+        cache: "no-store",
+        signal: controller.signal,
+      }),
     ])
       .then(async ([walletResponse, orderResponse, giftsResponse]) => {
         const walletPayload = (await walletResponse.json()) as WalletData & {
@@ -7508,7 +8031,7 @@ function useCommerceData(actor: Actor) {
         setLoading(false);
       })
       .catch((reason: unknown) => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         setError(
           reason instanceof Error
             ? reason.message
@@ -7518,8 +8041,9 @@ function useCommerceData(actor: Actor) {
       });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [actor, reloadKey]);
+  }, [actor, premiumEconomyPublic, reloadKey]);
 
   return {
     wallet,
@@ -7557,11 +8081,17 @@ function WalletOrdersPanel({
   compact?: boolean;
 }) {
   const { settings: commercialSettings } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercialSettings.economy.premiumEconomyPublic;
   const [tab, setTab] = useState<"wallet" | "orders" | "gifts">(initialTab);
   const [redeemCode, setRedeemCode] = useState("");
   const [giftStatus, setGiftStatus] = useState("");
   const [redeeming, setRedeeming] = useState(false);
-  const commerce = useCommerceData(actor);
+  const commerce = useCommerceData(actor, premiumEconomyPublic);
+  const activeTab = premiumEconomyPublic ? tab : "wallet";
+  const walletActivity = premiumEconomyPublic
+    ? commerce.wallet
+    : commerce.shardWallet;
 
   async function redeemGiftCard() {
     setRedeeming(true);
@@ -7582,7 +8112,7 @@ function WalletOrdersPanel({
         );
       }
       setGiftStatus(
-        `${Number(payload.amount ?? 0).toLocaleString("en-US")} Onyx added to your wallet.`,
+        `${Number(payload.amount ?? 0).toLocaleString("en-US")} ${commercialSettings.economy.coinPlural} added to your wallet.`,
       );
       setRedeemCode("");
       commerce.reload();
@@ -7614,23 +8144,31 @@ function WalletOrdersPanel({
   return (
     <div className={`wallet-orders-panel ${compact ? "wallet-orders-compact" : ""}`}>
       <div className="commerce-tabs" role="tablist" aria-label="Wallet, orders, and Gift Cards">
-        <button type="button" role="tab" aria-selected={tab === "wallet"} onClick={() => setTab("wallet")}>
+        <button type="button" role="tab" aria-selected={activeTab === "wallet"} onClick={() => setTab("wallet")}>
           <Wallet size={17} /> Wallet
         </button>
-        <button type="button" role="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
-          <CreditCard size={17} /> Orders
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "gifts"} onClick={() => setTab("gifts")}>
-          <Gift size={17} /> Gift Cards
-        </button>
+        {premiumEconomyPublic ? (
+          <>
+            <button type="button" role="tab" aria-selected={activeTab === "orders"} onClick={() => setTab("orders")}>
+              <CreditCard size={17} /> Orders
+            </button>
+            <button type="button" role="tab" aria-selected={activeTab === "gifts"} onClick={() => setTab("gifts")}>
+              <Gift size={17} /> Gift Cards
+            </button>
+          </>
+        ) : null}
       </div>
-      {tab === "wallet" ? (
+      {activeTab === "wallet" ? (
         <>
           <section className="wallet-balance-grid">
+          {premiumEconomyPublic ? (
           <div className="wallet-hero">
             <div>
               <span>
-                <Wallet size={22} />{" "}
+                <ConfiguredCoinMark
+                  settings={commercialSettings}
+                  size={22}
+                />{" "}
                 {commercialSettings.economy.coinPlural} wallet
               </span>
               <strong>{commerce.wallet?.balance ?? 0}</strong>
@@ -7643,6 +8181,7 @@ function WalletOrdersPanel({
               Add {commercialSettings.economy.coinPlural}
             </a>
           </div>
+          ) : null}
           <div className="wallet-hero wallet-hero-shards">
             <div>
               <span><Sparkle size={22} /> Shards wallet</span>
@@ -7659,14 +8198,19 @@ function WalletOrdersPanel({
               title="Transaction history"
               body="Every grant, spend, purchase, and reversal appears here."
             />
-            {commerce.wallet?.activity.length ? (
-              commerce.wallet.activity.map((item) => (
+            {walletActivity?.activity.length ? (
+              walletActivity.activity.map((item) => (
                 <div className="ledger-row" key={item.id}>
                   <span className={item.amount >= 0 ? "ledger-in" : "ledger-out"}>
                     {item.amount >= 0 ? <Plus size={18} /> : <ArrowUpRight size={18} />}
                   </span>
                   <div>
-                    <strong>{item.memo || item.kind}</strong>
+                    <strong>
+                      {configuredCoinCopy(
+                        item.memo || item.kind,
+                        commercialSettings,
+                      )}
+                    </strong>
                     <small>{item.kind.replaceAll("_", " ").toLowerCase()}</small>
                   </div>
                   <time>{new Date(item.createdAt).toLocaleDateString()}</time>
@@ -7676,13 +8220,17 @@ function WalletOrdersPanel({
             ) : (
               <EmptyState
                 title="No wallet activity yet"
-                body={`${commercialSettings.economy.coinPlural} grants and purchases will appear here.`}
+                body={
+                  premiumEconomyPublic
+                    ? `${commercialSettings.economy.coinPlural} grants and purchases will appear here.`
+                    : "Shard rewards and spending will appear here."
+                }
                 compact
               />
             )}
           </section>
         </>
-      ) : tab === "orders" ? (
+      ) : activeTab === "orders" ? (
         <section className="orders-section">
           <SectionHeading
             title="Orders"
@@ -7754,7 +8302,7 @@ function WalletOrdersPanel({
                     <code>{card.code}</code>
                     {card.message ? <p>{card.message}</p> : null}
                   </div>
-                  <strong>{card.amount.toLocaleString("en-US")} Onyx</strong>
+                  <strong>{card.amount.toLocaleString("en-US")} {commercialSettings.economy.coinPlural}</strong>
                   <em data-valid={card.valid ? "true" : "false"}>
                     {card.valid ? "Valid" : card.status === "REDEEMED" ? "Used" : "Expired"}
                   </em>
@@ -7816,6 +8364,9 @@ function AuthEntryView({
   accountBlocked: boolean;
   returnTo: string;
 }) {
+  const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercial.economy.premiumEconomyPublic;
   const signInHref =
     `/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`;
   const isSignup = intent === "signup";
@@ -7846,9 +8397,8 @@ function AuthEntryView({
               <p className="eyebrow">Account unavailable</p>
               <h1 id="auth-entry-title">This NyaScans account is suspended.</h1>
               <p>
-                Publishing, comments, purchases, and other protected actions
-                remain disabled. Contact support if you believe this is an
-                error.
+                Publishing, comments, and other protected actions remain
+                disabled. Contact support if you believe this is an error.
               </p>
             </div>
             <div className="auth-entry-actions">
@@ -7930,11 +8480,20 @@ function AuthEntryView({
           <LockSimple size={22} weight="fill" />
         </span>
         <p className="eyebrow">One account, every device</p>
-        <h2>Keep your place without weakening paid chapter protection.</h2>
+        <h2>
+          {premiumEconomyPublic
+            ? "Keep your place without weakening protected chapter access."
+            : "Keep your reading progress and rewards synchronized."}
+        </h2>
         <ul>
           <li><Check size={17} /> Sync reading progress and Library choices</li>
-          <li><Check size={17} /> Retain purchased chapter entitlements</li>
-          <li><Check size={17} /> Return to the exact unlock page after sign-in</li>
+          <li>
+            <Check size={17} />{" "}
+            {premiumEconomyPublic
+              ? "Retain chapter entitlements across devices"
+              : "Keep earned Shards and achievements together"}
+          </li>
+          <li><Check size={17} /> Return to the exact chapter after sign-in</li>
         </ul>
       </aside>
     </main>
@@ -7942,6 +8501,9 @@ function AuthEntryView({
 }
 
 function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (text: string) => void }) {
+  const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercial.economy.premiumEconomyPublic;
   const [section, setSection] = useState("Profile");
   const [accountSettings, setAccountSettings] = useState({
     displayName: actor?.displayName ?? "",
@@ -7964,15 +8526,20 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
     },
   });
   const [settingsBusy, setSettingsBusy] = useState(false);
-  const accountSections = [
-    ["Profile", UserCircle],
-    ["Reader settings", Books],
-    ["Security", ShieldCheck],
-    ["Notifications", Bell],
-    ["Connected accounts", Key],
-    ["Preferences", LockSimple],
-    ["Wallet and orders", Wallet],
-  ] as const;
+  const accountSections = useMemo<
+    ReadonlyArray<readonly [string, PhosphorIcon]>
+  >(
+    () => [
+      ["Profile", UserCircle],
+      ["Reader settings", Books],
+      ["Security", ShieldCheck],
+      ["Notifications", Bell],
+      ["Connected accounts", Key],
+      ["Preferences", LockSimple],
+      [premiumEconomyPublic ? "Wallet and orders" : "Rewards", Wallet],
+    ],
+    [premiumEconomyPublic],
+  );
 
   useEffect(() => {
     function syncFromLocation() {
@@ -7993,9 +8560,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
       window.clearTimeout(timeout);
       window.removeEventListener("popstate", syncFromLocation);
     };
-  // The tab registry is intentionally static.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [accountSections]);
 
   function selectSection(nextSection: string) {
     setSection(nextSection);
@@ -8083,8 +8648,8 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
           <Logo />
           <h1>Sign in to keep reading.</h1>
           <p>
-            Continue on any device, manage your wallet, and receive only the
-            updates you choose.
+            Continue on any device, keep your progress synchronized, and
+            receive only the updates you choose.
           </p>
           <a
             className="button button-primary"
@@ -8128,7 +8693,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
       </aside>
       <section className="account-content">
         <SectionHeading title={section} body={section === "Profile" ? "How you appear across NyaScans." : `Manage your ${section.toLowerCase()} preferences.`} />
-        {section === "Wallet and orders" ? (
+        {section === "Wallet and orders" || section === "Rewards" ? (
           <WalletOrdersPanel actor={actor} compact />
         ) : section === "Profile" ? (
           <ProfileSettingsWorkspace onSaved={showToast} />
@@ -8314,8 +8879,12 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
           <form className="settings-form">
             {[
               ["newChapters", "New chapters from followed series"],
-              ["unlockReminders", "Paid chapter and balance reminders"],
-              ["purchaseReceipts", "Purchase receipts"],
+              ...(premiumEconomyPublic
+                ? ([
+                    ["unlockReminders", "Chapter and balance reminders"],
+                    ["purchaseReceipts", "Purchase receipts"],
+                  ] as const)
+                : []),
               ["securityAlerts", "Security alerts"],
               ["newFollowers", "New followers"],
             ].map(([key, label]) => (
@@ -8426,6 +8995,11 @@ function OperationsView({
 }) {
   const admin = mode === "admin";
   const groups = useMemo<OperationsNavigationGroup[]>(() => {
+    const actorRoles = actor.roles?.length ? actor.roles : [actor.role];
+    const manager = actorRoles.includes("MANAGER");
+    const fullAdministrator = actorRoles.some((role) =>
+      ["OWNER", "ADMINISTRATOR"].includes(role),
+    );
     if (!admin && actor.role === "MODERATOR") {
       return [
         {
@@ -8471,6 +9045,18 @@ function OperationsView({
         },
       ];
     }
+    if (manager && !fullAdministrator) {
+      return [
+        {
+          id: "staff-work",
+          label: "Manager workspace",
+          items: [
+            ["New Series Queue", FileText],
+            ["Support tickets", Lifebuoy],
+          ] as const,
+        },
+      ];
+    }
     return [
       {
         id: "catalogue",
@@ -8488,9 +9074,19 @@ function OperationsView({
         id: "community",
         label: "Community",
         items: [
-          ["Users", UsersThree],
           ["Review queue", CheckCircle],
           ["Discussions", ChatCircle],
+          ["Support tickets", Lifebuoy],
+        ] as const,
+      },
+      {
+        id: "users-control",
+        label: "Users Control",
+        items: [
+          ["Users & roles", UsersThree],
+          ["User activity", Pulse],
+          ["Purchases", Storefront],
+          ["Balances", Wallet],
         ] as const,
       },
       {
@@ -8507,6 +9103,7 @@ function OperationsView({
         items: [
           ["Commerce", Coins],
           ["Store Management", Storefront],
+          ["Roulette", Sparkle],
         ] as const,
       },
       {
@@ -8515,19 +9112,24 @@ function OperationsView({
         items: [
           ["Appearance", GearSix],
           ["Security", Key],
-          ...(actor.role === "OWNER"
+          ...((actor.roles ?? [actor.role]).includes("OWNER")
             ? ([["Audit log", FileText]] as const)
             : []),
         ] as const,
       },
     ];
-  }, [actor.canUpload, actor.role, admin]);
+  }, [actor.canUpload, actor.role, actor.roles, admin]);
   const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   const defaultSection =
     !admin && actor.role === "MODERATOR"
       ? "Comments"
       : admin
-        ? "Overview"
+        ? actor.roles?.includes("MANAGER") &&
+          !actor.roles.some((role) =>
+            ["OWNER", "ADMINISTRATOR"].includes(role),
+          )
+          ? "New Series Queue"
+          : "Overview"
         : "Workspace";
   const sectionFromSlug =
     items.find(
@@ -8542,6 +9144,7 @@ function OperationsView({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(groups.map((group) => group.id)),
   );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dirtyState, setDirtyState] = useState({
     dirty: false,
     label: "administrative changes",
@@ -8574,12 +9177,19 @@ function OperationsView({
             );
           }
         }
+        setSidebarCollapsed(
+          window.localStorage.getItem(
+            `nyascans-${mode}-sidebar-collapsed`,
+          ) === "true",
+        );
       } catch {
         // Session-only navigation preferences are optional.
       }
     });
     return () => window.cancelAnimationFrame(frame);
   }, [mode]);
+
+  const visibleExpandedGroups = expandedGroups;
 
   useEffect(() => {
     function onDirty(event: Event) {
@@ -8678,31 +9288,61 @@ function OperationsView({
     });
   }
 
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(
+          `nyascans-${mode}-sidebar-collapsed`,
+          String(next),
+        );
+      } catch {
+        // The sidebar remains fully usable without preference persistence.
+      }
+      return next;
+    });
+  }
+
   return (
-    <main className="ops-shell">
-      <aside className="ops-sidebar">
-        <Logo />
-        <div className="ops-workspace">
-          <span>{admin ? "OA" : actor.role === "MODERATOR" ? "MO" : "BK"}</span>
-          <div>
-            <strong>
-              {admin
-                ? "NyaScans administration"
-                : actor.role === "MODERATOR"
-                  ? "Moderation workspace"
-                  : "Black Kite"}
-            </strong>
-            <small>{admin ? "Platform operations" : "Publishing workspace"}</small>
-          </div>
-          <CaretDown size={15} />
+    <main
+      className={`ops-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""} ${
+        activeSection === "Upload center" ? "is-upload-center" : ""
+      }`}
+      data-operations-mode={mode}
+    >
+      <aside
+        className="ops-sidebar"
+        aria-label={admin ? "Administration navigation" : "Workspace navigation"}
+      >
+        <div className="ops-sidebar-head">
+          <Logo />
+          <button
+            className="ops-sidebar-collapse"
+            type="button"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="operations-navigation"
+            onClick={toggleSidebar}
+          >
+            <SidebarSimple size={19} />
+          </button>
         </div>
-        <nav className="ops-grouped-nav">
+        <nav
+          className="ops-grouped-nav"
+          id="operations-navigation"
+          aria-label="Operations sections"
+        >
           {groups.map((group) => (
             <section className="ops-nav-group" key={group.id}>
               <button
                 className="ops-nav-group-toggle"
                 type="button"
-                aria-expanded={expandedGroups.has(group.id)}
+                id={`ops-nav-${mode}-${group.id}-toggle`}
+                aria-expanded={
+                  sidebarCollapsed || visibleExpandedGroups.has(group.id)
+                }
+                aria-controls={`ops-nav-${mode}-${group.id}-items`}
                 onClick={() => toggleGroup(group.id)}
               >
                 <span>{group.label}</span>
@@ -8710,56 +9350,77 @@ function OperationsView({
               </button>
               <div
                 className="ops-nav-group-items"
-                hidden={!expandedGroups.has(group.id)}
+                id={`ops-nav-${mode}-${group.id}-items`}
+                aria-labelledby={`ops-nav-${mode}-${group.id}-toggle`}
+                hidden={
+                  !sidebarCollapsed && !visibleExpandedGroups.has(group.id)
+                }
               >
                 {group.items.map(([label, Icon]) => (
                   <a
                     href={sectionHref(String(label))}
                     key={String(label)}
+                    title={sidebarCollapsed ? String(label) : undefined}
                     aria-current={activeSection === label ? "page" : undefined}
                     onClick={(event) => {
                       event.preventDefault();
                       openSection(String(label));
                     }}
                   >
-                    <Icon size={18} /> <span>{String(label)}</span>
+                    <Icon size={18} />
+                    <span className="ops-nav-label">{String(label)}</span>
                   </a>
                 ))}
               </div>
+              {!sidebarCollapsed &&
+              !visibleExpandedGroups.has(group.id) &&
+              group.items.some(([label]) => label === activeSection) ? (
+                <a
+                  className="ops-active-pinned"
+                  href={sectionHref(activeSection)}
+                  aria-current="page"
+                  onClick={(event) => event.preventDefault()}
+                >
+                  {(() => {
+                    const ActiveIcon =
+                      group.items.find(([label]) => label === activeSection)?.[1] ??
+                      SquaresFour;
+                    return <ActiveIcon size={18} />;
+                  })()}
+                  <span className="ops-nav-label">{activeSection}</span>
+                </a>
+              ) : null}
             </section>
           ))}
         </nav>
-        <div className="ops-session-actions">
-          <a href="/">
-            <House size={18} />
-            <span>Reader site</span>
-          </a>
-          <a href="/signout-with-chatgpt?return_to=%2F">
-            <SignOut size={18} />
-            <span>Logout</span>
-          </a>
-        </div>
-        <div className="ops-user">
-          <span>{actor.displayName.slice(0, 1)}</span>
+        <details className="ops-account-menu">
+          <summary aria-label={`Open account menu for ${actor.displayName}`}>
+            <span className="ops-account-avatar">
+              {actor.avatarUrl ? (
+                <img src={actor.avatarUrl} alt="" />
+              ) : (
+                actor.displayName.slice(0, 1).toUpperCase()
+              )}
+            </span>
+            <span className="ops-account-copy">
+              <strong>{actor.displayName}</strong>
+              <small>{roleLabel(actor.role)}</small>
+            </span>
+            <CaretDown size={14} />
+          </summary>
           <div>
-            <strong>{actor.displayName}</strong>
-            <small>{roleLabel(actor.role)}</small>
-          </div>
-          <DotsThree size={20} />
-        </div>
-      </aside>
-      <section className="ops-main">
-        <header className="ops-header">
-          <div>
-            <p>{admin ? "Platform operations" : "Publishing workspace"}</p>
-            <h1>{activeSection}</h1>
-          </div>
-          <div>
-            <a className="button button-secondary" href="/">
-              <House size={17} /> Reader site
+            <a href="/">
+              <House size={17} />
+              <span>Reader site</span>
+            </a>
+            <a href="/signout-with-chatgpt?return_to=%2F">
+              <SignOut size={17} />
+              <span>Logout</span>
             </a>
           </div>
-        </header>
+        </details>
+      </aside>
+      <section className="ops-main">
         <label className="ops-mobile-section">
           <span>Open section</span>
           <select
@@ -8778,26 +9439,31 @@ function OperationsView({
           </select>
           <CaretDown size={17} />
         </label>
-        {admin && activeSection === "Discussions" ? (
+        {admin && activeSection === "Roulette" ? (
+          <RewardSettingsPanel />
+        ) : admin && activeSection === "Discussions" ? (
           <ReactionLibraryPanel
             settingsPanel={
-              <>
-                <DiscussionSettingsPanel />
-                <RewardSettingsPanel />
-              </>
+              <DiscussionSettingsPanel />
             }
           />
         ) : admin && activeSection === "Appearance" ? (
           <AppearanceWorkspace
             initialTab={
-              ["branding", "reader", "footer", "theme", "preview"].includes(
-                activeSubsection,
-              )
+              [
+                "branding",
+                "reader",
+                "footer",
+                "theme",
+                "palettes",
+                "preview",
+              ].includes(activeSubsection)
                 ? (activeSubsection as
                     | "branding"
                     | "reader"
                     | "footer"
                     | "theme"
+                    | "palettes"
                     | "preview")
                 : "branding"
             }
@@ -8818,10 +9484,13 @@ function OperationsView({
               section={activeSection}
               subsection={activeSubsection}
               actorRole={actor.role}
+              actorRoles={actor.roles ?? [actor.role]}
               canUpload={Boolean(
                 admin ||
                   actor.canUpload ||
-                  ["OWNER", "ADMINISTRATOR"].includes(actor.role),
+                  (actor.roles ?? [actor.role]).some((role) =>
+                    ["OWNER", "ADMINISTRATOR"].includes(role),
+                  ),
               )}
               canRequestSeries={Boolean(
                 admin || actor.canRequestSeries,
@@ -8904,6 +9573,8 @@ function AccessView({
 
 function StatusView() {
   const { settings: commercial } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercial.economy.premiumEconomyPublic;
   return (
     <main className="page-main page-wrap status-page">
       <section className="status-hero">
@@ -8917,11 +9588,15 @@ function StatusView() {
           ["Account and library", "Operational", "99.96%"],
           ["Image delivery", "Operational", "99.99%"],
           ["Search", "Operational", "99.95%"],
-          [
-            `Payments and ${commercial.economy.coinPlural}`,
-            "Test mode",
-            "Configuration required",
-          ],
+          ...(premiumEconomyPublic
+            ? ([
+                [
+                  `Payments and ${commercial.economy.coinPlural}`,
+                  "Test mode",
+                  "Configuration required",
+                ],
+              ] as const)
+            : []),
           ["Publishing jobs", "Operational", "99.91%"],
         ].map(([service, status, uptime]) => (
           <div key={service}>
@@ -8945,31 +9620,89 @@ function StatusView() {
 function GenericView({
   view,
   resourceSlug,
+  signedIn,
   showToast,
 }: {
   view: AppView;
   resourceSlug?: string;
+  signedIn: boolean;
   showToast: (text: string) => void;
 }) {
   const { settings: commercial } = useCommercialSettings();
-  const legalCopy: Record<string, [string, string]> = {
-    terms: ["Terms of Service", "Rules for accounts, content access, publishing, and commerce."],
-    privacy: ["Privacy Policy", "How NyaScans collects, uses, retains, and protects personal data."],
-    cookies: ["Cookie Policy", "Essential, analytics, and marketing choices explained clearly."],
-    "content-policy": ["Content Policy", "Age ratings, prohibited material, warnings, and region controls."],
-    copyright: ["Copyright and Rights", "Reporting, quarantine, counter-notice, and repeat-infringer procedures."],
-    refunds: [
-      "Refund Policy",
-      `Eligibility rules for ${commercial.economy.coinPlural}, memberships, support, and episode access.`,
-    ],
-  };
+  const premiumEconomyPublic =
+    commercial.economy.premiumEconomyPublic;
+  const [supportTopic, setSupportTopic] = useState<
+    "ACCOUNT" | "READING" | "PURCHASES" | "PUBLISHING"
+  >("ACCOUNT");
+  const [supportFormOpen, setSupportFormOpen] = useState(false);
+  const supportTopics = {
+    ACCOUNT: {
+      label: "Account and security",
+      icon: Key,
+      title: "Secure and recover your account",
+      intro:
+        "Use your account settings first, then open a private ticket if access or identity still needs staff help.",
+      steps: [
+        "Update your profile, password, privacy, and notification choices from Settings.",
+        "Review active sessions and revoke any device you do not recognize.",
+        "Never include a password, recovery code, or payment secret in a ticket.",
+      ],
+    },
+    READING: {
+      label: "Reading and library",
+      icon: Books,
+      title: "Fix progress, bookmarks, and chapter access",
+      intro:
+        "Your Library import/export includes saved series and reading progress. A ticket can restore mismatched progress without exposing public history.",
+      steps: [
+        "Refresh the chapter once and confirm you are signed into the expected account.",
+        "Export Library data before a large import or manual cleanup.",
+        "Include the series, chapter number, device, and approximate time in your ticket.",
+      ],
+    },
+    PURCHASES: {
+      label: `Purchases and ${commercial.economy.coinPlural}`,
+      icon: Wallet,
+      title: "Orders, wallet balance, and gift codes",
+      intro:
+        "Wallet activity is server-verified. Gift cards can be redeemed once by their intended recipient.",
+      steps: [
+        "Check Wallet and Orders for the transaction status and reference.",
+        "Keep the full gift code private; staff only need the last four characters.",
+        "For a missing balance, include the order reference and payment time.",
+      ],
+    },
+    PUBLISHING: {
+      label: "Publishing help",
+      icon: UploadSimple,
+      title: "Series, chapters, teams, and uploads",
+      intro:
+        "Publishing requests keep rights, team, language, and upload details together for staff review.",
+      steps: [
+        "Confirm the correct team and series before uploading chapters.",
+        "Use the crop and auto-compression preview for logos, banners, and covers.",
+        "Include the series slug and upload job identifier when reporting a failure.",
+      ],
+    },
+  } as const;
+  const activeSupportTopicKey =
+    !premiumEconomyPublic && supportTopic === "PURCHASES"
+      ? "ACCOUNT"
+      : supportTopic;
+  const activeSupportTopic = supportTopics[activeSupportTopicKey];
+  const legalDocument =
+    LEGAL_DOCUMENTS_BY_SLUG[resourceSlug ?? "terms"] ??
+    LEGAL_DOCUMENTS_BY_SLUG.terms;
   const [title, intro] =
     view === "legal"
-      ? legalCopy[resourceSlug ?? "terms"] ?? legalCopy.terms
+      ? [legalDocument.title, legalDocument.summary]
       : view === "support"
         ? ["Support", "Find an answer or open a tracked support ticket."]
         : view === "rankings"
-              ? ["Rankings", "Time-decayed charts built from verified reading and support signals."]
+              ? [
+                  "Reader leaderboard",
+                  "Top 100 readers ranked by lifetime Shards, completed chapters, and community activity.",
+                ]
               : ["Explore NyaScans", "This product area is connected to the shared catalog and account system."];
 
   return (
@@ -8979,55 +9712,144 @@ function GenericView({
         <p>{intro}</p>
       </section>
       {view === "rankings" ? (
-        <div className="ranking-list">
-          {demoSeries.map((item, index) => (
-            <a href={`/title/${item.slug}`} key={item.id}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <ResilientCoverImage
-                src={item.cover}
-                alt={`Cover art for ${item.title}`}
-                decorative
-              />
-              <div><strong>{item.title}</strong><small>{item.genres.join(" • ")}</small></div>
-              <span><TrendUp size={17} /> {index < 3 ? `+${3 - index}` : "0"}</span>
-              <em>{item.rating}</em>
-              <ArrowRight size={18} />
-            </a>
-          ))}
-        </div>
+        <UserLeaderboardView />
       ) : view === "support" ? (
         <section className="support-grid">
-          {[
-            ["Account and security", Key],
-            ["Reading and library", Books],
-            [`Purchases and ${commercial.economy.coinPlural}`, Wallet],
-            ["Publishing help", UploadSimple],
-          ].map(([label, Icon]) => (
-            <button type="button" key={String(label)} onClick={() => showToast(`${String(label)} help opened.`)}><Icon size={24} /><strong>{String(label)}</strong><ArrowRight size={17} /></button>
-          ))}
-          <div className="support-ticket">
-            <ChatCircle size={26} />
-            <h2>Still need help?</h2>
-            <p>Open a ticket with attachments and a tracked response history.</p>
-            <button className="button button-primary" type="button" onClick={() => showToast("Support ticket form opened.")}>Open Ticket</button>
+          <div className="support-topic-grid" role="group" aria-label="Support topics">
+            {(Object.entries(supportTopics) as Array<
+              [keyof typeof supportTopics, (typeof supportTopics)[keyof typeof supportTopics]]
+            >)
+              .filter(
+                ([key]) =>
+                  premiumEconomyPublic || key !== "PURCHASES",
+              )
+              .map(([key, topic]) => {
+              const Icon = topic.icon;
+              return (
+                <button
+                  type="button"
+                  aria-pressed={activeSupportTopicKey === key}
+                  className={activeSupportTopicKey === key ? "active" : ""}
+                  key={key}
+                  onClick={() => setSupportTopic(key)}
+                >
+                  <Icon size={24} />
+                  <strong>{topic.label}</strong>
+                  <ArrowRight size={17} />
+                </button>
+              );
+            })}
+          </div>
+          <article className="support-help-article" aria-live="polite">
+            <div>
+              <span>Help guide</span>
+              <h2>{activeSupportTopic.title}</h2>
+              <p>{activeSupportTopic.intro}</p>
+            </div>
+            <ol>
+              {activeSupportTopic.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            {signedIn ? (
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => {
+                  setSupportFormOpen(true);
+                  window.requestAnimationFrame(() =>
+                    document
+                      .getElementById("support-ticket-workspace")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                  );
+                }}
+              >
+                Still need help? Open a ticket
+                <ArrowRight size={17} />
+              </button>
+            ) : (
+              <a
+                className="button button-secondary"
+                href="/login?return_to=/support"
+              >
+                Sign in to open a ticket
+                <ArrowRight size={17} />
+              </a>
+            )}
+          </article>
+          <div id="support-ticket-workspace">
+            <SupportTicketPanel
+              signedIn={signedIn}
+              initialCategory={activeSupportTopicKey}
+              premiumEconomyPublic={premiumEconomyPublic}
+              formOpen={supportFormOpen}
+              onFormOpenChange={setSupportFormOpen}
+              showToast={showToast}
+            />
           </div>
         </section>
-      ) : (
+      ) : view === "legal" ? (
         <article className="legal-article">
-          <aside>
-            {Object.entries(legalCopy).map(([slug, copy]) => <a href={`/legal/${slug}`} key={slug}>{copy[0]}</a>)}
+          <aside aria-label="Legal documents">
+            {LEGAL_DOCUMENTS.map((document) => (
+              <a
+                href={`/legal/${document.slug}`}
+                key={document.slug}
+                aria-current={
+                  document.slug === legalDocument.slug ? "page" : undefined
+                }
+              >
+                {document.title}
+              </a>
+            ))}
           </aside>
-          <div>
-            <div className="legal-notice"><WarningCircle size={19} /><p>This editable template requires review by qualified counsel before a public commercial launch.</p></div>
-            <h2>Purpose and scope</h2>
-            <p>NyaScans is designed to publish and sell only content with a documented lawful basis. Rights, territory, language, term, and renewal state are recorded for each title.</p>
-            <h2>Your choices</h2>
-            <p>Account controls include consent preferences, a personal data export, session revocation, and a deletion or anonymization request.</p>
-            <h2>Contact and appeals</h2>
-            <p>Reports and appeals receive a case identifier, status history, and an auditable resolution. Sensitive evidence remains private.</p>
-            <p className="legal-updated">Template updated July 23, 2026.</p>
+          <div className="legal-document">
+            <dl className="legal-document-meta">
+              <div>
+                <dt>Effective</dt>
+                <dd>{legalDocument.effectiveDate}</dd>
+              </div>
+              <div>
+                <dt>Last updated</dt>
+                <dd>{legalDocument.updatedDate}</dd>
+              </div>
+            </dl>
+            <nav className="legal-section-nav" aria-label="On this page">
+              {legalDocument.sections.map((section) => (
+                <a href={`#${section.id}`} key={section.id}>
+                  {section.title}
+                </a>
+              ))}
+            </nav>
+            {legalDocument.sections.map((section) => (
+              <section id={section.id} key={section.id}>
+                <h2>{section.title}</h2>
+                {section.paragraphs?.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+                {section.bullets?.length ? (
+                  <ul>
+                    {section.bullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ))}
+            <p className="legal-updated">
+              Questions or tracked requests can be sent through{" "}
+              <a href="/support">NyaScans Support</a>.
+            </p>
           </div>
         </article>
+      ) : (
+        <section className="generic-content-card">
+          <h2>Explore the platform</h2>
+          <p>
+            Use the main navigation or press Ctrl+K to find a title, team, or
+            creator.
+          </p>
+        </section>
       )}
     </main>
   );
@@ -9065,6 +9887,7 @@ function FooterGroup({
 }) {
   const key = `nyascans:footer:${title.toLowerCase()}`;
   const [open, setOpen] = useState(false);
+  const [desktop, setDesktop] = useState(false);
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
@@ -9080,15 +9903,28 @@ function FooterGroup({
       active = false;
     };
   }, [key]);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 821px)");
+    const sync = () => setDesktop(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
   const panelId = `${key.replaceAll(":", "-")}-links`;
+  const expanded = desktop || open;
   return (
-    <section className="footer-group" data-open={open ? "true" : "false"}>
+    <section
+      className="footer-group"
+      data-open={expanded ? "true" : "false"}
+    >
       <button
         className="footer-group-toggle"
         type="button"
-        aria-expanded={open}
+        aria-expanded={expanded}
         aria-controls={panelId}
+        disabled={desktop}
         onClick={() => {
+          if (desktop) return;
           const next = !open;
           setOpen(next);
           try {
@@ -9099,9 +9935,9 @@ function FooterGroup({
         }}
       >
         {title}
-        <span aria-hidden="true">{open ? "−" : "+"}</span>
+        <span aria-hidden="true">{expanded ? "−" : "+"}</span>
       </button>
-      <div id={panelId} hidden={!open}>
+      <div id={panelId} hidden={!expanded}>
         {links.map(([label, href]) => (
           <a href={href} key={label}>
             {label}
@@ -9112,14 +9948,18 @@ function FooterGroup({
   );
 }
 
-function SiteFooter() {
+function SiteFooter({
+  onOpenShortcuts,
+}: {
+  onOpenShortcuts: () => void;
+}) {
   const { settings } = useSiteConfiguration();
   const groups = [
     {
       title: "Browse",
       links: [
         ["Latest Updates", "/latest"],
-        ["Popular Series", "/rankings"],
+        ["Reader Leaderboard", "/leaderboard"],
         ["Completed", "/browse?status=completed"],
         ["Genres", "/browse#genres"],
       ],
@@ -9183,6 +10023,9 @@ function SiteFooter() {
       </div>
       <div className="page-wrap footer-bottom">
         <span>© 2026 NyaScans. Original platform artwork.</span>
+        <button type="button" onClick={onOpenShortcuts}>
+          <Key size={16} /> Keyboard shortcuts
+        </button>
       </div>
     </footer>
   );
@@ -9203,7 +10046,10 @@ export function NyaScansApp({
 }: AppProps) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const navigationChordAt = useRef(0);
+  const { settings: commercialSettings } = useCommercialSettings();
 
   useEffect(() => {
     const stored = window.localStorage.getItem("nyascans-theme");
@@ -9228,11 +10074,54 @@ export function NyaScansApp({
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLSelectElement ||
         (target instanceof HTMLElement && target.isContentEditable);
-      if (event.key === "/" && !typing) {
-        event.preventDefault();
-        setSearchOpen(true);
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        setShortcutsOpen(false);
+        navigationChordAt.current = 0;
+        return;
       }
-      if (event.key === "Escape") setSearchOpen(false);
+      if (
+        document.querySelector(
+          '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+        )
+      ) {
+        return;
+      }
+      if (
+        event.key.toLowerCase() === "k" &&
+        (event.ctrlKey || event.metaKey)
+      ) {
+        event.preventDefault();
+        setShortcutsOpen(false);
+        setSearchOpen(true);
+        return;
+      }
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setSearchOpen(false);
+        setShortcutsOpen(true);
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "g") {
+        navigationChordAt.current = Date.now();
+        return;
+      }
+      if (
+        navigationChordAt.current &&
+        Date.now() - navigationChordAt.current <= 1_500
+      ) {
+        navigationChordAt.current = 0;
+        const destination =
+          SITE_NAVIGATION_CHORDS[
+            key as keyof typeof SITE_NAVIGATION_CHORDS
+          ];
+        if (destination) {
+          event.preventDefault();
+          window.location.assign(destination);
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -9269,6 +10158,20 @@ export function NyaScansApp({
     window.localStorage.setItem("nyascans-theme", next);
   }
 
+  const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
+  const commonOverlays = (
+    <>
+      {searchOpen ? (
+        <SearchOverlay onClose={() => setSearchOpen(false)} />
+      ) : null}
+      <KeyboardShortcutsDialog
+        open={shortcutsOpen}
+        onClose={closeShortcuts}
+      />
+      {toast ? <div className="toast" role="status">{toast}</div> : null}
+    </>
+  );
+
   if (view === "reader") {
     return (
       <>
@@ -9278,7 +10181,7 @@ export function NyaScansApp({
           actor={actor}
           showToast={setToast}
         />
-        {toast ? <div className="toast" role="status">{toast}</div> : null}
+        {commonOverlays}
       </>
     );
   }
@@ -9301,30 +10204,42 @@ export function NyaScansApp({
           initialSubsectionSlug={operationPath?.[1]}
           initialUploadMode={uploadMode}
         />
-        <SiteFooter />
+        <SiteFooter onOpenShortcuts={() => setShortcutsOpen(true)} />
         <MobileNav view={view} actor={actor} />
-        {searchOpen ? (
-          <SearchOverlay onClose={() => setSearchOpen(false)} />
-        ) : null}
-        {toast ? <div className="toast" role="status">{toast}</div> : null}
+        {commonOverlays}
       </div>
     );
   }
   if (view === "admin" && actor) {
     return (
-      <OperationsView
-        mode="admin"
-        actor={actor}
-        initialSectionSlug={operationPath?.[0] ?? resourceSlug}
-        initialSubsectionSlug={operationPath?.[1]}
-        initialUploadMode={uploadMode}
-      />
+      <>
+        <OperationsView
+          mode="admin"
+          actor={actor}
+          initialSectionSlug={operationPath?.[0] ?? resourceSlug}
+          initialSubsectionSlug={operationPath?.[1]}
+          initialUploadMode={uploadMode}
+        />
+        {commonOverlays}
+      </>
     );
   }
   if (view === "access") {
-    return <AccessView actor={actor} signInPath={signInPath} adminGate={adminGate} />;
+    return (
+      <>
+        <AccessView actor={actor} signInPath={signInPath} adminGate={adminGate} />
+        {commonOverlays}
+      </>
+    );
   }
-  if (view === "error") return <ErrorView code={resourceSlug} />;
+  if (view === "error") {
+    return (
+      <>
+        <ErrorView code={resourceSlug} />
+        {commonOverlays}
+      </>
+    );
+  }
 
   const mainContent =
     view === "home" ? (
@@ -9368,11 +10283,21 @@ export function NyaScansApp({
     ) : view === "status" ? (
       <StatusView />
     ) : (
-      <GenericView view={view} resourceSlug={resourceSlug} showToast={setToast} />
+      <GenericView
+        view={view}
+        resourceSlug={resourceSlug}
+        signedIn={Boolean(actor)}
+        showToast={setToast}
+      />
     );
 
   return (
-    <div className="site-shell">
+    <div
+      className="site-shell"
+      data-premium-economy={
+        commercialSettings.economy.premiumEconomyPublic ? "public" : "hidden"
+      }
+    >
       <SiteHeader
         key={actor?.email ?? "guest"}
         view={view}
@@ -9382,10 +10307,9 @@ export function NyaScansApp({
         onSearch={() => setSearchOpen(true)}
       />
       {mainContent}
-      <SiteFooter />
+      <SiteFooter onOpenShortcuts={() => setShortcutsOpen(true)} />
       <MobileNav view={view} actor={actor} />
-      {searchOpen ? <SearchOverlay onClose={() => setSearchOpen(false)} /> : null}
-      {toast ? <div className="toast" role="status">{toast}</div> : null}
+      {commonOverlays}
     </div>
   );
 }

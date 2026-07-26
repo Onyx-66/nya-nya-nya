@@ -10,6 +10,7 @@ import {
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
+import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
 import {
   defaultCommercialSettings,
@@ -71,7 +72,11 @@ function nextMembership(index: number): MembershipOffer {
   };
 }
 
-export function CommercialSettingsPanel() {
+export function CommercialSettingsPanel({
+  actorRole = "ADMINISTRATOR",
+}: {
+  actorRole?: string;
+}) {
   const [document, setDocument] = useState<StoredDocument>({
     settings: defaultCommercialSettings,
     revision: 0,
@@ -170,7 +175,38 @@ export function CommercialSettingsPanel() {
     }
   }
 
+  async function uploadCoinIcon(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.set("expectedRevision", String(document.revision));
+      form.set("file", file);
+      const response = await fetch("/api/v1/coin-icon", {
+        method: "PUT",
+        body: form,
+      });
+      const payload = (await response.json()) as StoredDocument & {
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.settings) {
+        throw new Error(payload.error?.message ?? "The coin SVG could not be saved.");
+      }
+      setDocument(payload);
+      setSaved(payload.settings);
+      setMessage("Coin SVG saved.");
+      setError(false);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "The coin SVG could not be saved.");
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const { announcement, economy } = document.settings;
+  const owner = actorRole === "OWNER";
   const showTransitionalOfferEditors = false;
 
   if (loading) {
@@ -411,9 +447,9 @@ export function CommercialSettingsPanel() {
         <div className="commercial-form-grid commercial-four">
           {(
             [
-              ["coinName", "Singular name", "Onyx Coin"],
-              ["coinPlural", "Plural name", "Onyx Coins"],
-              ["coinIcon", "Icon", "◆"],
+              ["coinName", "Singular name", "Paw Coin"],
+              ["coinPlural", "Plural name", "Paw Coins"],
+              ["coinIcon", "Fallback icon", "🐾"],
             ] as const
           ).map(([key, label, placeholder]) => (
             <label key={key}>
@@ -422,6 +458,7 @@ export function CommercialSettingsPanel() {
                 value={economy[key]}
                 placeholder={placeholder}
                 required
+                disabled={!owner}
                 onChange={(event) =>
                   update((current) => ({
                     ...current,
@@ -485,6 +522,57 @@ export function CommercialSettingsPanel() {
                   },
                 }))
               }
+            />
+          </label>
+        </div>
+        <div className="commercial-economy-visibility">
+          <div className="coin-icon-preview" aria-label="Current premium coin icon">
+            {economy.coinIconKey ? (
+              <Image
+                src={`/api/v1/coin-icon?v=${economy.coinIconRevision}`}
+                alt=""
+                width={64}
+                height={64}
+                unoptimized
+              />
+            ) : (
+              <span>{economy.coinIcon}</span>
+            )}
+          </div>
+          <div>
+            <strong>Premium economy visibility</strong>
+            <p>
+              Hidden mode removes real-money packages and every {draft.economy.coinName}
+              purchase surface while keeping free Shards and existing balances.
+            </p>
+          </div>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={economy.premiumEconomyPublic}
+              disabled={!owner}
+              onChange={(event) =>
+                update((current) => ({
+                  ...current,
+                  economy: {
+                    ...current.economy,
+                    premiumEconomyPublic: event.target.checked,
+                  },
+                }))
+              }
+            />
+            <span>{economy.premiumEconomyPublic ? "Public" : "Hidden"}</span>
+          </label>
+          <label className="button button-secondary">
+            Upload coin SVG
+            <input
+              type="file"
+              accept="image/svg+xml"
+              disabled={!owner || busy}
+              onChange={(event) => {
+                void uploadCoinIcon(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
             />
           </label>
         </div>

@@ -46,6 +46,7 @@ export async function GET(request: Request) {
     );
     headers.set("etag", object.httpEtag);
     headers.set("x-request-id", requestId);
+    headers.set("x-content-type-options", "nosniff");
     if (request.headers.get("if-none-match") === object.httpEtag) {
       return new Response(null, { status: 304, headers });
     }

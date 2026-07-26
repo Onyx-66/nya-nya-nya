@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 const mediaInputSchema = z.object({
   seriesId: z.string().trim().min(3).max(160),
-  slot: z.enum(["cover", "banner"]),
+  slot: z.enum(["cover", "banner", "slider"]),
   revision: z.coerce.number().int().min(1),
 });
 
@@ -48,21 +48,25 @@ function extensionFor(contentType: string) {
 }
 
 function validateAspect(
-  slot: "cover" | "banner",
+  slot: "cover" | "banner" | "slider",
   dimensions: { width: number; height: number },
 ) {
   const ratio = dimensions.width / dimensions.height;
   const valid =
     slot === "cover"
       ? ratio >= 0.6 && ratio <= 0.75
-      : ratio >= 1.6 && ratio <= 3.5;
+      : slot === "slider"
+        ? ratio >= 0.98 && ratio <= 1.02
+        : ratio >= 1.6 && ratio <= 3.5;
   if (!valid) {
     throw new ApiError(
       422,
       "IMAGE_ASPECT_INVALID",
       slot === "cover"
         ? "Cover artwork should use a portrait aspect ratio near 2:3."
-        : "Banner artwork should use a wide landscape aspect ratio.",
+        : slot === "slider"
+          ? "Slider artwork must use a square 1:1 aspect ratio."
+          : "Banner artwork should use a wide landscape aspect ratio.",
     );
   }
 }
@@ -92,9 +96,11 @@ export async function PUT(request: Request) {
     }
     const image = await validateImageFile(file, {
       label: payload.slot,
-      maxBytes: payload.slot === "cover" ? 8_000_000 : 12_000_000,
-      minWidth: payload.slot === "cover" ? 300 : 800,
-      minHeight: payload.slot === "cover" ? 450 : 300,
+      maxBytes: payload.slot === "banner" ? 12_000_000 : 8_000_000,
+      minWidth:
+        payload.slot === "cover" ? 300 : payload.slot === "slider" ? 600 : 800,
+      minHeight:
+        payload.slot === "cover" ? 450 : payload.slot === "slider" ? 600 : 300,
       maxWidth: 8_000,
       maxHeight: 10_000,
       allowAnimation: false,
@@ -103,7 +109,8 @@ export async function PUT(request: Request) {
     validateAspect(payload.slot, image.dimensions);
     const current = await db
       .prepare(
-        `SELECT title, revision, cover_key AS coverKey, banner_key AS bannerKey
+        `SELECT title, revision, cover_key AS coverKey,
+                banner_key AS bannerKey, slider_key AS sliderKey
          FROM series WHERE id = ? LIMIT 1`,
       )
       .bind(payload.seriesId)
@@ -112,6 +119,7 @@ export async function PUT(request: Request) {
         revision: number;
         coverKey: string | null;
         bannerKey: string | null;
+        sliderKey: string | null;
       }>();
     if (!current) {
       throw new ApiError(
@@ -140,7 +148,12 @@ export async function PUT(request: Request) {
         sha256: digest,
       },
     });
-    const column = payload.slot === "cover" ? "cover_key" : "banner_key";
+    const column =
+      payload.slot === "cover"
+        ? "cover_key"
+        : payload.slot === "banner"
+          ? "banner_key"
+          : "slider_key";
     const updateResults = await db.batch([
       db.prepare(
         `UPDATE series
@@ -188,7 +201,11 @@ export async function PUT(request: Request) {
     // recovery path if cleanup or audit delivery fails afterwards.
     uploadedKey = "";
     const oldKey =
-      payload.slot === "cover" ? current.coverKey : current.bannerKey;
+      payload.slot === "cover"
+        ? current.coverKey
+        : payload.slot === "banner"
+          ? current.bannerKey
+          : current.sliderKey;
     if (oldKey) {
       await deleteMediaObject(db, bucket, oldKey, {
         mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
@@ -478,7 +495,8 @@ export async function DELETE(request: Request) {
     });
     const current = await db
       .prepare(
-        `SELECT title, revision, cover_key AS coverKey, banner_key AS bannerKey
+        `SELECT title, revision, cover_key AS coverKey,
+                banner_key AS bannerKey, slider_key AS sliderKey
          FROM series WHERE id = ? LIMIT 1`,
       )
       .bind(payload.seriesId)
@@ -487,6 +505,7 @@ export async function DELETE(request: Request) {
         revision: number;
         coverKey: string | null;
         bannerKey: string | null;
+        sliderKey: string | null;
       }>();
     if (!current) {
       throw new ApiError(
@@ -496,8 +515,17 @@ export async function DELETE(request: Request) {
       );
     }
     const oldKey =
-      payload.slot === "cover" ? current.coverKey : current.bannerKey;
-    const column = payload.slot === "cover" ? "cover_key" : "banner_key";
+      payload.slot === "cover"
+        ? current.coverKey
+        : payload.slot === "banner"
+          ? current.bannerKey
+          : current.sliderKey;
+    const column =
+      payload.slot === "cover"
+        ? "cover_key"
+        : payload.slot === "banner"
+          ? "banner_key"
+          : "slider_key";
     const updateResults = await db.batch([
       db.prepare(
         `UPDATE series

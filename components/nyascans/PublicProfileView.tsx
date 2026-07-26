@@ -3,8 +3,11 @@
 
 import {
   ArrowRight,
+  BookmarkSimple,
   Books,
   CalendarBlank,
+  ChatCircle,
+  Trophy,
   UserMinus,
   UserPlus,
   UsersThree,
@@ -21,7 +24,7 @@ type ProfileRecord = {
   revision: number;
   isSelf: boolean;
   isFollowing: boolean;
-  followerCount: number;
+  followerCount: number | null;
   followingCount: number | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
@@ -29,12 +32,46 @@ type ProfileRecord = {
   readingActivity: Array<{
     seriesSlug: string;
     seriesTitle: string;
-    chapterSlug: string;
+    chapterSlug: string | null;
     chapterNumber: string | null;
     readAt: string;
     coverUrl: string | null;
   }>;
   librarySummary: Array<{ status?: string; count?: number }>;
+  favorites: Array<{
+    seriesId: string;
+    seriesSlug: string;
+    seriesTitle: string;
+    coverUrl: string | null;
+    position: number;
+  }>;
+  achievements: Array<{
+    slug: string;
+    name: string;
+    description: string;
+    rarity: string;
+    earnedAt: string;
+  }>;
+  bookmarks: Array<{
+    seriesId: string;
+    seriesSlug: string;
+    seriesTitle: string;
+    coverUrl: string | null;
+    listType: string;
+    savedAt: string;
+  }>;
+  comments: Array<{
+    id: string;
+    body: string;
+    seriesSlug: string;
+    seriesTitle: string;
+    chapterSlug: string | null;
+    chapterNumber: string | null;
+    createdAt: string;
+    upvotes: number;
+    downvotes: number;
+    reactionCount: number;
+  }>;
 };
 
 function timeLabel(value: string) {
@@ -67,7 +104,13 @@ export function PublicProfileView({ username }: { username: string }) {
         if (!response.ok || !payload.data) {
           throw new Error(payload.error?.message ?? "This profile is unavailable.");
         }
-        setProfile(payload.data);
+        setProfile({
+          ...payload.data,
+          favorites: payload.data.favorites ?? [],
+          achievements: payload.data.achievements ?? [],
+          bookmarks: payload.data.bookmarks ?? [],
+          comments: payload.data.comments ?? [],
+        });
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
@@ -104,15 +147,18 @@ export function PublicProfileView({ username }: { username: string }) {
           ? {
               ...current,
               isFollowing: payload.following!,
-              followerCount: Math.max(
-                0,
-                current.followerCount +
-                  (payload.following === current.isFollowing
-                    ? 0
-                    : payload.following
-                      ? 1
-                      : -1),
-              ),
+              followerCount:
+                current.followerCount === null
+                  ? null
+                  : Math.max(
+                      0,
+                      current.followerCount +
+                        (payload.following === current.isFollowing
+                          ? 0
+                          : payload.following
+                            ? 1
+                            : -1),
+                    ),
             }
           : current,
       );
@@ -169,9 +215,11 @@ export function PublicProfileView({ username }: { username: string }) {
             <h1>{profile.displayName}</h1>
             <p>{profile.bio || "This reader has not added a bio yet."}</p>
             <span className="public-profile-meta">
-              <small>
-                <UsersThree size={15} /> {profile.followerCount} followers
-              </small>
+              {profile.followerCount !== null ? (
+                <small>
+                  <UsersThree size={15} /> {profile.followerCount} followers
+                </small>
+              ) : null}
               {profile.followingCount !== null ? (
                 <small>{profile.followingCount} following</small>
               ) : null}
@@ -224,10 +272,50 @@ export function PublicProfileView({ username }: { username: string }) {
             </div>
           </section>
         ) : null}
+        {profile.favorites.length ? (
+          <section className="public-profile-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Favorite series</h2>
+                <p>This reader&apos;s ordered top {profile.favorites.length}.</p>
+              </div>
+            </div>
+            <div className="public-profile-series-grid">
+              {profile.favorites.map((favorite, index) => (
+                <a
+                  href={`/title/${favorite.seriesSlug}`}
+                  key={favorite.seriesId}
+                >
+                  <span className="public-profile-series-rank">
+                    #{index + 1}
+                  </span>
+                  {favorite.coverUrl ? (
+                    <img
+                      src={favorite.coverUrl}
+                      alt=""
+                      loading="lazy"
+                      onError={(event) => {
+                        const fallback = "/art/series-cover-placeholder.svg";
+                        if (!event.currentTarget.src.endsWith(fallback)) {
+                          event.currentTarget.src = fallback;
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="public-reading-cover-placeholder">
+                      <Books size={22} />
+                    </span>
+                  )}
+                  <strong>{favorite.seriesTitle}</strong>
+                </a>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <section className="public-profile-panel">
           <div className="section-heading">
             <div>
-              <h2>Recent reading</h2>
+              <h2>Activity</h2>
               <p>Shared by this reader according to their privacy settings.</p>
             </div>
           </div>
@@ -240,7 +328,9 @@ export function PublicProfileView({ username }: { username: string }) {
                       ? `/chapter/${activity.chapterSlug}`
                       : ""
                   }`}
-                  key={`${activity.seriesSlug}:${activity.chapterSlug}`}
+                  key={`${activity.seriesSlug}:${
+                    activity.chapterSlug ?? activity.readAt
+                  }`}
                 >
                   {activity.coverUrl ? (
                     <img
@@ -275,11 +365,114 @@ export function PublicProfileView({ username }: { username: string }) {
           ) : (
             <div className="public-profile-empty">
               <Books size={25} />
-              <strong>No public reading activity</strong>
-              <span>Reading history is private or has not started yet.</span>
+              <strong>No public activity</strong>
+              <span>Activity is private or has not started yet.</span>
             </div>
           )}
         </section>
+        {profile.achievements.length ? (
+          <section className="public-profile-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Achievements</h2>
+                <p>Badges earned across reading and community activity.</p>
+              </div>
+            </div>
+            <div className="public-profile-achievements">
+              {profile.achievements.map((achievement) => (
+                <article key={achievement.slug}>
+                  <Trophy size={22} weight="duotone" />
+                  <span>
+                    <strong>{achievement.name}</strong>
+                    <small>{achievement.description}</small>
+                  </span>
+                  <small>{achievement.rarity.toLowerCase()}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {profile.bookmarks.length ? (
+          <section className="public-profile-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Bookmarks</h2>
+                <p>Public series this reader saved to their Library.</p>
+              </div>
+            </div>
+            <div className="public-reading-grid">
+              {profile.bookmarks.map((bookmark) => (
+                <a
+                  href={`/title/${bookmark.seriesSlug}`}
+                  key={bookmark.seriesId}
+                >
+                  {bookmark.coverUrl ? (
+                    <img
+                      src={bookmark.coverUrl}
+                      alt=""
+                      loading="lazy"
+                      onError={(event) => {
+                        const fallback = "/art/series-cover-placeholder.svg";
+                        if (!event.currentTarget.src.endsWith(fallback)) {
+                          event.currentTarget.src = fallback;
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="public-reading-cover-placeholder">
+                      <BookmarkSimple size={20} />
+                    </span>
+                  )}
+                  <span>
+                    <strong>{bookmark.seriesTitle}</strong>
+                    <small>
+                      {bookmark.listType.replaceAll("_", " ").toLowerCase()} ·{" "}
+                      {timeLabel(bookmark.savedAt)}
+                    </small>
+                  </span>
+                  <ArrowRight size={17} />
+                </a>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {profile.comments.length ? (
+          <section className="public-profile-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Comments</h2>
+                <p>Recent visible comments and community reactions.</p>
+              </div>
+            </div>
+            <div className="public-profile-comments">
+              {profile.comments.map((comment) => (
+                <article key={comment.id}>
+                  <ChatCircle size={20} weight="duotone" />
+                  <div>
+                    <a
+                      href={`/title/${comment.seriesSlug}${
+                        comment.chapterSlug
+                          ? `/chapter/${comment.chapterSlug}`
+                          : ""
+                      }`}
+                    >
+                      {comment.seriesTitle}
+                      {comment.chapterNumber
+                        ? ` · Chapter ${comment.chapterNumber}`
+                        : ""}
+                    </a>
+                    <p>{comment.body}</p>
+                    <small>
+                      {timeLabel(comment.createdAt)} · {comment.upvotes} up ·{" "}
+                      {comment.downvotes} down · {comment.reactionCount}{" "}
+                      reactions
+                    </small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {profile.librarySummary.length ? (
           <section className="public-profile-panel">
             <h2>Library summary</h2>

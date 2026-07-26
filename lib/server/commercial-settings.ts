@@ -72,6 +72,18 @@ export async function getCommercialSettingsDocument(): Promise<CommercialSetting
   }
 }
 
+export async function requirePaidEconomyPublic() {
+  const document = await getCommercialSettingsDocument();
+  if (!document.settings.economy.premiumEconomyPublic) {
+    throw new ApiError(
+      403,
+      "PAID_ECONOMY_HIDDEN",
+      "The premium coin economy is currently private.",
+    );
+  }
+  return document.settings;
+}
+
 export async function saveCommercialSettings(
   settings: CommercialSettings,
   actorUserId: string,
@@ -100,13 +112,14 @@ export async function saveCommercialSettings(
       ? env.DB.prepare(
           `INSERT INTO commercial_settings
            (id, schema_version, settings_json, revision, updated_by_user_id)
-           VALUES ('active', 1, ?, 1, ?)
+           VALUES ('active', 2, ?, 1, ?)
            ON CONFLICT(id) DO NOTHING`,
         )
           .bind(JSON.stringify(normalized), actorUserId)
       : env.DB.prepare(
           `UPDATE commercial_settings
               SET settings_json = ?,
+                  schema_version = 2,
                   revision = revision + 1,
                   updated_by_user_id = ?,
                   updated_at = CURRENT_TIMESTAMP

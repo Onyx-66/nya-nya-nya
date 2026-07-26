@@ -73,6 +73,24 @@ export const sliderStyleOptions = [
   },
 ] as const;
 
+export const featuredSliderStyleOptions = [
+  {
+    value: "ASURA_SHOWCASE",
+    label: "Asura poster wall",
+    detail: "A wide, cover-first rail with a dominant title in the center.",
+  },
+  {
+    value: "KAKAO_PANELS",
+    label: "Kakao focus panels",
+    detail: "A banner-led three-panel stage with cropped neighbors.",
+  },
+  {
+    value: "ONYX_DECK",
+    label: "Onyx focus deck",
+    detail: "The current layered five-cover NyaScans composition.",
+  },
+] as const;
+
 export const sliderSizeOptions = [
   { value: "COMPACT", label: "Compact", detail: "More titles per row" },
   { value: "BALANCED", label: "Balanced", detail: "Default reading density" },
@@ -111,6 +129,9 @@ const experienceSchema = z.object({
       "CHAPTER_CAROUSEL",
     ])
     .default("POSTER_RAIL"),
+  featuredSliderStyle: z
+    .enum(["ASURA_SHOWCASE", "KAKAO_PANELS", "ONYX_DECK"])
+    .default("ASURA_SHOWCASE"),
   sliderSize: z.enum(["COMPACT", "BALANCED", "LARGE"]).default("BALANCED"),
   sliderAutoplay: z.boolean().default(true),
   sliderIntervalSeconds: z.number().int().min(3).max(15).default(7),
@@ -175,6 +196,7 @@ export const siteThemeSchema = z.object({
   experience: experienceSchema.default({
     template: "ONYX_EDITORIAL",
     sliderStyle: "POSTER_RAIL",
+    featuredSliderStyle: "ASURA_SHOWCASE",
     sliderSize: "BALANCED",
     sliderAutoplay: true,
     sliderIntervalSeconds: 7,
@@ -183,6 +205,13 @@ export const siteThemeSchema = z.object({
 });
 
 export type SiteTheme = z.infer<typeof siteThemeSchema>;
+
+export const siteAppearanceSavedEvent = "nyascans:appearance-saved";
+
+export type SiteAppearanceSavedDetail = {
+  settings: SiteTheme;
+  revision: number;
+};
 
 export const defaultSiteTheme: SiteTheme = {
   dark: {
@@ -244,12 +273,284 @@ export const defaultSiteTheme: SiteTheme = {
   experience: {
     template: "ONYX_EDITORIAL",
     sliderStyle: "POSTER_RAIL",
+    featuredSliderStyle: "ASURA_SHOWCASE",
     sliderSize: "BALANCED",
     sliderAutoplay: true,
     sliderIntervalSeconds: 7,
     newSeriesLayout: "CAROUSEL",
   },
 };
+
+export type SitePalettePreset = {
+  id: string;
+  name: string;
+  mood: string;
+  summary: string;
+  palette: Pick<
+    SiteTheme,
+    | "dark"
+    | "light"
+    | "accent"
+    | "accentStrong"
+    | "accentInk"
+    | "danger"
+    | "warning"
+    | "success"
+    | "premium"
+    | "gradient"
+  >;
+};
+
+export const sitePalettePresets = [
+  {
+    id: "moonlit-blue",
+    name: "Moonlit blue",
+    mood: "NyaScans signature",
+    summary:
+      "Deep navy surfaces, crisp sky-blue actions, and cool editorial neutrals.",
+    palette: {
+      dark: {
+        background: "#07111f",
+        backgroundSoft: "#0a1728",
+        surface: "#0d1d31",
+        surfaceRaised: "#12263f",
+        surfaceStrong: "#18314f",
+        text: "#f4f9fd",
+        textSoft: "#bfd1df",
+        muted: "#829db1",
+        line: "#244563",
+        lineStrong: "#376789",
+      },
+      light: {
+        background: "#f3f8fc",
+        backgroundSoft: "#e8f1f8",
+        surface: "#ffffff",
+        surfaceRaised: "#dceaf4",
+        surfaceStrong: "#cddfeb",
+        text: "#0b2134",
+        textSoft: "#34566f",
+        muted: "#647f92",
+        line: "#bfd2df",
+        lineStrong: "#91afc3",
+      },
+      accent: "#39a9ff",
+      accentStrong: "#168de2",
+      accentInk: "#03111f",
+      danger: "#ef8175",
+      warning: "#e6bd61",
+      success: "#39c98a",
+      premium: "#8ecbff",
+      gradient: {
+        enabled: true,
+        from: "#168de2",
+        to: "#68d5ff",
+        angle: 135,
+        intensity: 100,
+      },
+    },
+  },
+  {
+    id: "violet-ink",
+    name: "Violet ink",
+    mood: "Mystic editorial",
+    summary:
+      "Inky plum backgrounds with restrained amethyst accents and soft lilac detail.",
+    palette: {
+      dark: {
+        background: "#0d0a17",
+        backgroundSoft: "#151020",
+        surface: "#1b1529",
+        surfaceRaised: "#251d37",
+        surfaceStrong: "#312747",
+        text: "#faf7ff",
+        textSoft: "#d5cbe6",
+        muted: "#998cac",
+        line: "#3b3150",
+        lineStrong: "#584872",
+      },
+      light: {
+        background: "#f8f5fb",
+        backgroundSoft: "#eee8f5",
+        surface: "#ffffff",
+        surfaceRaised: "#e8dff1",
+        surfaceStrong: "#d9cee6",
+        text: "#24162f",
+        textSoft: "#574568",
+        muted: "#7d708b",
+        line: "#d2c6de",
+        lineStrong: "#ad9cbd",
+      },
+      accent: "#b39af4",
+      accentStrong: "#9277df",
+      accentInk: "#160e25",
+      danger: "#e97d8a",
+      warning: "#d8ad5c",
+      success: "#53c99c",
+      premium: "#d1b7ff",
+      gradient: {
+        enabled: true,
+        from: "#7258c9",
+        to: "#c08be8",
+        angle: 132,
+        intensity: 88,
+      },
+    },
+  },
+  {
+    id: "crimson-paper",
+    name: "Crimson paper",
+    mood: "Dramatic release",
+    summary:
+      "Charcoal-red surfaces, warm paper whites, and a confident vermilion action color.",
+    palette: {
+      dark: {
+        background: "#140b0d",
+        backgroundSoft: "#1e1013",
+        surface: "#28161a",
+        surfaceRaised: "#341d22",
+        surfaceStrong: "#43272d",
+        text: "#fff8f7",
+        textSoft: "#e4c9c7",
+        muted: "#aa8888",
+        line: "#513037",
+        lineStrong: "#73454e",
+      },
+      light: {
+        background: "#fbf6f3",
+        backgroundSoft: "#f3e9e4",
+        surface: "#fffdfb",
+        surfaceRaised: "#ebdcd6",
+        surfaceStrong: "#dfccc5",
+        text: "#32191c",
+        textSoft: "#684247",
+        muted: "#8d6f71",
+        line: "#dec8c3",
+        lineStrong: "#bb9e99",
+      },
+      accent: "#ee897a",
+      accentStrong: "#d5675b",
+      accentInk: "#250b08",
+      danger: "#ff746d",
+      warning: "#dda85a",
+      success: "#55bf8d",
+      premium: "#f2b6aa",
+      gradient: {
+        enabled: true,
+        from: "#c44f50",
+        to: "#f2a36d",
+        angle: 140,
+        intensity: 82,
+      },
+    },
+  },
+  {
+    id: "jade-night",
+    name: "Jade night",
+    mood: "Quiet momentum",
+    summary:
+      "Blue-green night tones, clear jade actions, and calm mineral surfaces.",
+    palette: {
+      dark: {
+        background: "#071411",
+        backgroundSoft: "#0b1d19",
+        surface: "#102821",
+        surfaceRaised: "#17352d",
+        surfaceStrong: "#20443a",
+        text: "#f2fbf8",
+        textSoft: "#c3dbd3",
+        muted: "#83a69b",
+        line: "#285347",
+        lineStrong: "#3b7565",
+      },
+      light: {
+        background: "#f2f8f5",
+        backgroundSoft: "#e5f0eb",
+        surface: "#ffffff",
+        surfaceRaised: "#d9e9e2",
+        surfaceStrong: "#c9ddd5",
+        text: "#102c25",
+        textSoft: "#3e6258",
+        muted: "#668279",
+        line: "#bfd4cc",
+        lineStrong: "#91afa4",
+      },
+      accent: "#63d5ad",
+      accentStrong: "#3bb68e",
+      accentInk: "#062019",
+      danger: "#e87f78",
+      warning: "#d9b25d",
+      success: "#4dcc9d",
+      premium: "#9be3ca",
+      gradient: {
+        enabled: true,
+        from: "#2b9f80",
+        to: "#70dbc2",
+        angle: 128,
+        intensity: 84,
+      },
+    },
+  },
+  {
+    id: "amber-studio",
+    name: "Amber studio",
+    mood: "Warm catalogue",
+    summary:
+      "Graphite-brown foundations with amber highlights and comfortable paper neutrals.",
+    palette: {
+      dark: {
+        background: "#15110c",
+        backgroundSoft: "#1d1710",
+        surface: "#282016",
+        surfaceRaised: "#352a1d",
+        surfaceStrong: "#443626",
+        text: "#fffaf0",
+        textSoft: "#e1d2b8",
+        muted: "#a18e70",
+        line: "#51422e",
+        lineStrong: "#715d41",
+      },
+      light: {
+        background: "#faf7ef",
+        backgroundSoft: "#f1eadc",
+        surface: "#fffdf8",
+        surfaceRaised: "#e9dfce",
+        surfaceStrong: "#dcd0bc",
+        text: "#302315",
+        textSoft: "#65513a",
+        muted: "#88765f",
+        line: "#d9cbb7",
+        lineStrong: "#b4a087",
+      },
+      accent: "#e9b968",
+      accentStrong: "#cb9444",
+      accentInk: "#281808",
+      danger: "#e67c72",
+      warning: "#e1ad53",
+      success: "#62bd8b",
+      premium: "#f0cc8c",
+      gradient: {
+        enabled: true,
+        from: "#b87935",
+        to: "#eccb7a",
+        angle: 138,
+        intensity: 78,
+      },
+    },
+  },
+] as const satisfies readonly SitePalettePreset[];
+
+export function applySitePalettePreset(
+  theme: SiteTheme,
+  preset: SitePalettePreset,
+): SiteTheme {
+  return siteThemeSchema.parse({
+    ...theme,
+    ...preset.palette,
+    dark: { ...preset.palette.dark },
+    light: { ...preset.palette.light },
+    gradient: { ...preset.palette.gradient },
+  });
+}
 
 export function parseSiteTheme(value: unknown): SiteTheme {
   const parsed = siteThemeSchema.safeParse(value);
@@ -315,6 +616,9 @@ export function siteThemeDataAttributes(theme: SiteTheme) {
       .toLowerCase()
       .replaceAll("_", "-"),
     "data-slider-style": theme.experience.sliderStyle
+      .toLowerCase()
+      .replaceAll("_", "-"),
+    "data-featured-slider-style": theme.experience.featuredSliderStyle
       .toLowerCase()
       .replaceAll("_", "-"),
     "data-slider-size": theme.experience.sliderSize.toLowerCase(),

@@ -21,11 +21,12 @@ test("homepage discovery uses public database-backed series and teams", async ()
   assert.match(components, /aria-label="Publishing teams carousel"/);
 });
 
-test("Library provides three persistent views and a versioned private export", async () => {
-  const [workspace, dataApi, exportApi] = await Promise.all([
+test("Library provides three persistent views and versioned private transfer", async () => {
+  const [workspace, dataApi, exportApi, importApi] = await Promise.all([
     read("components/nyascans/LibraryWorkspace.tsx"),
     read("app/api/v1/library-data/route.ts"),
     read("app/api/v1/library-export/route.ts"),
+    read("app/api/v1/library-import/route.ts"),
   ]);
 
   for (const label of ["Cover grid", "Compact grid", "List view"]) {
@@ -35,7 +36,10 @@ test("Library provides three persistent views and a versioned private export", a
   assert.match(dataApi, /libraryViewMode/);
   assert.match(dataApi, /requireActor\("library\.manage\.own"\)/);
   assert.match(exportApi, /format: "nyascans-library-export"/);
-  assert.match(exportApi, /version: "1\.0"/);
+  assert.match(exportApi, /version: "2\.0"/);
+  assert.match(importApi, /nyascans-library-export/);
+  assert.match(importApi, /ON CONFLICT\(user_id, series_id\) DO UPDATE SET/);
+  assert.doesNotMatch(importApi, /\bDELETE FROM library_entries\b/);
   assert.match(exportApi, /cache-control": "private, no-store"/);
   assert.doesNotMatch(exportApi, /password|provider_token|access_token/i);
 });
@@ -60,5 +64,5 @@ test("public profiles keep private reading data server-gated", async () => {
   assert.match(media, /PROFILE_CHANGED/);
   assert.match(media, /cleanupIfUnreferenced/);
   assert.match(view, /isFollowing/);
-  assert.match(view, /Recent reading/);
+  assert.match(view, /Activity/);
 });

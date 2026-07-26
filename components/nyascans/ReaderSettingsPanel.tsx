@@ -13,7 +13,7 @@ import {
 
 export type ReaderSettings = {
   mode: "vertical" | "single" | "double";
-  imageFit: "width" | "height" | "original" | "smart";
+  imageFit: "width" | "height" | "page" | "original" | "smart";
   imageSpacing: number;
   topMargin: number;
   bottomMargin: number;
@@ -159,6 +159,7 @@ export function ReaderSettingsPanel({
           options={[
             ["width", "Fit width"],
             ["height", "Fit height"],
+            ["page", "Page fit"],
             ["original", "Original"],
             ["smart", "Smart fit"],
           ]}

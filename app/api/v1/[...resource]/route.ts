@@ -7,11 +7,18 @@ import {
   languageCodeSchema,
   normalizedLookupKey,
 } from "@/lib/admin-metadata";
-import { commercialSettingsSchema } from "@/lib/commercial-settings";
+import {
+  commercialSettingsSchema,
+  sanitizeCommercialSettingsForPublic,
+} from "@/lib/commercial-settings";
 import {
   discussionSettingsSchema,
 } from "@/lib/discussion-settings";
-import { can, sumBalancedEntries } from "@/lib/permissions.mjs";
+import {
+  canAny,
+  highestRole,
+  sumBalancedEntries,
+} from "@/lib/permissions.mjs";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import {
   getDiscussionSettingsDocument,
@@ -19,9 +26,15 @@ import {
 } from "@/lib/server/discussion-settings";
 import {
   getCommercialSettingsDocument,
+  requirePaidEconomyPublic,
   saveCommercialSettings,
 } from "@/lib/server/commercial-settings";
-import { grantCurrencyReward } from "@/lib/server/economy";
+import {
+  ensureWalletAccount,
+  grantCurrencyReward,
+  platformAccountId,
+  walletSnapshot as currencyWalletSnapshot,
+} from "@/lib/server/economy";
 import { getRewardSettingsDocument } from "@/lib/server/reward-settings";
 import {
   getActor,
@@ -105,6 +118,7 @@ const analyticsEventSchema = z
   .object({
     eventId: z.string().uuid(),
     sessionId: z.string().uuid(),
+    visitorId: z.string().uuid(),
     eventType: z.enum([
       "HOME_VIEW",
       "LATEST_VIEW",
@@ -235,28 +249,34 @@ const adminTeamUpdateSchema = z.object({
 
 const adminUserUpdateSchema = z.object({
   id: z.string().min(3).max(120),
-  expectedPrimaryRole: z.enum([
-    "OWNER",
-    "ADMINISTRATOR",
-    "MODERATOR",
-    "TEAM_LEADER",
-    "UPLOADER",
-    "USER",
-  ]),
+  expectedAccessRevision: z.coerce.number().int().min(1),
   expectedStatus: z.enum(["ACTIVE", "SUSPENDED"]),
-  primaryRole: z
-    .enum([
+  roles: z
+    .array(
+      z.enum([
       "OWNER",
       "ADMINISTRATOR",
+      "MANAGER",
       "MODERATOR",
       "TEAM_LEADER",
       "UPLOADER",
       "USER",
-    ])
+      ]),
+    )
+    .min(1)
+    .max(7)
     .optional(),
   status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
-}).refine((value) => value.primaryRole || value.status, {
+}).refine((value) => value.roles || value.status, {
   message: "Choose a role or account status to update.",
+});
+
+const balanceAdjustmentSchema = z.object({
+  userId: z.string().min(3).max(120),
+  currency: z.enum(["ONYX", "SHARDS"]),
+  delta: z.number().int().min(-10_000_000).max(10_000_000).refine(Boolean),
+  reason: z.string().trim().min(8).max(500),
+  idempotencyKey: z.string().min(12).max(160),
 });
 
 const chapterAccessTypeSchema = z.enum(["FREE", "PAID"]);
@@ -359,7 +379,7 @@ const adminChapterAccessSchema = z
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
-        message: "Paid chapters need an Onyx Coin price.",
+        message: "Paid chapters need a premium coin price.",
       });
     }
   });
@@ -372,12 +392,23 @@ const discussionCommentSchema = z.object({
   body: z.string().trim().max(2500),
   spoiler: z.boolean().default(false),
   mediaIds: z.array(z.string().uuid()).max(4).default([]),
+  gifIds: z
+    .array(z.string().trim().min(3).max(160))
+    .max(4)
+    .default([])
+    .refine((items) => new Set(items).size === items.length, {
+      message: "Choose each GIF only once.",
+    }),
 }).superRefine((value, context) => {
-  if (value.body.length < 2 && value.mediaIds.length === 0) {
+  if (
+    value.body.length < 2 &&
+    value.mediaIds.length === 0 &&
+    value.gifIds.length === 0
+  ) {
     context.addIssue({
       code: "custom",
       path: ["body"],
-      message: "Write at least two characters or attach an image.",
+      message: "Write at least two characters or attach an image or GIF.",
     });
   }
 });
@@ -735,13 +766,17 @@ function analyticsWindow(url: URL) {
 function isAdminActor(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
-  return ["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole);
+  return actor.roles.some((role) =>
+    ["OWNER", "ADMINISTRATOR"].includes(role),
+  );
 }
 
 function isGlobalModerator(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
-  return ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(actor.primaryRole);
+  return actor.roles.some((role) =>
+    ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(role),
+  );
 }
 
 function publicSeriesPredicate(alias = "s") {
@@ -811,7 +846,7 @@ async function requireSeriesModerator(
     );
   }
   if (isGlobalModerator(actor)) return;
-  if (actor.primaryRole !== "TEAM_LEADER") {
+  if (!actor.roles.includes("TEAM_LEADER")) {
     throw new ApiError(
       403,
       "MODERATION_PERMISSION_REQUIRED",
@@ -982,6 +1017,32 @@ function publicSeriesCover(slug: string, coverKey: string | null | undefined) {
   return `/api/v1/series-cover?slug=${encodeURIComponent(slug)}`;
 }
 
+function publicSeriesBanner(
+  seriesId: string,
+  bannerKey: string | null | undefined,
+  revision: number,
+) {
+  const normalized = bannerKey?.trim() ?? "";
+  if (!normalized) return null;
+  if (normalized.startsWith("/") || /^https?:\/\//.test(normalized)) {
+    return normalized;
+  }
+  return `/api/v1/series-media?id=${encodeURIComponent(seriesId)}&slot=banner&v=${revision}`;
+}
+
+function publicSeriesSlider(
+  seriesId: string,
+  sliderKey: string | null | undefined,
+  revision: number,
+) {
+  const normalized = sliderKey?.trim() ?? "";
+  if (!normalized) return null;
+  if (normalized.startsWith("/") || /^https?:\/\//.test(normalized)) {
+    return normalized;
+  }
+  return `/api/v1/series-media?id=${encodeURIComponent(seriesId)}&slot=slider&v=${revision}`;
+}
+
 async function fixedReaderManifest(
   pages: Array<Record<string, unknown>>,
   seriesSlug: string,
@@ -1095,7 +1156,12 @@ export async function GET(request: Request, context: RouteContext) {
     const url = new URL(request.url);
 
     if (path === "site-commercial-settings") {
-      return json(id, await getCommercialSettingsDocument(), {
+      const document = await getCommercialSettingsDocument();
+      const publicDocument = {
+        ...document,
+        settings: sanitizeCommercialSettingsForPublic(document.settings),
+      };
+      return json(id, publicDocument, {
         headers: {
           "cache-control": "public, max-age=30, stale-while-revalidate=120",
         },
@@ -1538,6 +1604,8 @@ export async function GET(request: Request, context: RouteContext) {
                 END AS chapterLabel,
                 c.language,
                 c.version,
+                c.thumbnail_key AS thumbnailKey,
+                c.revision AS chapterRevision,
                 t.name AS teamName,
                 c.access_type AS accessType,
                 c.price_onyx AS priceOnyx,
@@ -1583,6 +1651,8 @@ export async function GET(request: Request, context: RouteContext) {
             priceOnyx: number;
             teamPreviewAllowed: number;
             isFresh: number;
+            thumbnailKey: string | null;
+            chapterRevision: number;
           }
         >();
       const actor = await getActor();
@@ -1619,7 +1689,17 @@ export async function GET(request: Request, context: RouteContext) {
       }));
       return json(
         id,
-        { data: decisions.map(chapterAccessContract) },
+        {
+          data: decisions.map((chapter, index) => {
+            const source = releaseRows.results[index];
+            return {
+              ...chapterAccessContract(chapter),
+              thumbnailUrl: source?.thumbnailKey
+                ? `/api/v1/chapter-thumbnail?id=${encodeURIComponent(chapter.chapterId)}&v=${Number(source.chapterRevision ?? 1)}`
+                : null,
+            };
+          }),
+        },
         {
           headers: {
             "cache-control": "private, no-store",
@@ -2558,6 +2638,9 @@ export async function GET(request: Request, context: RouteContext) {
                 s.status,
                 s.synopsis,
                 s.cover_key AS coverKey,
+                s.banner_key AS bannerKey,
+                s.slider_key AS sliderKey,
+                s.revision,
                 s.rating_tenths AS ratingTenths,
                 COALESCE((
                   SELECT COUNT(DISTINCT chapter_count.chapter_number)
@@ -2623,6 +2706,9 @@ export async function GET(request: Request, context: RouteContext) {
         status: string;
         synopsis: string;
         coverKey: string | null;
+        bannerKey: string | null;
+        sliderKey: string | null;
+        revision: number;
         ratingTenths: number;
         chapterCount: number;
         bookmarkCount: number;
@@ -2644,6 +2730,16 @@ export async function GET(request: Request, context: RouteContext) {
               ? row.alternativeTitles.split("||").filter(Boolean)
               : [],
             cover: publicSeriesCover(row.slug, row.coverKey),
+            banner: publicSeriesBanner(
+              row.seriesId,
+              row.bannerKey,
+              Number(row.revision),
+            ),
+            slider: publicSeriesSlider(
+              row.seriesId,
+              row.sliderKey,
+              Number(row.revision),
+            ),
           })),
         },
         { headers: { "cache-control": "public, max-age=30" } },
@@ -2794,6 +2890,7 @@ export async function GET(request: Request, context: RouteContext) {
       type CommentRow = {
         id: string;
         chapterSlug: string | null;
+        chapterNumber: string | null;
         parentId: string | null;
         depth: number;
         body: string;
@@ -2806,6 +2903,15 @@ export async function GET(request: Request, context: RouteContext) {
         updatedAt: string;
         displayName: string;
         role: string;
+        avatarKey: string | null;
+        avatarUsername: string | null;
+        avatarRevision: number | null;
+        cosmeticItemId: string | null;
+        cosmeticName: string | null;
+        cosmeticCategory: string | null;
+        cosmeticPreviewKey: string | null;
+        cosmeticRevision: number | null;
+        cosmeticConfigJson: string | null;
         affiliationTeamId: string | null;
         affiliationTeamName: string | null;
         affiliationBadgeKey: string | null;
@@ -2837,10 +2943,30 @@ export async function GET(request: Request, context: RouteContext) {
         kind: string;
         altText: string;
       };
+      type CommentGifRow = {
+        commentId: string;
+        gifId: string;
+        name: string;
+        accessibleLabel: string;
+        revision: number;
+      };
 
       const commentsResult = await env.DB.prepare(
         `SELECT dc.id,
                 dc.chapter_slug AS chapterSlug,
+                (
+                  SELECT chapter_source.chapter_number
+                    FROM chapters chapter_source
+                    JOIN series chapter_series
+                      ON chapter_series.id = chapter_source.series_id
+                   WHERE chapter_series.slug = dc.series_slug
+                     AND chapter_source.slug = dc.chapter_slug
+                     AND chapter_source.state = 'PUBLISHED'
+                     AND chapter_source.visibility = 'PUBLIC'
+                     AND chapter_source.published_at IS NOT NULL
+                     AND datetime(chapter_source.published_at) <= datetime('now')
+                   LIMIT 1
+                ) AS chapterNumber,
                 dc.parent_id AS parentId,
                 dc.depth,
                 dc.body,
@@ -2853,6 +2979,27 @@ export async function GET(request: Request, context: RouteContext) {
                 dc.updated_at AS updatedAt,
                 u.display_name AS displayName,
                 u.primary_role AS role,
+                CASE
+                  WHEN up.avatar_key IS NOT NULL
+                   AND (up.profile_visibility = 'PUBLIC' OR dc.user_id = ?)
+                  THEN up.avatar_key ELSE NULL
+                END AS avatarKey,
+                CASE
+                  WHEN up.avatar_key IS NOT NULL
+                   AND (up.profile_visibility = 'PUBLIC' OR dc.user_id = ?)
+                  THEN up.username ELSE NULL
+                END AS avatarUsername,
+                CASE
+                  WHEN up.avatar_key IS NOT NULL
+                   AND (up.profile_visibility = 'PUBLIC' OR dc.user_id = ?)
+                  THEN up.revision ELSE NULL
+                END AS avatarRevision,
+                si.id AS cosmeticItemId,
+                si.name AS cosmeticName,
+                si.category AS cosmeticCategory,
+                si.preview_key AS cosmeticPreviewKey,
+                si.revision AS cosmeticRevision,
+                si.preview_config_json AS cosmeticConfigJson,
                 CASE WHEN tm.user_id IS NOT NULL THEN t.id ELSE NULL END
                   AS affiliationTeamId,
                 CASE WHEN tm.user_id IS NOT NULL THEN t.name ELSE NULL END
@@ -2898,6 +3045,9 @@ export async function GET(request: Request, context: RouteContext) {
                   THEN 1 ELSE 0 END AS ownedByViewer
          FROM discussion_comments dc
          JOIN users u ON u.id = dc.user_id
+         LEFT JOIN user_profiles up ON up.user_id = dc.user_id
+         LEFT JOIN store_items si
+           ON si.id = dc.cosmetic_item_id
          LEFT JOIN teams t
            ON t.id = dc.affiliation_team_id
           AND t.is_archived = 0
@@ -2928,6 +3078,9 @@ export async function GET(request: Request, context: RouteContext) {
          LIMIT 250`,
       )
         .bind(
+          viewerId,
+          viewerId,
+          viewerId,
           viewerId,
           viewerId,
           viewerId,
@@ -2976,6 +3129,22 @@ export async function GET(request: Request, context: RouteContext) {
       )
         .bind(seriesSlug, chapterSlug, chapterSlug)
         .all<MediaRow>();
+      const commentGifsResult = await env.DB.prepare(
+        `SELECT dcg.comment_id AS commentId,
+                cr.id AS gifId,
+                cr.name,
+                cr.accessible_label AS accessibleLabel,
+                cr.revision
+           FROM discussion_comment_gifs dcg
+           JOIN discussion_comments dc ON dc.id = dcg.comment_id
+           JOIN custom_reactions cr ON cr.id = dcg.gif_id
+          WHERE dc.series_slug = ?
+            AND (? IS NULL OR dc.chapter_slug = ?)
+            AND dc.moderation_status = 'VISIBLE'
+          ORDER BY dcg.display_order, dcg.created_at`,
+      )
+        .bind(seriesSlug, chapterSlug, chapterSlug)
+        .all<CommentGifRow>();
 
       const reactionsByComment = new Map<string, ReactionRow[]>();
       for (const reaction of reactionsResult.results) {
@@ -2991,8 +3160,36 @@ export async function GET(request: Request, context: RouteContext) {
           media,
         ]);
       }
+      const gifsByComment = new Map<string, CommentGifRow[]>();
+      for (const gif of commentGifsResult.results) {
+        gifsByComment.set(gif.commentId, [
+          ...(gifsByComment.get(gif.commentId) ?? []),
+          gif,
+        ]);
+      }
       const data = commentsResult.results.map((comment) => ({
         ...comment,
+        chapterNumber: comment.chapterNumber
+          ? normalizeChapterNumber(comment.chapterNumber)
+          : null,
+        avatarKey: undefined,
+        cosmeticPreviewKey: undefined,
+        cosmeticConfigJson: undefined,
+        avatarUrl:
+          comment.avatarKey && comment.avatarUsername
+            ? `/api/v1/profile-media?username=${encodeURIComponent(comment.avatarUsername)}&slot=avatar&v=${comment.avatarRevision ?? 1}`
+            : null,
+        commentCosmetic: comment.cosmeticItemId
+          ? {
+              id: comment.cosmeticItemId,
+              name: comment.cosmeticName,
+              category: comment.cosmeticCategory,
+              previewUrl: comment.cosmeticPreviewKey
+                ? `/api/v1/store-preview?id=${encodeURIComponent(comment.cosmeticItemId)}&v=${comment.cosmeticRevision ?? 1}`
+                : null,
+              config: safeJsonRecord(comment.cosmeticConfigJson ?? "{}"),
+            }
+          : null,
         voteScore: Number(comment.voteScore ?? 0),
         viewerVote: Number(comment.viewerVote ?? 0),
         reactions: (reactionsByComment.get(comment.id) ?? []).map(
@@ -3011,6 +3208,12 @@ export async function GET(request: Request, context: RouteContext) {
         media: (mediaByComment.get(comment.id) ?? []).map((media) => ({
           ...media,
           url: `/api/v1/discussion-media?id=${encodeURIComponent(media.id)}`,
+        })),
+        gifs: (gifsByComment.get(comment.id) ?? []).map((gif) => ({
+          id: gif.gifId,
+          name: gif.name,
+          altText: gif.accessibleLabel,
+          url: `/api/v1/reaction-asset?id=${encodeURIComponent(gif.gifId)}&v=${gif.revision}`,
         })),
         teamAffiliation: comment.affiliationTeamId
           ? {
@@ -3088,6 +3291,7 @@ export async function GET(request: Request, context: RouteContext) {
                 availability_json AS availabilityJson
          FROM custom_reactions
          WHERE is_active = 1 AND is_archived = 0
+           AND usage_kind = 'REACTION'
          ORDER BY display_order, name COLLATE NOCASE`,
       ).all<{
         id: string;
@@ -3101,6 +3305,42 @@ export async function GET(request: Request, context: RouteContext) {
       }>();
       const eligibleReactions = reactionLibrary.results.filter((reaction) => {
         const availability = safeJsonRecord(reaction.availabilityJson);
+        if (availability.scope === "SIGNED_IN") return Boolean(viewerActor);
+        if (availability.scope !== "TEAM") return true;
+        const teamIds = Array.isArray(availability.teamIds)
+          ? availability.teamIds.filter(
+              (teamId): teamId is string => typeof teamId === "string",
+            )
+          : [];
+        return Boolean(
+          viewerActor &&
+            teamIds.some((teamId) => viewerActor!.teamIds.includes(teamId)),
+        );
+      });
+      const commentGifLibrary = discussionSettings.settings.allowGifs
+        ? await env.DB.prepare(
+            `SELECT id, name, accessible_label AS label,
+                    category, revision, availability_json AS availabilityJson
+               FROM custom_reactions
+              WHERE is_active = 1
+                AND is_archived = 0
+                AND usage_kind = 'COMMENT_GIF'
+                AND asset_key IS NOT NULL
+                AND is_animated = 1
+              ORDER BY category COLLATE NOCASE, display_order,
+                       name COLLATE NOCASE
+              LIMIT 120`,
+          ).all<{
+            id: string;
+            name: string;
+            label: string;
+            category: string | null;
+            revision: number;
+            availabilityJson: string;
+          }>()
+        : { results: [] };
+      const eligibleCommentGifs = commentGifLibrary.results.filter((gif) => {
+        const availability = safeJsonRecord(gif.availabilityJson);
         if (availability.scope === "SIGNED_IN") return Boolean(viewerActor);
         if (availability.scope !== "TEAM") return true;
         const teamIds = Array.isArray(availability.teamIds)
@@ -3131,6 +3371,20 @@ export async function GET(request: Request, context: RouteContext) {
             .bind(viewerActor.id, seriesSlug)
             .all<{ id: string; name: string }>()
         : { results: [] };
+      const viewerProfile = viewerActor
+        ? await env.DB.prepare(
+            `SELECT username, avatar_key AS avatarKey, revision
+               FROM user_profiles
+              WHERE user_id = ?
+              LIMIT 1`,
+          )
+            .bind(viewerActor.id)
+            .first<{
+              username: string;
+              avatarKey: string | null;
+              revision: number;
+            }>()
+        : null;
 
       return json(id, {
         data: orderedData,
@@ -3138,6 +3392,14 @@ export async function GET(request: Request, context: RouteContext) {
         scope: { seriesSlug, chapterSlug },
         sort,
         eligibleAffiliations: eligibleAffiliations.results,
+        viewer: viewerActor
+          ? {
+              avatarUrl:
+                viewerProfile?.avatarKey && viewerProfile.username
+                  ? `/api/v1/profile-media?username=${encodeURIComponent(viewerProfile.username)}&slot=avatar&v=${viewerProfile.revision}`
+                  : null,
+            }
+          : null,
         settings: {
           ...discussionSettings.settings,
           reactions: eligibleReactions.map((reaction) => ({
@@ -3149,6 +3411,13 @@ export async function GET(request: Request, context: RouteContext) {
               ? `/api/v1/reaction-asset?id=${encodeURIComponent(reaction.id)}&v=${reaction.revision}`
               : null,
             animated: Boolean(reaction.animated),
+          })),
+          gifs: eligibleCommentGifs.map((gif) => ({
+            id: gif.id,
+            name: gif.name,
+            label: gif.label,
+            category: gif.category || "General",
+            url: `/api/v1/reaction-asset?id=${encodeURIComponent(gif.id)}&v=${gif.revision}`,
           })),
         },
       });
@@ -3573,11 +3842,52 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "wallet") {
       const actor = await requireActor("wallet.read.own");
-      return json(id, await walletSnapshot(actor.id));
+      const commercial = await getCommercialSettingsDocument();
+      if (!commercial.settings.economy.premiumEconomyPublic) {
+        if (!env.DB) {
+          throw new ApiError(
+            503,
+            "DATABASE_UNAVAILABLE",
+            "Wallet storage is unavailable.",
+          );
+        }
+        return json(
+          id,
+          {
+            ...(await currencyWalletSnapshot(env.DB, actor.id, "SHARDS")),
+            premiumEconomyPublic: false,
+          },
+          {
+            headers: {
+              "cache-control": "private, no-store",
+              vary: "cookie",
+            },
+          },
+        );
+      }
+      return json(id, await walletSnapshot(actor.id), {
+        headers: {
+          "cache-control": "private, no-store",
+          vary: "cookie",
+        },
+      });
     }
 
     if (path === "orders") {
       const actor = await requireActor("orders.read.own");
+      const commercial = await getCommercialSettingsDocument();
+      if (!commercial.settings.economy.premiumEconomyPublic) {
+        return json(
+          id,
+          { data: [], premiumEconomyPublic: false },
+          {
+            headers: {
+              "cache-control": "private, no-store",
+              vary: "cookie",
+            },
+          },
+        );
+      }
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -3599,20 +3909,36 @@ export async function GET(request: Request, context: RouteContext) {
       )
         .bind(actor.id)
         .all();
-      return json(id, { data: result.results });
+      return json(id, { data: result.results }, {
+        headers: {
+          "cache-control": "private, no-store",
+          vary: "cookie",
+        },
+      });
     }
 
     if (path === "notifications") {
       const actor = await requireActor();
       if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Notification storage is unavailable.");
+      const commercial = await getCommercialSettingsDocument();
       const result = await env.DB.prepare(
-        `SELECT id, kind, title, body, read_at, created_at
-         FROM notifications WHERE user_id = ?
+         `SELECT id, kind, title, body, read_at, created_at
+         FROM notifications
+         WHERE user_id = ?
+           AND (? = 1 OR kind <> 'TEAM_SUPPORT')
          ORDER BY created_at DESC LIMIT 40`,
       )
-        .bind(actor.id)
+        .bind(
+          actor.id,
+          commercial.settings.economy.premiumEconomyPublic ? 1 : 0,
+        )
         .all();
-      return json(id, { data: result.results });
+      return json(id, { data: result.results }, {
+        headers: {
+          "cache-control": "private, no-store",
+          vary: "cookie",
+        },
+      });
     }
 
     if (path === "uploads") {
@@ -3709,7 +4035,7 @@ export async function GET(request: Request, context: RouteContext) {
 
       if (section === "series" || section === "rights") {
         const managedTeams =
-          actor.primaryRole === "TEAM_LEADER"
+          actor.roles.includes("TEAM_LEADER")
             ? await env.DB.prepare(
                 `SELECT t.id, t.slug, t.name
                    FROM teams t
@@ -3773,7 +4099,7 @@ export async function GET(request: Request, context: RouteContext) {
           })),
           managedTeams: managedTeams.results,
           canCreateSeries:
-            actor.primaryRole === "TEAM_LEADER" &&
+            actor.roles.includes("TEAM_LEADER") &&
             managedTeams.results.length > 0,
           section,
         });
@@ -3813,7 +4139,7 @@ export async function GET(request: Request, context: RouteContext) {
             selectedSeries: null,
             canModerate:
               isGlobalModerator(actor) ||
-              actor.primaryRole === "TEAM_LEADER",
+              actor.roles.includes("TEAM_LEADER"),
             canSuspendUsers: isAdminActor(actor),
             pagination: {
               page: 1,
@@ -3905,7 +4231,7 @@ export async function GET(request: Request, context: RouteContext) {
           selectedSeries,
           canModerate:
             isGlobalModerator(actor) ||
-            actor.primaryRole === "TEAM_LEADER",
+            actor.roles.includes("TEAM_LEADER"),
           canSuspendUsers: isAdminActor(actor),
           pagination: {
             page,
@@ -4152,10 +4478,16 @@ export async function GET(request: Request, context: RouteContext) {
                       c.created_at AS createdAt,
                       s.slug AS seriesSlug,
                       s.title AS seriesTitle,
-                      t.name AS teamName
+                      t.name AS teamName,
+                      uji.replacement_chapter_id AS replacementChapterId,
+                      replacement.chapter_number AS replacementChapterNumber,
+                      replacement.title AS replacementChapterTitle
                  FROM chapters c
                  JOIN series s ON s.id = c.series_id
                  LEFT JOIN teams t ON t.id = c.team_id
+                 LEFT JOIN upload_job_items uji ON uji.chapter_id = c.id
+                 LEFT JOIN chapters replacement
+                   ON replacement.id = uji.replacement_chapter_id
                 WHERE c.state IN ('DRAFT', 'READY_FOR_REVIEW')
                 ORDER BY CASE WHEN c.state = 'READY_FOR_REVIEW' THEN 0 ELSE 1 END,
                          c.created_at DESC
@@ -4175,12 +4507,21 @@ export async function GET(request: Request, context: RouteContext) {
                         c.created_at AS createdAt,
                         s.slug AS seriesSlug,
                         s.title AS seriesTitle,
-                        t.name AS teamName
+                        t.name AS teamName,
+                        NULL AS replacementChapterId,
+                        NULL AS replacementChapterNumber,
+                        NULL AS replacementChapterTitle
                    FROM chapters c
                    JOIN series s ON s.id = c.series_id
                    LEFT JOIN teams t ON t.id = c.team_id
                   WHERE c.team_id IN (${teamPlaceholders})
                     AND c.state IN ('DRAFT', 'READY_FOR_REVIEW')
+                    AND NOT EXISTS (
+                      SELECT 1
+                        FROM upload_job_items replacement_item
+                       WHERE replacement_item.chapter_id = c.id
+                         AND replacement_item.replacement_chapter_id IS NOT NULL
+                    )
                   ORDER BY CASE WHEN c.state = 'READY_FOR_REVIEW' THEN 0 ELSE 1 END,
                            c.created_at DESC
                   LIMIT 100`,
@@ -4282,7 +4623,7 @@ export async function GET(request: Request, context: RouteContext) {
         ),
       ]);
       const activity =
-        actor.primaryRole === "OWNER"
+        actor.roles.includes("OWNER")
           ? await env.DB.prepare(
               `SELECT al.id,
                       al.action,
@@ -4310,7 +4651,7 @@ export async function GET(request: Request, context: RouteContext) {
           visibleComments: countValue(counts[9]),
         },
         activity: activity.results,
-        activityRestricted: actor.primaryRole !== "OWNER",
+        activityRestricted: !actor.roles.includes("OWNER"),
         generatedAt: new Date().toISOString(),
       });
     }
@@ -4332,12 +4673,38 @@ export async function GET(request: Request, context: RouteContext) {
         bucketFormat,
         buckets,
       } = analyticsWindow(url);
+      const requestedRegion = (url.searchParams.get("region") ?? "ALL")
+        .trim()
+        .toUpperCase();
+      const selectedRegion =
+        requestedRegion === "UNKNOWN"
+          ? "Unknown"
+          : requestedRegion !== "ALL" && /^[A-Z]{2}$/.test(requestedRegion)
+            ? requestedRegion
+            : null;
+      const regionClause = selectedRegion
+        ? "AND COALESCE(NULLIF(region_code, ''), 'Unknown') = ?"
+        : "";
+      const regionClauseAe = selectedRegion
+        ? "AND COALESCE(NULLIF(ae.region_code, ''), 'Unknown') = ?"
+        : "";
+      const regionBindings = selectedRegion ? [selectedRegion] : [];
       const results = (await env.DB.batch([
         env.DB.prepare(
           `SELECT COUNT(DISTINCT CASE
                     WHEN created_at >= datetime('now', '-5 minutes')
                     THEN session_id END) AS activeSessions5m,
                   COUNT(DISTINCT session_id) AS uniqueSessions,
+                  COUNT(DISTINCT visitor_id) AS uniqueVisitors,
+                  COUNT(DISTINCT CASE
+                    WHEN visitor_id IS NOT NULL
+                     AND NOT EXISTS (
+                       SELECT 1
+                         FROM analytics_events prior
+                        WHERE prior.visitor_id = analytics_events.visitor_id
+                          AND prior.created_at < datetime(?)
+                     )
+                    THEN visitor_id END) AS newVisitors,
                   COALESCE(SUM(CASE
                     WHEN event_type IN
                       ('HOME_VIEW', 'LATEST_VIEW', 'BROWSE_VIEW', 'SERIES_VIEW')
@@ -4350,8 +4717,9 @@ export async function GET(request: Request, context: RouteContext) {
                     AS chapterCompletions
              FROM analytics_events
             WHERE created_at >= datetime(?)
-              AND created_at < datetime(?)`,
-        ).bind(startAt, endAt),
+              AND created_at < datetime(?)
+              ${regionClause}`,
+        ).bind(startAt, startAt, endAt, ...regionBindings),
         env.DB.prepare(
           `SELECT strftime('${bucketFormat}', created_at) AS bucket,
                   COUNT(DISTINCT session_id) AS readers,
@@ -4368,9 +4736,10 @@ export async function GET(request: Request, context: RouteContext) {
              FROM analytics_events
             WHERE created_at >= datetime(?)
               AND created_at < datetime(?)
+              ${regionClause}
             GROUP BY bucket
             ORDER BY bucket`,
-        ).bind(startAt, endAt),
+        ).bind(startAt, endAt, ...regionBindings),
         env.DB.prepare(
           `SELECT COUNT(*) AS comments
             FROM discussion_comments
@@ -4440,10 +4809,11 @@ export async function GET(request: Request, context: RouteContext) {
             WHERE ae.series_slug IS NOT NULL
               AND ae.created_at >= datetime(?)
               AND ae.created_at < datetime(?)
+              ${regionClauseAe}
             GROUP BY ae.series_slug, s.title
             ORDER BY (seriesViews + chapterStarts) DESC
             LIMIT 8`,
-        ).bind(startAt, endAt),
+        ).bind(startAt, endAt, ...regionBindings),
         env.DB.prepare(
           `SELECT event_type AS eventType,
                   series_slug AS seriesSlug,
@@ -4511,10 +4881,11 @@ export async function GET(request: Request, context: RouteContext) {
               AND ae.chapter_slug IS NOT NULL
               AND ae.created_at >= datetime(?)
               AND ae.created_at < datetime(?)
+              ${regionClauseAe}
             GROUP BY ae.series_slug, ae.chapter_slug, s.title, c.chapter_number
             ORDER BY views DESC, uniqueViewers DESC
             LIMIT 10`,
-        ).bind(startAt, endAt),
+        ).bind(startAt, endAt, ...regionBindings),
         env.DB.prepare(
           `SELECT COALESCE(NULLIF(region_code, ''), 'Unknown') AS regionCode,
                   COUNT(*) AS views,
@@ -4541,6 +4912,93 @@ export async function GET(request: Request, context: RouteContext) {
             GROUP BY billing_currency, provider
             ORDER BY orders DESC, billing_currency`,
         ).bind(startAt, endAt),
+        env.DB.prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM users) AS registeredUsers,
+             (SELECT COALESCE(SUM(le.amount), 0)
+                FROM ledger_entries le
+                JOIN ledger_accounts la ON la.id = le.account_id
+                JOIN ledger_transactions lt ON lt.id = le.transaction_id
+               WHERE la.owner_type = 'USER'
+                 AND la.currency = 'SHARDS'
+                 AND le.amount > 0
+                 AND lt.kind IN (
+                   'CHAPTER_REWARD',
+                   'COMMENT_REWARD',
+                   'COMMENT_UPVOTE_REWARD',
+                   'ROULETTE_REWARD'
+                 )
+                 AND lt.created_at >= datetime(?)
+                 AND lt.created_at < datetime(?)) AS shardsCollected,
+             (SELECT COALESCE(SUM(-le.amount), 0)
+                FROM ledger_entries le
+                JOIN ledger_accounts la ON la.id = le.account_id
+                JOIN ledger_transactions lt ON lt.id = le.transaction_id
+               WHERE la.owner_type = 'USER'
+                 AND la.currency = 'SHARDS'
+                 AND le.amount < 0
+                 AND lt.kind IN ('ROULETTE_SPIN_PURCHASE', 'STORE_PURCHASE')
+                 AND lt.created_at >= datetime(?)
+                 AND lt.created_at < datetime(?)) AS shardsSpent,
+             (SELECT COALESCE(SUM(le.amount), 0)
+                FROM ledger_entries le
+                JOIN ledger_accounts la ON la.id = le.account_id
+               WHERE la.owner_type = 'USER'
+                 AND la.currency = 'SHARDS') AS shardsOutstanding`,
+        ).bind(startAt, endAt, startAt, endAt),
+        env.DB.prepare(
+          `SELECT s.id, s.slug, s.title,
+                  COUNT(DISTINCT lt.id) AS purchases,
+                  COALESCE(SUM(CASE
+                    WHEN la.owner_type = 'PLATFORM' AND le.amount > 0
+                    THEN le.amount ELSE 0 END), 0) AS pawCoinsSpent
+             FROM ledger_transactions lt
+             JOIN chapters c
+               ON lt.reference_type = 'CHAPTER'
+              AND lt.reference_id = c.id
+             JOIN series s ON s.id = c.series_id
+             LEFT JOIN ledger_entries le ON le.transaction_id = lt.id
+             LEFT JOIN ledger_accounts la ON la.id = le.account_id
+            WHERE lt.kind = 'CHAPTER_UNLOCK'
+              AND lt.created_at >= datetime(?)
+              AND lt.created_at < datetime(?)
+            GROUP BY s.id, s.slug, s.title
+            ORDER BY purchases DESC, pawCoinsSpent DESC
+            LIMIT 12`,
+        ).bind(startAt, endAt),
+        env.DB.prepare(
+          `SELECT u.id, u.display_name AS displayName, u.email,
+                  (SELECT COUNT(*) FROM discussion_comments dc
+                    WHERE dc.user_id = u.id
+                      AND dc.moderation_status = 'VISIBLE'
+                      AND dc.created_at >= datetime(?)
+                      AND dc.created_at < datetime(?)) AS comments,
+                  (SELECT COUNT(*) FROM roulette_spins rs
+                    WHERE rs.user_id = u.id
+                      AND rs.spun_at >= datetime(?)
+                      AND rs.spun_at < datetime(?)) AS spins,
+                  (SELECT COUNT(DISTINCT lt.id)
+                     FROM ledger_transactions lt
+                     JOIN ledger_entries le ON le.transaction_id = lt.id
+                     JOIN ledger_accounts la ON la.id = le.account_id
+                    WHERE lt.kind = 'CHAPTER_UNLOCK'
+                      AND la.owner_type = 'USER'
+                      AND la.owner_id = u.id
+                      AND le.amount < 0
+                      AND lt.created_at >= datetime(?)
+                      AND lt.created_at < datetime(?)) AS purchases
+             FROM users u
+            WHERE comments > 0 OR spins > 0 OR purchases > 0
+            ORDER BY purchases DESC, spins DESC, comments DESC
+            LIMIT 20`,
+        ).bind(
+          startAt,
+          endAt,
+          startAt,
+          endAt,
+          startAt,
+          endAt,
+        ),
       ])) as Array<D1Result<Record<string, unknown>>>;
       const eventSummary = (results[0].results?.[0] ?? {}) as Record<
         string,
@@ -4559,6 +5017,10 @@ export async function GET(request: Request, context: RouteContext) {
         unknown
       >;
       const platformSummary = (results[9].results?.[0] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const economySummary = (results[13].results?.[0] ?? {}) as Record<
         string,
         unknown
       >;
@@ -4591,6 +5053,7 @@ export async function GET(request: Request, context: RouteContext) {
         id,
         {
           range,
+          selectedRegion: selectedRegion ?? "ALL",
           startAt,
           endAt,
           generatedAt: new Date().toISOString(),
@@ -4598,6 +5061,7 @@ export async function GET(request: Request, context: RouteContext) {
           summary: {
             activeSessions5m: Number(eventSummary.activeSessions5m ?? 0),
             uniqueSessions: Number(eventSummary.uniqueSessions ?? 0),
+            uniqueVisitors: Number(eventSummary.uniqueVisitors ?? 0),
             views: Number(eventSummary.views ?? 0),
             chapterStarts,
             chapterCompletions,
@@ -4612,6 +5076,13 @@ export async function GET(request: Request, context: RouteContext) {
               orderSummary.testCheckoutValueMinor ?? 0,
             ),
             newUsers: Number(platformSummary.newUsers ?? 0),
+            registeredUsers: Number(economySummary.registeredUsers ?? 0),
+            newVisitors: Number(eventSummary.newVisitors ?? 0),
+            shardsCollected: Number(economySummary.shardsCollected ?? 0),
+            shardsSpent: Number(economySummary.shardsSpent ?? 0),
+            shardsOutstanding: Number(
+              economySummary.shardsOutstanding ?? 0,
+            ),
             reactions: Number(platformSummary.reactions ?? 0),
             newSeries: Number(platformSummary.newSeries ?? 0),
             newChapters: Number(platformSummary.newChapters ?? 0),
@@ -4619,6 +5090,23 @@ export async function GET(request: Request, context: RouteContext) {
             storePurchases: Number(platformSummary.storePurchases ?? 0),
           },
           timeline: buckets,
+          regionScope: selectedRegion
+            ? {
+                region: selectedRegion,
+                metrics: [
+                  "activeSessions5m",
+                  "uniqueSessions",
+                  "uniqueVisitors",
+                  "newVisitors",
+                  "views",
+                  "chapterStarts",
+                  "chapterCompletions",
+                  "timeline",
+                  "topSeries",
+                  "topChapters",
+                ],
+              }
+            : null,
           topSeries: (results[7].results ?? []).map((row) => {
             const slug = String(row.slug);
             return {
@@ -4648,6 +5136,17 @@ export async function GET(request: Request, context: RouteContext) {
             orders: Number(row.orders ?? 0),
             totalMinor: Number(row.totalMinor ?? 0),
             isTest: String(row.provider).toUpperCase() === "TEST",
+          })),
+          purchaseRankedSeries: (results[14].results ?? []).map((row) => ({
+            ...row,
+            purchases: Number(row.purchases ?? 0),
+            pawCoinsSpent: Number(row.pawCoinsSpent ?? 0),
+          })),
+          topUsers: (results[15].results ?? []).map((row) => ({
+            ...row,
+            comments: Number(row.comments ?? 0),
+            spins: Number(row.spins ?? 0),
+            purchases: Number(row.purchases ?? 0),
           })),
         },
         { headers: { "cache-control": "private, no-store" } },
@@ -4939,6 +5438,7 @@ export async function GET(request: Request, context: RouteContext) {
                 s.id AS seriesId,
                 s.slug AS seriesSlug,
                 s.title AS seriesTitle,
+                t.name AS teamName,
                 (SELECT COUNT(*)
                    FROM entitlements e
                   WHERE e.chapter_id = c.id
@@ -4948,6 +5448,7 @@ export async function GET(request: Request, context: RouteContext) {
                 ) AS entitlementCount
            FROM chapters c
            JOIN series s ON s.id = c.series_id
+           LEFT JOIN teams t ON t.id = c.team_id
           ORDER BY s.title COLLATE NOCASE,
                    CAST(c.chapter_number AS REAL) DESC,
                    c.version DESC,
@@ -5041,16 +5542,248 @@ export async function GET(request: Request, context: RouteContext) {
                 u.display_name AS displayName,
                 u.primary_role AS primaryRole,
                 u.status,
+                u.access_revision AS accessRevision,
+                COALESCE((
+                  SELECT GROUP_CONCAT(ur.role, ',')
+                    FROM user_roles ur
+                   WHERE ur.user_id = u.id
+                ), u.primary_role) AS rolesCsv,
                 u.email_verified_at AS emailVerifiedAt,
                 u.created_at AS createdAt,
                 u.updated_at AS updatedAt,
+                up.username AS avatarUsername,
+                up.revision AS avatarRevision,
+                CASE WHEN up.avatar_key IS NULL THEN 0 ELSE 1 END AS hasAvatar,
                 (SELECT COUNT(*) FROM team_memberships tm
                   WHERE tm.user_id = u.id AND tm.status = 'ACTIVE') AS teamCount
            FROM users u
+           LEFT JOIN user_profiles up ON up.user_id = u.id
           ORDER BY u.updated_at DESC
           LIMIT 150`,
       ).all();
-      return json(id, { data: result.results, currentActorId: actor.id });
+      return json(id, {
+        data: result.results.map((entry) => {
+          const row = entry as Record<string, unknown> & {
+            avatarUsername?: string | null;
+            avatarRevision?: number | null;
+            hasAvatar?: number;
+            rolesCsv?: string;
+          };
+          return {
+            ...row,
+            roles: String(row.rolesCsv ?? row.primaryRole ?? "USER")
+              .split(",")
+              .filter(Boolean),
+            avatarUrl:
+              row.hasAvatar && row.avatarUsername
+                ? `/api/v1/profile-media?username=${encodeURIComponent(row.avatarUsername)}&slot=avatar&v=${Number(row.avatarRevision ?? 1)}&admin=1`
+                : null,
+          };
+        }),
+        currentActorId: actor.id,
+      });
+    }
+
+    if (path === "admin/user-control") {
+      const actor = await requireActor();
+      requireAdmin(actor);
+      if (!env.DB) {
+        throw new ApiError(
+          503,
+          "DATABASE_UNAVAILABLE",
+          "Users Control is temporarily unavailable.",
+        );
+      }
+      const view = z
+        .enum(["overview", "activity", "purchases", "balances"])
+        .default("overview")
+        .parse(url.searchParams.get("view") ?? "overview");
+      const query = (url.searchParams.get("query") ?? "").trim().slice(0, 160);
+      const search = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+      const summaryResults = await env.DB.batch([
+        env.DB.prepare("SELECT COUNT(*) AS count FROM users"),
+        env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM users WHERE created_at >= datetime('now', '-30 days')",
+        ),
+        env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM users WHERE status = 'SUSPENDED'",
+        ),
+        env.DB.prepare(
+          `SELECT COUNT(DISTINCT user_id) AS count
+             FROM reading_progress
+            WHERE updated_at >= datetime('now', '-30 days')`,
+        ),
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM ledger_transactions
+            WHERE kind = 'CHAPTER_UNLOCK'`,
+        ),
+      ]);
+      const summary = {
+        registeredUsers: countValue(summaryResults[0]),
+        newUsers30d: countValue(summaryResults[1]),
+        suspendedUsers: countValue(summaryResults[2]),
+        activeReaders30d: countValue(summaryResults[3]),
+        purchasedChapters: countValue(summaryResults[4]),
+      };
+      let rows: unknown[] = [];
+      if (view === "balances") {
+        const result = await env.DB.prepare(
+          `SELECT u.id, u.display_name AS displayName, u.email, u.status,
+                  up.username, up.revision AS avatarRevision,
+                  CASE WHEN up.avatar_key IS NULL THEN 0 ELSE 1 END AS hasAvatar,
+                  COALESCE((
+                    SELECT SUM(le.amount)
+                      FROM ledger_entries le
+                      JOIN ledger_accounts la ON la.id = le.account_id
+                     WHERE la.owner_type = 'USER'
+                       AND la.owner_id = u.id
+                       AND la.currency = 'ONYX'
+                  ), 0) AS onyxBalance,
+                  COALESCE((
+                    SELECT SUM(le.amount)
+                      FROM ledger_entries le
+                      JOIN ledger_accounts la ON la.id = le.account_id
+                     WHERE la.owner_type = 'USER'
+                       AND la.owner_id = u.id
+                       AND la.currency = 'SHARDS'
+                  ), 0) AS shardsBalance
+             FROM users u
+             LEFT JOIN user_profiles up ON up.user_id = u.id
+            WHERE (? = '' OR u.display_name LIKE ? ESCAPE '\\'
+                    OR u.email LIKE ? ESCAPE '\\')
+            ORDER BY u.updated_at DESC
+            LIMIT 100`,
+        )
+          .bind(query, search, search)
+          .all<Record<string, unknown>>();
+        rows = result.results.map((row) => ({
+          ...row,
+          avatarUrl:
+            row.hasAvatar && row.username
+              ? `/api/v1/profile-media?username=${encodeURIComponent(String(row.username))}&slot=avatar&v=${Number(row.avatarRevision ?? 1)}&admin=1`
+              : null,
+        }));
+      } else if (view === "purchases") {
+        const result = await env.DB.prepare(
+          `SELECT o.id, 'ORDER' AS kind, u.display_name AS displayName,
+                  u.email, o.status, o.total_minor AS amount,
+                  o.billing_currency AS currency, o.created_at AS createdAt
+             FROM orders o
+             JOIN users u ON u.id = o.user_id
+            WHERE (? = '' OR u.display_name LIKE ? ESCAPE '\\'
+                    OR u.email LIKE ? ESCAPE '\\' OR o.id LIKE ? ESCAPE '\\')
+           UNION ALL
+           SELECT lt.id, 'CHAPTER_UNLOCK' AS kind,
+                  u.display_name AS displayName, u.email,
+                  'COMPLETED' AS status,
+                  -buyer_entry.amount AS amount,
+                  buyer_account.currency AS currency,
+                  lt.created_at AS createdAt
+             FROM ledger_transactions lt
+             JOIN ledger_entries buyer_entry
+               ON buyer_entry.transaction_id = lt.id
+              AND buyer_entry.amount < 0
+             JOIN ledger_accounts buyer_account
+               ON buyer_account.id = buyer_entry.account_id
+              AND buyer_account.owner_type = 'USER'
+             JOIN users u ON u.id = buyer_account.owner_id
+            WHERE lt.kind = 'CHAPTER_UNLOCK'
+              AND (? = '' OR u.display_name LIKE ? ESCAPE '\\'
+                    OR u.email LIKE ? ESCAPE '\\' OR lt.id LIKE ? ESCAPE '\\')
+            ORDER BY createdAt DESC
+            LIMIT 150`,
+        )
+          .bind(query, search, search, search, query, search, search, search)
+          .all();
+        rows = result.results;
+      } else if (view === "activity") {
+        const result = await env.DB.prepare(
+          `SELECT activity.*
+             FROM (
+               SELECT al.id, al.action AS activityType,
+                      al.target_type AS targetType,
+                      al.target_id AS targetId, al.result,
+                      al.created_at AS createdAt,
+                      u.display_name AS displayName, u.email
+                 FROM audit_logs al
+                 LEFT JOIN users u ON u.id = al.actor_user_id
+               UNION ALL
+               SELECT 'read:' || rp.user_id || ':' || rp.chapter_id,
+                      'CHAPTER_READ', 'CHAPTER', rp.chapter_id,
+                      CASE WHEN rp.completed_at IS NULL
+                        THEN 'IN_PROGRESS' ELSE 'COMPLETED' END,
+                      rp.updated_at, u.display_name, u.email
+                 FROM reading_progress rp
+                 JOIN users u ON u.id = rp.user_id
+               UNION ALL
+               SELECT dc.id, 'COMMENT_CREATED', 'COMMENT', dc.id,
+                      dc.moderation_status, dc.created_at,
+                      u.display_name, u.email
+                 FROM discussion_comments dc
+                 JOIN users u ON u.id = dc.user_id
+               UNION ALL
+               SELECT rs.id, 'ROULETTE_SPIN', 'ROULETTE_SPIN', rs.id,
+                      rs.reward_type, rs.spun_at,
+                      u.display_name, u.email
+                 FROM roulette_spins rs
+                 JOIN users u ON u.id = rs.user_id
+               UNION ALL
+               SELECT lt.id, 'CHAPTER_UNLOCK', 'CHAPTER', lt.reference_id,
+                      'COMPLETED', lt.created_at,
+                      u.display_name, u.email
+                 FROM ledger_transactions lt
+                 JOIN ledger_entries buyer_entry
+                   ON buyer_entry.transaction_id = lt.id
+                  AND buyer_entry.amount < 0
+                 JOIN ledger_accounts buyer_account
+                   ON buyer_account.id = buyer_entry.account_id
+                  AND buyer_account.owner_type = 'USER'
+                 JOIN users u ON u.id = buyer_account.owner_id
+                WHERE lt.kind = 'CHAPTER_UNLOCK'
+             ) activity
+            WHERE (? = '' OR activity.displayName LIKE ? ESCAPE '\\'
+                    OR activity.email LIKE ? ESCAPE '\\'
+                    OR activity.activityType LIKE ? ESCAPE '\\')
+            ORDER BY activity.createdAt DESC
+            LIMIT 150`,
+        )
+          .bind(query, search, search, search)
+          .all();
+        rows = result.results;
+      } else {
+        const result = await env.DB.prepare(
+          `SELECT u.id, u.display_name AS displayName, u.email, u.status,
+                  u.created_at AS createdAt,
+                  COUNT(DISTINCT dc.id) AS comments,
+                  COUNT(DISTINCT rs.id) AS spins,
+                  COUNT(DISTINCT rp.chapter_id) AS chaptersRead,
+                  (SELECT COUNT(DISTINCT lt.id)
+                     FROM ledger_transactions lt
+                     JOIN ledger_entries buyer_entry
+                       ON buyer_entry.transaction_id = lt.id
+                      AND buyer_entry.amount < 0
+                     JOIN ledger_accounts buyer_account
+                       ON buyer_account.id = buyer_entry.account_id
+                      AND buyer_account.owner_type = 'USER'
+                    WHERE lt.kind = 'CHAPTER_UNLOCK'
+                      AND buyer_account.owner_id = u.id) AS purchases
+             FROM users u
+             LEFT JOIN discussion_comments dc ON dc.user_id = u.id
+             LEFT JOIN roulette_spins rs ON rs.user_id = u.id
+             LEFT JOIN reading_progress rp
+               ON rp.user_id = u.id AND rp.completed_at IS NOT NULL
+            GROUP BY u.id
+            ORDER BY purchases DESC, chaptersRead DESC, comments DESC
+            LIMIT 50`,
+        ).all();
+        rows = result.results;
+      }
+      return json(
+        id,
+        { view, summary, rows, ownerCanAdjust: actor.roles.includes("OWNER") },
+        { headers: { "cache-control": "private, no-store" } },
+      );
     }
 
     if (path === "admin/audit") {
@@ -5616,6 +6349,14 @@ export async function PUT(request: Request, context: RouteContext) {
                 c.revision,
                 c.page_count AS pageCount,
                 s.rights_status AS rightsStatus,
+                uji.id AS uploadItemId,
+                uji.job_id AS uploadJobId,
+                uji.replacement_chapter_id AS replacementChapterId,
+                c.thumbnail_key AS proposedThumbnailKey,
+                replacement.thumbnail_key AS replacementThumbnailKey,
+                replacement.revision AS replacementChapterRevision,
+                replacement.state AS replacementChapterState,
+                replacement.page_count AS replacementPageCount,
                 COALESCE((
                   SELECT sta.can_publish
                     FROM series_team_assignments sta
@@ -5625,6 +6366,9 @@ export async function PUT(request: Request, context: RouteContext) {
                 ), 0) AS canPublish
            FROM chapters c
            JOIN series s ON s.id = c.series_id
+           LEFT JOIN upload_job_items uji ON uji.chapter_id = c.id
+           LEFT JOIN chapters replacement
+             ON replacement.id = uji.replacement_chapter_id
           WHERE c.id = ?
           LIMIT 1`,
       )
@@ -5638,6 +6382,14 @@ export async function PUT(request: Request, context: RouteContext) {
           pageCount: number;
           rightsStatus: string;
           canPublish: number;
+          uploadItemId: string | null;
+          uploadJobId: string | null;
+          replacementChapterId: string | null;
+          proposedThumbnailKey: string | null;
+          replacementThumbnailKey: string | null;
+          replacementChapterRevision: number | null;
+          replacementChapterState: string | null;
+          replacementPageCount: number | null;
         }>();
       if (!chapter) {
         throw new ApiError(
@@ -5654,13 +6406,20 @@ export async function PUT(request: Request, context: RouteContext) {
         );
       }
       const isAdmin = isAdminActor(actor);
+      if (chapter.replacementChapterId && !isAdmin) {
+        throw new ApiError(
+          403,
+          "REPLACEMENT_REVIEW_ADMIN_REQUIRED",
+          "Only an administrator can approve or return a chapter replacement.",
+        );
+      }
       const requiredCapability =
         payload.action === "SUBMIT"
           ? "chapter.submit.assigned"
           : payload.action === "PUBLISH"
             ? "chapter.publish.assigned"
             : "chapter.review.own";
-      if (!can(actor.primaryRole, requiredCapability)) {
+      if (!canAny(actor.roles, requiredCapability)) {
         throw new ApiError(
           403,
           "REVIEW_ACTION_FORBIDDEN",
@@ -5743,13 +6502,391 @@ export async function PUT(request: Request, context: RouteContext) {
           "Publication is blocked by the current rights state.",
         );
       }
+      if (
+        chapter.replacementChapterId &&
+        chapter.uploadItemId &&
+        chapter.uploadJobId &&
+        payload.action === "RETURN"
+      ) {
+        const guardCondition = `EXISTS (
+          SELECT 1 FROM upload_publish_guards
+           WHERE job_id = '${chapter.uploadJobId.replaceAll("'", "''")}'
+             AND verified = 1
+        )`;
+        let returnResults;
+        try {
+          returnResults = await env.DB.batch([
+            env.DB.prepare(
+              "DELETE FROM upload_publish_guards WHERE job_id = ?",
+            ).bind(chapter.uploadJobId),
+            env.DB.prepare(
+              `UPDATE chapters
+                  SET state = 'DRAFT',
+                      revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND revision = ?
+                  AND state = 'READY_FOR_REVIEW'`,
+            ).bind(chapter.id, payload.expectedRevision),
+            env.DB.prepare(
+              `INSERT INTO upload_publish_guards (job_id, verified)
+               VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
+            ).bind(chapter.uploadJobId),
+            env.DB.prepare(
+              `UPDATE upload_sessions
+                  SET chapter_id = NULL,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE upload_job_item_id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.uploadItemId),
+            env.DB.prepare(
+              `UPDATE upload_job_items
+                  SET chapter_id = NULL,
+                      replacement_chapter_id = NULL,
+                      status = 'READY',
+                      revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND chapter_id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.uploadItemId, chapter.id),
+            env.DB.prepare(
+              `DELETE FROM chapters
+                WHERE id = ?
+                  AND state = 'DRAFT'
+                  AND ${guardCondition}`,
+            ).bind(chapter.id),
+            env.DB.prepare(
+              `UPDATE upload_jobs
+                  SET status = 'READY',
+                      submitted_at = NULL,
+                      completed_at = NULL,
+                      revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.uploadJobId),
+            auditStatement(
+              env.DB,
+              actor,
+              id,
+              {
+                action: "upload.chapter_replacement.return",
+                category: "UPLOADS_IMPORTS",
+                sourceArea: "REVIEW_QUEUE",
+                targetType: "UPLOAD_JOB",
+                targetId: chapter.uploadJobId,
+                reason: payload.reason,
+                oldValue: {
+                  proposedChapterId: chapter.id,
+                  replacementChapterId: chapter.replacementChapterId,
+                },
+                newValue: {
+                  status: "READY",
+                  replacementChapterId: null,
+                },
+              },
+              guardCondition,
+            ),
+            env.DB.prepare(
+              "DELETE FROM upload_publish_guards WHERE job_id = ?",
+            ).bind(chapter.uploadJobId),
+          ]);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            /upload_publish_guards\.verified/i.test(error.message)
+          ) {
+            throw new ApiError(
+              409,
+              "REPLACEMENT_REVIEW_CHANGED",
+              "The replacement request changed. Reload the review queue.",
+            );
+          }
+          throw error;
+        }
+        if (!returnResults[1]?.meta.changes) {
+          throw new ApiError(
+            409,
+            "REPLACEMENT_REVIEW_CHANGED",
+            "The replacement request changed. Reload the review queue.",
+          );
+        }
+        return json(id, {
+          ok: true,
+          chapterId: null,
+          state: "READY",
+          revision: payload.expectedRevision + 1,
+          replacementReturned: true,
+        });
+      }
+      if (
+        chapter.replacementChapterId &&
+        chapter.uploadItemId &&
+        chapter.uploadJobId &&
+        payload.action === "PUBLISH"
+      ) {
+        const [oldPages, replacementPages] = await Promise.all([
+          env.DB.prepare(
+            "SELECT object_key AS objectKey FROM chapter_pages WHERE chapter_id = ?",
+          )
+            .bind(chapter.replacementChapterId)
+            .all<{ objectKey: string }>(),
+          env.DB.prepare(
+            "SELECT object_key AS objectKey FROM chapter_pages WHERE chapter_id = ?",
+          )
+            .bind(chapter.id)
+            .all<{ objectKey: string }>(),
+        ]);
+        const guardCondition = `EXISTS (
+          SELECT 1 FROM upload_publish_guards
+           WHERE job_id = '${chapter.uploadJobId.replaceAll("'", "''")}'
+             AND verified = 1
+        )`;
+        let replacementResults;
+        try {
+          replacementResults = await env.DB.batch([
+            env.DB.prepare(
+              "DELETE FROM upload_publish_guards WHERE job_id = ?",
+            ).bind(chapter.uploadJobId),
+            env.DB.prepare(
+              `UPDATE chapters
+                  SET uploader_user_id = (
+                        SELECT uploader_user_id FROM chapters WHERE id = ?
+                      ),
+                      volume = (SELECT volume FROM chapters WHERE id = ?),
+                      title = (SELECT title FROM chapters WHERE id = ?),
+                      access_type = (
+                        SELECT access_type FROM chapters WHERE id = ?
+                      ),
+                      price_onyx = (
+                        SELECT price_onyx FROM chapters WHERE id = ?
+                      ),
+                      page_count = (
+                        SELECT page_count FROM chapters WHERE id = ?
+                      ),
+                      release_notes = (
+                        SELECT release_notes FROM chapters WHERE id = ?
+                      ),
+                      credits_json = (
+                        SELECT credits_json FROM chapters WHERE id = ?
+                      ),
+                      visibility = (
+                        SELECT visibility FROM chapters WHERE id = ?
+                      ),
+                      comments_enabled = (
+                        SELECT comments_enabled FROM chapters WHERE id = ?
+                      ),
+                      thumbnail_key = (
+                        SELECT thumbnail_key FROM chapters WHERE id = ?
+                      ),
+                      state = 'PUBLISHED',
+                      published_at = COALESCE(published_at, CURRENT_TIMESTAMP),
+                      revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND revision = ?
+                  AND state = ?
+                  AND page_count = ?
+                  AND EXISTS (
+                    SELECT 1
+                      FROM chapters proposed
+                     WHERE proposed.id = ?
+                       AND proposed.revision = ?
+                       AND proposed.state = 'READY_FOR_REVIEW'
+                       AND proposed.series_id = chapters.series_id
+                       AND LTRIM(proposed.chapter_number, '0') =
+                           LTRIM(chapters.chapter_number, '0')
+                       AND proposed.language = chapters.language
+                       AND COALESCE(proposed.team_id, '') =
+                           COALESCE(chapters.team_id, '')
+                       AND proposed.version = chapters.version
+                  )`,
+            ).bind(
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.id,
+              chapter.replacementChapterId,
+              chapter.replacementChapterRevision,
+              chapter.replacementChapterState,
+              chapter.replacementPageCount,
+              chapter.id,
+              payload.expectedRevision,
+            ),
+            env.DB.prepare(
+              `INSERT INTO upload_publish_guards (job_id, verified)
+               VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
+            ).bind(chapter.uploadJobId),
+            env.DB.prepare(
+              `DELETE FROM chapter_pages
+                WHERE chapter_id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.replacementChapterId),
+            env.DB.prepare(
+              `UPDATE chapter_pages
+                  SET chapter_id = ?
+                WHERE chapter_id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.replacementChapterId, chapter.id),
+            env.DB.prepare(
+              `UPDATE upload_sessions
+                  SET chapter_id = ?,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE upload_job_item_id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.replacementChapterId, chapter.uploadItemId),
+            env.DB.prepare(
+              `UPDATE upload_job_items
+                  SET chapter_id = ?,
+                      replacement_chapter_id = NULL,
+                      status = 'PUBLISHED',
+                      revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND chapter_id = ?
+                  AND ${guardCondition}`,
+            ).bind(
+              chapter.replacementChapterId,
+              chapter.uploadItemId,
+              chapter.id,
+            ),
+            env.DB.prepare(
+              `DELETE FROM chapters
+                WHERE id = ?
+                  AND state = 'READY_FOR_REVIEW'
+                  AND ${guardCondition}`,
+            ).bind(chapter.id),
+            env.DB.prepare(
+              `UPDATE upload_jobs
+                  SET status = CASE
+                        WHEN NOT EXISTS (
+                          SELECT 1
+                            FROM upload_job_items
+                           WHERE job_id = upload_jobs.id
+                             AND status NOT IN ('PUBLISHED', 'SCHEDULED')
+                        ) THEN 'PUBLISHED'
+                        ELSE 'PENDING_REVIEW'
+                      END,
+                      completed_at = CASE
+                        WHEN NOT EXISTS (
+                          SELECT 1
+                            FROM upload_job_items
+                           WHERE job_id = upload_jobs.id
+                             AND status NOT IN ('PUBLISHED', 'SCHEDULED')
+                        ) THEN CURRENT_TIMESTAMP
+                        ELSE completed_at
+                      END,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND ${guardCondition}`,
+            ).bind(chapter.uploadJobId),
+            auditStatement(
+              env.DB,
+              actor,
+              id,
+              {
+                action: "upload.chapter_replacement.approve",
+                category: "UPLOADS_IMPORTS",
+                sourceArea: "REVIEW_QUEUE",
+                targetType: "CHAPTER",
+                targetId: chapter.replacementChapterId,
+                reason: payload.reason,
+                oldValue: { proposedChapterId: chapter.id },
+                newValue: {
+                  replacementChapterId: chapter.replacementChapterId,
+                  pageCount: chapter.pageCount,
+                },
+              },
+              guardCondition,
+            ),
+            env.DB.prepare(
+              "DELETE FROM upload_publish_guards WHERE job_id = ?",
+            ).bind(chapter.uploadJobId),
+          ]);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            /upload_publish_guards\.verified/i.test(error.message)
+          ) {
+            throw new ApiError(
+              409,
+              "REPLACEMENT_REVIEW_CHANGED",
+              "The replacement target or proposed chapter changed. Reload the review queue.",
+            );
+          }
+          throw error;
+        }
+        if (!replacementResults[1]?.meta.changes) {
+          throw new ApiError(
+            409,
+            "REPLACEMENT_REVIEW_CHANGED",
+            "The replacement target or proposed chapter changed. Reload the review queue.",
+          );
+        }
+        if (env.BUCKET) {
+          const retainedKeys = new Set(
+            replacementPages.results.map((page) => page.objectKey),
+          );
+          for (const page of oldPages.results) {
+            if (retainedKeys.has(page.objectKey)) continue;
+            await deleteMediaObject(env.DB, env.BUCKET, page.objectKey, {
+              mediaKind: "CHAPTER_PAGE",
+              targetType: "CHAPTER",
+              targetId: chapter.replacementChapterId,
+              reason: "Approved chapter replacement",
+            });
+          }
+          if (
+            chapter.replacementThumbnailKey &&
+            chapter.replacementThumbnailKey !== chapter.proposedThumbnailKey
+          ) {
+            await deleteMediaObject(
+              env.DB,
+              env.BUCKET,
+              chapter.replacementThumbnailKey,
+              {
+                mediaKind: "CHAPTER_THUMBNAIL",
+                targetType: "CHAPTER",
+                targetId: chapter.replacementChapterId,
+                reason: "Approved chapter thumbnail replacement",
+              },
+            );
+          }
+        }
+        return json(id, {
+          ok: true,
+          chapterId: chapter.replacementChapterId,
+          state: "PUBLISHED",
+          revision: Number(chapter.replacementChapterRevision) + 1,
+          replacementApproved: true,
+        });
+      }
       const nextState =
         payload.action === "SUBMIT"
           ? "READY_FOR_REVIEW"
           : payload.action === "PUBLISH"
             ? "PUBLISHED"
             : "DRAFT";
-      const reviewResults = await env.DB.batch([
+      const reviewStatements: D1PreparedStatement[] = [];
+      const uploadJobId = chapter.uploadJobId;
+      const uploadItemId = chapter.uploadItemId;
+      if (uploadJobId && uploadItemId) {
+        reviewStatements.push(
+          env.DB.prepare(
+            "DELETE FROM upload_publish_guards WHERE job_id = ?",
+          ).bind(uploadJobId),
+        );
+      }
+      const chapterUpdateIndex = reviewStatements.length;
+      reviewStatements.push(
         env.DB.prepare(
           `UPDATE chapters
               SET state = ?,
@@ -5811,8 +6948,89 @@ export async function PUT(request: Request, context: RouteContext) {
             revision: payload.expectedRevision + 1,
           }),
         ),
-      ]);
-      if (!reviewResults[0]?.meta.changes) {
+      );
+      if (uploadJobId && uploadItemId) {
+        const guardCondition = `EXISTS (
+          SELECT 1 FROM upload_publish_guards
+           WHERE job_id = '${uploadJobId.replaceAll("'", "''")}'
+             AND verified = 1
+        )`;
+        reviewStatements.push(
+          env.DB.prepare(
+            `INSERT INTO upload_publish_guards (job_id, verified)
+             VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
+          ).bind(uploadJobId),
+          env.DB.prepare(
+            `UPDATE upload_job_items
+                SET status = ?,
+                    revision = revision + 1,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND chapter_id = ?
+                AND ${guardCondition}`,
+          ).bind(
+            payload.action === "PUBLISH"
+              ? "PUBLISHED"
+              : payload.action === "RETURN"
+                ? "REJECTED"
+                : "PENDING_REVIEW",
+            uploadItemId,
+            chapter.id,
+          ),
+          env.DB.prepare(
+            `UPDATE upload_jobs
+                SET status = CASE
+                      WHEN ? = 'RETURN' THEN 'REJECTED'
+                      WHEN ? = 'SUBMIT' THEN 'PENDING_REVIEW'
+                      WHEN NOT EXISTS (
+                        SELECT 1
+                          FROM upload_job_items
+                         WHERE job_id = upload_jobs.id
+                           AND status NOT IN ('PUBLISHED', 'SCHEDULED')
+                      ) THEN 'PUBLISHED'
+                      ELSE 'PENDING_REVIEW'
+                    END,
+                    completed_at = CASE
+                      WHEN ? = 'PUBLISH'
+                       AND NOT EXISTS (
+                         SELECT 1
+                           FROM upload_job_items
+                          WHERE job_id = upload_jobs.id
+                            AND status NOT IN ('PUBLISHED', 'SCHEDULED')
+                       ) THEN CURRENT_TIMESTAMP
+                      ELSE completed_at
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND ${guardCondition}`,
+          ).bind(
+            payload.action,
+            payload.action,
+            payload.action,
+            uploadJobId,
+          ),
+          env.DB.prepare(
+            "DELETE FROM upload_publish_guards WHERE job_id = ?",
+          ).bind(uploadJobId),
+        );
+      }
+      let reviewResults;
+      try {
+        reviewResults = await env.DB.batch(reviewStatements);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /upload_publish_guards\.verified/i.test(error.message)
+        ) {
+          throw new ApiError(
+            409,
+            "STALE_VERSION",
+            "This release changed. Reload the review queue before updating it.",
+          );
+        }
+        throw error;
+      }
+      if (!reviewResults[chapterUpdateIndex]?.meta.changes) {
         throw new ApiError(
           409,
           "STALE_VERSION",
@@ -6287,6 +7505,19 @@ export async function PUT(request: Request, context: RouteContext) {
           expectedRevision: z.coerce.number().int().min(0),
         })
         .parse(body);
+      const current = await getCommercialSettingsDocument();
+      const sensitiveChanged =
+        wrapped.settings.economy.coinName !==
+          current.settings.economy.coinName ||
+        wrapped.settings.economy.coinPlural !==
+          current.settings.economy.coinPlural ||
+        wrapped.settings.economy.coinIcon !==
+          current.settings.economy.coinIcon ||
+        wrapped.settings.economy.coinIconKey !==
+          current.settings.economy.coinIconKey ||
+        wrapped.settings.economy.premiumEconomyPublic !==
+          current.settings.economy.premiumEconomyPublic;
+      if (sensitiveChanged) requireOwner(actor);
       return json(
         id,
         await saveCommercialSettings(
@@ -6664,7 +7895,8 @@ export async function PUT(request: Request, context: RouteContext) {
         `SELECT id,
                 email,
                 primary_role AS primaryRole,
-                status
+                status,
+                access_revision AS accessRevision
            FROM users
           WHERE id = ?
           LIMIT 1`,
@@ -6675,6 +7907,7 @@ export async function PUT(request: Request, context: RouteContext) {
           email: string;
           primaryRole: string;
           status: string;
+          accessRevision: number;
         }>();
       if (!current) {
         throw new ApiError(
@@ -6683,10 +7916,25 @@ export async function PUT(request: Request, context: RouteContext) {
           "This user no longer exists.",
         );
       }
-      const nextRole = payload.primaryRole ?? current.primaryRole;
+      const currentRoleRows = await env.DB.prepare(
+        `SELECT role FROM user_roles WHERE user_id = ? ORDER BY role`,
+      )
+        .bind(payload.id)
+        .all<{ role: string }>();
+      const currentRoles = [
+        ...new Set(
+          (currentRoleRows.results.length
+            ? currentRoleRows.results.map((entry) => entry.role)
+            : [current.primaryRole]),
+        ),
+      ];
+      const nextRoles = [
+        ...new Set(payload.roles ?? currentRoles),
+      ];
+      const nextRole = highestRole(nextRoles);
       const nextStatus = payload.status ?? current.status;
       if (
-        payload.expectedPrimaryRole !== current.primaryRole ||
+        payload.expectedAccessRevision !== Number(current.accessRevision) ||
         payload.expectedStatus !== current.status
       ) {
         throw new ApiError(
@@ -6698,12 +7946,13 @@ export async function PUT(request: Request, context: RouteContext) {
       const privilegedRoles = new Set([
         "OWNER",
         "ADMINISTRATOR",
-        "MODERATOR",
+        "MANAGER",
       ]);
       if (
-        actor.primaryRole !== "OWNER" &&
-        (privilegedRoles.has(current.primaryRole) ||
-          privilegedRoles.has(nextRole))
+        !actor.roles.includes("OWNER") &&
+        ([...currentRoles, ...nextRoles].some((role) =>
+          privilegedRoles.has(role),
+        ))
       ) {
         throw new ApiError(
           403,
@@ -6712,13 +7961,16 @@ export async function PUT(request: Request, context: RouteContext) {
         );
       }
       if (
-        current.primaryRole === "OWNER" &&
-        (nextRole !== "OWNER" || nextStatus !== "ACTIVE")
+        currentRoles.includes("OWNER") &&
+        (!nextRoles.includes("OWNER") || nextStatus !== "ACTIVE")
       ) {
         const otherOwners = await env.DB.prepare(
           `SELECT COUNT(*) AS count
-           FROM users
-           WHERE primary_role = 'OWNER' AND status = 'ACTIVE' AND id <> ?`,
+             FROM user_roles ur
+             JOIN users owner_user ON owner_user.id = ur.user_id
+            WHERE ur.role = 'OWNER'
+              AND owner_user.status = 'ACTIVE'
+              AND ur.user_id <> ?`,
         )
           .bind(payload.id)
           .first<{ count: number }>();
@@ -6730,37 +7982,71 @@ export async function PUT(request: Request, context: RouteContext) {
           );
         }
       }
+      const updateToken = `access-${randomId()}`;
+      const nextRevision = Number(current.accessRevision) + 1;
       const results = await env.DB.batch([
         env.DB.prepare(
           `UPDATE users
               SET primary_role = ?,
                   status = ?,
+                  access_revision = access_revision + 1,
+                  access_update_token = ?,
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-              AND primary_role = ?
+              AND access_revision = ?
               AND status = ?
               AND (
                 ? = 0
                 OR EXISTS (
                   SELECT 1
-                    FROM users active_owner
-                   WHERE active_owner.primary_role = 'OWNER'
+                    FROM user_roles owner_role
+                    JOIN users active_owner
+                      ON active_owner.id = owner_role.user_id
+                   WHERE owner_role.role = 'OWNER'
                      AND active_owner.status = 'ACTIVE'
-                     AND active_owner.id <> ?
+                     AND owner_role.user_id <> ?
                 )
               )`,
         ).bind(
           nextRole,
           nextStatus,
+          updateToken,
           payload.id,
-          payload.expectedPrimaryRole,
+          payload.expectedAccessRevision,
           payload.expectedStatus,
-          current.primaryRole === "OWNER" &&
-            (nextRole !== "OWNER" || nextStatus !== "ACTIVE")
+          currentRoles.includes("OWNER") &&
+            (!nextRoles.includes("OWNER") || nextStatus !== "ACTIVE")
             ? 1
             : 0,
           payload.id,
         ),
+        env.DB.prepare(
+          `DELETE FROM user_roles
+            WHERE user_id = ?
+              AND EXISTS (
+                SELECT 1 FROM users
+                 WHERE id = ?
+                   AND access_update_token = ?
+              )`,
+        ).bind(payload.id, payload.id, updateToken),
+        ...nextRoles.map((role) =>
+          env.DB.prepare(
+            `INSERT INTO user_roles
+             (user_id, role, assigned_by_user_id)
+             SELECT ?, ?, ?
+              WHERE EXISTS (
+                SELECT 1 FROM users
+                 WHERE id = ?
+                   AND access_update_token = ?
+              )`,
+          ).bind(payload.id, role, actor.id, payload.id, updateToken),
+        ),
+        env.DB.prepare(
+          `UPDATE users
+              SET access_update_token = NULL
+            WHERE id = ?
+              AND access_update_token = ?`,
+        ).bind(payload.id, updateToken),
         env.DB.prepare(
           `INSERT INTO audit_logs
            (id, actor_user_id, action, target_type, target_id, request_id,
@@ -6773,26 +8059,31 @@ export async function PUT(request: Request, context: RouteContext) {
           payload.id,
           id,
           JSON.stringify({
+            roles: currentRoles,
             primaryRole: current.primaryRole,
             status: current.status,
+            accessRevision: current.accessRevision,
           }),
           JSON.stringify({
+            roles: nextRoles,
             primaryRole: nextRole,
             status: nextStatus,
+            accessRevision: nextRevision,
           }),
         ),
       ]);
       if (!results[0]?.meta.changes) {
         if (
-          current.primaryRole === "OWNER" &&
-          (nextRole !== "OWNER" || nextStatus !== "ACTIVE")
+          currentRoles.includes("OWNER") &&
+          (!nextRoles.includes("OWNER") || nextStatus !== "ACTIVE")
         ) {
           const activeOtherOwner = await env.DB.prepare(
             `SELECT 1
-               FROM users
-              WHERE primary_role = 'OWNER'
-                AND status = 'ACTIVE'
-                AND id <> ?
+               FROM user_roles ur
+               JOIN users owner_user ON owner_user.id = ur.user_id
+              WHERE ur.role = 'OWNER'
+                AND owner_user.status = 'ACTIVE'
+                AND ur.user_id <> ?
               LIMIT 1`,
           )
             .bind(payload.id)
@@ -6814,7 +8105,9 @@ export async function PUT(request: Request, context: RouteContext) {
       return json(id, {
         id: payload.id,
         primaryRole: nextRole,
+        roles: nextRoles,
         status: nextStatus,
+        accessRevision: nextRevision,
       });
     }
     const wrapped = z
@@ -6918,6 +8211,21 @@ export async function PATCH(request: Request, context: RouteContext) {
           "Another moderator or the author changed this comment. Reload it before continuing.",
         );
       }
+      const targetRoleRows = await env.DB.prepare(
+        `SELECT role
+           FROM user_roles
+          WHERE user_id = ?
+          ORDER BY role`,
+      )
+        .bind(comment.userId)
+        .all<{ role: string }>();
+      const targetRoles = [
+        ...new Set(
+          targetRoleRows.results.length
+            ? targetRoleRows.results.map((entry) => entry.role)
+            : [comment.userRole],
+        ),
+      ];
       await requireSeriesModerator(actor, payload.seriesSlug);
       if (
         payload.action === "SUSPEND_USER" &&
@@ -6931,8 +8239,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       if (
         payload.action === "SUSPEND_USER" &&
-        ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(comment.userRole) &&
-        actor.primaryRole !== "OWNER"
+        targetRoles.some((role) =>
+          ["OWNER", "ADMINISTRATOR", "MANAGER", "MODERATOR"].includes(role),
+        ) &&
+        !actor.roles.includes("OWNER")
       ) {
         throw new ApiError(
           403,
@@ -6952,11 +8262,18 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       if (
         payload.action === "SUSPEND_USER" &&
-        comment.userRole === "OWNER"
+        targetRoles.includes("OWNER")
       ) {
         const ownerCount = await env.DB.prepare(
-          `SELECT COUNT(*) AS count FROM users
-           WHERE primary_role = 'OWNER' AND status = 'ACTIVE'`,
+          `SELECT COUNT(DISTINCT owner_user.id) AS count
+             FROM users owner_user
+             LEFT JOIN user_roles owner_role
+               ON owner_role.user_id = owner_user.id
+            WHERE owner_user.status = 'ACTIVE'
+              AND (
+                owner_user.primary_role = 'OWNER'
+                OR owner_role.role = 'OWNER'
+              )`,
         ).first<{ count: number }>();
         if (Number(ownerCount?.count ?? 0) <= 1) {
           throw new ApiError(
@@ -8095,6 +9412,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "store/purchases") {
       assertSameOrigin(request);
       const actor = await requireActor();
+      const commercial = await requirePaidEconomyPublic();
       const payload = storePurchaseSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -8171,7 +9489,7 @@ export async function POST(request: Request, context: RouteContext) {
         throw new ApiError(
           409,
           "INSUFFICIENT_ONYX",
-          "Your Onyx Coins balance is too low for this cosmetic.",
+          `Your ${commercial.economy.coinPlural} balance is too low for this cosmetic.`,
         );
       }
       const platformAccountId = "la_platform_store_onyx";
@@ -8672,10 +9990,225 @@ export async function POST(request: Request, context: RouteContext) {
       });
     }
 
+    if (path === "admin/balance-adjustments") {
+      assertSameOrigin(request);
+      const actor = await requireActor();
+      requireOwner(actor);
+      const payload = balanceAdjustmentSchema.parse(await request.json());
+      if (!env.DB) {
+        throw new ApiError(
+          503,
+          "DATABASE_UNAVAILABLE",
+          "The wallet ledger is temporarily unavailable.",
+        );
+      }
+      const recipient = await env.DB.prepare(
+        "SELECT id, display_name AS displayName FROM users WHERE id = ? LIMIT 1",
+      )
+        .bind(payload.userId)
+        .first<{ id: string; displayName: string }>();
+      if (!recipient) {
+        throw new ApiError(404, "USER_NOT_FOUND", "This user no longer exists.");
+      }
+      const accountId = await ensureWalletAccount(
+        env.DB,
+        recipient.id,
+        payload.currency,
+      );
+      const platformId = platformAccountId(
+        "owner-adjustments",
+        payload.currency,
+      );
+      const idempotencyKey = `balance-adjustment:${payload.idempotencyKey}`;
+      const existing = await env.DB.prepare(
+        `SELECT lt.id,
+                lt.reference_id AS referenceId,
+                lt.memo AS reason,
+                COALESCE((
+                  SELECT le.amount
+                    FROM ledger_entries le
+                   WHERE le.transaction_id = lt.id
+                     AND le.account_id = ?
+                   LIMIT 1
+                ), 0) AS delta
+           FROM ledger_transactions lt
+          WHERE lt.idempotency_key = ?
+          LIMIT 1`,
+      )
+        .bind(accountId, idempotencyKey)
+        .first<{
+          id: string;
+          referenceId: string;
+          reason: string;
+          delta: number;
+        }>();
+      if (existing) {
+        if (
+          existing.referenceId !== recipient.id ||
+          Number(existing.delta) !== payload.delta ||
+          existing.reason !== payload.reason
+        ) {
+          throw new ApiError(
+            409,
+            "IDEMPOTENCY_KEY_REUSED",
+            "Use a new request identifier for a different balance adjustment.",
+          );
+        }
+        const balance = await env.DB.prepare(
+          "SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries WHERE account_id = ?",
+        )
+          .bind(accountId)
+          .first<{ balance: number }>();
+        return json(id, {
+          created: false,
+          transactionId: existing.id,
+          balance: Number(balance?.balance ?? 0),
+          currency: payload.currency,
+        });
+      }
+      const transactionId = randomId();
+      const results = await env.DB.batch([
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO ledger_accounts
+           (id, owner_type, owner_id, currency, account_type)
+           VALUES (?, 'PLATFORM', 'NYASCANS_OWNER_ADJUSTMENTS', ?, 'ADJUSTMENT')`,
+        ).bind(platformId, payload.currency),
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO ledger_transactions
+           (id, kind, reference_type, reference_id, idempotency_key, memo)
+           SELECT ?, 'OWNER_BALANCE_ADJUSTMENT', 'USER', ?, ?, ?
+            WHERE ? > 0
+               OR COALESCE((
+                    SELECT SUM(amount) FROM ledger_entries
+                     WHERE account_id = ?
+                  ), 0) + ? >= 0`,
+        ).bind(
+          transactionId,
+          recipient.id,
+          idempotencyKey,
+          payload.reason,
+          payload.delta,
+          accountId,
+          payload.delta,
+        ),
+        env.DB.prepare(
+          `INSERT INTO ledger_entries
+           (id, transaction_id, account_id, amount)
+           SELECT ?, ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM ledger_transactions WHERE id = ?)`,
+        ).bind(
+          randomId(),
+          transactionId,
+          platformId,
+          -payload.delta,
+          transactionId,
+        ),
+        env.DB.prepare(
+          `INSERT INTO ledger_entries
+           (id, transaction_id, account_id, amount)
+           SELECT ?, ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM ledger_transactions WHERE id = ?)`,
+        ).bind(
+          randomId(),
+          transactionId,
+          accountId,
+          payload.delta,
+          transactionId,
+        ),
+        env.DB.prepare(
+          `INSERT INTO audit_logs
+           (id, actor_user_id, actor_role, action, category, source_area,
+            target_type, target_id, target_label, reason, request_id,
+            new_value_json)
+           SELECT ?, ?, ?, 'wallet.balance.adjust',
+                  'COMMERCE_STORE', 'USERS_CONTROL', 'USER', ?, ?, ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM ledger_transactions WHERE id = ?)`,
+        ).bind(
+          randomId(),
+          actor.id,
+          actor.primaryRole,
+          recipient.id,
+          recipient.displayName,
+          payload.reason,
+          id,
+          JSON.stringify({
+            currency: payload.currency,
+            delta: payload.delta,
+            transactionId,
+          }),
+          transactionId,
+        ),
+      ]);
+      if (Number(results[1]?.meta.changes ?? 0) !== 1) {
+        const replay = await env.DB.prepare(
+          `SELECT lt.id,
+                  lt.reference_id AS referenceId,
+                  lt.memo AS reason,
+                  COALESCE((
+                    SELECT le.amount
+                      FROM ledger_entries le
+                     WHERE le.transaction_id = lt.id
+                       AND le.account_id = ?
+                     LIMIT 1
+                  ), 0) AS delta
+             FROM ledger_transactions lt
+            WHERE lt.idempotency_key = ?
+            LIMIT 1`,
+        )
+          .bind(accountId, idempotencyKey)
+          .first<{
+            id: string;
+            referenceId: string;
+            reason: string;
+            delta: number;
+          }>();
+        if (replay) {
+          if (
+            replay.referenceId !== recipient.id ||
+            Number(replay.delta) !== payload.delta ||
+            replay.reason !== payload.reason
+          ) {
+            throw new ApiError(
+              409,
+              "IDEMPOTENCY_KEY_REUSED",
+              "Use a new request identifier for a different balance adjustment.",
+            );
+          }
+          const replayBalance = await env.DB.prepare(
+            "SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries WHERE account_id = ?",
+          )
+            .bind(accountId)
+            .first<{ balance: number }>();
+          return json(id, {
+            created: false,
+            transactionId: replay.id,
+            balance: Number(replayBalance?.balance ?? 0),
+            currency: payload.currency,
+          });
+        }
+        throw new ApiError(
+          409,
+          "INSUFFICIENT_BALANCE",
+          "This adjustment would make the user balance negative.",
+        );
+      }
+      const balance = await env.DB.prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries WHERE account_id = ?",
+      )
+        .bind(accountId)
+        .first<{ balance: number }>();
+      return json(id, {
+        created: true,
+        transactionId,
+        balance: Number(balance?.balance ?? 0),
+        currency: payload.currency,
+      });
+    }
+
     if (path === "admin/test-coins") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireOwner(actor);
       const payload = testCoinGrantSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -9097,8 +10630,9 @@ export async function POST(request: Request, context: RouteContext) {
           : null;
       const result = await env.DB.prepare(
         `INSERT OR IGNORE INTO analytics_events
-         (id, session_id, event_type, series_slug, chapter_slug, region_code)
-         SELECT ?, ?, ?, ?, ?, ?
+         (id, session_id, visitor_id, event_type, series_slug, chapter_slug,
+          region_code)
+         SELECT ?, ?, ?, ?, ?, ?, ?
           WHERE NOT EXISTS (
             SELECT 1
               FROM analytics_events
@@ -9118,6 +10652,7 @@ export async function POST(request: Request, context: RouteContext) {
         .bind(
           payload.eventId,
           payload.sessionId,
+          payload.visitorId,
           payload.eventType,
           payload.seriesSlug ?? null,
           payload.chapterSlug ?? null,
@@ -9420,7 +10955,10 @@ export async function POST(request: Request, context: RouteContext) {
       const discussionSettings = (
         await getDiscussionSettingsDocument()
       ).settings;
-      if (payload.mediaIds.length > discussionSettings.maxAttachments) {
+      if (
+        payload.mediaIds.length + payload.gifIds.length >
+        discussionSettings.maxAttachments
+      ) {
         throw new ApiError(
           422,
           "TOO_MANY_ATTACHMENTS",
@@ -9493,6 +11031,7 @@ export async function POST(request: Request, context: RouteContext) {
         kind: string;
       };
       let pendingMedia: PendingMedia[] = [];
+      let pendingGifs: Array<{ id: string; availabilityJson: string }> = [];
       if (payload.mediaIds.length > 0) {
         const placeholders = payload.mediaIds.map(() => "?").join(",");
         const mediaResult = await env.DB.prepare(
@@ -9527,7 +11066,74 @@ export async function POST(request: Request, context: RouteContext) {
           );
         }
       }
+      if (payload.gifIds.length > 0) {
+        if (!discussionSettings.allowGifs) {
+          throw new ApiError(
+            422,
+            "GIF_LIBRARY_DISABLED",
+            "GIFs are currently disabled in comments.",
+          );
+        }
+        const placeholders = payload.gifIds.map(() => "?").join(",");
+        const gifResult = await env.DB.prepare(
+          `SELECT id, availability_json AS availabilityJson
+             FROM custom_reactions
+            WHERE id IN (${placeholders})
+              AND usage_kind = 'COMMENT_GIF'
+              AND is_active = 1
+              AND is_archived = 0
+              AND asset_key IS NOT NULL
+              AND is_animated = 1`,
+        )
+          .bind(...payload.gifIds)
+          .all<{ id: string; availabilityJson: string }>();
+        pendingGifs = gifResult.results;
+        if (pendingGifs.length !== payload.gifIds.length) {
+          throw new ApiError(
+            422,
+            "GIF_UNAVAILABLE",
+            "One or more selected GIFs are no longer available.",
+          );
+        }
+        const restrictedGif = pendingGifs.find((gif) => {
+          const availability = safeJsonRecord(gif.availabilityJson);
+          if (availability.scope !== "TEAM") return false;
+          const teamIds = Array.isArray(availability.teamIds)
+            ? availability.teamIds.filter(
+                (teamId): teamId is string => typeof teamId === "string",
+              )
+            : [];
+          return !teamIds.some((teamId) => actor.teamIds.includes(teamId));
+        });
+        if (restrictedGif) {
+          throw new ApiError(
+            403,
+            "GIF_RESTRICTED",
+            "One or more selected GIFs are limited to eligible team members.",
+          );
+        }
+      }
 
+      const equippedCommentCosmetic = await env.DB.prepare(
+        `SELECT selected_loadout.item_id AS itemId
+           FROM user_cosmetic_loadouts selected_loadout
+           JOIN user_store_items owned
+             ON owned.user_id = selected_loadout.user_id
+            AND owned.item_id = selected_loadout.item_id
+           JOIN store_items selected_item
+             ON selected_item.id = selected_loadout.item_id
+          WHERE selected_loadout.user_id = ?
+            AND selected_loadout.category IN
+              ('COMMENT_GRADIENT', 'COMMENT_EFFECT')
+            AND selected_item.is_published = 1
+            AND selected_item.is_hidden = 0
+            AND selected_item.archived_at IS NULL
+          ORDER BY CASE selected_loadout.category
+            WHEN 'COMMENT_GRADIENT' THEN 0 ELSE 1 END
+          LIMIT 1`,
+      )
+        .bind(actor.id)
+        .first<{ itemId: string }>();
       const commentId = randomId();
       const attachmentGate = pendingMedia.length
         ? `WHERE (
@@ -9543,8 +11149,8 @@ export async function POST(request: Request, context: RouteContext) {
         env.DB.prepare(
           `INSERT INTO discussion_comments
            (id, user_id, series_slug, chapter_slug, affiliation_team_id,
-            parent_id, depth, body, spoiler)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+            cosmetic_item_id, parent_id, depth, body, spoiler)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            ${attachmentGate}`,
         ).bind(
           commentId,
@@ -9552,6 +11158,7 @@ export async function POST(request: Request, context: RouteContext) {
           payload.seriesSlug,
           payload.chapterSlug ?? null,
           affiliationTeamId,
+          equippedCommentCosmetic?.itemId ?? null,
           parentId,
           depth,
           payload.body,
@@ -9575,10 +11182,12 @@ export async function POST(request: Request, context: RouteContext) {
             seriesSlug: payload.seriesSlug,
             chapterSlug: payload.chapterSlug ?? null,
             affiliationTeamId,
+            cosmeticItemId: equippedCommentCosmetic?.itemId ?? null,
             parentId,
             depth,
             spoiler: payload.spoiler,
             mediaCount: pendingMedia.length,
+            gifCount: pendingGifs.length,
           }),
           commentId,
         ),
@@ -9594,6 +11203,16 @@ export async function POST(request: Request, context: RouteContext) {
                  SELECT 1 FROM discussion_comments WHERE id = ?
                )`,
           ).bind(commentId, media.id, actor.id, commentId),
+        ),
+        ...pendingGifs.map((gif, index) =>
+          env.DB.prepare(
+            `INSERT INTO discussion_comment_gifs
+             (comment_id, gif_id, display_order)
+             SELECT ?, ?, ?
+              WHERE EXISTS (
+                SELECT 1 FROM discussion_comments WHERE id = ?
+              )`,
+          ).bind(commentId, gif.id, index, commentId),
         ),
       ];
       const commentResults = await env.DB.batch(statements);
@@ -9659,6 +11278,7 @@ export async function POST(request: Request, context: RouteContext) {
         `SELECT id, availability_json AS availabilityJson
          FROM custom_reactions
          WHERE slug = ? AND is_active = 1 AND is_archived = 0
+           AND usage_kind = 'REACTION'
          LIMIT 1`,
       )
         .bind(payload.reaction)
@@ -9907,6 +11527,16 @@ export async function POST(request: Request, context: RouteContext) {
           "Choose an image or GIF.",
         );
       }
+      if (
+        file.type === "image/gif" ||
+        file.name.toLowerCase().endsWith(".gif")
+      ) {
+        throw new ApiError(
+          422,
+          "DIRECT_GIF_UPLOAD_DISABLED",
+          "Choose a GIF from the NyaScans GIF library in the comment composer.",
+        );
+      }
       const validated = await validateImageFile(file, {
         label: "comment attachment",
         maxBytes: 8 * 1024 * 1024,
@@ -9915,9 +11545,8 @@ export async function POST(request: Request, context: RouteContext) {
         maxWidth: 4096,
         maxHeight: 4096,
         maxPixels: 16_000_000,
-        allowAnimation: settings.allowGifs,
-        maxGifFrames: 120,
-        allowedTypes: discussionImageTypes,
+        allowAnimation: false,
+        allowedTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
       });
       const {
         bytes,
@@ -9925,8 +11554,7 @@ export async function POST(request: Request, context: RouteContext) {
         dimensions,
         animated,
       } = validated;
-      const kind =
-        verifiedType === "image/gif" || animated ? "GIF" : "IMAGE";
+      const kind = animated ? "GIF" : "IMAGE";
       if (
         (kind === "GIF" && !settings.allowGifs) ||
         (kind === "IMAGE" && !settings.allowImages)
@@ -10090,6 +11718,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "orders") {
       assertSameOrigin(request);
       await requireActor();
+      await requirePaidEconomyPublic();
       const payload = orderSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -10183,6 +11812,7 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
 
+      await requirePaidEconomyPublic();
       const commercial = await getCommercialSettingsDocument();
       const wallet = await walletSnapshot(actor.id);
       if (wallet.balance < access.priceOnyx) {

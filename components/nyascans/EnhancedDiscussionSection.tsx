@@ -9,7 +9,7 @@ import {
   CaretDown,
   ChatCircle,
   Eye,
-  Gif,
+  FilmStrip,
   ImageSquare,
   PencilSimple,
   PushPin,
@@ -33,7 +33,7 @@ import {
   parseDiscussionSettings,
   type DiscussionSettings,
 } from "@/lib/discussion-settings";
-import { optimizeReactionAsset } from "@/lib/client/reaction-media";
+import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
 type DiscussionActor = {
   displayName: string;
@@ -79,9 +79,38 @@ type DiscussionMedia = {
   url: string;
 };
 
+type CuratedGif = {
+  id: string;
+  name: string;
+  label: string;
+  category: string;
+  url: string;
+};
+
+type CommentGif = {
+  id: string;
+  name: string;
+  altText: string;
+  url: string;
+};
+
+type CommentCosmetic = {
+  id: string;
+  name: string;
+  category: "COMMENT_EFFECT" | "COMMENT_GRADIENT";
+  previewUrl: string | null;
+  config: {
+    from?: unknown;
+    to?: unknown;
+    accent?: unknown;
+    commentOpacity?: unknown;
+  };
+};
+
 type DiscussionComment = {
   id: string;
   chapterSlug: string | null;
+  chapterNumber: string | null;
   parentId: string | null;
   depth: number;
   body: string;
@@ -94,11 +123,14 @@ type DiscussionComment = {
   updatedAt: string;
   displayName: string;
   role: string;
+  avatarUrl: string | null;
   voteScore: number;
   viewerVote: -1 | 0 | 1;
   ownedByViewer: number | boolean;
   reactions: DiscussionReaction[];
   media: DiscussionMedia[];
+  gifs: CommentGif[];
+  commentCosmetic: CommentCosmetic | null;
   teamAffiliation: TeamAffiliation | null;
 };
 
@@ -166,6 +198,12 @@ function formatBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function cosmeticColor(value: unknown, fallback: string) {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
+    ? value
+    : fallback;
+}
+
 export function EnhancedDiscussionSection({
   actor,
   seriesSlug,
@@ -194,6 +232,12 @@ export function EnhancedDiscussionSection({
     depth: number;
   } | null>(null);
   const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([]);
+  const [curatedGifs, setCuratedGifs] = useState<CuratedGif[]>([]);
+  const [selectedGifIds, setSelectedGifIds] = useState<string[]>([]);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [gifQuery, setGifQuery] = useState("");
+  const [gifCategory, setGifCategory] = useState("ALL");
+  const [viewerAvatarUrl, setViewerAvatarUrl] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -224,8 +268,27 @@ export function EnhancedDiscussionSection({
   const [refreshKey, setRefreshKey] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const gifInputRef = useRef<HTMLInputElement>(null);
   const scopeLabel = chapterSlug ? "Chapter comments" : "Series discussion";
+  const gifCategories = useMemo(
+    () => [
+      "ALL",
+      ...Array.from(
+        new Set(curatedGifs.map((gif) => gif.category).filter(Boolean)),
+      ).sort((left, right) => left.localeCompare(right)),
+    ],
+    [curatedGifs],
+  );
+  const visibleGifs = useMemo(() => {
+    const term = gifQuery.trim().toLowerCase();
+    return curatedGifs.filter(
+      (gif) =>
+        (gifCategory === "ALL" || gif.category === gifCategory) &&
+        (!term ||
+          gif.name.toLowerCase().includes(term) ||
+          gif.label.toLowerCase().includes(term) ||
+          gif.category.toLowerCase().includes(term)),
+    );
+  }, [curatedGifs, gifCategory, gifQuery]);
 
   const loadComments = useCallback(
     async ({
@@ -250,6 +313,7 @@ export function EnhancedDiscussionSection({
           data?: DiscussionComment[];
           count?: number;
           settings?: DiscussionSettings;
+          viewer?: { avatarUrl?: string | null } | null;
           eligibleAffiliations?: AffiliationOption[];
           error?: { message?: string };
         };
@@ -260,7 +324,12 @@ export function EnhancedDiscussionSection({
         }
         setComments(payload.data ?? []);
         setCount(Number(payload.count ?? 0));
-        setSettings(parseDiscussionSettings(payload.settings));
+        const rawSettings = payload.settings as
+          | (DiscussionSettings & { gifs?: CuratedGif[] })
+          | undefined;
+        setSettings(parseDiscussionSettings(rawSettings));
+        setCuratedGifs(rawSettings?.gifs ?? []);
+        setViewerAvatarUrl(payload.viewer?.avatarUrl ?? null);
         const affiliations = payload.eligibleAffiliations ?? [];
         setEligibleAffiliations(affiliations);
         setAffiliationTeamId((current) =>
@@ -291,6 +360,15 @@ export function EnhancedDiscussionSection({
       controller.abort();
     };
   }, [loadComments, refreshKey]);
+
+  useEffect(() => {
+    if (!gifPickerOpen) return;
+    function closeGifPicker(event: KeyboardEvent) {
+      if (event.key === "Escape") setGifPickerOpen(false);
+    }
+    document.addEventListener("keydown", closeGifPicker);
+    return () => document.removeEventListener("keydown", closeGifPicker);
+  }, [gifPickerOpen]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -415,9 +493,16 @@ export function EnhancedDiscussionSection({
               lastModified: file.lastModified,
             })
           : file;
-      const uploadFile = isGif
-        ? (await optimizeReactionAsset(typedFile)).file
-        : file;
+      if (isGif) {
+        throw new Error(
+          "Choose a GIF from the NyaScans GIF library instead.",
+        );
+      }
+      const uploadFile = await optimizeStaticMedia(typedFile, {
+        maxWidth: 2_048,
+        maxHeight: 2_048,
+        maxBytes: 2_500_000,
+      });
       const form = new FormData();
       form.set("file", uploadFile);
       form.set("altText", file.name.replace(/\.[^.]+$/, "").replaceAll("_", " "));
@@ -465,7 +550,6 @@ export function EnhancedDiscussionSection({
     } finally {
       setUploadingMedia(false);
       if (imageInputRef.current) imageInputRef.current.value = "";
-      if (gifInputRef.current) gifInputRef.current.value = "";
     }
   }
 
@@ -512,8 +596,12 @@ export function EnhancedDiscussionSection({
       return;
     }
     const nextBody = body.trim();
-    if (nextBody.length < 2 && pendingMedia.length === 0) {
-      showToast("Write at least two characters or attach an image.");
+    if (
+      nextBody.length < 2 &&
+      pendingMedia.length === 0 &&
+      selectedGifIds.length === 0
+    ) {
+      showToast("Write at least two characters or attach an image or GIF.");
       return;
     }
     setSubmitting(true);
@@ -528,6 +616,7 @@ export function EnhancedDiscussionSection({
           body: nextBody,
           spoiler,
           mediaIds: pendingMedia.map((media) => media.id),
+          gifIds: selectedGifIds,
           affiliationTeamId: affiliationTeamId || null,
         }),
       });
@@ -546,6 +635,8 @@ export function EnhancedDiscussionSection({
       setSpoiler(false);
       setReplyTo(null);
       setPendingMedia([]);
+      setSelectedGifIds([]);
+      setGifPickerOpen(false);
       setMediaError("");
       setRefreshKey((value) => value + 1);
       let rewardAmount = Number(payload.rewardAmount ?? 0);
@@ -887,27 +978,103 @@ export function EnhancedDiscussionSection({
           </>
         ) : null}
         {settings.allowGifs ? (
-          <>
+          <div className="comment-gif-picker-wrap">
             <button
               type="button"
-              onClick={() => gifInputRef.current?.click()}
+              aria-expanded={gifPickerOpen}
+              aria-controls="comment-gif-picker"
+              onClick={() => setGifPickerOpen((current) => !current)}
               disabled={
                 uploadingMedia ||
-                pendingMedia.length >= settings.maxAttachments
+                pendingMedia.length + selectedGifIds.length >=
+                  settings.maxAttachments
               }
             >
-              <Gif size={18} /> GIF
+              <FilmStrip size={18} /> GIF
             </button>
-            <input
-              ref={gifInputRef}
-              className="sr-only"
-              type="file"
-              accept="image/gif"
-              onChange={(event) =>
-                void uploadMedia(event.target.files?.[0])
-              }
-            />
-          </>
+            {gifPickerOpen ? (
+              <div
+                className="comment-gif-picker"
+                id="comment-gif-picker"
+                role="dialog"
+                aria-label="Choose a GIF"
+              >
+                <header>
+                  <div>
+                    <strong>NyaScans GIFs</strong>
+                    <span>Curated by the community team</span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close GIF picker"
+                    onClick={() => setGifPickerOpen(false)}
+                  >
+                    <X size={16} />
+                  </button>
+                </header>
+                <div className="comment-gif-filters">
+                  <label>
+                    <span className="sr-only">Search GIFs</span>
+                    <input
+                      type="search"
+                      value={gifQuery}
+                      placeholder="Search GIFs"
+                      onChange={(event) => setGifQuery(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span className="sr-only">GIF category</span>
+                    <select
+                      value={gifCategory}
+                      onChange={(event) => setGifCategory(event.target.value)}
+                    >
+                      {gifCategories.map((category) => (
+                        <option value={category} key={category}>
+                          {category === "ALL" ? "All categories" : category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {curatedGifs.length === 0 ? (
+                  <p className="comment-gif-empty">
+                    The community team has not published any GIFs yet.
+                  </p>
+                ) : visibleGifs.length === 0 ? (
+                  <p className="comment-gif-empty">
+                    No curated GIF matches this search.
+                  </p>
+                ) : (
+                  <div className="comment-gif-grid">
+                  {visibleGifs.map((gif) => {
+                    const selected = selectedGifIds.includes(gif.id);
+                    return (
+                      <button
+                        type="button"
+                        key={gif.id}
+                        aria-pressed={selected}
+                        title={`${gif.category} · ${gif.name}`}
+                        onClick={() =>
+                          setSelectedGifIds((current) =>
+                            selected
+                              ? current.filter((id) => id !== gif.id)
+                              : pendingMedia.length + current.length <
+                                  settings.maxAttachments
+                                ? [...current, gif.id]
+                                : current,
+                          )
+                        }
+                      >
+                        <img src={gif.url} alt={gif.label} loading="lazy" />
+                        <span>{gif.name}</span>
+                      </button>
+                    );
+                  })}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         <div className="emoji-picker-wrap">
           <button
@@ -965,10 +1132,19 @@ export function EnhancedDiscussionSection({
   }
 
   function renderPendingMedia() {
-    if (pendingMedia.length === 0 && !mediaError) return null;
+    if (
+      pendingMedia.length === 0 &&
+      selectedGifIds.length === 0 &&
+      !mediaError
+    ) {
+      return null;
+    }
+    const selectedGifs = selectedGifIds
+      .map((id) => curatedGifs.find((gif) => gif.id === id))
+      .filter((gif): gif is CuratedGif => Boolean(gif));
     return (
       <>
-        {pendingMedia.length > 0 ? (
+        {pendingMedia.length > 0 || selectedGifs.length > 0 ? (
           <div className="pending-media-tray" aria-label="Comment attachments">
             {pendingMedia.map((media) => (
               <article key={media.id}>
@@ -988,6 +1164,26 @@ export function EnhancedDiscussionSection({
                   ) : (
                     <X size={16} />
                   )}
+                </button>
+              </article>
+            ))}
+            {selectedGifs.map((gif) => (
+              <article key={gif.id}>
+                <img src={gif.url} alt={gif.label} />
+                <div>
+                  <strong>{gif.name}</strong>
+                  <span>{gif.category} · Curated GIF</span>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Remove ${gif.name}`}
+                  onClick={() =>
+                    setSelectedGifIds((current) =>
+                      current.filter((id) => id !== gif.id),
+                    )
+                  }
+                >
+                  <X size={16} />
                 </button>
               </article>
             ))}
@@ -1014,7 +1210,16 @@ export function EnhancedDiscussionSection({
       >
           <div className="comment-composer-heading">
           <div className="comment-avatar" aria-hidden="true">
-            {actor.displayName.slice(0, 2).toUpperCase()}
+            <span>{actor.displayName.slice(0, 2).toUpperCase()}</span>
+            {viewerAvatarUrl ? (
+              <img
+                src={viewerAvatarUrl}
+                alt=""
+                onError={(event) => {
+                  event.currentTarget.hidden = true;
+                }}
+              />
+            ) : null}
           </div>
           <div>
             <strong>{inline ? `Reply to ${replyTo?.name}` : "Join the discussion"}</strong>
@@ -1066,7 +1271,9 @@ export function EnhancedDiscussionSection({
               disabled={
                 submitting ||
                 uploadingMedia ||
-                (body.trim().length < 2 && pendingMedia.length === 0)
+                (body.trim().length < 2 &&
+                  pendingMedia.length === 0 &&
+                  selectedGifIds.length === 0)
               }
             >
               {submitting ? (
@@ -1147,15 +1354,45 @@ export function EnhancedDiscussionSection({
       3,
       Math.max(1, Number(teamEffect?.config.intensity ?? 1)),
     );
-    const effectStyle = teamEffect
-      ? ({
+    const cosmetic = comment.commentCosmetic;
+    const cosmeticOpacity = Math.min(
+      1,
+      Math.max(
+        0.1,
+        Number(cosmetic?.config.commentOpacity ?? 65) / 100,
+      ),
+    );
+    const cosmeticFrom = cosmeticColor(
+      cosmetic?.config.from,
+      "#0b4f7d",
+    );
+    const cosmeticTo = cosmeticColor(cosmetic?.config.to, "#07111f");
+    const effectStyle =
+      teamEffect || cosmetic
+        ? ({
+            ...(teamEffect
+              ? {
           "--comment-team-accent":
             teamEffect.config.accentColor ?? "#2d8cff",
           "--comment-team-border-mix": `${18 + teamIntensity * 8}%`,
           "--comment-team-background-mix": `${3 + teamIntensity * 2}%`,
           "--comment-team-glow": `${teamIntensity * 7}px`,
-        } as CSSProperties)
-      : undefined;
+                }
+              : {}),
+            ...(cosmetic
+              ? {
+                  "--comment-cosmetic-opacity": cosmeticOpacity,
+                  "--comment-cosmetic-background": cosmetic.previewUrl
+                    ? `url("${cosmetic.previewUrl}")`
+                    : `linear-gradient(135deg, ${cosmeticFrom}, ${cosmeticTo})`,
+                  "--comment-cosmetic-accent": cosmeticColor(
+                    cosmetic.config.accent,
+                    "#68d5ff",
+                  ),
+                }
+              : {}),
+          } as CSSProperties)
+        : undefined;
 
     return (
       <article
@@ -1168,6 +1405,7 @@ export function EnhancedDiscussionSection({
           teamEffect?.config.motion === "SUBTLE"
             ? "comment-team-effect-motion"
             : "",
+          cosmetic ? "comment-cosmetic" : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -1176,7 +1414,17 @@ export function EnhancedDiscussionSection({
         style={effectStyle}
       >
         <div className="comment-avatar" aria-hidden="true">
-          {comment.displayName.slice(0, 2).toUpperCase()}
+          <span>{comment.displayName.slice(0, 2).toUpperCase()}</span>
+          {comment.avatarUrl ? (
+            <img
+              src={comment.avatarUrl}
+              alt=""
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
+          ) : null}
         </div>
         <div className="comment-content">
           <header className="comment-meta">
@@ -1217,7 +1465,10 @@ export function EnhancedDiscussionSection({
               className="comment-source-link"
               href={`/title/${seriesSlug}/chapter/${comment.chapterSlug}#comment-${comment.id}`}
             >
-              Chapter discussion
+              Chapter{" "}
+              {comment.chapterNumber
+                ? comment.chapterNumber
+                : "discussion"}
               <ArrowRight size={14} />
             </a>
           ) : null}
@@ -1279,10 +1530,10 @@ export function EnhancedDiscussionSection({
               {comment.body ? (
                 <p className="comment-body">{comment.body}</p>
               ) : null}
-              {comment.media.length > 0 ? (
+              {comment.media.length > 0 || comment.gifs.length > 0 ? (
                 <div
                   className={`comment-media-grid media-count-${Math.min(
-                    comment.media.length,
+                    comment.media.length + comment.gifs.length,
                     4,
                   )}`}
                 >
@@ -1303,6 +1554,22 @@ export function EnhancedDiscussionSection({
                         }
                       />
                       {media.kind === "GIF" ? <span>GIF</span> : null}
+                    </a>
+                  ))}
+                  {comment.gifs.map((gif) => (
+                    <a
+                      href={gif.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      key={`gif:${gif.id}`}
+                      aria-label={`Open ${gif.name} GIF`}
+                    >
+                      <img
+                        src={gif.url}
+                        loading="lazy"
+                        alt={gif.altText}
+                      />
+                      <span>GIF</span>
                     </a>
                   ))}
                 </div>

@@ -24,6 +24,7 @@ import {
   ConfirmActionDialog,
   useUnsavedChanges,
 } from "@/components/nyascans/admin/AdminPageScaffold";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type OfferKind =
   | "CURRENCY_PACKAGE"
@@ -135,6 +136,9 @@ export function CommerceOfferManager({
   settingsPanel?: ReactNode;
   initialKind?: OfferKind | "ALL";
 }) {
+  const { settings: commercial } = useCommercialSettings();
+  const coinName = commercial.economy.coinName;
+  const coinPlural = commercial.economy.coinPlural;
   const fixedKind = initialKind === "ALL" ? null : initialKind;
   const [tab, setTab] = useState<"offers" | "economy">("offers");
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -794,7 +798,7 @@ export function CommerceOfferManager({
                     {draft.kind === "CURRENCY_PACKAGE" ? (
                       <>
                         <label>
-                          Base Onyx Coins
+                          Base {coinPlural}
                           <input
                             type="number"
                             min={1}
@@ -808,7 +812,7 @@ export function CommerceOfferManager({
                           />
                         </label>
                         <label>
-                          Bonus Onyx Coins
+                          Bonus {coinPlural}
                           <input
                             type="number"
                             min={0}
@@ -845,7 +849,7 @@ export function CommerceOfferManager({
                           />
                         </label>
                         <label>
-                          Monthly Onyx allowance
+                          Monthly {coinName} allowance
                           <input
                             type="number"
                             min={0}
@@ -933,7 +937,7 @@ export function CommerceOfferManager({
                         }
                       >
                         <option value="OCEAN">Ocean</option>
-                        <option value="ONYX">Onyx</option>
+                        <option value="ONYX">{coinPlural}</option>
                         <option value="AURORA">Aurora</option>
                         <option value="SUNSET">Sunset</option>
                         <option value="MINIMAL">Minimal</option>

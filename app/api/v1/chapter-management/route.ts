@@ -64,14 +64,14 @@ const updateSchema = z
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
-        message: "Paid chapters need an Onyx price of at least 1.",
+        message: "Paid chapters need a premium coin price of at least 1.",
       });
     }
     if (value.accessType === "FREE" && value.priceOnyx !== 0) {
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
-        message: "Free chapters cannot have an Onyx price.",
+        message: "Free chapters cannot have a premium coin price.",
       });
     }
   });
@@ -277,7 +277,7 @@ export async function PATCH(request: Request) {
         throw new ApiError(
           403,
           "CHAPTER_COMMERCE_FORBIDDEN",
-          "Only an administrator can change paid access or the Onyx price.",
+          "Only an administrator can change paid access or the premium coin price.",
         );
       }
     }

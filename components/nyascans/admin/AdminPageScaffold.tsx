@@ -182,6 +182,7 @@ export function ConfirmActionDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   destructive = true,
   busy = false,
   onCancel,
@@ -191,6 +192,7 @@ export function ConfirmActionDialog({
   title: string;
   description: string;
   confirmLabel: string;
+  cancelLabel?: string;
   destructive?: boolean;
   busy?: boolean;
   onCancel(): void;
@@ -279,7 +281,7 @@ export function ConfirmActionDialog({
             disabled={busy}
             onClick={onCancel}
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             className={`button ${destructive ? "button-danger" : "button-primary"}`}
