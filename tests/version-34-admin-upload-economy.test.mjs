@@ -183,11 +183,11 @@ test("series requests, catalogue editing, and chapter thumbnails preserve visual
   assert.match(upload, /series\.coverUrl/u);
   assert.match(upload, /\/api\/v1\/upload-job-thumbnail/u);
   assert.match(upload, /onThumbnailChange/u);
-  assert.match(upload, /square thumbnail settings/u);
+  assert.match(upload, /Chapter thumbnail/u);
   const composer = upload.slice(upload.indexOf("<form"));
-  const releaseContext = composer.indexOf(">Release context<");
+  const releaseContext = composer.indexOf("Quick upload settings");
   const pages = composer.indexOf(">Pages and ordering<");
-  const batchSettings = composer.indexOf(">Chapter review table<");
+  const batchSettings = composer.indexOf(">Upload queue<");
   assert.ok(releaseContext >= 0);
   assert.ok(pages > releaseContext);
   assert.ok(batchSettings > pages);

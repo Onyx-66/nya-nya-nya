@@ -24,7 +24,7 @@ async function migratedDatabase() {
   return { database, migrationNames };
 }
 
-test("Latest Updates exposes every unique chapter number with Free or Paid status", async () => {
+test("Latest Updates exposes at most four unique chapter numbers with language, team, and access", async () => {
   const [api, app] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
@@ -43,14 +43,18 @@ test("Latest Updates exposes every unique chapter number with Free or Paid statu
     api.indexOf('if (path === "latest-releases")'),
     api.indexOf('if (path === "search")'),
   );
-  assert.doesNotMatch(latestApi, /WHERE releaseRank = 1[\s\S]*LIMIT 5/);
+  assert.match(latestApi, /WHERE releaseRank = 1[\s\S]*LIMIT 4/);
+  assert.match(latestApi, /t\.slug AS teamSlug/);
   assert.match(latestApi, /isNewInPeriod/);
   assert.match(api, /datetime\(newest\.created_at\) DESC/);
   assert.match(api, /newest\.id DESC/);
   assert.match(
     latestMarkup,
-    /Chapter \{normalizeChapterNumber\(chapter\.chapterNumber\)\}/,
+    /normalizeChapterNumber\(chapter\.chapterNumber\)/,
   );
+  assert.match(latestMarkup, /update\.chapters\.slice\(0, 4\)/);
+  assert.match(latestMarkup, /language=\{chapter\.language\}/);
+  assert.match(latestMarkup, /chapter\.teamSlug/);
   assert.match(latestMarkup, /ChapterAccessBadge/);
   assert.doesNotMatch(latestMarkup, /chapter\.title/);
 });

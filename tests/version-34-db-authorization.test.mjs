@@ -325,11 +325,16 @@ test("V34 public chapter thumbnails accept only canonical public rights states",
   assert.match(uploadRoute, /function liveThumbnailAuthorization/u);
   assert.match(uploadRoute, /FROM user_roles live_admin_role/u);
   assert.match(uploadRoute, /FROM user_roles live_upload_role/u);
-  assert.match(uploadRoute, /live_assignment\.can_upload = 1/u);
-  assert.match(uploadRoute, /live_assignment\.revoked_at IS NULL/u);
+  assert.match(uploadRoute, /FROM team_memberships live_membership/u);
   assert.match(
     uploadRoute,
-    /live_membership\.membership_role\) IN\s+\('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER'\)/u,
+    /live_team\.verification_status = 'VERIFIED'/u,
+  );
+  assert.doesNotMatch(uploadRoute, /series_team_assignments/u);
+  assert.doesNotMatch(uploadRoute, /live_assignment/u);
+  assert.match(
+    uploadRoute,
+    /live_membership\.membership_role\) IN\s+\('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER'\)/u,
   );
   assert.match(
     uploadRoute,

@@ -1,7 +1,8 @@
 "use client";
 
-import { CheckCircle, FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {
   defaultSiteTheme,
   featuredSliderStyleOptions,
@@ -775,10 +776,10 @@ export function ThemeSettingsPanel() {
         </>
       ) : null}
       {message ? (
-        <p className={`theme-status ${status === "error" ? "theme-status-error" : ""}`} role="status">
-          {status === "saved" ? <CheckCircle size={17} weight="fill" /> : null}
-          {message}
-        </p>
+        <SystemNoticeBridge
+          message={message}
+          kind={status === "error" ? "error" : status === "saved" ? "success" : "info"}
+        />
       ) : null}
     </section>
   );

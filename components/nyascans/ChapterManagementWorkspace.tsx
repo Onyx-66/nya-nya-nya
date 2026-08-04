@@ -5,7 +5,6 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  CheckCircle,
   CloudArrowUp,
   Coins,
   Eye,
@@ -26,6 +25,7 @@ import {
   type FormEvent,
 } from "react";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type Credits = {
@@ -138,7 +138,7 @@ function formFromChapter(chapter: ManagedChapter): FormState {
     credits: { ...emptyCredits, ...chapter.credits },
     state: chapter.state,
     visibility: chapter.visibility,
-    commentsEnabled: chapter.commentsEnabled,
+    commentsEnabled: true,
     accessType: chapter.accessType,
     priceOnyx: Number(chapter.priceOnyx),
     publishedAt: localDateTime(chapter.publishedAt),
@@ -279,6 +279,7 @@ export function ChapterManagementWorkspace({
           chapterId,
           expectedRevision: chapter.revision,
           ...form,
+          commentsEnabled: true,
           publishedAt: form.publishedAt
             ? new Date(form.publishedAt).toISOString()
             : null,
@@ -623,19 +624,6 @@ export function ChapterManagementWorkspace({
                 }
               />
             </label>
-            <label className="chapter-management-check">
-              <input
-                type="checkbox"
-                checked={form.commentsEnabled}
-                onChange={(event) =>
-                  updateForm("commentsEnabled", event.target.checked)
-                }
-              />
-              <span>
-                Allow chapter comments
-                <small>Moderation policies still apply.</small>
-              </span>
-            </label>
           </div>
         </section>
 
@@ -827,17 +815,10 @@ export function ChapterManagementWorkspace({
       </form>
 
       {message ? (
-        <div
-          className={`chapter-management-message ${messageKind}`}
-          role={messageKind === "error" ? "alert" : "status"}
-        >
-          {messageKind === "success" ? (
-            <CheckCircle size={18} weight="fill" />
-          ) : (
-            <WarningCircle size={18} />
-          )}
-          {message}
-        </div>
+        <SystemNoticeBridge
+          message={message}
+          kind={messageKind === "success" ? "success" : "error"}
+        />
       ) : null}
 
       <ConfirmActionDialog

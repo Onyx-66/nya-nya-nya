@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
 type TeamOption = {
@@ -715,14 +716,10 @@ export function AddSeriesRequestPanel() {
         {requestRecord ? <RequestStatus status={requestRecord.status} /> : null}
       </header>
       {error ? (
-        <div className="upload-alert is-error" role="alert">
-          <WarningCircle size={19} /> {error}
-        </div>
+        <SystemNoticeBridge message={error} kind="error" />
       ) : null}
       {message ? (
-        <div className="upload-alert is-success" role="status">
-          <CheckCircle size={19} /> {message}
-        </div>
+        <SystemNoticeBridge message={message} kind="success" />
       ) : null}
       {!editable ? (
         <div className="upload-alert">
@@ -1381,9 +1378,7 @@ export function SeriesRequestsPanel() {
         ) : null}
       </header>
       {error ? (
-        <div className="upload-alert is-error" role="alert">
-          <WarningCircle size={19} /> {error}
-        </div>
+        <SystemNoticeBridge message={error} kind="error" />
       ) : null}
       <div className="upload-filter-row">
         <label>

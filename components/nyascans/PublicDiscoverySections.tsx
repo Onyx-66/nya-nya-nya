@@ -3,10 +3,12 @@
 
 import {
   ArrowRight,
+  BookOpenText,
   Books,
   UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 
 type NewSeriesRecord = {
@@ -28,6 +30,7 @@ type PublicTeamRecord = {
   description: string;
   publicSeriesCount: number;
   releaseCount: number;
+  followerCount: number;
   logoUrl: string | null;
   bannerUrl: string | null;
 };
@@ -46,12 +49,15 @@ function SeriesTypeLabel({ type }: { type: string }) {
       : type.toUpperCase() === "MANHUA"
         ? "Manhua"
         : "Manga";
-  const flag =
-    normalized === "Manhwa" ? "🇰🇷" : normalized === "Manhua" ? "🇨🇳" : "🇯🇵";
+  const country =
+    normalized === "Manhwa" ? "kr" : normalized === "Manhua" ? "cn" : "jp";
   return (
-    <span className={`series-type-badge type-${normalized.toLowerCase()}`}>
-      <span aria-hidden="true">{flag}</span>
-      {normalized}
+    <span
+      className={`series-type-badge type-${normalized.toLowerCase()} is-flag-only`}
+      aria-label={normalized}
+      title={normalized}
+    >
+      <LanguageFlag country={country} label={normalized} showCode={false} />
     </span>
   );
 }
@@ -162,10 +168,13 @@ function PublishingTeamCard({
         </p>
         <span className="team-public-metrics">
           <small>
-            <Books size={15} /> {record.publicSeriesCount} public series
+            <Books size={15} /> {record.publicSeriesCount} series
           </small>
           <small>
-            <UsersThree size={15} /> {record.releaseCount} releases
+            <BookOpenText size={15} /> {record.releaseCount} releases
+          </small>
+          <small>
+            <UsersThree size={15} /> {record.followerCount} followers
           </small>
         </span>
         <a href={`/team/${record.slug}`}>

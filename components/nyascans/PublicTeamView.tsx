@@ -5,8 +5,19 @@ import {
   ArrowRight,
   BookOpenText,
   Books,
+  CalendarBlank,
+  ChatCircle,
+  Gift,
+  IdentificationCard,
+  PushPin,
+  Sparkle,
+  Translate,
+  UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
+import { TeamDiscussionPanel } from "@/components/nyascans/TeamDiscussionPanel";
+import { languageName } from "@/lib/language-flags";
 
 type PublicTeamSeries = {
   id: string;
@@ -24,11 +35,56 @@ type PublicTeam = {
   slug: string;
   name: string;
   description: string;
+  createdAt: string;
   logoUrl: string | null;
   bannerUrl: string | null;
   publicSeriesCount: number;
   releaseCount: number;
+  followerCount: number;
   series: PublicTeamSeries[];
+  latestReleases: PublicTeamLatestRelease[];
+  pinnedComments: PublicTeamPinnedComment[];
+  focusedLanguages: Array<{
+    language: string;
+    releaseCount: number;
+  }>;
+  members: Array<{
+    displayName: string;
+    username: string;
+    avatarUrl: string | null;
+    membershipRole: string;
+    joinedAt: string;
+  }>;
+  support: PublicTeamSupport | null;
+};
+
+type PublicTeamLatestRelease = {
+  id: string;
+  seriesSlug: string;
+  seriesTitle: string;
+  chapterSlug: string;
+  chapterNumber: string;
+  chapterTitle: string;
+  publishedAt: string;
+  thumbnailUrl: string | null;
+};
+
+type PublicTeamPinnedComment = {
+  id: string;
+  body: string;
+  spoiler: boolean;
+  createdAt: string;
+  displayName: string;
+  seriesSlug: string;
+  seriesTitle: string;
+  chapterSlug: string | null;
+};
+
+type PublicTeamSupport = {
+  totalAmount: number;
+  giftCount: number;
+  supporterCount: number;
+  coinPlural: string;
 };
 
 type PublicTeamResponse = {
@@ -188,8 +244,17 @@ function PublicTeamSeriesCard({ series }: { series: PublicTeamSeries }) {
   );
 }
 
-export function PublicTeamView({ slug }: { slug?: string }) {
+export function PublicTeamView({
+  slug,
+  signedIn = false,
+}: {
+  slug?: string;
+  signedIn?: boolean;
+}) {
   const requestedSlug = slug?.trim() ?? "";
+  const [tab, setTab] = useState<
+    "info" | "titles" | "members" | "discussion"
+  >("info");
   const [loadState, setLoadState] = useState<PublicTeamLoadState>({
     slug: "",
     team: null,
@@ -225,6 +290,18 @@ export function PublicTeamView({ slug }: { slug?: string }) {
             ...payload.data,
             series: Array.isArray(payload.data.series)
               ? payload.data.series
+              : [],
+            latestReleases: Array.isArray(payload.data.latestReleases)
+              ? payload.data.latestReleases
+              : [],
+            pinnedComments: Array.isArray(payload.data.pinnedComments)
+              ? payload.data.pinnedComments
+              : [],
+            focusedLanguages: Array.isArray(payload.data.focusedLanguages)
+              ? payload.data.focusedLanguages
+              : [],
+            members: Array.isArray(payload.data.members)
+              ? payload.data.members
               : [],
           },
         });
@@ -302,10 +379,6 @@ export function PublicTeamView({ slug }: { slug?: string }) {
           <TeamLogo team={team} />
           <div className="public-team-summary">
             <h1 id="public-team-title">{team.name}</h1>
-            <p>
-              {team.description ||
-                "This publishing team has not added a description yet."}
-            </p>
             <dl className="public-team-metrics">
               <div className="public-team-metric">
                 <dt>
@@ -321,40 +394,352 @@ export function PublicTeamView({ slug }: { slug?: string }) {
                 </dt>
                 <dd>{team.releaseCount}</dd>
               </div>
+              <div className="public-team-metric">
+                <dt>
+                  <UsersThree size={18} aria-hidden="true" />
+                  Readers reached
+                </dt>
+                <dd>{team.followerCount}</dd>
+              </div>
             </dl>
           </div>
         </div>
       </section>
 
-      <section
-        className="content-section page-wrap public-team-series"
-        aria-labelledby="public-team-series-title"
+      <div
+        className="page-wrap public-team-tabs"
+        role="group"
+        aria-label={`${team.name} sections`}
       >
-        <div className="section-heading public-team-series-heading">
-          <div>
-            <h2 id="public-team-series-title">Published series</h2>
-            <p>
-              {team.series.length === 1
-                ? "1 public series from this team."
-                : `${team.series.length} public series from this team.`}
-            </p>
-          </div>
-        </div>
+        {(
+          [
+            ["info", "Info", IdentificationCard],
+            ["titles", `Titles (${team.series.length})`, Books],
+            ["members", `Members (${team.members.length})`, UsersThree],
+            ["discussion", "Discussion", ChatCircle],
+          ] as const
+        ).map(([value, label, Icon]) => (
+          <button
+            type="button"
+            key={value}
+            aria-pressed={tab === value}
+            onClick={() => setTab(value)}
+          >
+            <Icon size={17} aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </div>
 
-        {team.series.length ? (
-          <div className="public-team-series-grid">
-            {team.series.map((series) => (
-              <PublicTeamSeriesCard key={series.id} series={series} />
-            ))}
+      {tab === "info" ? (
+        <>
+          <section className="content-section page-wrap public-team-info">
+            <article className="public-team-description-card">
+              <p className="eyebrow">About the group</p>
+              <h2>Group description</h2>
+              <p>
+                {team.description ||
+                  "This publishing team has not added a description yet."}
+              </p>
+            </article>
+            <aside className="public-team-facts" aria-label="Group information">
+              <div>
+                <span>
+                  <Translate size={18} aria-hidden="true" />
+                  Focused languages
+                </span>
+                {team.focusedLanguages.length ? (
+                  <p className="public-team-language-list">
+                    {team.focusedLanguages.map((language) => (
+                      <span key={language.language}>
+                        <LanguageFlag
+                          language={language.language}
+                          showCode={false}
+                        />
+                        {languageName(language.language)} ·{" "}
+                        {language.releaseCount.toLocaleString("en-US")} releases
+                      </span>
+                    ))}
+                  </p>
+                ) : (
+                  <strong>No public releases yet</strong>
+                )}
+              </div>
+              <div>
+                <span>
+                  <IdentificationCard size={18} aria-hidden="true" />
+                  Group ID
+                </span>
+                <strong>{team.id}</strong>
+              </div>
+              <div>
+                <span>
+                  <CalendarBlank size={18} aria-hidden="true" />
+                  Established
+                </span>
+                <strong>
+                  {new Date(team.createdAt).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "long",
+                  })}
+                </strong>
+              </div>
+              <div>
+                <span>
+                  <UsersThree size={18} aria-hidden="true" />
+                  Active members
+                </span>
+                <strong>{team.members.length.toLocaleString("en-US")}</strong>
+              </div>
+            </aside>
+          </section>
+
+          <section
+            className="content-section page-wrap public-team-releases"
+            aria-labelledby="public-team-releases-title"
+          >
+            <div className="section-heading">
+              <div>
+                <h2 id="public-team-releases-title">Latest releases</h2>
+                <p>The newest public chapters released by {team.name}.</p>
+              </div>
+            </div>
+            {team.latestReleases.length ? (
+              <div className="public-team-release-list">
+                {team.latestReleases.map((release) => (
+                  <a
+                    href={`/title/${encodeURIComponent(release.seriesSlug)}/chapter/${encodeURIComponent(release.chapterSlug)}`}
+                    className="public-team-release-card"
+                    key={release.id}
+                  >
+                    <span className="public-team-release-thumbnail">
+                      {release.thumbnailUrl ? (
+                        <img
+                          src={release.thumbnailUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <BookOpenText size={24} aria-hidden="true" />
+                      )}
+                    </span>
+                    <span>
+                      <small>{release.seriesTitle}</small>
+                      <strong>{chapterLabel(release.chapterNumber)}</strong>
+                      {release.chapterTitle ? (
+                        <em>{release.chapterTitle}</em>
+                      ) : null}
+                      <time dateTime={release.publishedAt}>
+                        {new Date(release.publishedAt).toLocaleDateString()}
+                      </time>
+                    </span>
+                    <ArrowRight size={17} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="public-team-empty is-compact">
+                <BookOpenText size={28} aria-hidden="true" />
+                <strong>No public releases yet</strong>
+                <span>New chapters from this team will appear here.</span>
+              </div>
+            )}
+          </section>
+
+          <section className="content-section page-wrap public-team-community">
+            <article
+              className="public-team-community-card public-team-pins"
+              aria-labelledby="public-team-pins-title"
+            >
+              <header>
+                <span>
+                  <PushPin size={20} weight="fill" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 id="public-team-pins-title">Pinned team comments</h2>
+                  <p>Highlights from {team.name} staff across series pages.</p>
+                </div>
+              </header>
+              {team.pinnedComments.length ? (
+                <div className="public-team-pin-list">
+                  {team.pinnedComments.map((comment) => {
+                    const sourceHref = comment.chapterSlug
+                      ? `/title/${encodeURIComponent(comment.seriesSlug)}/chapter/${encodeURIComponent(comment.chapterSlug)}#comments`
+                      : `/title/${encodeURIComponent(comment.seriesSlug)}#comments`;
+                    return (
+                      <article key={comment.id}>
+                        <div>
+                          <strong>{comment.displayName}</strong>
+                          <a href={sourceHref}>
+                            {comment.seriesTitle}
+                            {comment.chapterSlug
+                              ? " · Chapter discussion"
+                              : ""}
+                          </a>
+                          <time dateTime={comment.createdAt}>
+                            {new Date(
+                              comment.createdAt,
+                            ).toLocaleDateString()}
+                          </time>
+                        </div>
+                        {comment.spoiler ? (
+                          <details>
+                            <summary>Spoiler-tagged team note</summary>
+                            <p>{comment.body}</p>
+                          </details>
+                        ) : (
+                          <p>{comment.body}</p>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="public-team-community-empty">
+                  <ChatCircle size={24} aria-hidden="true" />
+                  <span>No series notes are pinned right now.</span>
+                </div>
+              )}
+            </article>
+
+            {team.support ? (
+              <article
+                className="public-team-community-card public-team-support"
+                aria-labelledby="public-team-support-title"
+              >
+                <header>
+                  <span>
+                    <Gift size={20} weight="duotone" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h2 id="public-team-support-title">Community support</h2>
+                    <p>Support sent through the NyaScans Store.</p>
+                  </div>
+                </header>
+                <strong className="public-team-support-total">
+                  <Sparkle size={22} weight="fill" aria-hidden="true" />
+                  {team.support.totalAmount.toLocaleString("en-US")}{" "}
+                  {team.support.coinPlural}
+                </strong>
+                <dl>
+                  <div>
+                    <dt>Support gifts</dt>
+                    <dd>
+                      {team.support.giftCount.toLocaleString("en-US")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Supporters</dt>
+                    <dd>
+                      {team.support.supporterCount.toLocaleString("en-US")}
+                    </dd>
+                  </div>
+                </dl>
+                <a className="button button-primary" href="/store/gifts">
+                  Support this team
+                  <ArrowRight size={16} aria-hidden="true" />
+                </a>
+              </article>
+            ) : null}
+          </section>
+        </>
+      ) : null}
+
+      {tab === "titles" ? (
+        <section
+          className="content-section page-wrap public-team-series"
+          aria-labelledby="public-team-series-title"
+        >
+          <div className="section-heading public-team-series-heading">
+            <div>
+              <h2 id="public-team-series-title">Published series</h2>
+              <p>
+                {team.series.length === 1
+                  ? "1 public series from this team."
+                  : `${team.series.length} public series from this team.`}
+              </p>
+            </div>
           </div>
-        ) : (
-          <div className="public-team-empty">
-            <Books size={30} aria-hidden="true" />
-            <strong>No public series yet</strong>
-            <span>Approved series from this team will appear here.</span>
+          {team.series.length ? (
+            <div className="public-team-series-grid">
+              {team.series.map((series) => (
+                <PublicTeamSeriesCard key={series.id} series={series} />
+              ))}
+            </div>
+          ) : (
+            <div className="public-team-empty">
+              <Books size={30} aria-hidden="true" />
+              <strong>No public series yet</strong>
+              <span>Approved series from this team will appear here.</span>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "members" ? (
+        <section
+          className="content-section page-wrap public-team-members"
+          aria-labelledby="public-team-members-title"
+        >
+          <div className="section-heading">
+            <div>
+              <h2 id="public-team-members-title">Group members</h2>
+              <p>Active staff and contributors in {team.name}.</p>
+            </div>
           </div>
-        )}
-      </section>
+          {team.members.length ? (
+            <div className="public-team-member-grid">
+              {team.members.map((member) => {
+                const content = (
+                  <>
+                    <span className="public-team-member-avatar">
+                      {member.avatarUrl ? (
+                        <img src={member.avatarUrl} alt="" loading="lazy" />
+                      ) : (
+                        member.displayName.slice(0, 2).toUpperCase()
+                      )}
+                    </span>
+                    <span>
+                      <strong>{member.displayName}</strong>
+                      <small>
+                        {member.username
+                          ? `@${member.username}`
+                          : "Private profile"}
+                      </small>
+                    </span>
+                    <em>{displayLabel(member.membershipRole)}</em>
+                  </>
+                );
+                return (
+                  <a
+                    className="public-team-member-card"
+                    href={`/u/${encodeURIComponent(member.username)}`}
+                    key={member.username}
+                  >
+                    {content}
+                  </a>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="public-team-empty">
+              <UsersThree size={30} aria-hidden="true" />
+              <strong>No active members to display</strong>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "discussion" ? (
+        <div className="content-section page-wrap">
+          <TeamDiscussionPanel
+            teamSlug={team.slug}
+            teamName={team.name}
+            signedIn={signedIn}
+          />
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -7,6 +7,7 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 
 const createdAt = text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`);
@@ -295,6 +296,187 @@ export const teamMemberships = sqliteTable(
   ],
 );
 
+export const teamDiscussionPosts = sqliteTable(
+  "team_discussion_posts",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    parentId: text("parent_id").references(
+      (): AnySQLiteColumn => teamDiscussionPosts.id,
+      { onDelete: "cascade" },
+    ),
+    depth: integer("depth").notNull().default(0),
+    body: text("body").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    moderationStatus: text("moderation_status")
+      .notNull()
+      .default("VISIBLE"),
+    editedAt: text("edited_at"),
+    deletedAt: text("deleted_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "team_discussion_posts_depth_check",
+      sql`${table.depth} IN (0, 1)`,
+    ),
+    check(
+      "team_discussion_posts_status_check",
+      sql`${table.moderationStatus} IN ('VISIBLE', 'DELETED', 'HIDDEN')`,
+    ),
+    check(
+      "team_discussion_posts_parent_check",
+      sql`(${table.depth} = 0 AND ${table.parentId} IS NULL)
+        OR (${table.depth} = 1 AND ${table.parentId} IS NOT NULL)`,
+    ),
+    index("team_discussion_posts_team_recent_idx").on(
+      table.teamId,
+      table.moderationStatus,
+      table.createdAt,
+      table.id,
+    ),
+    index("team_discussion_posts_parent_idx").on(
+      table.parentId,
+      table.createdAt,
+    ),
+    index("team_discussion_posts_user_recent_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    uniqueIndex("team_discussion_posts_idempotency_uidx")
+      .on(table.teamId, table.userId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
+  ],
+);
+
+export const teamDiscussionVotes = sqliteTable(
+  "team_discussion_votes",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => teamDiscussionPosts.id, { onDelete: "cascade" }),
+    value: integer("value").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.postId] }),
+    check(
+      "team_discussion_votes_value_check",
+      sql`${table.value} IN (-1, 1)`,
+    ),
+    index("team_discussion_votes_post_idx").on(table.postId, table.value),
+    index("team_discussion_votes_user_recent_idx").on(
+      table.userId,
+      table.updatedAt,
+    ),
+  ],
+);
+
+export const teamDiscussionMentions = sqliteTable(
+  "team_discussion_mentions",
+  {
+    postId: text("post_id")
+      .notNull()
+      .references(() => teamDiscussionPosts.id, { onDelete: "cascade" }),
+    ordinal: integer("ordinal").notNull(),
+    targetType: text("target_type").notNull(),
+    targetUserId: text("target_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    targetSeriesId: text("target_series_id").references(
+      (): AnySQLiteColumn => series.id,
+      { onDelete: "cascade" },
+    ),
+    token: text("token").notNull(),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.postId, table.ordinal] }),
+    check(
+      "team_discussion_mentions_target_check",
+      sql`(
+        ${table.targetType} = 'USER'
+        AND ${table.targetUserId} IS NOT NULL
+        AND ${table.targetSeriesId} IS NULL
+      ) OR (
+        ${table.targetType} = 'SERIES'
+        AND ${table.targetUserId} IS NULL
+        AND ${table.targetSeriesId} IS NOT NULL
+      )`,
+    ),
+    index("team_discussion_mentions_user_idx").on(
+      table.targetUserId,
+      table.createdAt,
+    ),
+    index("team_discussion_mentions_series_idx").on(
+      table.targetSeriesId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const discussionVoteEvents = sqliteTable(
+  "discussion_vote_events",
+  {
+    id: text("id").primaryKey(),
+    voterUserId: text("voter_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    oldValue: integer("old_value").notNull(),
+    newValue: integer("new_value").notNull(),
+    delta: integer("delta").notNull(),
+    createdAt,
+  },
+  (table) => [
+    check(
+      "discussion_vote_events_target_check",
+      sql`${table.targetType} IN ('SERIES', 'TEAM')`,
+    ),
+    check(
+      "discussion_vote_events_old_value_check",
+      sql`${table.oldValue} IN (-1, 0, 1)`,
+    ),
+    check(
+      "discussion_vote_events_new_value_check",
+      sql`${table.newValue} IN (-1, 0, 1)`,
+    ),
+    check(
+      "discussion_vote_events_delta_check",
+      sql`${table.delta} = ${table.newValue} - ${table.oldValue}
+        AND ${table.delta} <> 0`,
+    ),
+    index("discussion_vote_events_author_time_idx").on(
+      table.authorUserId,
+      table.createdAt,
+    ),
+    index("discussion_vote_events_voter_time_idx").on(
+      table.voterUserId,
+      table.createdAt,
+    ),
+    index("discussion_vote_events_target_idx").on(
+      table.targetType,
+      table.targetId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const publishers = sqliteTable(
   "publishers",
   {
@@ -356,6 +538,88 @@ export const series = sqliteTable(
     ),
     index("series_title_lookup_idx").on(table.title, table.updatedAt),
     index("series_publisher_idx").on(table.publisherId),
+  ],
+);
+
+export const seriesGalleryAssets = sqliteTable(
+  "series_gallery_assets",
+  {
+    id: text("id").primaryKey(),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    objectKey: text("object_key").notNull(),
+    contentType: text("content_type").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    orientation: text("orientation").notNull(),
+    caption: text("caption").notNull().default(""),
+    altText: text("alt_text").notNull().default(""),
+    language: text("language"),
+    volume: text("volume"),
+    coverType: text("cover_type"),
+    submittedByUserId: text("submitted_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    submitterTeamId: text("submitter_team_id").references(() => teams.id, {
+      onDelete: "set null",
+    }),
+    moderationStatus: text("moderation_status")
+      .notNull()
+      .default("PENDING"),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: text("reviewed_at"),
+    rejectionReason: text("rejection_reason"),
+    displayOrder: integer("display_order").notNull().default(0),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("series_gallery_public_idx").on(
+      table.seriesId,
+      table.kind,
+      table.moderationStatus,
+      table.displayOrder,
+      table.createdAt,
+    ),
+    index("series_gallery_moderation_idx").on(
+      table.moderationStatus,
+      table.createdAt,
+      table.id,
+    ),
+    index("series_gallery_submitter_idx").on(
+      table.submittedByUserId,
+      table.createdAt,
+    ),
+    check(
+      "series_gallery_kind_check",
+      sql`${table.kind} IN ('ART', 'COVER')`,
+    ),
+    check(
+      "series_gallery_orientation_check",
+      sql`${table.orientation} IN ('LANDSCAPE', 'PORTRAIT')`,
+    ),
+    check(
+      "series_gallery_moderation_check",
+      sql`${table.moderationStatus} IN ('PENDING', 'APPROVED', 'REJECTED')`,
+    ),
+    check(
+      "series_gallery_dimensions_check",
+      sql`${table.width} > 0 AND ${table.height} > 0 AND ${table.byteSize} > 0`,
+    ),
+    check(
+      "series_gallery_ratio_check",
+      sql`(
+        (${table.orientation} = 'LANDSCAPE' AND ${table.width} * 9 = ${table.height} * 16)
+        OR
+        (${table.orientation} = 'PORTRAIT' AND ${table.width} * 3 = ${table.height} * 2)
+      )`,
+    ),
   ],
 );
 
@@ -1159,7 +1423,10 @@ export const follows = sqliteTable(
       .references(() => series.id, { onDelete: "cascade" }),
     createdAt,
   },
-  (table) => [primaryKey({ columns: [table.userId, table.seriesId] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.seriesId] }),
+    index("follows_series_user_idx").on(table.seriesId, table.userId),
+  ],
 );
 
 export const reviews = sqliteTable(
@@ -1817,6 +2084,49 @@ export const ledgerEntries = sqliteTable(
   ],
 );
 
+export const chapterUnlockReceipts = sqliteTable(
+  "chapter_unlock_receipts",
+  {
+    id: text("id").primaryKey(),
+    transactionId: text("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    entitlementId: text("entitlement_id")
+      .notNull()
+      .references(() => entitlements.id),
+    buyerUserId: text("buyer_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapters.id, { onDelete: "restrict" }),
+    teamId: text("team_id").references(() => teams.id, {
+      onDelete: "set null",
+    }),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull().default("ONYX"),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("chapter_unlock_receipts_transaction_uidx").on(
+      table.transactionId,
+    ),
+    index("chapter_unlock_receipts_entitlement_idx").on(table.entitlementId),
+    index("chapter_unlock_receipts_team_recent_idx").on(
+      table.teamId,
+      table.createdAt,
+    ),
+    index("chapter_unlock_receipts_buyer_recent_idx").on(
+      table.buyerUserId,
+      table.createdAt,
+    ),
+    check(
+      "chapter_unlock_receipts_amount_check",
+      sql`${table.amount} > 0`,
+    ),
+  ],
+);
+
 export const chapterRewardClaims = sqliteTable(
   "chapter_reward_claims",
   {
@@ -2385,6 +2695,34 @@ export const uploadPublishGuards = sqliteTable(
   ],
 );
 
+export const uploadRateLimitAttempts = sqliteTable(
+  "upload_rate_limit_attempts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    uploadJobId: text("upload_job_id").notNull(),
+    uploadJobItemId: text("upload_job_item_id").notNull(),
+    requestId: text("request_id").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    admitted: integer("admitted").notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("upload_rate_attempts_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    check(
+      "upload_rate_attempts_byte_size_check",
+      sql`${table.byteSize} > 0`,
+    ),
+    check(
+      "upload_rate_attempts_admitted_check",
+      sql`${table.admitted} IN (0, 1)`,
+    ),
+  ],
+);
+
 export const uploadJobMediaGuards = sqliteTable("upload_job_media_guards", {
   jobId: text("job_id")
     .primaryKey()
@@ -2479,10 +2817,28 @@ export const reports = sqliteTable(
     category: text("category").notNull(),
     detail: text("detail").notNull(),
     status: text("status").notNull().default("OPEN"),
+    moderatedByUserId: text("moderated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    moderatedAt: text("moderated_at"),
+    resolutionNote: text("resolution_note"),
+    revision: integer("revision").notNull().default(1),
     createdAt,
     updatedAt,
   },
-  (table) => [index("reports_queue_idx").on(table.status, table.createdAt)],
+  (table) => [
+    index("reports_queue_idx").on(table.status, table.createdAt),
+    index("reports_target_idx").on(
+      table.targetType,
+      table.targetId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "reports_status_check",
+      sql`${table.status} IN ('OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED')`,
+    ),
+  ],
 );
 
 export const auditLogs = sqliteTable(

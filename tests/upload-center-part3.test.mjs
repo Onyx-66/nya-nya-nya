@@ -137,7 +137,10 @@ test("upload policy limits methods, paths, media, batches, and paid metadata", a
   assert.match(policy, /maxJobBytes:\s*7 \* 1024 \* 1024 \* 1024/);
   assert.match(policy, /segment === "\.\."/);
   assert.match(policy, /segment\.startsWith\("\."\)/);
-  assert.match(policy, /id: "ZIP"[\s\S]*supported: false/);
+  assert.match(
+    policy,
+    /id: "ZIP",[\s\S]*?supported: true,[\s\S]*?Extracted locally/,
+  );
   assert.match(policy, /id: "RAR"[\s\S]*supported: false/);
   assert.match(policy, /id: "GOOGLE_DRIVE"[\s\S]*supported: false/);
 
@@ -150,7 +153,14 @@ test("upload policy limits methods, paths, media, batches, and paid metadata", a
   assert.doesNotMatch(server, /Onyx price/);
   assert.match(server, /APPROVED_SERIES_REQUIRED/);
   assert.match(server, /UPLOAD_PERMISSION_REQUIRED/);
-  assert.match(server, /RELEASE_LANGUAGE_NOT_ALLOWED/);
+  const uploadScope = server.slice(
+    server.indexOf("export async function requireUploadScope"),
+    server.indexOf("export function requireUploadCapability"),
+  );
+  assert.match(uploadScope, /FROM team_memberships tm/);
+  assert.match(uploadScope, /t\.verification_status = 'VERIFIED'/);
+  assert.doesNotMatch(uploadScope, /series_team_assignments/);
+  assert.doesNotMatch(uploadScope, /RELEASE_LANGUAGE_NOT_ALLOWED/);
   assert.match(server, /validateImageFile/);
   assert.match(server, /sha256Hex/);
   assert.match(server, /cleanupExpiredUploadDrafts/);
@@ -168,9 +178,17 @@ test("upload policy limits methods, paths, media, batches, and paid metadata", a
   assert.match(jobsApi, /DUPLICATE_RELEASE/);
   assert.match(jobsApi, /PUBLISH_CONFLICT/);
   assert.match(jobsApi, /liveJobAuthorization/);
-  assert.match(jobsApi, /live_assignment\.revoked_at IS NULL/);
-  assert.match(jobsApi, /live_assignment\.upload_requires_review = 0/);
-  assert.match(jobsApi, /json_each\(live_assignment\.allowed_languages_json\)/);
+  const liveAuthorization = jobsApi.slice(
+    jobsApi.indexOf("function liveJobAuthorization"),
+    jobsApi.indexOf("function statusPredicate"),
+  );
+  assert.match(liveAuthorization, /JOIN team_memberships live_membership/);
+  assert.match(
+    liveAuthorization,
+    /live_team\.verification_status = 'VERIFIED'/,
+  );
+  assert.doesNotMatch(liveAuthorization, /series_team_assignments/);
+  assert.doesNotMatch(liveAuthorization, /live_assignment/);
   assert.match(
     jobsApi,
     /cleanupExpiredUploadDrafts\(\s*env\.DB,\s*env\.BUCKET,\s*actor,\s*id/,

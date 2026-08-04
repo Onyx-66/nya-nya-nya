@@ -8,7 +8,13 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   computeCropRect,
   cropStaticMedia,
@@ -59,6 +65,9 @@ export function AdminMediaField({
     width: 0,
     height: 0,
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropDialogRef = useRef<HTMLDivElement>(null);
+  const preparingRef = useRef(false);
   const previewUrl = useMemo(
     () => (file ? URL.createObjectURL(file) : currentUrl ?? ""),
     [currentUrl, file],
@@ -79,6 +88,54 @@ export function AdminMediaField({
     },
     [cropPreviewUrl],
   );
+  useEffect(() => {
+    preparingRef.current = preparing;
+  }, [preparing]);
+  useEffect(() => {
+    if (!cropFile) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      cropDialogRef.current
+        ?.querySelector<HTMLElement>("[data-crop-initial-focus]")
+        ?.focus();
+    });
+    function closeOrTrapCrop(event: KeyboardEvent) {
+      if (event.key === "Escape" && !preparingRef.current) {
+        event.stopImmediatePropagation();
+        setCropFile(null);
+        window.requestAnimationFrame(() => fileInputRef.current?.focus());
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        cropDialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", closeOrTrapCrop);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOrTrapCrop);
+    };
+  }, [cropFile]);
+
+  function closeCrop() {
+    setCropFile(null);
+    window.requestAnimationFrame(() => fileInputRef.current?.focus());
+  }
 
   async function prepareFile(nextFile: File | null) {
     if (!nextFile) {
@@ -129,7 +186,7 @@ export function AdminMediaField({
         y: positionY,
       });
       onSelect(prepared);
-      setCropFile(null);
+      closeCrop();
     } catch (error) {
       setPrepareError(
         error instanceof Error
@@ -204,6 +261,7 @@ export function AdminMediaField({
           <label className="button button-secondary">
             {previewUrl ? "Replace" : "Choose image"}
             <input
+              ref={fileInputRef}
               type="file"
               accept={accept}
               disabled={fieldBusy || Boolean(disabledReason)}
@@ -237,6 +295,7 @@ export function AdminMediaField({
       {cropFile && cropProfile ? (
         <div
           className="admin-crop-dialog"
+          ref={cropDialogRef}
           role="dialog"
           aria-modal="true"
           aria-label={`Crop ${label}`}
@@ -252,8 +311,9 @@ export function AdminMediaField({
               <button
                 type="button"
                 aria-label="Cancel crop"
+                data-crop-initial-focus
                 disabled={preparing}
-                onClick={() => setCropFile(null)}
+                onClick={closeCrop}
               >
                 <X size={18} />
               </button>
@@ -318,7 +378,7 @@ export function AdminMediaField({
                 className="button button-secondary"
                 type="button"
                 disabled={preparing}
-                onClick={() => setCropFile(null)}
+                onClick={closeCrop}
               >
                 Cancel
               </button>

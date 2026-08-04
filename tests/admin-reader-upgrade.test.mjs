@@ -50,7 +50,14 @@ test("chapter importer exposes only the upload methods implemented in production
   }
   assert.match(workspace, /webkitdirectory/);
   assert.match(workspace, /Multi-chapter upload/);
-  assert.match(uploadPolicy, /id: "ZIP"[\s\S]*supported: false/);
+  assert.match(
+    uploadPolicy,
+    /id: "ZIP",[\s\S]*?supported: true,[\s\S]*?Extracted locally/,
+  );
+  assert.match(
+    workspace,
+    /"\.zip,\.cbz,application\/zip,application\/vnd\.comicbook\+zip"/,
+  );
   assert.match(uploadPolicy, /id: "RAR"[\s\S]*supported: false/);
   assert.match(uploadPolicy, /id: "GOOGLE_DRIVE"[\s\S]*supported: false/);
   assert.match(filesApi, /validateChapterPage/);
@@ -62,10 +69,7 @@ test("chapter importer exposes only the upload methods implemented in production
 test("administrator security guidance is truthful and not a fake checklist", async () => {
   const panel = await read("components/nyascans/OperationsControlPanel.tsx");
 
-  assert.match(
-    panel,
-    /Archive imports remain unavailable until bounded extraction is configured/,
-  );
+  assert.match(panel, /File signature checks/);
   assert.match(panel, /className="security-operator-item"/);
   assert.doesNotMatch(
     panel.slice(panel.indexOf("Operator checklist"), panel.indexOf("function AuditLog")),
@@ -90,7 +94,8 @@ test("reader shows ten top threads, collapsible replies, recommendations, and qu
   assert.match(discussion, /Hide replies/);
 
   assert.match(app, /function SeriesRecommendations/);
-  assert.match(app, /sharedGenres\.length \* 100/);
+  assert.match(app, /catalog\?page=1&pageSize=12&sort=followed/);
+  assert.match(app, /\.slice\(0, 8\)/);
   assert.match(app, /Series recommendations/);
   assert.match(app, /id="reader-start"/);
   assert.match(app, /id="chapter-end"/);

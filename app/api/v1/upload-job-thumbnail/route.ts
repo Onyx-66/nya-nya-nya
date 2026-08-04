@@ -49,12 +49,32 @@ function liveThumbnailAuthorization(alias: string) {
      WHERE live_actor.id = ?
        AND live_actor.status = 'ACTIVE'
        AND (
-         live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
-         OR EXISTS (
-           SELECT 1
-             FROM user_roles live_admin_role
-            WHERE live_admin_role.user_id = live_actor.id
-              AND live_admin_role.role IN ('OWNER', 'ADMINISTRATOR')
+         (
+           (
+             live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
+             OR EXISTS (
+               SELECT 1
+                 FROM user_roles live_admin_role
+                WHERE live_admin_role.user_id = live_actor.id
+                  AND live_admin_role.role IN ('OWNER', 'ADMINISTRATOR')
+             )
+           )
+           AND (
+             ${alias}.team_id IS NULL
+             OR EXISTS (
+               SELECT 1
+                 FROM team_memberships live_admin_membership
+                 JOIN teams live_admin_team
+                   ON live_admin_team.id = live_admin_membership.team_id
+                WHERE live_admin_membership.user_id = live_actor.id
+                  AND live_admin_membership.team_id = ${alias}.team_id
+                  AND live_admin_membership.status = 'ACTIVE'
+                  AND UPPER(live_admin_membership.membership_role) IN
+                    ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+                  AND live_admin_team.is_archived = 0
+                  AND live_admin_team.verification_status = 'VERIFIED'
+             )
+           )
          )
          OR (
            (
@@ -68,16 +88,11 @@ function liveThumbnailAuthorization(alias: string) {
            )
            AND EXISTS (
              SELECT 1
-               FROM series_team_assignments live_assignment
-               JOIN team_memberships live_membership
-                 ON live_membership.team_id = live_assignment.team_id
-                AND live_membership.user_id = live_actor.id
+               FROM team_memberships live_membership
                JOIN teams live_team
-                 ON live_team.id = live_assignment.team_id
-              WHERE live_assignment.series_id = ${alias}.series_id
-                AND live_assignment.team_id = ${alias}.team_id
-                AND live_assignment.can_upload = 1
-                AND live_assignment.revoked_at IS NULL
+                 ON live_team.id = live_membership.team_id
+                AND live_membership.user_id = live_actor.id
+              WHERE live_membership.team_id = ${alias}.team_id
                 AND live_membership.status = 'ACTIVE'
                 AND UPPER(live_membership.membership_role) IN
                   ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
@@ -87,7 +102,7 @@ function liveThumbnailAuthorization(alias: string) {
                     ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')
                 )
                 AND live_team.is_archived = 0
-                AND live_team.verification_status <> 'SUSPENDED'
+                AND live_team.verification_status = 'VERIFIED'
            )
          )
        )
@@ -98,6 +113,7 @@ function liveThumbnailAuthorization(alias: string) {
      WHERE live_series.id = ${alias}.series_id
        AND live_series.is_published = 1
        AND live_series.archived_at IS NULL
+       AND live_series.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
        AND live_series.rights_status IN
          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
   )
@@ -108,7 +124,7 @@ function liveThumbnailAuthorization(alias: string) {
         FROM teams live_job_team
        WHERE live_job_team.id = ${alias}.team_id
          AND live_job_team.is_archived = 0
-         AND live_job_team.verification_status <> 'SUSPENDED'
+         AND live_job_team.verification_status = 'VERIFIED'
     )
   )`;
 }

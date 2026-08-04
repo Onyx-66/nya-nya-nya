@@ -111,14 +111,10 @@ async function databaseChapterRecord(
             s.rights_status AS rightsStatus,
             EXISTS (
               SELECT 1
-                FROM series_team_assignments sta
-                JOIN teams preview_team ON preview_team.id = sta.team_id
-               WHERE sta.series_id = c.series_id
-                 AND sta.team_id = c.team_id
-                 AND sta.can_upload = 1
-                 AND sta.revoked_at IS NULL
+                FROM teams preview_team
+               WHERE preview_team.id = c.team_id
                  AND preview_team.is_archived = 0
-                 AND preview_team.verification_status <> 'SUSPENDED'
+                 AND preview_team.verification_status = 'VERIFIED'
             ) AS teamPreviewAllowed
        FROM chapters c
        JOIN series s ON s.id = c.series_id

@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   ArrowsOut,
   Bell,
-  BookmarkSimple,
   Books,
   CaretDown,
   CaretLeft,
@@ -55,6 +54,7 @@ import {
   Storefront,
   Sun,
   Trash,
+  Trophy,
   UploadSimple,
   UserCircle,
   UsersThree,
@@ -74,11 +74,13 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
 import { KeyboardShortcutsDialog } from "@/components/nyascans/KeyboardShortcutsDialog";
 import { SupportTicketPanel } from "@/components/nyascans/SupportTicketPanel";
+import { useSystemNotifications } from "@/components/nyascans/SystemNotifications";
 import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
 import { NotificationsView } from "@/components/nyascans/NotificationsView";
 import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
@@ -89,6 +91,8 @@ import {
 import { PublicProfileView } from "@/components/nyascans/PublicProfileView";
 import { PublicTeamView } from "@/components/nyascans/PublicTeamView";
 import { RouletteView } from "@/components/nyascans/RouletteView";
+import { SeriesGallerySections } from "@/components/nyascans/SeriesGallerySections";
+import { SeriesReportDialog } from "@/components/nyascans/SeriesReportDialog";
 import { UserLeaderboardView } from "@/components/nyascans/UserLeaderboardView";
 import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
@@ -115,6 +119,7 @@ import {
   compareChapterNumbers,
   normalizeChapterNumber,
 } from "@/lib/chapter-number";
+import { languageName } from "@/lib/language-flags";
 import {
   LEGAL_DOCUMENTS,
   LEGAL_DOCUMENTS_BY_SLUG,
@@ -692,25 +697,44 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
 
 function Logo() {
   const { settings } = useSiteConfiguration();
-  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
-  const logoUrl =
+  const [failedLogoUrls, setFailedLogoUrls] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const logoMedia =
     settings.brand.logo.enabled && settings.brand.logo.key
-      ? `/api/v1/site-media?slot=logo&v=${settings.brand.logo.revision}`
+      ? settings.brand.logo
+      : null;
+  const compactLogoMedia =
+    settings.brand.compactLogo.enabled && settings.brand.compactLogo.key
+      ? settings.brand.compactLogo
+      : null;
+  const configuredLogoUrl = logoMedia
+    ? `/api/v1/site-media?slot=logo&v=${logoMedia.revision}`
+    : null;
+  const configuredCompactLogoUrl = compactLogoMedia
+    ? `/api/v1/site-media?slot=compact&v=${compactLogoMedia.revision}`
+    : null;
+  const logoUrl =
+    configuredLogoUrl && !failedLogoUrls.has(configuredLogoUrl)
+      ? configuredLogoUrl
       : null;
   const compactLogoUrl =
-    settings.brand.compactLogo.enabled && settings.brand.compactLogo.key
-      ? `/api/v1/site-media?slot=compactLogo&v=${settings.brand.compactLogo.revision}`
+    configuredCompactLogoUrl &&
+    !failedLogoUrls.has(configuredCompactLogoUrl)
+      ? configuredCompactLogoUrl
       : null;
   const displayLogoUrl = logoUrl ?? compactLogoUrl;
+  const displayLogoMedia = logoUrl ? logoMedia : compactLogoMedia;
   return (
     <a
-      className="brand"
+      className={`brand ${displayLogoUrl ? "has-custom-logo" : ""}`}
       href="/"
       aria-label={`${settings.brand.siteName} home`}
     >
-      {displayLogoUrl && failedLogoUrl !== displayLogoUrl ? (
+      {displayLogoUrl &&
+      displayLogoMedia ? (
         <picture>
-          {compactLogoUrl && failedLogoUrl !== compactLogoUrl ? (
+          {compactLogoUrl && compactLogoUrl !== displayLogoUrl ? (
             <source
               media="(max-width: 720px)"
               srcSet={compactLogoUrl}
@@ -719,12 +743,18 @@ function Logo() {
           <img
             className="brand-logo-image"
             src={displayLogoUrl}
-            alt={settings.brand.logoAlt}
-            width={29}
-            height={29}
-            onError={(event) =>
-              setFailedLogoUrl(event.currentTarget.currentSrc || displayLogoUrl)
-            }
+            alt={settings.brand.logoAlt.trim()}
+            width={displayLogoMedia.width}
+            height={displayLogoMedia.height}
+            onError={(event) => {
+              const failedUrl =
+                event.currentTarget.currentSrc || displayLogoUrl;
+              setFailedLogoUrls((current) => {
+                const next = new Set(current);
+                next.add(failedUrl);
+                return next;
+              });
+            }}
           />
         </picture>
       ) : (
@@ -732,7 +762,7 @@ function Logo() {
           <span />
         </span>
       )}
-      <span>{settings.brand.siteName}</span>
+      <span className="brand-name">{settings.brand.siteName}</span>
     </a>
   );
 }
@@ -1235,6 +1265,13 @@ function SiteHeader({
                     </a>
                     <a
                       role="menuitem"
+                      href="/rankings"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <Trophy size={18} /> Ranking
+                    </a>
+                    <a
+                      role="menuitem"
                       href="/roulette"
                       onClick={() => setMenuOpen(false)}
                     >
@@ -1369,19 +1406,31 @@ function MobileNav({ view, actor }: { view: AppView; actor: Actor | null }) {
   );
 }
 
-function SeriesTypeBadge({ type }: { type: SeriesCard["type"] | string }) {
+function SeriesTypeBadge({
+  type,
+  flagOnly = false,
+}: {
+  type: SeriesCard["type"] | string;
+  flagOnly?: boolean;
+}) {
   const normalized: "Manga" | "Manhwa" | "Manhua" =
     type.toUpperCase() === "MANHWA"
       ? "Manhwa"
       : type.toUpperCase() === "MANHUA"
         ? "Manhua"
         : "Manga";
-  const flag =
-    normalized === "Manhwa" ? "🇰🇷" : normalized === "Manhua" ? "🇨🇳" : "🇯🇵";
+  const country =
+    normalized === "Manhwa" ? "kr" : normalized === "Manhua" ? "cn" : "jp";
   return (
-    <span className={`series-type-badge type-${normalized.toLowerCase()}`}>
-      <span aria-hidden="true">{flag}</span>
-      {normalized}
+    <span
+      className={`series-type-badge type-${normalized.toLowerCase()} ${
+        flagOnly ? "is-flag-only" : ""
+      }`}
+      aria-label={flagOnly ? normalized : undefined}
+      title={flagOnly ? normalized : undefined}
+    >
+      <LanguageFlag country={country} label={normalized} showCode={false} />
+      {flagOnly ? null : normalized}
     </span>
   );
 }
@@ -1440,7 +1489,7 @@ function SeriesCardView({
           height={540}
         />
         <span className="cover-shade" />
-        <SeriesTypeBadge type={item.type} />
+        <SeriesTypeBadge type={item.type} flagOnly />
         <span className="quick-read">
           <Play size={14} weight="fill" />
           Read
@@ -1462,48 +1511,120 @@ function SeriesCardView({
   );
 }
 
-function SeriesRecommendations({ item }: { item: SeriesCard }) {
-  const recommendations = demoSeries
-    .filter((candidate) => candidate.id !== item.id)
-    .map((candidate) => {
-      const sharedGenres = candidate.genres.filter((genre) =>
-        item.genres.includes(genre),
-      );
-      const score =
-        sharedGenres.length * 100 +
-        (candidate.type === item.type ? 12 : 0) +
-        (candidate.direction === item.direction ? 5 : 0) +
-        candidate.rating;
-      return { candidate, sharedGenres, score };
+type LiveSeriesSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  nativeTitle: string | null;
+  synopsis: string;
+  type: "MANHWA" | "MANGA" | "MANHUA";
+  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+  accessType: "FREE" | "PAID";
+  cover: string | null;
+  ratingTenths: number;
+  followerCount: number;
+  viewCount: number;
+  latestChapterNumber: string | null;
+  chapterCount: number;
+};
+
+function liveSeriesCard(item: LiveSeriesSummary): SeriesCard {
+  const type =
+    item.type === "MANHWA"
+      ? "Manhwa"
+      : item.type === "MANHUA"
+        ? "Manhua"
+        : "Manga";
+  const status =
+    item.status === "COMPLETED"
+      ? "Completed"
+      : item.status === "HIATUS"
+        ? "Hiatus"
+        : item.status === "PAUSED"
+          ? "Paused"
+          : item.status === "UPCOMING"
+            ? "Upcoming"
+            : "Ongoing";
+  return {
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    subtitle: item.nativeTitle ?? "Published on NyaScans",
+    type,
+    status,
+    access: item.accessType,
+    rating: Number(item.ratingTenths) / 10,
+    followers: String(Number(item.followerCount ?? 0)),
+    chapter: `${Number(item.chapterCount ?? 0)} chapters`,
+    updated: "Recently",
+    cover: item.cover ?? "/art/series-cover-placeholder.svg",
+    accent: "#2d8cff",
+    genres: [],
+    direction:
+      item.type === "MANHWA"
+        ? "VERTICAL"
+        : item.type === "MANHUA"
+          ? "LTR"
+          : "RTL",
+    synopsis: item.synopsis,
+    originalTitle: item.nativeTitle ?? "",
+    creator: "Not credited",
+    originalLanguage: "",
+    originCountry: "",
+    releaseYear: null,
+    chapterCount: Number(item.chapterCount ?? 0),
+    team: { name: "", slug: "", initials: "" },
+  };
+}
+
+function SeriesRecommendations({ seriesSlug }: { seriesSlug: string }) {
+  const [recommendations, setRecommendations] = useState<LiveSeriesSummary[]>(
+    [],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/catalog?page=1&pageSize=12&sort=followed", {
+      signal: controller.signal,
+      cache: "no-store",
     })
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        right.candidate.rating - left.candidate.rating,
-    )
-    .slice(0, 4);
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: LiveSeriesSummary[];
+        };
+        if (!response.ok) return;
+        setRecommendations(
+          (payload.data ?? [])
+            .filter((candidate) => candidate.slug !== seriesSlug)
+            .slice(0, 8),
+        );
+      })
+      .catch(() => {
+        // Recommendations remain hidden until live catalogue data recovers.
+      });
+    return () => controller.abort();
+  }, [seriesSlug]);
+
+  if (!recommendations.length) return null;
 
   return (
     <section
       className="series-recommendations"
-      aria-labelledby={`recommendations-${item.slug}`}
+      aria-labelledby={`recommendations-${seriesSlug}`}
     >
       <SectionHeading
+        id={`recommendations-${seriesSlug}`}
         title="Series recommendations"
-        body={`More ${item.genres.slice(0, 2).join(" and ")} stories selected by shared genres.`}
+        body="More published stories readers are following now."
       />
       <div className="recommend-grid">
-        {recommendations.map(({ candidate, sharedGenres }) => (
-          <div
-            className="recommend-item"
-            key={candidate.id}
-            data-shared-genres={sharedGenres.join(",")}
-          >
-            <SeriesCardView item={candidate} />
+        {recommendations.map((candidate) => (
+          <div className="recommend-item" key={candidate.id}>
+            <SeriesCardView item={liveSeriesCard(candidate)} />
             <span>
-              {sharedGenres.length
-                ? `${sharedGenres.slice(0, 2).join(" · ")} match`
-                : `${candidate.type} readers also follow`}
+              {Number(candidate.followerCount ?? 0).toLocaleString("en-US")}{" "}
+              followers ·{" "}
+              {Number(candidate.viewCount ?? 0).toLocaleString("en-US")} views
             </span>
           </div>
         ))}
@@ -1851,15 +1972,17 @@ function SectionHeading({
   title,
   body,
   action,
+  id,
 }: {
   title: string;
   body?: string;
   action?: { label: string; href: string };
+  id?: string;
 }) {
   return (
     <div className="section-heading">
       <div>
-        <h2>{title}</h2>
+        <h2 id={id}>{title}</h2>
         {body ? <p>{body}</p> : null}
       </div>
       {action ? (
@@ -1912,6 +2035,8 @@ type LatestRelease = {
     priceOnyx: number;
     publishedAt: string;
     teamName: string | null;
+    teamSlug: string | null;
+    isRead?: boolean;
     isFresh?: boolean;
     isNewInPeriod?: boolean;
   }>;
@@ -1965,9 +2090,6 @@ function LatestUpdatesGrid({
   period?: "today" | "week" | "month" | "all";
   pageSize?: 6 | 20;
 }) {
-  const { settings: commercial } = useCommercialSettings();
-  const premiumEconomyPublic =
-    commercial.economy.premiumEconomyPublic;
   const [page, setPage] = useState(1);
   const [records, setRecords] = useState<LatestRelease[]>([]);
   const [pageCount, setPageCount] = useState(1);
@@ -1975,7 +2097,9 @@ function LatestUpdatesGrid({
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshWarning, setRefreshWarning] = useState("");
   const [revision, setRevision] = useState(0);
+  const hasRecordsRef = useRef(false);
   const [homePeriod, setHomePeriod] = useState<
     "today" | "week" | "month"
   >("week");
@@ -1990,7 +2114,8 @@ function LatestUpdatesGrid({
       if (requestInFlight) return;
       requestInFlight = true;
       if (showLoading) setLoading(true);
-      setError("");
+      if (showLoading) setError("");
+      setRefreshWarning("");
       try {
         const response = await fetch(
           `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${effectivePeriod}`,
@@ -2007,18 +2132,26 @@ function LatestUpdatesGrid({
           );
         }
         if (active) {
-          setRecords(payload.data ?? []);
+          const nextRecords = payload.data ?? [];
+          hasRecordsRef.current = nextRecords.length > 0;
+          setRecords(nextRecords);
           setPageCount(payload.pagination?.pageCount ?? 1);
           setHasPrevious(Boolean(payload.pagination?.hasPrevious));
           setHasNext(Boolean(payload.pagination?.hasNext));
         }
       } catch (loadError) {
         if (active && !controller.signal.aborted) {
-          setError(
+          const message =
             loadError instanceof Error
               ? loadError.message
-              : "Latest releases could not be loaded.",
-          );
+              : "Latest releases could not be loaded.";
+          if (showLoading || !hasRecordsRef.current) {
+            setError(message);
+          } else {
+            setRefreshWarning(
+              "Latest updates could not refresh. Showing the last loaded releases.",
+            );
+          }
         }
       } finally {
         requestInFlight = false;
@@ -2140,7 +2273,7 @@ function LatestUpdatesGrid({
                     </span>
                   )}
                   <span className="latest-cover-type">
-                    <SeriesTypeBadge type={update.type} />
+                    <SeriesTypeBadge type={update.type} flagOnly />
                   </span>
                 </a>
                 <div className="latest-card-copy">
@@ -2159,26 +2292,63 @@ function LatestUpdatesGrid({
                     </span>
                   </div>
                   <ul className="latest-chapters">
-                    {update.chapters.map((chapter) => (
+                    {update.chapters.slice(0, 4).map((chapter) => (
                       <li key={chapter.slug}>
-                        <a
-                          href={`/title/${update.slug}/chapter/${chapter.slug}`}
-                        >
-                          <PeriodChapterMark active={chapter.isNewInPeriod} />
-                          Chapter {normalizeChapterNumber(chapter.chapterNumber)}
-                        </a>
-                        <time dateTime={chapter.publishedAt}>
-                          {releaseTime(chapter.publishedAt)} ago
-                        </time>
-                        {premiumEconomyPublic ||
-                        (chapter.effectiveAccessType ?? chapter.accessType) !==
-                          "PAID" ? (
-                          <ChapterAccessBadge
-                            accessType={
-                              chapter.effectiveAccessType ?? chapter.accessType
-                            }
-                          />
-                        ) : null}
+                        <span className="latest-chapter-copy">
+                          <span className="latest-chapter-title-line">
+                            <a
+                              href={`/title/${update.slug}/chapter/${chapter.slug}`}
+                            >
+                              <span
+                                className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
+                                aria-label={
+                                  chapter.isRead
+                                    ? "Chapter already read"
+                                    : "Chapter not read yet"
+                                }
+                                title={
+                                  chapter.isRead
+                                    ? "Already read"
+                                    : "Not read yet"
+                                }
+                              >
+                                <Eye
+                                  size={15}
+                                  weight={chapter.isRead ? "fill" : "regular"}
+                                  aria-hidden="true"
+                                />
+                              </span>
+                              <PeriodChapterMark active={chapter.isNewInPeriod} />
+                              Chapter{" "}
+                              {normalizeChapterNumber(chapter.chapterNumber)}
+                            </a>
+                            <time dateTime={chapter.publishedAt}>
+                              {releaseTime(chapter.publishedAt)} ago
+                            </time>
+                          </span>
+                          <span className="latest-chapter-attribution">
+                            <LanguageFlag
+                              language={chapter.language}
+                              showCode={false}
+                            />
+                            {chapter.teamSlug ? (
+                              <a
+                                href={`/team/${encodeURIComponent(chapter.teamSlug)}`}
+                              >
+                                {chapter.teamName ?? "Publishing team"}
+                              </a>
+                            ) : (
+                              <span>
+                                {chapter.teamName ?? "Independent release"}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        <ChapterAccessBadge
+                          accessType={
+                            chapter.effectiveAccessType ?? chapter.accessType
+                          }
+                        />
                       </li>
                     ))}
                   </ul>
@@ -2193,6 +2363,12 @@ function LatestUpdatesGrid({
           compact
         />
       )}
+      {refreshWarning && records.length ? (
+        <p className="latest-refresh-warning" role="status">
+          <WarningCircle size={16} aria-hidden="true" />
+          {refreshWarning}
+        </p>
+      ) : null}
       {pagination && !loading && !error && records.length ? (
         <nav className="latest-pagination" aria-label="Latest updates pages">
           <button
@@ -2245,7 +2421,7 @@ function LatestUpdatesView() {
         </p>
         <div
           className="latest-periods"
-          role="tablist"
+          role="group"
           aria-label="Latest updates period"
         >
           {(
@@ -2258,9 +2434,8 @@ function LatestUpdatesView() {
           ).map(([value, label]) => (
             <button
               type="button"
-              role="tab"
               key={value}
-              aria-selected={period === value}
+              aria-pressed={period === value}
               onClick={() => setPeriod(value)}
             >
               {label}
@@ -2281,12 +2456,44 @@ function LatestUpdatesView() {
   );
 }
 
-function TrendingShowcase({
-  ordered,
-}: {
-  ordered: SeriesCard[];
-}) {
+function TrendingShowcase() {
   const railRef = useRef<HTMLDivElement | null>(null);
+  const [ordered, setOrdered] = useState<LiveSeriesSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/catalog?page=1&pageSize=12&sort=viewed", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: LiveSeriesSummary[];
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            payload.error?.message ?? "Trending titles could not be loaded.",
+          );
+        }
+        setOrdered(payload.data ?? []);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Trending titles could not be loaded.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   function moveRail(direction: -1 | 1) {
     const rail = railRef.current;
@@ -2331,6 +2538,16 @@ function TrendingShowcase({
         </div>
       </div>
       <div className="trending-viewport">
+        {loading ? (
+          <div className="catalog-loading" role="status">
+            Loading live reader activity…
+          </div>
+        ) : loadError ? (
+          <div className="catalog-error" role="alert">
+            <WarningCircle size={24} />
+            <span>{loadError}</span>
+          </div>
+        ) : ordered.length ? (
         <div
           className="series-rail trending-rail"
           ref={railRef}
@@ -2350,10 +2567,21 @@ function TrendingShowcase({
           {ordered.map((item, index) => (
             <div className="ranked-card" key={item.id}>
               <span>{String(index + 1).padStart(2, "0")}</span>
-              <SeriesCardView item={item} />
+              <SeriesCardView item={liveSeriesCard(item)} />
+              <small className="trending-live-metrics">
+                {Number(item.viewCount ?? 0).toLocaleString("en-US")} views ·{" "}
+                {Number(item.followerCount ?? 0).toLocaleString("en-US")} followers
+              </small>
             </div>
           ))}
         </div>
+        ) : (
+          <EmptyState
+            title="No reader activity yet"
+            body="Published titles will rank here as real views arrive."
+            compact
+          />
+        )}
       </div>
     </section>
   );
@@ -2719,7 +2947,7 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
 
       {!signedIn ? (
         <div className="continue-reading-guest">
-          <span><BookmarkSimple size={23} /></span>
+          <span><Books size={23} /></span>
           <div>
             <strong>Keep every chapter in sync.</strong>
             <p>Sign in to resume from the exact page on any device.</p>
@@ -2835,7 +3063,7 @@ type EditorPick = {
   ratingTenths: number;
   latestChapterSlug: string | null;
   chapterCount: number;
-  bookmarkCount: number;
+  followerCount: number;
   commentCount: number;
   genres: string[];
   alternativeTitles: string[];
@@ -3089,9 +3317,9 @@ function FeaturedSeriesSlider() {
               ) : null}
               <span className="featured-main-meta">
                 <SeriesStatusBadge status={item.status} />
-                <span aria-label={`${item.bookmarkCount} bookmarks`}>
-                  <BookmarkSimple size={14} />
-                  {item.bookmarkCount}
+                <span aria-label={`${item.followerCount} followers`}>
+                  <Heart size={14} />
+                  {item.followerCount}
                 </span>
                 <span aria-label={`${item.chapterCount} chapters`}>
                   <Books size={14} />
@@ -3453,7 +3681,7 @@ function EditorsPickSection({
               {librarySeries.has(item.seriesId) ? (
                 <Check size={18} />
               ) : (
-                <BookmarkSimple size={18} />
+                <Books size={18} />
               )}
               {libraryBusy === item.seriesId
                 ? "Adding…"
@@ -3487,7 +3715,7 @@ function HomeView({
       <FeaturedSeriesSlider />
 
       <main className="home-main">
-        <TrendingShowcase ordered={demoSeries} />
+        <TrendingShowcase />
 
         <ContinueReadingSection signedIn={Boolean(actor)} />
 
@@ -3844,11 +4072,8 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
       </section>
 
       <div className="catalog-summary">
-        <p>
-          <strong>{pagination.total.toLocaleString("en-US")}</strong> titles
-        </p>
         <div>
-          <label>
+          <label className="catalog-sort-control">
             Sort
             <select
               aria-label="Sort catalog"
@@ -3865,7 +4090,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
               <option value="title">Alphabetical</option>
             </select>
           </label>
-          <label>
+          <label className="catalog-page-size-control">
             Per page
             <select
               aria-label="Results per page"
@@ -3982,7 +4207,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                 <a className="cover-link" href={`/title/${item.slug}`}>
                   <CatalogCover item={item} />
                   <span className="cover-shade" />
-                  <SeriesTypeBadge type={item.type} />
+                  <SeriesTypeBadge type={item.type} flagOnly />
                   <span className="quick-read">
                     <Play size={14} weight="fill" /> Read
                   </span>
@@ -4246,6 +4471,23 @@ function StoreView({
   const [cosmetics, setCosmetics] = useState<StoreCosmetic[]>([]);
   const [packages, setPackages] = useState<StoreCoinPackage[]>([]);
   const [memberships, setMemberships] = useState<StoreMembership[]>([]);
+  const sortedMemberships = useMemo(
+    () =>
+      [...memberships].sort(
+        (left, right) =>
+          Number(
+            billing === "monthly"
+              ? left.monthlyPriceMinor
+              : left.annualPriceMinor,
+          ) -
+          Number(
+            billing === "monthly"
+              ? right.monthlyPriceMinor
+              : right.annualPriceMinor,
+          ),
+      ),
+    [billing, memberships],
+  );
   const [categoryCounts, setCategoryCounts] = useState<
     Record<StoreCategory, number>
   >({
@@ -4307,7 +4549,13 @@ function StoreView({
           );
           setCollections(payload.collections ?? []);
           setCosmetics(payload.cosmetics ?? []);
-          setPackages(payload.data ?? []);
+          setPackages(
+            [...(payload.data ?? [])].sort(
+              (left, right) =>
+                Number(left.priceMinor) - Number(right.priceMinor) ||
+                left.id.localeCompare(right.id),
+            ),
+          );
           setMemberships(payload.memberships ?? []);
           setActiveCollection("all");
           setStoreError("");
@@ -4893,7 +5141,7 @@ function StoreView({
                     ? "Preparing..."
                     : checkoutEnabled
                       ? product.ctaText
-                      : "Unavailable"}
+                      : "Coming soon"}
                 </button>
               </article>
             );
@@ -4904,6 +5152,15 @@ function StoreView({
 
       {selectedCategory === "memberships" && memberships.length ? (
       <section className="membership-section" id="memberships">
+        {!checkoutEnabled ? (
+          <div className="commerce-unavailable page-wrap" role="status">
+            <ShieldCheck size={19} />
+            <span>
+              <strong>Memberships are in preview.</strong>
+              {checkoutStatus}
+            </span>
+          </div>
+        ) : null}
         <div className="page-wrap membership-layout membership-layout-multiple">
           <div className="membership-copy">
             <CrownSimple size={34} weight="fill" />
@@ -4920,7 +5177,7 @@ function StoreView({
             </div>
           </div>
           <div className="membership-card-grid">
-          {memberships.map((membership) => (
+          {sortedMemberships.map((membership) => (
           <article
             className={`membership-card store-offer-theme-${membership.themeKey.toLowerCase()}`}
             key={membership.id}
@@ -4968,7 +5225,7 @@ function StoreView({
               ) : null}
             </ul>
             <button className="button button-primary" type="button" onClick={() => buy(membership.id)} disabled={!checkoutEnabled || busy !== null}>
-              {checkoutEnabled ? membership.ctaText : "Unavailable"}
+              {checkoutEnabled ? membership.ctaText : "Coming soon"}
             </button>
             <small>Benefits are active only while the membership is current.</small>
           </article>
@@ -5595,13 +5852,18 @@ export function LegacyDiscussionSection({
 }
 
 type SeriesChapterAccess = {
+  chapterId: string;
   teamId: string | null;
+  teamSlug?: string | null;
   chapterSlug: string;
   chapterNumber: string;
   chapterLabel: string;
   language: string;
   version: number;
   teamName: string | null;
+  uploaderUserId?: string | null;
+  uploaderName?: string | null;
+  uploaderUsername?: string | null;
   thumbnailUrl?: string | null;
   publishedAt: string | null;
   isFresh?: boolean;
@@ -5638,6 +5900,32 @@ function chapterDisplayLabel(chapter: SeriesChapterAccess) {
   return `Chapter ${number}${title ? ` · ${title}` : ""}`;
 }
 
+function chapterLanguageCounts(releases: SeriesChapterAccess[]) {
+  const counts = releases.reduce((languages, release) => {
+    const language = release.language.toLowerCase();
+    languages.set(language, (languages.get(language) ?? 0) + 1);
+    return languages;
+  }, new Map<string, number>());
+  return [...counts.entries()]
+    .map(([language, count]) => ({ language, count }))
+    .sort((left, right) => left.language.localeCompare(right.language));
+}
+
+function representativeChapterThumbnail(
+  chapterNumber: string,
+  releases: SeriesChapterAccess[],
+) {
+  const thumbnails = releases
+    .map((release) => release.thumbnailUrl)
+    .filter((url): url is string => Boolean(url));
+  if (!thumbnails.length) return null;
+  const seed = [...chapterNumber].reduce(
+    (total, character) => total + character.charCodeAt(0),
+    releases.length,
+  );
+  return thumbnails[seed % thumbnails.length] ?? thumbnails[0]!;
+}
+
 type PublicSeriesDetail = {
   id: string;
   slug: string;
@@ -5646,7 +5934,6 @@ type PublicSeriesDetail = {
   synopsis: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
   status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
-  ageRating: string;
   publicationYear: number | null;
   authors: Array<{ id: string; name: string }>;
   artists: Array<{ id: string; name: string }>;
@@ -5667,7 +5954,7 @@ type PublicSeriesDetail = {
   viewCount: number;
   coverUrl: string | null;
   bannerUrl: string | null;
-  chapters: unknown[];
+  chapters: Array<{ chapterNumber: string }>;
 };
 
 function publicDetailCard(detail: PublicSeriesDetail): SeriesCard {
@@ -5709,7 +5996,7 @@ function publicDetailCard(detail: PublicSeriesDetail): SeriesCard {
     access: detail.accessType,
     rating: detail.rating,
     followers: String(detail.followerCount),
-    chapter: `${detail.chapters.length} chapters`,
+    chapter: `${new Set(detail.chapters.map((chapter) => normalizeChapterNumber(chapter.chapterNumber))).size} chapters`,
     updated: "Recently",
     cover: detail.coverUrl ?? "/art/series-cover-placeholder.svg",
     accent: "#2d8cff",
@@ -5731,8 +6018,11 @@ function publicDetailCard(detail: PublicSeriesDetail): SeriesCard {
       languageNames?.of(detail.languageCode) ?? detail.languageCode,
     originCountry: regionNames?.of(detail.countryCode) ?? detail.countryCode,
     releaseYear: detail.publicationYear,
-    ageRating: detail.ageRating,
-    chapterCount: detail.chapters.length,
+    chapterCount: new Set(
+      detail.chapters.map((chapter) =>
+        normalizeChapterNumber(chapter.chapterNumber),
+      ),
+    ).size,
     team: {
       name: teamName,
       slug: primaryTeam?.slug ?? "",
@@ -5779,12 +6069,18 @@ function TitleView({
   );
   const [chapterQuery, setChapterQuery] = useState("");
   const [chapterOrder, setChapterOrder] = useState<"newest" | "oldest">("newest");
+  const [collapsedChapterNumbers, setCollapsedChapterNumbers] = useState<
+    Set<string>
+  >(new Set());
   const [chapterPolicies, setChapterPolicies] = useState<
     SeriesChapterAccess[]
   >([]);
+  const [canUploadChapter, setCanUploadChapter] = useState(false);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [seriesMetrics, setSeriesMetrics] = useState<CatalogResult | null>(
     null,
   );
+  const reportTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -5818,10 +6114,17 @@ function TitleView({
       .then(async (response) => {
         const payload = (await response.json()) as {
           data?: SeriesChapterAccess[];
+          permissions?: { canUploadChapter?: boolean };
         };
-        if (response.ok && payload.data) setChapterPolicies(payload.data);
+        if (response.ok && payload.data) {
+          setChapterPolicies(payload.data);
+          setCanUploadChapter(Boolean(payload.permissions?.canUploadChapter));
+        }
       })
-      .catch(() => setChapterPolicies([]));
+      .catch(() => {
+        setChapterPolicies([]);
+        setCanUploadChapter(false);
+      });
     return () => controller.abort();
   }, [available, item.slug]);
   useEffect(() => {
@@ -5879,17 +6182,88 @@ function TitleView({
       );
       return numberOrder || left.version - right.version;
     });
-  const visibleChapters =
-    chapterOrder === "newest" ? [...chapters].reverse() : chapters;
-  const allChaptersAscending = [...chapterPolicies].sort((left, right) => {
-    const numberOrder = compareChapterNumbers(
-      chapterDisplayNumber(left),
-      chapterDisplayNumber(right),
+  const chapterGroups = [...chapters.reduce((groups, chapter) => {
+    const number = chapterDisplayNumber(chapter);
+    groups.set(number, [...(groups.get(number) ?? []), chapter]);
+    return groups;
+  }, new Map<string, SeriesChapterAccess[]>()).entries()]
+    .map(([number, releases]) => {
+      const sortedReleases = releases.sort(
+        (left, right) =>
+          right.version - left.version ||
+          String(right.publishedAt ?? "").localeCompare(
+            String(left.publishedAt ?? ""),
+          ),
+      );
+      return {
+        number,
+        releases: sortedReleases,
+        languages: chapterLanguageCounts(sortedReleases),
+        thumbnailUrl: representativeChapterThumbnail(number, sortedReleases),
+      };
+    })
+    .sort((left, right) => compareChapterNumbers(left.number, right.number));
+  const visibleChapterGroups =
+    chapterOrder === "newest" ? [...chapterGroups].reverse() : chapterGroups;
+  const allChapterDetailsCollapsed =
+    visibleChapterGroups.length > 0 &&
+    visibleChapterGroups.every(
+      (group) =>
+        collapsedChapterNumbers.has("*") ||
+        collapsedChapterNumbers.has(group.number),
     );
-    return numberOrder || left.version - right.version;
-  });
-  const latestChapter = allChaptersAscending.at(-1) ?? null;
-  const firstChapter = allChaptersAscending[0] ?? null;
+  const allGroupsAscending = [
+    ...chapterPolicies
+      .reduce((groups, chapter) => {
+        const number = chapterDisplayNumber(chapter);
+        groups.set(number, [...(groups.get(number) ?? []), chapter]);
+        return groups;
+      }, new Map<string, SeriesChapterAccess[]>())
+      .entries(),
+  ]
+    .map(([number, releases]) => ({
+      number,
+      releases: releases.sort(
+        (left, right) =>
+          right.version - left.version ||
+          String(right.publishedAt ?? "").localeCompare(
+            String(left.publishedAt ?? ""),
+          ),
+      ),
+    }))
+    .sort((left, right) => compareChapterNumbers(left.number, right.number));
+  const latestChapter = allGroupsAscending.at(-1)?.releases[0] ?? null;
+  const firstChapter = allGroupsAscending[0]?.releases[0] ?? null;
+
+  function applyCollapsedChapters(next: Set<string>) {
+    setCollapsedChapterNumbers(next);
+  }
+
+  function toggleChapterDetails() {
+    applyCollapsedChapters(
+      allChapterDetailsCollapsed ? new Set() : new Set(["*"]),
+    );
+  }
+
+  function toggleChapterGroup(chapterNumber: string) {
+    const next = collapsedChapterNumbers.has("*")
+      ? new Set(
+          chapterGroups
+            .map((group) => group.number)
+            .filter((number) => number !== chapterNumber),
+        )
+      : new Set(collapsedChapterNumbers);
+    if (!collapsedChapterNumbers.has("*")) {
+      if (next.has(chapterNumber)) next.delete(chapterNumber);
+      else next.add(chapterNumber);
+    }
+    applyCollapsedChapters(next);
+  }
+
+  const closeSeriesReport = useCallback(() => {
+    setReportDialogOpen(false);
+    window.requestAnimationFrame(() => reportTriggerRef.current?.focus());
+  }, []);
 
   async function shareSeries() {
     const shareData = {
@@ -5946,8 +6320,8 @@ function TitleView({
       );
       showToast(
         payload.following
-          ? "Added to following."
-          : "Removed from following.",
+          ? "Series followed."
+          : "Series unfollowed.",
       );
     } catch (followError) {
       showToast(
@@ -5980,6 +6354,13 @@ function TitleView({
       </main>
     );
   }
+
+  const titleFollowerCount = Number(
+    liveFollowerCount ??
+      seriesMetrics?.followerCount ??
+      publicDetail?.followerCount ??
+      0,
+  );
 
   return (
     <main className="title-page">
@@ -6017,40 +6398,24 @@ function TitleView({
                 <Eye size={17} />{" "}
                 {Number(seriesMetrics?.viewCount ?? 0).toLocaleString("en-US")} views
               </span>
-              <span>
+              <span
+                aria-label={`${titleFollowerCount.toLocaleString("en-US")} followers`}
+              >
                 <Heart size={17} />{" "}
-                {Number(
-                  liveFollowerCount ??
-                    seriesMetrics?.followerCount ??
-                    publicDetail?.followerCount ??
-                    0,
-                ).toLocaleString("en-US")}
+                {titleFollowerCount.toLocaleString("en-US")}
               </span>
             </div>
-            <p className="title-synopsis">{item.synopsis}</p>
             <div className="tag-row">
               {item.genres.map((genre) => (
                 <a key={genre} href={`/browse?genre=${genre}`}>{genre}</a>
               ))}
             </div>
             <div className="title-actions">
-              {latestChapter ? (
-                <a
-                  className="button button-primary"
-                  href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}
-                >
-                  <Play size={17} weight="fill" />
-                  Read latest
-                </a>
-              ) : (
-                <span className="button button-primary is-disabled">
-                  No chapters yet
-                </span>
-              )}
               <button
                 className="button button-secondary series-secondary-action"
                 type="button"
                 aria-pressed={followed}
+                aria-label={followed ? "Unfollow series" : "Follow series"}
                 disabled={followBusy}
                 onClick={() => void toggleSeriesFollow()}
               >
@@ -6073,7 +6438,9 @@ function TitleView({
 
       <nav className="series-jump page-wrap" aria-label="Series sections">
         <a href="#details">Details</a>
-        <a href="#chapters">Latest Chapters</a>
+        <a href="#art">Art</a>
+        <a href="#covers">Covers</a>
+        <a href="#chapters">Chapters List</a>
         <a href="#reviews">Ratings & Reviews</a>
         <a href="#comments">Discussion</a>
       </nav>
@@ -6114,92 +6481,28 @@ function TitleView({
           <div><dt>Original language</dt><dd>{item.originalLanguage}</dd></div>
           <div><dt>Origin</dt><dd>{item.originCountry}</dd></div>
           <div><dt>Reading format</dt><dd>{item.direction}</dd></div>
-          <div><dt>Age rating</dt><dd>{item.ageRating}</dd></div>
           <div><dt>Total chapters</dt><dd>{item.chapterCount}</dd></div>
         </dl>
-        <div className="series-team-stack" aria-label="Publishing teams">
-          {(publicDetail?.teams.length
-            ? publicDetail.teams
-            : [
-                {
-                  id: item.team.slug,
-                  name: item.team.name,
-                  slug: item.team.slug,
-                  isPrimary: true,
-                },
-              ]
-          ).map((team) => (
-            <aside className="series-team-card" key={team.id}>
-              <span className="series-team-mark">
-                {team.name
-                  .split(/\s+/)
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)}
-              </span>
-              <div>
-                <small>{team.isPrimary ? "Primary publishing team" : "Publishing team"}</small>
-                <strong>{team.name}</strong>
-                <span><ShieldCheck size={15} weight="fill" /> Active affiliation</span>
-              </div>
-              {team.slug ? (
-                <a href={`/team/${team.slug}`} aria-label={`Open ${team.name}`}>
-                  <ArrowRight size={18} />
-                </a>
-              ) : null}
-            </aside>
-          ))}
-        </div>
       </section>
 
-      <section className="title-content page-wrap">
-        <aside className="title-sidebar" aria-label="Reading guide">
-          <section>
-            <p className="eyebrow">Reading guide</p>
-            <h3>{item.chapterCount} chapters</h3>
-            <p className="reading-guide-copy">
-              English release by {item.team.name}. Newest chapters appear first.
-            </p>
-            <div className="chapter-quick-links">
-              {latestChapter ? (
-                <a className="button button-primary" href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}>
-                  <Play size={15} weight="fill" /> Latest chapter
-                </a>
-              ) : null}
-              {firstChapter ? (
-                <a className="button button-secondary" href={`/title/${item.slug}/chapter/${firstChapter.chapterSlug}`}>
-                  First chapter
-                </a>
-              ) : null}
-            </div>
-          </section>
-          <a
-            className="report-link"
-            href={`/report?target=series&series=${encodeURIComponent(item.slug)}`}
-          >
-            <WarningCircle size={17} />
-            Report title
-          </a>
-        </aside>
+      <div className="page-wrap">
+        <SeriesGallerySections
+          seriesSlug={item.slug}
+          seriesTitle={item.title}
+          showToast={showToast}
+        />
+      </div>
 
+      <section className="title-content page-wrap">
         <div className="title-main">
           <section className="chapter-panel" id="chapters" aria-labelledby="chapters-title">
             <div className="chapter-heading">
               <div>
-                <p className="eyebrow">English release</p>
-                <h2 id="chapters-title">Latest Chapters</h2>
-                <span>{item.team.name} • Newest updates first</span>
+                <p className="eyebrow">Available translations</p>
+                <h2 id="chapters-title">Chapters List</h2>
+                <span>Choose a language and verified publishing team</span>
               </div>
               <div className="chapter-tools">
-                <label className="chapter-search">
-                  <MagnifyingGlass size={18} />
-                  <span className="sr-only">Search chapters</span>
-                  <input
-                    value={chapterQuery}
-                    onChange={(event) => setChapterQuery(event.target.value)}
-                    placeholder="Search chapters"
-                  />
-                </label>
                 <label className="chapter-sort">
                   <span className="sr-only">Sort chapters</span>
                   <select
@@ -6213,64 +6516,291 @@ function TitleView({
                   </select>
                   <CaretDown size={15} />
                 </label>
+                <label className="chapter-search">
+                  <MagnifyingGlass size={18} />
+                  <span className="sr-only">Search chapters</span>
+                  <input
+                    value={chapterQuery}
+                    onChange={(event) => setChapterQuery(event.target.value)}
+                    placeholder="Search chapters"
+                  />
+                </label>
+                <button
+                  className="chapter-details-toggle"
+                  type="button"
+                  aria-pressed={allChapterDetailsCollapsed}
+                  aria-controls="chapter-groups"
+                  onClick={toggleChapterDetails}
+                >
+                  <List size={16} />
+                  {allChapterDetailsCollapsed
+                    ? "Show all details"
+                    : "Hide all details"}
+                </button>
               </div>
             </div>
-            <div className="chapter-list">
-              {visibleChapters.length > 0 ? (
-                visibleChapters.map((chapter, index) => {
-                  const access =
-                    chapter.accessType === "FREE"
-                      ? "Free"
-                      : premiumEconomyPublic
-                        ? "Paid"
-                        : "Unavailable";
-                  const number = chapterDisplayNumber(chapter);
-                  return (
-                    <a
-                      className="chapter-row"
-                      href={`/title/${item.slug}/chapter/${chapter.chapterSlug}`}
-                      key={`${chapter.chapterSlug}:${chapter.version}:${chapter.language}`}
+            <div className="chapter-action-bar" aria-label="Chapter actions">
+              {firstChapter ? (
+                <a
+                  className="button button-secondary"
+                  href={`/title/${item.slug}/chapter/${firstChapter.chapterSlug}`}
+                >
+                  <Play size={16} /> Read First
+                </a>
+              ) : (
+                <span
+                  className="button button-secondary is-disabled"
+                  aria-disabled="true"
+                >
+                  Read First
+                </span>
+              )}
+              {latestChapter ? (
+                <a
+                  className="button button-primary"
+                  href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}
+                >
+                  <Play size={16} weight="fill" /> Read Latest
+                </a>
+              ) : (
+                <span
+                  className="button button-primary is-disabled"
+                  aria-disabled="true"
+                >
+                  Read Latest
+                </span>
+              )}
+              {canUploadChapter ? (
+                <a
+                  className="button button-secondary chapter-upload-action"
+                  href={`/upload-chapter/single?series=${encodeURIComponent(publicDetail?.id ?? item.id)}`}
+                >
+                  <CloudArrowUp size={17} /> Upload Chapter
+                </a>
+              ) : null}
+              <button
+                className="button button-danger report-link"
+                type="button"
+                ref={reportTriggerRef}
+                onClick={() => setReportDialogOpen(true)}
+              >
+                <WarningCircle size={17} /> Report title
+              </button>
+            </div>
+            <div
+              className={`chapter-group-list ${
+                allChapterDetailsCollapsed ? "is-compact" : "is-detailed"
+              }`}
+              id="chapter-groups"
+            >
+              {visibleChapterGroups.length > 0 ? (
+                visibleChapterGroups.map((group) => {
+                  const detailsCollapsed =
+                    collapsedChapterNumbers.has("*") ||
+                    collapsedChapterNumbers.has(group.number);
+                  const disclosureId = `chapter-versions-${encodeURIComponent(
+                    group.number,
+                  )}`;
+                  const groupLocked =
+                    group.releases.length > 0 &&
+                    group.releases.every(
+                      (release) =>
+                        release.accessType === "PAID" && !release.canRead,
+                    );
+                  return !detailsCollapsed ? (
+                    <section
+                      className="chapter-release-group"
+                      key={group.number}
                     >
-                      <span className="chapter-number">
-                        {chapter.thumbnailUrl ? (
-                          <img
-                            className="chapter-thumbnail"
-                            src={chapter.thumbnailUrl}
-                            alt=""
-                            loading="lazy"
-                          />
-                        ) : null}
-                        <FreshChapterMark fresh={chapter.isFresh} />
-                        <span>#{number}</span>
-                      </span>
-                      <span>
-                        <strong>{chapterDisplayLabel(chapter)}</strong>
-                        <small>
-                          <time>
-                            {chapter.publishedAt
-                              ? `${releaseTime(chapter.publishedAt)} ago`
-                              : "Publication pending"}
-                          </time>
-                          {" • "}
-                          {chapter.teamName ?? item.team.name}
-                          {" • "}
-                          {chapter.language.toUpperCase()}
-                          {chapter.version > 1 ? ` • v${chapter.version}` : ""}
-                        </small>
-                      </span>
-                      <span className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}>
-                        {access === "Free" ? <Check size={14} /> : <LockSimple size={14} />}
-                        {access}
-                        {premiumEconomyPublic &&
-                        chapter.priceOnyx > 0 &&
-                        access === "Paid"
-                          ? ` · ${coinLabel(chapter.priceOnyx, commercial)}`
-                          : ""}
-                      </span>
-                      <span className="chapter-read">
-                        {index === 0 ? "Read latest" : "Read"} <ArrowRight size={16} />
-                      </span>
-                    </a>
+                      <header>
+                        <div>
+                          <strong>Chapter {group.number}</strong>
+                          <span
+                            className="chapter-language-counts"
+                            aria-label={`${group.releases.length} available translation ${
+                              group.releases.length === 1 ? "version" : "versions"
+                            }`}
+                          >
+                            {group.languages.map(({ language, count }) => (
+                              <span key={language}>
+                                <LanguageFlag
+                                  language={language}
+                                  showCode={false}
+                                />
+                                <b>{count}</b>
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                        <button
+                          className="chapter-group-toggle"
+                          type="button"
+                          aria-label={`Hide translation details for chapter ${group.number}`}
+                          aria-expanded="true"
+                          aria-controls={disclosureId}
+                          onClick={() => toggleChapterGroup(group.number)}
+                        >
+                          <CaretDown size={18} aria-hidden="true" />
+                        </button>
+                      </header>
+                      <div
+                        className="chapter-variant-list"
+                        id={disclosureId}
+                      >
+                        {group.releases.map((chapter) => {
+                          const access =
+                            chapter.accessType === "FREE"
+                              ? "Free"
+                              : "Paid";
+                          const chapterHref = `/title/${item.slug}/chapter/${chapter.chapterSlug}`;
+                          return (
+                            <article
+                              className="chapter-variant-row"
+                              key={`${chapter.chapterId}:${chapter.version}:${chapter.language}`}
+                            >
+                              <a
+                                className="chapter-variant-visual"
+                                href={chapterHref}
+                                aria-label={`Read ${chapterDisplayLabel(chapter)}`}
+                              >
+                                {chapter.thumbnailUrl ? (
+                                  <img
+                                    className="chapter-thumbnail"
+                                    src={chapter.thumbnailUrl}
+                                    alt=""
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <ImageIcon size={21} aria-hidden="true" />
+                                )}
+                              </a>
+                              <span className="chapter-variant-copy">
+                                <a
+                                  className="chapter-variant-title"
+                                  href={chapterHref}
+                                >
+                                  <LanguageFlag
+                                    language={chapter.language}
+                                    showCode={false}
+                                  />
+                                  <span>{chapterDisplayLabel(chapter)}</span>
+                                  <FreshChapterMark fresh={chapter.isFresh} />
+                                </a>
+                                <small>
+                                  <span className="chapter-credit-chip">
+                                    <span>Uploader</span>
+                                    {chapter.uploaderUsername ? (
+                                      <a
+                                        href={`/u/${encodeURIComponent(chapter.uploaderUsername)}`}
+                                      >
+                                        {chapter.uploaderName ??
+                                          chapter.uploaderUsername}
+                                      </a>
+                                    ) : (
+                                      chapter.uploaderName ?? "NyaScans member"
+                                    )}
+                                  </span>
+                                  <span className="chapter-credit-chip">
+                                    <span>Team</span>
+                                    {chapter.teamSlug ? (
+                                      <a
+                                        href={`/team/${encodeURIComponent(chapter.teamSlug)}`}
+                                      >
+                                        {chapter.teamName ??
+                                          "Publishing team"}
+                                      </a>
+                                    ) : (
+                                      chapter.teamName ?? "Independent release"
+                                    )}
+                                  </span>
+                                  <time
+                                    dateTime={chapter.publishedAt ?? undefined}
+                                  >
+                                    {chapter.publishedAt
+                                      ? `${releaseTime(chapter.publishedAt)} ago`
+                                      : "Publication pending"}
+                                  </time>
+                                  {chapter.version > 1 ? (
+                                    <span>v{chapter.version}</span>
+                                  ) : null}
+                                </small>
+                              </span>
+                              <span
+                                className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}
+                              >
+                                {access === "Free" ? (
+                                  <Check size={14} />
+                                ) : (
+                                  <LockSimple size={14} />
+                                )}
+                                {access}
+                                {premiumEconomyPublic &&
+                                chapter.priceOnyx > 0 &&
+                                access === "Paid"
+                                  ? ` · ${coinLabel(chapter.priceOnyx, commercial)}`
+                                  : ""}
+                              </span>
+                              <a className="chapter-read" href={chapterHref}>
+                                {chapter.chapterId === latestChapter?.chapterId
+                                  ? "Read latest"
+                                  : "Read"}{" "}
+                                <ArrowRight size={16} />
+                              </a>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : (
+                    <section
+                      className="chapter-release-group chapter-release-compact"
+                      key={group.number}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Show ${group.releases.length} translation versions for chapter ${group.number}`}
+                        aria-expanded="false"
+                        aria-controls={disclosureId}
+                        onClick={() => toggleChapterGroup(group.number)}
+                      >
+                        <span className="chapter-compact-thumbnail">
+                          {group.thumbnailUrl ? (
+                            <img
+                              src={group.thumbnailUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <ImageIcon size={24} aria-hidden="true" />
+                          )}
+                        </span>
+                        <span className="chapter-compact-copy">
+                          <strong>
+                            {groupLocked ? (
+                              <LockSimple
+                                className="chapter-compact-lock"
+                                size={15}
+                                aria-label="Paid chapter"
+                              />
+                            ) : null}
+                            Chapter {group.number}
+                          </strong>
+                        </span>
+                        <span className="chapter-language-counts">
+                          {group.languages.map(({ language, count }) => (
+                            <span key={language}>
+                              <LanguageFlag
+                                language={language}
+                                showCode={false}
+                              />
+                              <b>{count}</b>
+                            </span>
+                          ))}
+                        </span>
+                        <CaretDown size={18} aria-hidden="true" />
+                      </button>
+                      <div id={disclosureId} hidden />
+                    </section>
                   );
                 })
               ) : (
@@ -6294,9 +6824,24 @@ function TitleView({
             seriesSlug={item.slug}
             showToast={showToast}
           />
-          <SeriesRecommendations item={item} />
+          <SeriesRecommendations seriesSlug={item.slug} />
         </div>
       </section>
+      {reportDialogOpen ? (
+        <SeriesReportDialog
+          seriesId={publicDetail?.id ?? item.id}
+          seriesTitle={item.title}
+          signedIn={Boolean(actor)}
+          onClose={closeSeriesReport}
+          onSignIn={() => {
+            window.location.href = authEntryPath(
+              "login",
+              `/title/${item.slug}#chapters`,
+            );
+          }}
+          showToast={showToast}
+        />
+      ) : null}
     </main>
   );
 }
@@ -6361,6 +6906,39 @@ type ReaderContextData = {
     number: string;
     title: string;
   } | null;
+  previousAlternatives: Array<
+    ChapterAccessData & {
+      teamId: string | null;
+      chapterNumber: string;
+      chapterLabel: string;
+      language: string;
+      version: number;
+      teamName: string | null;
+      title: string;
+    }
+  >;
+  nextAlternatives: Array<
+    ChapterAccessData & {
+      teamId: string | null;
+      chapterNumber: string;
+      chapterLabel: string;
+      language: string;
+      version: number;
+      teamName: string | null;
+      title: string;
+    }
+  >;
+  previousFallbackReason:
+    | "TEAM_UNAVAILABLE"
+    | "LANGUAGE_UNAVAILABLE"
+    | "TEAM_AND_LANGUAGE_UNAVAILABLE"
+    | null;
+  nextFallbackReason:
+    | "TEAM_UNAVAILABLE"
+    | "LANGUAGE_UNAVAILABLE"
+    | "TEAM_AND_LANGUAGE_UNAVAILABLE"
+    | null;
+  nextFallbackRequired: boolean;
   chapterManagementHref: string | null;
   access: ChapterAccessData;
 };
@@ -6561,6 +7139,9 @@ function ReaderView({
   const [ui, setUi] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chapterDrawerOpen, setChapterDrawerOpen] = useState(false);
+  const [continuityDirection, setContinuityDirection] = useState<
+    "previous" | "next" | null
+  >(null);
   const [chapterList, setChapterList] = useState<SeriesChapterAccess[]>([]);
   const [chapterListSeries, setChapterListSeries] = useState("");
   const [chapterListLoading, setChapterListLoading] = useState(false);
@@ -6580,6 +7161,8 @@ function ReaderView({
   const restoredProgressKey = useRef("");
   const chapterDrawerTrigger = useRef<HTMLButtonElement>(null);
   const chapterDrawer = useRef<HTMLElement>(null);
+  const continuityDialog = useRef<HTMLElement>(null);
+  const continuityReturnFocus = useRef<HTMLElement | null>(null);
   const chapterListRequest = useRef<AbortController | null>(null);
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const unlockIdempotencyKey = useRef("");
@@ -6593,6 +7176,18 @@ function ReaderView({
       : null;
   const nextChapter = readerContext?.nextChapter ?? null;
   const previousChapter = readerContext?.previousChapter ?? null;
+  const continuityAlternatives =
+    continuityDirection === "next"
+      ? readerContext?.nextAlternatives ?? []
+      : continuityDirection === "previous"
+        ? readerContext?.previousAlternatives ?? []
+        : [];
+  const continuityReason =
+    continuityDirection === "next"
+      ? readerContext?.nextFallbackReason
+      : continuityDirection === "previous"
+        ? readerContext?.previousFallbackReason
+        : null;
   const seriesTitle =
     readerContext?.series.title ?? catalogItem?.title ?? "NyaScans";
   const seriesCover =
@@ -6601,6 +7196,9 @@ function ReaderView({
     readerContext?.series.teamName ??
     catalogItem?.team.name ??
     "Independent release";
+  const currentLanguageName = readerContext
+    ? languageName(readerContext.chapter.language)
+    : "selected language";
   const releaseChapters = useMemo(() => {
     if (
       chapterListSeries !== routeSeriesSlug ||
@@ -6608,18 +7206,20 @@ function ReaderView({
     ) {
       return [];
     }
-    return chapterList
-      .filter(
-        (chapter) =>
-          chapter.language === readerContext.chapter.language &&
-          chapter.teamId === readerContext.chapter.teamId,
-      )
-      .sort((left, right) => {
+    return [...chapterList].sort((left, right) => {
         const numberOrder = compareChapterNumbers(
           chapterDisplayNumber(right),
           chapterDisplayNumber(left),
         );
-        return numberOrder || right.version - left.version;
+        if (numberOrder) return numberOrder;
+        const preferredLeft =
+          left.language === readerContext.chapter.language &&
+          left.teamId === readerContext.chapter.teamId;
+        const preferredRight =
+          right.language === readerContext.chapter.language &&
+          right.teamId === readerContext.chapter.teamId;
+        if (preferredLeft !== preferredRight) return preferredLeft ? -1 : 1;
+        return right.version - left.version;
       });
   }, [
     chapterList,
@@ -6685,6 +7285,42 @@ function ReaderView({
   }, [chapterDrawerOpen]);
 
   useEffect(() => {
+    if (!continuityDirection) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function closeContinuity(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setContinuityDirection(null);
+        window.requestAnimationFrame(() =>
+          continuityReturnFocus.current?.focus(),
+        );
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        continuityDialog.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", closeContinuity);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeContinuity);
+    };
+  }, [continuityDirection]);
+
+  useEffect(() => {
     if (readerSettings.rememberSettings) {
       window.localStorage.setItem(
         "nyascans:reader-settings:v1",
@@ -6703,6 +7339,14 @@ function ReaderView({
     )
       .then((context) => {
         setReaderContext(context);
+        setContinuityDirection(null);
+        window.localStorage.setItem(
+          `nyascans:reader-release-preference:${context.series.slug}`,
+          JSON.stringify({
+            teamId: context.chapter.teamId,
+            language: context.chapter.language,
+          }),
+        );
         if (
           !window.localStorage.getItem("nyascans:reader-settings:v1")
         ) {
@@ -7343,7 +7987,7 @@ function ReaderView({
     return (
       <main className="reader-access-page">
         <a className="reader-access-back" href={`/title/${routeSeriesSlug}#chapters`}>
-          <CaretLeft size={18} /> Back to Latest Chapters
+          <CaretLeft size={18} /> Back to Chapters List
         </a>
         <section className="reader-access-card">
           <div className="reader-lock-cover">
@@ -7480,7 +8124,7 @@ function ReaderView({
           </div>
           <div className="reader-header-actions">
             <button type="button" onClick={saveProgress}>
-              <BookmarkSimple size={19} />
+              <CheckCircle size={19} />
               <span>Save</span>
             </button>
             <button type="button" onClick={() => setUi(false)}>
@@ -7570,7 +8214,10 @@ function ReaderView({
                 <span>Chapter list</span>
                 <h2 id="reader-chapter-drawer-title">{seriesTitle}</h2>
                 <p>
-                  {readerContext?.chapter.language.toUpperCase()} · {teamName}
+                  {readerContext ? (
+                    <LanguageFlag language={readerContext.chapter.language} />
+                  ) : null}
+                  <span>· {teamName}</span>
                 </p>
               </div>
               <button
@@ -7618,9 +8265,12 @@ function ReaderView({
                       <div>
                         <strong>
                           <FreshChapterMark fresh={chapter.isFresh} />
+                          <LanguageFlag language={chapter.language} />
                           {chapterDisplayLabel(chapter)}
                         </strong>
                         <small>
+                          {chapter.teamName ?? "Independent release"}
+                          {" · "}
                           {chapter.accessType === "PAID" &&
                           premiumEconomyPublic
                             ? `${coinLabel(chapter.priceOnyx, commercial)}`
@@ -7640,8 +8290,7 @@ function ReaderView({
                   <Books size={24} />
                   <strong>No matching chapters</strong>
                   <span>
-                    This release has no other public chapters in the same
-                    language and team.
+                    No public chapter releases are available yet.
                   </span>
                 </div>
               )}
@@ -7771,7 +8420,10 @@ function ReaderView({
             <span>
               <strong>Chapter complete</strong>
               <small>
-                Continue within this {readerContext?.chapter.language.toUpperCase()}{" "}
+                Continue within this{" "}
+                {readerContext ? (
+                  <LanguageFlag language={readerContext.chapter.language} />
+                ) : null}{" "}
                 release.
               </small>
             </span>
@@ -7791,6 +8443,20 @@ function ReaderView({
                   <strong>Chapter {previousChapter.number}</strong>
                 </span>
               </a>
+            ) : readerContext?.previousAlternatives.length ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  continuityReturnFocus.current = event.currentTarget;
+                  setContinuityDirection("previous");
+                }}
+              >
+                <CaretLeft size={21} />
+                <span>
+                  <small>Previous</small>
+                  <strong>Choose translation</strong>
+                </span>
+              </button>
             ) : (
               <span aria-disabled="true">
                 <CaretLeft size={21} />
@@ -7811,6 +8477,20 @@ function ReaderView({
                 </span>
                 <CaretRight size={21} />
               </a>
+            ) : readerContext?.nextAlternatives.length ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  continuityReturnFocus.current = event.currentTarget;
+                  setContinuityDirection("next");
+                }}
+              >
+                <span>
+                  <small>Next</small>
+                  <strong>Choose translation</strong>
+                </span>
+                <CaretRight size={21} />
+              </button>
             ) : (
               <span aria-disabled="true">
                 <span>
@@ -7822,6 +8502,99 @@ function ReaderView({
             )}
           </nav>
         </section>
+      ) : null}
+
+      {continuityDirection && continuityAlternatives.length ? (
+        <div className="reader-continuity-layer">
+          <button
+            className="reader-continuity-scrim"
+            type="button"
+            aria-label="Close translation chooser"
+            onClick={() => {
+              setContinuityDirection(null);
+              window.requestAnimationFrame(() =>
+                continuityReturnFocus.current?.focus(),
+              );
+            }}
+          />
+          <section
+            className="reader-continuity-dialog"
+            ref={continuityDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reader-continuity-title"
+          >
+            <header>
+              <div>
+                <span>Translation needed</span>
+                <h2 id="reader-continuity-title">
+                  Choose another release
+                </h2>
+              </div>
+              <button
+                type="button"
+                autoFocus
+                aria-label="Close translation chooser"
+                onClick={() => {
+                  setContinuityDirection(null);
+                  window.requestAnimationFrame(() =>
+                    continuityReturnFocus.current?.focus(),
+                  );
+                }}
+              >
+                <X size={19} />
+              </button>
+            </header>
+            <p>
+              {continuityReason === "TEAM_UNAVAILABLE"
+                ? `${teamName} has not released this chapter in ${currentLanguageName}.`
+                : continuityReason === "LANGUAGE_UNAVAILABLE"
+                  ? `${teamName} has released this chapter only in another language.`
+                  : `This chapter is not available from ${teamName} in ${currentLanguageName}.`}
+              {" "}Select one available translation to continue.
+            </p>
+            <div className="reader-continuity-options">
+              {continuityAlternatives.map((alternative) => (
+                <a
+                  href={`/title/${routeSeriesSlug}/chapter/${alternative.chapterSlug}`}
+                  key={alternative.chapterId}
+                  onClick={() => setContinuityDirection(null)}
+                >
+                  <LanguageFlag language={alternative.language} />
+                  <span>
+                    <strong>{alternative.chapterLabel}</strong>
+                    <small>
+                      {alternative.teamName ?? "Independent release"} · Version{" "}
+                      {alternative.version}
+                    </small>
+                  </span>
+                  <em>
+                    {alternative.accessType === "FREE"
+                      ? "Free"
+                      : premiumEconomyPublic
+                        ? coinLabel(alternative.priceOnyx, commercial)
+                        : "Unavailable"}
+                  </em>
+                  <CaretRight size={17} />
+                </a>
+              ))}
+            </div>
+            <footer>
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => {
+                  setContinuityDirection(null);
+                  window.requestAnimationFrame(() =>
+                    continuityReturnFocus.current?.focus(),
+                  );
+                }}
+              >
+                Stay on this chapter
+              </button>
+            </footer>
+          </section>
+        </div>
       ) : null}
 
       <footer className={`reader-footer ${ui ? "" : "reader-footer-hidden"}`}>
@@ -7894,7 +8667,9 @@ function ReaderView({
                 </div>
               </section>
             )}
-            {catalogItem ? <SeriesRecommendations item={catalogItem} /> : null}
+            {routeSeriesSlug ? (
+              <SeriesRecommendations seriesSlug={routeSeriesSlug} />
+            ) : null}
           </div>
         </>
       ) : null}
@@ -9066,6 +9841,7 @@ function OperationsView({
           ["Upload center", CloudArrowUp],
           ["New Series Queue", FileText],
           ["Series", Books],
+          ["Series Reports", WarningCircle],
           ["Chapter access", LockSimple],
           ["Teams", ShieldCheck],
         ] as const,
@@ -9651,7 +10427,7 @@ function GenericView({
     READING: {
       label: "Reading and library",
       icon: Books,
-      title: "Fix progress, bookmarks, and chapter access",
+      title: "Fix progress, followed series, and chapter access",
       intro:
         "Your Library import/export includes saved series and reading progress. A ticket can restore mismatched progress without exposing public history.",
       steps: [
@@ -9700,8 +10476,8 @@ function GenericView({
         ? ["Support", "Find an answer or open a tracked support ticket."]
         : view === "rankings"
               ? [
-                  "Reader leaderboard",
-                  "Top 100 readers ranked by lifetime Shards, completed chapters, and community activity.",
+                  "Users Ranking",
+                  "Weekly, monthly, and all-time Top 100 based on collected Shards and community contribution.",
                 ]
               : ["Explore NyaScans", "This product area is connected to the shared catalog and account system."];
 
@@ -9881,9 +10657,11 @@ function ErrorView({ code = "404" }: { code?: string }) {
 function FooterGroup({
   title,
   links,
+  onOpenShortcuts,
 }: {
   title: string;
   links: string[][];
+  onOpenShortcuts: () => void;
 }) {
   const key = `nyascans:footer:${title.toLowerCase()}`;
   const [open, setOpen] = useState(false);
@@ -9938,11 +10716,22 @@ function FooterGroup({
         <span aria-hidden="true">{expanded ? "−" : "+"}</span>
       </button>
       <div id={panelId} hidden={!expanded}>
-        {links.map(([label, href]) => (
-          <a href={href} key={label}>
-            {label}
-          </a>
-        ))}
+        {links.map(([label, href]) =>
+          href === "#keyboard-shortcuts" ? (
+            <button
+              className="footer-inline-action"
+              type="button"
+              key={label}
+              onClick={onOpenShortcuts}
+            >
+              {label}
+            </button>
+          ) : (
+            <a href={href} key={label}>
+              {label}
+            </a>
+          ),
+        )}
       </div>
     </section>
   );
@@ -9959,7 +10748,7 @@ function SiteFooter({
       title: "Browse",
       links: [
         ["Latest Updates", "/latest"],
-        ["Reader Leaderboard", "/leaderboard"],
+        ["Users Ranking", "/rankings"],
         ["Completed", "/browse?status=completed"],
         ["Genres", "/browse#genres"],
       ],
@@ -9970,6 +10759,7 @@ function SiteFooter({
         ["Teams", "/browse?view=teams"],
         ["Latest Top Comments", "/#community"],
         ["Support", "/support"],
+        ["Keyboard shortcuts", "#keyboard-shortcuts"],
         ["Contact", "mailto:support@nyascans.com"],
       ],
     },
@@ -10017,15 +10807,13 @@ function SiteFooter({
               key={group.title}
               title={group.title}
               links={group.links}
+              onOpenShortcuts={onOpenShortcuts}
             />
           ))}
         </div>
       </div>
       <div className="page-wrap footer-bottom">
         <span>© 2026 NyaScans. Original platform artwork.</span>
-        <button type="button" onClick={onOpenShortcuts}>
-          <Key size={16} /> Keyboard shortcuts
-        </button>
       </div>
     </footer>
   );
@@ -10047,9 +10835,15 @@ export function NyaScansApp({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [toast, setToast] = useState("");
   const navigationChordAt = useRef(0);
   const { settings: commercialSettings } = useCommercialSettings();
+  const { notifyText } = useSystemNotifications();
+  const showToast = useCallback(
+    (message: string) => {
+      notifyText(message);
+    },
+    [notifyText],
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem("nyascans-theme");
@@ -10128,12 +10922,6 @@ export function NyaScansApp({
   }, []);
 
   useEffect(() => {
-    if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(""), 2600);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
-
-  useEffect(() => {
     const eventType: AnalyticsEventType | null =
       view === "home"
         ? "HOME_VIEW"
@@ -10168,7 +10956,6 @@ export function NyaScansApp({
         open={shortcutsOpen}
         onClose={closeShortcuts}
       />
-      {toast ? <div className="toast" role="status">{toast}</div> : null}
     </>
   );
 
@@ -10179,7 +10966,7 @@ export function NyaScansApp({
           slug={resourceSlug}
           chapterSlug={chapterSlug}
           actor={actor}
-          showToast={setToast}
+          showToast={showToast}
         />
         {commonOverlays}
       </>
@@ -10243,27 +11030,27 @@ export function NyaScansApp({
 
   const mainContent =
     view === "home" ? (
-      <HomeView actor={actor} showToast={setToast} />
+      <HomeView actor={actor} showToast={showToast} />
     ) : view === "latest" ? (
       <LatestUpdatesView />
     ) : view === "browse" ? (
-      <BrowseView showToast={setToast} />
+      <BrowseView showToast={showToast} />
     ) : view === "library" ? (
       <LibraryView actor={actor} />
     ) : view === "store" ? (
       <StoreView
         actor={actor}
         category={resourceSlug}
-        showToast={setToast}
+        showToast={showToast}
       />
     ) : view === "title" ? (
-      <TitleView slug={resourceSlug} actor={actor} showToast={setToast} />
+      <TitleView slug={resourceSlug} actor={actor} showToast={showToast} />
     ) : view === "wallet" ? (
       <WalletView actor={actor} />
     ) : view === "orders" ? (
       <OrdersView actor={actor} />
     ) : view === "roulette" ? (
-      <RouletteView signedIn={Boolean(actor)} showToast={setToast} />
+      <RouletteView signedIn={Boolean(actor)} showToast={showToast} />
     ) : view === "login" || view === "signup" ? (
       <AuthEntryView
         intent={view}
@@ -10273,13 +11060,13 @@ export function NyaScansApp({
         returnTo={authReturnTo}
       />
     ) : view === "account" ? (
-      <AccountView actor={actor} showToast={setToast} />
+      <AccountView actor={actor} showToast={showToast} />
     ) : view === "profile" ? (
       <PublicProfileView username={resourceSlug ?? ""} />
     ) : view === "notifications" ? (
       <NotificationsView actor={actor} />
     ) : view === "team" ? (
-      <PublicTeamView slug={resourceSlug} />
+      <PublicTeamView slug={resourceSlug} signedIn={Boolean(actor)} />
     ) : view === "status" ? (
       <StatusView />
     ) : (
@@ -10287,7 +11074,7 @@ export function NyaScansApp({
         view={view}
         resourceSlug={resourceSlug}
         signedIn={Boolean(actor)}
-        showToast={setToast}
+        showToast={showToast}
       />
     );
 

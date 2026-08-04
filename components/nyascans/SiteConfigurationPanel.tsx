@@ -4,7 +4,6 @@
 import {
   ArrowDown,
   ArrowUp,
-  CheckCircle,
   FileImage,
   FloppyDisk,
   LinkSimple,
@@ -26,15 +25,24 @@ import {
   parseSiteConfiguration,
   siteMediaUrl,
   type SiteConfiguration,
+  type SiteMediaSlot,
   type SiteSocialLink,
 } from "@/lib/site-configuration";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
 type SiteConfigurationResponse = {
   settings: SiteConfiguration;
   revision: number;
   recoveredFromInvalid?: boolean;
+};
+
+type SiteConfigurationFailure = {
+  error?: {
+    message?: string;
+    fields?: Array<{ path?: string; message?: string }>;
+  };
 };
 
 function linkId(label: string, taken: Set<string>) {
@@ -55,6 +63,57 @@ function linkId(label: string, taken: Set<string>) {
 type ConfigurationSection = "branding" | "reader" | "footer";
 type MediaSlot = "logo" | "compact" | "app" | "first" | "last";
 type PendingMedia = { file: File; url: string } | null;
+
+function mediaSlotValue(
+  configuration: SiteConfiguration,
+  slot: MediaSlot,
+): SiteMediaSlot {
+  if (slot === "logo") return configuration.brand.logo;
+  if (slot === "compact") return configuration.brand.compactLogo;
+  if (slot === "app") return configuration.brand.appIcon;
+  if (slot === "first") return configuration.reader.firstPage;
+  return configuration.reader.lastPage;
+}
+
+function withMediaSlot(
+  configuration: SiteConfiguration,
+  slot: MediaSlot,
+  media: SiteMediaSlot,
+): SiteConfiguration {
+  if (slot === "logo" || slot === "compact" || slot === "app") {
+    const key =
+      slot === "logo"
+        ? "logo"
+        : slot === "compact"
+          ? "compactLogo"
+          : "appIcon";
+    return {
+      ...configuration,
+      brand: { ...configuration.brand, [key]: media },
+    };
+  }
+  const key = slot === "first" ? "firstPage" : "lastPage";
+  return {
+    ...configuration,
+    reader: { ...configuration.reader, [key]: media },
+  };
+}
+
+function responseFailureMessage(
+  payload: SiteConfigurationFailure,
+  fallback: string,
+) {
+  const field = payload.error?.fields?.[0];
+  if (field?.message) {
+    const label = field.path
+      ? field.path
+          .replaceAll(".", " › ")
+          .replace(/([a-z])([A-Z])/g, "$1 $2")
+      : "Configuration";
+    return `${label}: ${field.message}`;
+  }
+  return payload.error?.message ?? fallback;
+}
 
 const emptyPendingMedia: Record<MediaSlot, PendingMedia> = {
   logo: null,
@@ -88,6 +147,7 @@ export function SiteConfigurationPanel({
     "loading" | "idle" | "saving" | "saved" | "error"
   >("loading");
   const [message, setMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false);
@@ -143,6 +203,7 @@ export function SiteConfigurationPanel({
       setSaved(normalized);
       setRevision(Number(payload.revision ?? 0));
       setRecoveredFromInvalid(Boolean(payload.recoveredFromInvalid));
+      setFieldErrors({});
       clearPendingMedia();
       setHasLoaded(true);
       setStatus("idle");
@@ -167,35 +228,12 @@ export function SiteConfigurationPanel({
     event.preventDefault();
     setStatus("saving");
     setMessage("");
+    setFieldErrors({});
     let persisted = false;
     let currentRevision = revision;
+    let desiredSettings = settings;
+    let serverSettings = saved;
     try {
-      if (settingsDirty) {
-        const response = await fetch("/api/v1/admin/site-configuration", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            settings,
-            expectedRevision: currentRevision,
-          }),
-        });
-        const payload = (await response.json()) as SiteConfigurationResponse & {
-          error?: { message?: string };
-        };
-        if (!response.ok) {
-          throw new Error(
-            payload.error?.message ?? "Site configuration could not be saved.",
-          );
-        }
-        const normalized = parseSiteConfiguration(payload.settings);
-        currentRevision = Number(payload.revision ?? currentRevision + 1);
-        setSettings(normalized);
-        setSaved(normalized);
-        setRevision(currentRevision);
-        setRecoveredFromInvalid(false);
-        broadcastSiteConfiguration(normalized, currentRevision);
-        persisted = true;
-      }
       for (const slot of Object.keys(emptyPendingMedia) as MediaSlot[]) {
         const pending = pendingMedia[slot];
         if (!pending && !pendingRemovals[slot]) continue;
@@ -203,51 +241,117 @@ export function SiteConfigurationPanel({
         const response = pending
           ? await (() => {
               return optimizeStaticMedia(pending.file, {
-                maxWidth: slot === "logo" ? 2_400 : 1_200,
-                maxHeight: slot === "logo" ? 1_200 : 1_200,
-                maxBytes: 2_500_000,
+                maxWidth:
+                  slot === "logo"
+                    ? 2_400
+                    : slot === "first" || slot === "last"
+                      ? 1_600
+                      : 1_200,
+                maxHeight:
+                  slot === "first" || slot === "last" ? 2_400 : 1_200,
+                maxBytes:
+                  slot === "first" || slot === "last"
+                    ? 7_500_000
+                    : 1_900_000,
               }).then((prepared) => {
-              const body = new FormData();
-              body.set("file", prepared);
-              body.set("expectedRevision", String(currentRevision));
-              return fetch(`/api/v1/admin/site-media?slot=${slot}`, {
-                method: "POST",
-                body,
-              });
+                const body = new FormData();
+                body.set("file", prepared);
+                body.set("expectedRevision", String(currentRevision));
+                return fetch(`/api/v1/admin/site-media?slot=${slot}`, {
+                  method: "POST",
+                  body,
+                });
               });
             })()
           : await fetch(
               `/api/v1/admin/site-media?slot=${slot}&expectedRevision=${currentRevision}`,
               { method: "DELETE" },
             );
-        const payload = (await response.json()) as SiteConfigurationResponse & {
-          error?: { message?: string };
-        };
+        const payload = (await response.json()) as SiteConfigurationResponse &
+          SiteConfigurationFailure;
         if (!response.ok) {
+          setFieldErrors(
+            Object.fromEntries(
+              (payload.error?.fields ?? []).flatMap((field) =>
+                field.path && field.message
+                  ? [[field.path, field.message]]
+                  : [],
+              ),
+            ),
+          );
           throw new Error(
-            payload.error?.message ?? "The staged image could not be saved.",
+            responseFailureMessage(
+              payload,
+              "The staged image could not be saved.",
+            ),
           );
         }
         const normalized = parseSiteConfiguration(payload.settings);
         currentRevision = Number(payload.revision ?? currentRevision + 1);
-        setSettings(normalized);
-        setSaved(normalized);
-        setRevision(currentRevision);
-        setRecoveredFromInvalid(false);
-        broadcastSiteConfiguration(normalized, currentRevision);
+        const persistedMedia = mediaSlotValue(normalized, slot);
+        desiredSettings = withMediaSlot(desiredSettings, slot, {
+          ...persistedMedia,
+          enabled: pendingRemovals[slot]
+            ? false
+            : mediaSlotValue(desiredSettings, slot).enabled,
+        });
+        serverSettings = normalized;
         if (pending?.url) URL.revokeObjectURL(pending.url);
         setPendingMedia((current) => ({ ...current, [slot]: null }));
         setPendingRemovals((current) => ({ ...current, [slot]: false }));
         persisted = true;
       }
+      if (JSON.stringify(desiredSettings) !== JSON.stringify(serverSettings)) {
+        const response = await fetch("/api/v1/admin/site-configuration", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            settings: desiredSettings,
+            expectedRevision: currentRevision,
+          }),
+        });
+        const payload = (await response.json()) as SiteConfigurationResponse &
+          SiteConfigurationFailure;
+        if (!response.ok) {
+          setFieldErrors(
+            Object.fromEntries(
+              (payload.error?.fields ?? []).flatMap((field) =>
+                field.path && field.message
+                  ? [[field.path, field.message]]
+                  : [],
+              ),
+            ),
+          );
+          throw new Error(
+            responseFailureMessage(
+              payload,
+              "Site configuration could not be saved.",
+            ),
+          );
+        }
+        serverSettings = parseSiteConfiguration(payload.settings);
+        currentRevision = Number(payload.revision ?? currentRevision + 1);
+        persisted = true;
+      }
+      setSettings(serverSettings);
+      setSaved(serverSettings);
+      setRevision(currentRevision);
+      setRecoveredFromInvalid(false);
+      broadcastSiteConfiguration(serverSettings, currentRevision);
       setMessage("Branding, footer links, and reader pages are live.");
       setStatus("saved");
     } catch (error) {
+      setSettings(desiredSettings);
+      setSaved(serverSettings);
+      setRevision(currentRevision);
+      if (persisted) {
+        broadcastSiteConfiguration(serverSettings, currentRevision);
+      }
       setMessage(
         persisted
-          ? `Some configuration was published, but a staged media action failed: ${
+          ? `Saved media was retained, but another change still needs attention: ${
               error instanceof Error ? error.message : "try the remaining image again"
-            }. The latest saved revision was retained.`
+            }.`
           : error instanceof Error
             ? error.message
             : "Site configuration could not be saved.",
@@ -273,6 +377,8 @@ export function SiteConfigurationPanel({
       };
     });
     setPendingRemovals((current) => ({ ...current, [slot]: false }));
+    setMediaEnabled(slot, true);
+    setFieldErrors({});
     setStatus("idle");
     setMessage("Image staged locally. Save configuration to publish it.");
   }
@@ -298,7 +404,7 @@ export function SiteConfigurationPanel({
           slot: "logo" as const,
           label: "Site logo",
           detail: "Shown in the main header, footer, and access screens.",
-          recommendation: "512 × 512 px, square PNG or WebP",
+          recommendation: "1:2, 1:1, or 2:1 PNG or WebP",
           value: settings.brand.logo,
           url: pendingMedia.logo?.url ??
             (pendingRemovals.logo
@@ -310,7 +416,7 @@ export function SiteConfigurationPanel({
           slot: "compact" as const,
           label: "Compact/mobile logo",
           detail: "Used where the full brand mark would be too large.",
-          recommendation: "256 × 256 px, square PNG or WebP",
+          recommendation: "1:2, 1:1, or 2:1 PNG or WebP",
           value: settings.brand.compactLogo,
           url: pendingMedia.compact?.url ??
             (pendingRemovals.compact
@@ -509,6 +615,7 @@ export function SiteConfigurationPanel({
               <span>Site name</span>
               <input
                 value={settings.brand.siteName}
+                aria-invalid={Boolean(fieldErrors["brand.siteName"])}
                 onChange={(event) =>
                   setSettings((current) => ({
                     ...current,
@@ -520,11 +627,17 @@ export function SiteConfigurationPanel({
                 }
                 required
               />
+              {fieldErrors["brand.siteName"] ? (
+                <small className="admin-field-error">
+                  {fieldErrors["brand.siteName"]}
+                </small>
+              ) : null}
             </label>
             <label>
-              <span>Logo alternative text</span>
+              <span>Logo alternative text (optional)</span>
               <input
                 value={settings.brand.logoAlt}
+                aria-invalid={Boolean(fieldErrors["brand.logoAlt"])}
                 onChange={(event) =>
                   setSettings((current) => ({
                     ...current,
@@ -534,8 +647,12 @@ export function SiteConfigurationPanel({
                     },
                   }))
                 }
-                required
               />
+              {fieldErrors["brand.logoAlt"] ? (
+                <small className="admin-field-error">
+                  {fieldErrors["brand.logoAlt"]}
+                </small>
+              ) : null}
             </label>
             <label>
               <span>Short description</span>
@@ -799,15 +916,16 @@ export function SiteConfigurationPanel({
       )}
 
       {message ? (
-        <div
-          className={`site-configuration-message ${
-            status === "error" ? "is-error" : ""
-          }`}
-          role={status === "error" ? "alert" : "status"}
-        >
-          {status !== "error" ? <CheckCircle size={18} /> : null}
-          {message}
-        </div>
+        <SystemNoticeBridge
+          message={message}
+          kind={
+            status === "error"
+              ? "error"
+              : status === "saved"
+                ? "success"
+                : "info"
+          }
+        />
       ) : null}
     </form>
   );

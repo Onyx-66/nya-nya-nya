@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowSquareOut,
-  ArrowUp,
   Camera,
   CheckCircle,
   FloppyDisk,
@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type ProfileSeries = {
   seriesId: string;
@@ -839,9 +840,7 @@ export function ProfileSettingsWorkspace({
         ) : null}
       </header>
       {error ? (
-        <div className="profile-settings-alert" role="alert">
-          <WarningCircle size={18} /> {error}
-        </div>
+        <SystemNoticeBridge message={error} kind="error" />
       ) : null}
       <section className="profile-settings-card profile-media-composer">
         <div className="profile-media-banner-stage">
@@ -1025,18 +1024,31 @@ export function ProfileSettingsWorkspace({
             </select>
           </label>
           {(profile.favorites ?? []).length ? (
-            <ol>
+            <ol aria-label="Favorite series order">
               {(profile.favorites ?? []).map((favorite, index, favorites) => (
                 <li key={favorite.seriesId}>
-                  <span>
+                  <span className="profile-favorite-cover">
+                    {favorite.coverUrl ? (
+                      // Series art is served by a revisioned application endpoint.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={favorite.coverUrl}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <ImageSquare size={24} aria-hidden="true" />
+                    )}
+                  </span>
+                  <span className="profile-favorite-copy">
                     <small>#{index + 1}</small>
                     <strong>{favorite.seriesTitle}</strong>
                   </span>
-                  <span>
+                  <span className="profile-favorite-actions">
                     <button
                       type="button"
                       disabled={index === 0}
-                      aria-label={`Move ${favorite.seriesTitle} up`}
+                      aria-label={`Move ${favorite.seriesTitle} left`}
                       onClick={() =>
                         setProfile((current) => {
                           if (!current || index === 0) return current;
@@ -1049,12 +1061,12 @@ export function ProfileSettingsWorkspace({
                         })
                       }
                     >
-                      <ArrowUp size={16} />
+                      <ArrowLeft size={16} />
                     </button>
                     <button
                       type="button"
                       disabled={index === favorites.length - 1}
-                      aria-label={`Move ${favorite.seriesTitle} down`}
+                      aria-label={`Move ${favorite.seriesTitle} right`}
                       onClick={() =>
                         setProfile((current) => {
                           if (
@@ -1072,7 +1084,7 @@ export function ProfileSettingsWorkspace({
                         })
                       }
                     >
-                      <ArrowDown size={16} />
+                      <ArrowRight size={16} />
                     </button>
                     <button
                       type="button"
@@ -1187,8 +1199,8 @@ export function ProfileSettingsWorkspace({
               ],
               [
                 "showBookmarks",
-                "Share bookmarks",
-                "Shows public series saved in your Library.",
+                "Share followed series",
+                "Shows the public series you follow.",
               ],
               [
                 "showComments",

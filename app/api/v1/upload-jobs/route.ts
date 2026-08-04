@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { UPLOAD_LIMITS, UPLOAD_METHODS } from "@/lib/uploads";
+import { canAny } from "@/lib/permissions.mjs";
 import {
   assertSameOrigin,
   auditStatement,
@@ -8,6 +9,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
+import { requirePaidEconomyPublicDocument } from "@/lib/server/commercial-settings";
 import {
   assertUploadRateLimit,
   chapterSlug,
@@ -42,6 +44,47 @@ const listQuerySchema = z.object({
     .default("ALL"),
   teamId: z.string().trim().max(120).default(""),
 });
+
+function paidEconomyPublicSql(expectedRevision: number) {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    throw new ApiError(
+      403,
+      "PAID_ECONOMY_HIDDEN",
+      "The premium coin economy is currently private.",
+    );
+  }
+  return `EXISTS (
+    SELECT 1
+      FROM commercial_settings live_commercial
+     WHERE live_commercial.id = 'active'
+       AND live_commercial.revision = ${expectedRevision}
+       AND json_valid(live_commercial.settings_json)
+       AND json_type(
+             live_commercial.settings_json,
+             '$.economy.premiumEconomyPublic'
+           ) = 'true'
+  )`;
+}
+
+function isUploadGuardFailure(error: unknown) {
+  return (
+    error instanceof Error &&
+    /not null constraint failed.*upload_publish_guards\.verified/i.test(
+      error.message,
+    )
+  );
+}
+
+async function assertPaidEconomyGuardFresh(expectedRevision: number) {
+  const current = await requirePaidEconomyPublicDocument();
+  if (current.revision !== expectedRevision) {
+    throw new ApiError(
+      409,
+      "COMMERCIAL_SETTINGS_CHANGED",
+      "Commercial settings changed while this upload was being saved. Review the paid chapter selection and retry.",
+    );
+  }
+}
 
 type UploadItemRow = {
   id: string;
@@ -109,7 +152,6 @@ function liveJobAuthorization(
   actor: Actor,
   input: {
     alias?: string;
-    language?: string;
     requirePublish?: boolean;
   } = {},
 ) {
@@ -120,6 +162,7 @@ function liveJobAuthorization(
      WHERE live_series.id = ${alias}.series_id
        AND live_series.is_published = 1
        AND live_series.archived_at IS NULL
+       AND live_series.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
        AND live_series.rights_status IN
          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
   )`;
@@ -144,52 +187,29 @@ function liveJobAuthorization(
         ${alias}.team_id IS NULL
         OR EXISTS (
           SELECT 1
-            FROM teams live_team
-           WHERE live_team.id = ${alias}.team_id
+            FROM team_memberships live_membership
+            JOIN teams live_team ON live_team.id = live_membership.team_id
+           WHERE live_membership.user_id = ?
+             AND live_membership.team_id = ${alias}.team_id
+             AND live_membership.status = 'ACTIVE'
+             AND UPPER(live_membership.membership_role) IN
+               ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
              AND live_team.is_archived = 0
-             AND live_team.verification_status <> 'SUSPENDED'
+             AND live_team.verification_status = 'VERIFIED'
         )
       )`,
-      bindings: [actor.id] as unknown[],
+      bindings: [actor.id, actor.id] as unknown[],
     };
   }
 
-  const languagePolicy = input.language
-    ? `AND json_valid(live_assignment.allowed_languages_json) = 1
-       AND (
-         json_array_length(live_assignment.allowed_languages_json) = 0
-         OR EXISTS (
-           SELECT 1
-             FROM json_each(live_assignment.allowed_languages_json)
-            WHERE LOWER(CAST(value AS TEXT)) IN ('*', LOWER(?))
-         )
-       )`
-    : `AND json_valid(live_assignment.allowed_languages_json) = 1
-       AND (
-         json_array_length(live_assignment.allowed_languages_json) = 0
-         OR NOT EXISTS (
-           SELECT 1
-             FROM upload_job_items live_item
-            WHERE live_item.job_id = ${alias}.id
-              AND NOT EXISTS (
-                SELECT 1
-                  FROM json_each(live_assignment.allowed_languages_json)
-                 WHERE LOWER(CAST(value AS TEXT)) IN
-                   ('*', LOWER(live_item.language))
-              )
-         )
-       )`;
   return {
     sql: `EXISTS (
       SELECT 1
         FROM users live_actor
-        JOIN series_team_assignments live_assignment
-          ON live_assignment.series_id = ${alias}.series_id
-         AND live_assignment.team_id = ${alias}.team_id
         JOIN team_memberships live_membership
-          ON live_membership.team_id = live_assignment.team_id
+          ON live_membership.team_id = ${alias}.team_id
          AND live_membership.user_id = live_actor.id
-        JOIN teams live_team ON live_team.id = live_assignment.team_id
+        JOIN teams live_team ON live_team.id = live_membership.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
          AND (
@@ -203,11 +223,8 @@ function liveJobAuthorization(
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
            ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-         AND live_assignment.can_upload = 1
-         AND live_assignment.revoked_at IS NULL
          AND live_team.is_archived = 0
-         AND live_team.verification_status <> 'SUSPENDED'
-         ${languagePolicy}
+         AND live_team.verification_status = 'VERIFIED'
          ${
            input.requirePublish
              ? `AND (
@@ -218,16 +235,13 @@ function liveJobAuthorization(
                        AND live_publish_role.role = 'TEAM_LEADER'
                   )
                 )
-                AND live_assignment.can_publish = 1
-                AND live_assignment.upload_requires_review = 0`
+                AND UPPER(live_membership.membership_role) IN
+                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')`
              : ""
          }
     )
     AND ${seriesIsEligible}`,
-    bindings: [
-      actor.id,
-      ...(input.language ? [input.language.toLowerCase()] : []),
-    ] as unknown[],
+    bindings: [actor.id] as unknown[],
   };
 }
 
@@ -376,87 +390,79 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
 
 async function uploadOptions(db: D1Database, actor: Actor) {
   const admin = isUploadAdmin(actor);
-  const [seriesResult, teamsResult] = admin
-    ? await Promise.all([
-        db
-          .prepare(
-            `SELECT id, slug, title,
-                    CASE WHEN cover_key IS NULL THEN NULL
-                      ELSE '/api/v1/series-media?id=' || id ||
-                           '&slot=cover&v=' || revision
-                    END AS coverUrl
-               FROM series
-              WHERE is_published = 1
-                AND archived_at IS NULL
-                AND rights_status IN
-                  ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-              ORDER BY title COLLATE NOCASE, id`,
-          )
-          .all(),
-        db
-          .prepare(
-            `SELECT id, slug, name
-               FROM teams
-              WHERE is_archived = 0
-                AND verification_status <> 'SUSPENDED'
-              ORDER BY name COLLATE NOCASE, id`,
-          )
-          .all(),
-      ])
-    : await Promise.all([
-        db
-          .prepare(
-            `SELECT DISTINCT s.id,
-                    s.slug,
-                    s.title,
-                    CASE WHEN s.cover_key IS NULL THEN NULL
-                      ELSE '/api/v1/series-media?id=' || s.id ||
-                           '&slot=cover&v=' || s.revision
-                    END AS coverUrl,
-                    sta.team_id AS teamId,
-                    t.name AS teamName,
-                    sta.can_publish AS canPublish,
-                    sta.upload_requires_review AS uploadRequiresReview,
-                    sta.allowed_languages_json AS allowedLanguagesJson
-               FROM series s
-               JOIN series_team_assignments sta ON sta.series_id = s.id
-               JOIN team_memberships tm ON tm.team_id = sta.team_id
-               JOIN teams t ON t.id = sta.team_id
-              WHERE tm.user_id = ?
-                AND tm.status = 'ACTIVE'
-                AND UPPER(tm.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-                AND sta.can_upload = 1
-                AND sta.revoked_at IS NULL
-                AND s.is_published = 1
-                AND s.archived_at IS NULL
-                AND s.rights_status IN
-                  ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-                AND t.is_archived = 0
-                AND t.verification_status <> 'SUSPENDED'
-              ORDER BY s.title COLLATE NOCASE, t.name COLLATE NOCASE`,
-          )
-          .bind(actor.id)
-          .all(),
-        db
-          .prepare(
-            `SELECT DISTINCT t.id, t.slug, t.name
-               FROM teams t
-               JOIN team_memberships tm ON tm.team_id = t.id
-              WHERE tm.user_id = ?
-                AND tm.status = 'ACTIVE'
-                AND UPPER(tm.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-                AND t.is_archived = 0
-                AND t.verification_status <> 'SUSPENDED'
-              ORDER BY t.name COLLATE NOCASE, t.id`,
-          )
-          .bind(actor.id)
-          .all(),
-      ]);
+  const [seriesResult, teamsResult] = await Promise.all([
+    db
+      .prepare(
+        `SELECT s.id,
+                s.slug,
+                s.title,
+                CASE WHEN s.cover_key IS NULL THEN NULL
+                  ELSE '/api/v1/series-media?id=' || s.id ||
+                       '&slot=cover&v=' || s.revision
+                END AS coverUrl
+           FROM series s
+          WHERE s.is_published = 1
+            AND s.archived_at IS NULL
+            AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+            AND s.rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+          ORDER BY s.title COLLATE NOCASE, s.id`,
+      )
+      .all(),
+    db
+      .prepare(
+        `SELECT DISTINCT t.id, t.slug, t.name, t.revision,
+                UPPER(tm.membership_role) AS membershipRole,
+                CASE WHEN t.logo_key IS NULL THEN NULL
+                  ELSE '/api/v1/team-media?id=' || t.id ||
+                       '&slot=logo&v=' || t.revision
+                END AS logoUrl,
+                CASE WHEN t.banner_key IS NULL THEN NULL
+                  ELSE '/api/v1/team-media?id=' || t.id ||
+                       '&slot=banner&v=' || t.revision
+                END AS bannerUrl
+           FROM teams t
+           JOIN team_memberships tm ON tm.team_id = t.id
+          WHERE tm.user_id = ?
+            AND tm.status = 'ACTIVE'
+            AND UPPER(tm.membership_role) IN
+              ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+            AND t.is_archived = 0
+            AND t.verification_status = 'VERIFIED'
+          ORDER BY t.name COLLATE NOCASE, t.id`,
+      )
+      .bind(actor.id)
+      .all<{
+        id: string;
+        slug: string;
+        name: string;
+        revision: number;
+        membershipRole: string;
+        logoUrl: string | null;
+        bannerUrl: string | null;
+      }>(),
+  ]);
+  const canPublishByRole =
+    admin ||
+    canAny(
+      [actor.primaryRole, ...(actor.roles ?? [])],
+      "chapter.publish.assigned",
+    );
   return {
     series: seriesResult.results,
-    teams: teamsResult.results,
+    teams: teamsResult.results.map((team) => {
+      const canPublish =
+        admin ||
+        (canPublishByRole &&
+          ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
+            team.membershipRole,
+          ));
+      return {
+        ...team,
+        canPublish,
+        requiresReview: !canPublish,
+      };
+    }),
     methods: UPLOAD_METHODS,
     limits: UPLOAD_LIMITS,
     admin,
@@ -604,7 +610,9 @@ export async function POST(request: Request) {
       );
     }
     const payload = createUploadJobSchema.parse(await request.json());
-    await assertUploadRateLimit(env.DB, actor, "JOB");
+    const hasPaidItems = payload.items.some(
+      (item) => item.accessType === "PAID",
+    );
     const existing = await env.DB.prepare(
       `SELECT id
          FROM upload_jobs
@@ -624,6 +632,10 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "private, no-store" } },
       );
     }
+    const paidEconomyRevision = hasPaidItems
+      ? (await requirePaidEconomyPublicDocument()).revision
+      : null;
+    await assertUploadRateLimit(env.DB, actor, "JOB");
     const scope = await requireUploadScope(
       env.DB,
       actor,
@@ -680,13 +692,29 @@ export async function POST(request: Request) {
       ...item,
       id: `upi_${randomId()}`,
     }));
-    await env.DB.batch([
+    const createAuthorization = liveJobAuthorization(actor, {
+      alias: "draft",
+    });
+    const createStatements: D1PreparedStatement[] = [
       env.DB.prepare(
         `INSERT INTO upload_jobs
          (id, user_id, team_id, series_id, kind, source_type, status,
           idempotency_key, total_bytes, page_count, revision, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', ?, 0, 0, 1,
-                 datetime('now', ?))`,
+         SELECT draft.id, draft.user_id, draft.team_id, draft.series_id,
+                draft.kind, draft.source_type, 'DRAFT',
+                draft.idempotency_key, 0, 0, 1,
+                datetime('now', draft.expiry)
+           FROM (
+             SELECT ? AS id, ? AS user_id, ? AS team_id, ? AS series_id,
+                    ? AS kind, ? AS source_type, ? AS idempotency_key,
+                    ? AS expiry
+           ) draft
+          WHERE ${createAuthorization.sql}
+            AND ${
+            paidEconomyRevision === null
+              ? "1 = 1"
+              : paidEconomyPublicSql(paidEconomyRevision)
+          }`,
       ).bind(
         jobId,
         actor.id,
@@ -696,7 +724,16 @@ export async function POST(request: Request) {
         payload.sourceType,
         payload.idempotencyKey,
         `+${UPLOAD_LIMITS.draftLifetimeDays} days`,
+        ...createAuthorization.bindings,
       ),
+      ...(paidEconomyRevision === null
+        ? []
+        : [
+            env.DB.prepare(
+              `INSERT INTO upload_publish_guards (job_id, verified)
+               VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
+            ).bind(jobId),
+          ]),
       ...itemRecords.map((item) =>
         env.DB!.prepare(
           `INSERT INTO upload_job_items
@@ -726,7 +763,7 @@ export async function POST(request: Request) {
           item.priceOnyx,
           item.visibility,
           item.scheduledAt,
-          item.commentsEnabled ? 1 : 0,
+          1,
         ),
       ),
       auditStatement(env.DB, actor, id, {
@@ -744,7 +781,37 @@ export async function POST(request: Request) {
           chapterCount: itemRecords.length,
         },
       }),
-    ]);
+      ...(paidEconomyRevision === null
+        ? []
+        : [
+            env.DB.prepare(
+              "DELETE FROM upload_publish_guards WHERE job_id = ?",
+            ).bind(jobId),
+          ]),
+    ];
+    try {
+      await env.DB.batch(createStatements);
+    } catch (error) {
+      if (paidEconomyRevision !== null && isUploadGuardFailure(error)) {
+        await assertPaidEconomyGuardFresh(paidEconomyRevision);
+        throw new ApiError(
+          409,
+          "UPLOAD_JOB_CHANGED",
+          "This upload changed while the paid draft was being created.",
+        );
+      }
+      if (
+        error instanceof Error &&
+        /FOREIGN KEY constraint failed/i.test(error.message)
+      ) {
+        throw new ApiError(
+          409,
+          "UPLOAD_SCOPE_CHANGED",
+          "Your series or publishing-team access changed while this draft was being created.",
+        );
+      }
+      throw error;
+    }
     return json(
       id,
       { data: await jobDetail(env.DB, actor, jobId), reused: false },
@@ -770,6 +837,7 @@ async function assertJobMutable(
               user_id AS userId,
               team_id AS teamId,
               series_id AS seriesId,
+              kind,
               status,
               revision,
               publish_idempotency_key AS publishIdempotencyKey
@@ -784,6 +852,7 @@ async function assertJobMutable(
       userId: string;
       teamId: string | null;
       seriesId: string;
+      kind: "SINGLE" | "BATCH";
       status: string;
       revision: number;
       publishIdempotencyKey: string | null;
@@ -821,6 +890,11 @@ export async function PATCH(request: Request) {
           "This upload can no longer be edited.",
         );
       }
+      const singlePaidUpdate =
+        job.kind === "SINGLE" && payload.item.accessType === "PAID";
+      const singlePaidEconomyRevision = singlePaidUpdate
+        ? (await requirePaidEconomyPublicDocument()).revision
+        : null;
       await requireUploadScope(
         env.DB,
         actor,
@@ -872,16 +946,21 @@ export async function PATCH(request: Request) {
       }
       const authorization = liveJobAuthorization(actor, {
         alias: "upload_jobs",
-        language: payload.item.language,
       });
-      await env.DB.batch([
-        env.DB.prepare(
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
           `UPDATE upload_jobs
               SET revision = revision + 1,
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
               AND revision = ?
               AND status IN ('DRAFT', 'UPLOADING', 'READY', 'FAILED')
+              ${
+                singlePaidEconomyRevision === null
+                  ? ""
+                  : `AND ${paidEconomyPublicSql(singlePaidEconomyRevision)}`
+              }
               AND ${authorization.sql}`,
         ).bind(payload.jobId, job.revision, ...authorization.bindings),
         env.DB.prepare(
@@ -899,8 +978,10 @@ export async function PATCH(request: Request) {
                   version = ?,
                   release_notes = ?,
                   credits_json = ?,
-                  access_type = ?,
-                  price_onyx = ?,
+                  access_type =
+                    CASE WHEN ? = 'BATCH' THEN access_type ELSE ? END,
+                  price_onyx =
+                    CASE WHEN ? = 'BATCH' THEN price_onyx ELSE ? END,
                   visibility = ?,
                   scheduled_at = ?,
                   comments_enabled = ?,
@@ -950,11 +1031,13 @@ export async function PATCH(request: Request) {
           payload.item.version,
           payload.item.releaseNotes,
           JSON.stringify(payload.item.credits),
+          job.kind,
           payload.item.accessType,
+          job.kind,
           payload.item.priceOnyx,
           payload.item.visibility,
           payload.item.scheduledAt,
-          payload.item.commentsEnabled ? 1 : 0,
+          1,
           payload.itemId,
           payload.jobId,
           payload.expectedRevision,
@@ -972,10 +1055,177 @@ export async function PATCH(request: Request) {
               SET verified = CASE WHEN changes() = 1 THEN 1 ELSE NULL END
             WHERE job_id = ?`,
         ).bind(payload.jobId),
-        env.DB.prepare(
-          "DELETE FROM upload_publish_guards WHERE job_id = ?",
-        ).bind(payload.jobId),
-      ]);
+          env.DB.prepare(
+            "DELETE FROM upload_publish_guards WHERE job_id = ?",
+          ).bind(payload.jobId),
+        ]);
+      } catch (error) {
+        if (
+          singlePaidEconomyRevision !== null &&
+          isUploadGuardFailure(error)
+        ) {
+          await assertPaidEconomyGuardFresh(singlePaidEconomyRevision);
+        }
+        throw error;
+      }
+      return json(
+        id,
+        { data: await jobDetail(env.DB, actor, payload.jobId) },
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+
+    if (payload.action === "UPDATE_BATCH_COMMERCE") {
+      if (
+        job.kind !== "BATCH" ||
+        !["DRAFT", "UPLOADING", "READY", "FAILED"].includes(job.status)
+      ) {
+        throw new ApiError(
+          409,
+          "UPLOAD_JOB_LOCKED",
+          "Batch access settings can be changed only before submission.",
+        );
+      }
+      if (job.revision !== payload.expectedRevision) {
+        throw new ApiError(
+          409,
+          "UPLOAD_JOB_CHANGED",
+          "This batch changed. Reload before updating paid chapters.",
+        );
+      }
+      const paidItemIds = [...new Set(payload.paidItemIds)];
+      if (paidItemIds.length !== payload.paidItemIds.length) {
+        throw new ApiError(
+          422,
+          "BATCH_PAID_ITEMS_INVALID",
+          "Paid chapter selections must be unique.",
+        );
+      }
+      const storedItems = await env.DB.prepare(
+        `SELECT id, language
+           FROM upload_job_items
+          WHERE job_id = ?
+          ORDER BY created_at, id`,
+      )
+        .bind(payload.jobId)
+        .all<{ id: string; language: string }>();
+      const storedItemIds = new Set(storedItems.results.map((item) => item.id));
+      if (
+        storedItems.results.length === 0 ||
+        paidItemIds.some((itemId) => !storedItemIds.has(itemId))
+      ) {
+        throw new ApiError(
+          422,
+          "BATCH_PAID_ITEMS_INVALID",
+          "Every paid chapter must belong to this upload batch.",
+        );
+      }
+      const paidEconomyRevision = paidItemIds.length
+        ? (await requirePaidEconomyPublicDocument()).revision
+        : null;
+      await requireUploadScope(
+        env.DB,
+        actor,
+        job.seriesId,
+        job.teamId,
+        storedItems.results.map((item) => item.language),
+      );
+      const paidCondition = paidItemIds.length
+        ? `id IN (${paidItemIds.map(() => "?").join(", ")})`
+        : "0";
+      const authorization = liveJobAuthorization(actor, {
+        alias: "upload_jobs",
+      });
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE upload_jobs
+                SET revision = revision + 1,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND revision = ?
+                AND status IN ('DRAFT', 'UPLOADING', 'READY', 'FAILED')
+                ${
+                  paidEconomyRevision === null
+                    ? ""
+                    : `AND ${paidEconomyPublicSql(paidEconomyRevision)}`
+                }
+                AND ${authorization.sql}`,
+          ).bind(
+            payload.jobId,
+            payload.expectedRevision,
+            ...authorization.bindings,
+          ),
+          env.DB.prepare(
+            `INSERT INTO upload_publish_guards (job_id, verified)
+             VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
+          ).bind(payload.jobId),
+          env.DB.prepare(
+            `UPDATE upload_job_items
+                SET access_type =
+                      CASE WHEN ${paidCondition} THEN 'PAID' ELSE 'FREE' END,
+                    price_onyx =
+                      CASE WHEN ${paidCondition} THEN ? ELSE 0 END,
+                    revision = revision + 1,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE job_id = ?
+                AND status IN ('DRAFT', 'READY', 'FAILED')
+                AND EXISTS (
+                  SELECT 1 FROM upload_publish_guards
+                   WHERE job_id = ? AND verified = 1
+                )`,
+          ).bind(
+            ...paidItemIds,
+            ...paidItemIds,
+            payload.priceOnyx,
+            payload.jobId,
+            payload.jobId,
+          ),
+          env.DB.prepare(
+            `UPDATE upload_publish_guards
+                SET verified =
+                      CASE WHEN changes() = ? THEN 1 ELSE NULL END
+              WHERE job_id = ?`,
+          ).bind(storedItems.results.length, payload.jobId),
+          auditStatement(
+            env.DB,
+            actor,
+            id,
+            {
+              action: "upload.batch.commerce",
+              category: "COMMERCE_STORE",
+              sourceArea: "UPLOAD_CENTER",
+              targetType: "UPLOAD_JOB",
+              targetId: payload.jobId,
+              reason: "Uploader updated batch paid chapter selection",
+              newValue: {
+                priceOnyx: payload.priceOnyx,
+                paidItemIds,
+              },
+            },
+            `EXISTS (
+              SELECT 1 FROM upload_publish_guards
+               WHERE job_id = '${payload.jobId.replaceAll("'", "''")}'
+                 AND verified = 1
+            )`,
+          ),
+          env.DB.prepare(
+            "DELETE FROM upload_publish_guards WHERE job_id = ?",
+          ).bind(payload.jobId),
+        ]);
+      } catch (error) {
+        if (isUploadGuardFailure(error)) {
+          if (paidEconomyRevision !== null) {
+            await assertPaidEconomyGuardFresh(paidEconomyRevision);
+          }
+          throw new ApiError(
+            409,
+            "UPLOAD_JOB_CHANGED",
+            "This batch changed while paid chapter settings were being saved.",
+          );
+        }
+        throw error;
+      }
       return json(
         id,
         { data: await jobDetail(env.DB, actor, payload.jobId) },
@@ -1136,6 +1386,7 @@ export async function PATCH(request: Request) {
       )
         .bind(payload.jobId)
         .all<{ id: string; objectKey: string }>();
+      const discardAuthorization = liveJobAuthorization(actor);
       const discarded = await env.DB.batch([
         env.DB.prepare(
           `UPDATE upload_jobs
@@ -1145,8 +1396,13 @@ export async function PATCH(request: Request) {
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
               AND revision = ?
-              AND status IN ('DRAFT', 'UPLOADING', 'READY', 'FAILED')`,
-        ).bind(payload.jobId, payload.expectedRevision),
+              AND status IN ('DRAFT', 'UPLOADING', 'READY', 'FAILED')
+              AND ${discardAuthorization.sql}`,
+        ).bind(
+          payload.jobId,
+          payload.expectedRevision,
+          ...discardAuthorization.bindings,
+        ),
         env.DB.prepare(
           `INSERT INTO upload_publish_guards (job_id, verified)
            VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
@@ -1302,6 +1558,21 @@ export async function PATCH(request: Request) {
         "Every chapter needs validated pages before it can be published.",
       );
     }
+    const batchPaidPrices = new Set(
+      items
+        .filter((item) => item.accessType === "PAID")
+        .map((item) => Number(item.priceOnyx)),
+    );
+    if (job.kind === "BATCH" && batchPaidPrices.size > 1) {
+      throw new ApiError(
+        422,
+        "BATCH_PAID_PRICE_MISMATCH",
+        "All paid chapters in this batch must use the same price.",
+      );
+    }
+    const paidEconomyRevision = batchPaidPrices.size
+      ? (await requirePaidEconomyPublicDocument()).revision
+      : null;
     const scope = await requireUploadScope(
       env.DB,
       actor,
@@ -1386,6 +1657,11 @@ export async function PATCH(request: Request) {
           WHERE id = ?
             AND revision = ?
             AND status = 'READY'
+            AND ${
+              paidEconomyRevision === null
+                ? "1 = 1"
+                : paidEconomyPublicSql(paidEconomyRevision)
+            }
             AND ${authorization.sql}`,
       ).bind(
         payload.idempotencyKey,
@@ -1396,7 +1672,12 @@ export async function PATCH(request: Request) {
     ];
     for (const item of items) {
       const newChapterId = `ch_${randomId()}`;
-      const chapterState = needsReview ? "READY_FOR_REVIEW" : "PUBLISHED";
+      const isReplacement = Boolean(item.replacementChapterId);
+      const chapterState = isReplacement
+        ? "DRAFT"
+        : needsReview
+          ? "READY_FOR_REVIEW"
+          : "PUBLISHED";
       const publishedAt = needsReview
         ? null
         : item.scheduledAt ?? new Date().toISOString();
@@ -1412,7 +1693,7 @@ export async function PATCH(request: Request) {
                   uji.chapter_number, uji.title, uji.language, 'VERTICAL',
                   ?, uji.access_type, uji.price_onyx, uji.page_count, ?,
                   NULL, uji.version, uji.release_notes, uji.credits_json,
-                  uji.thumbnail_key, uji.visibility, uji.comments_enabled, 1
+                  uji.thumbnail_key, uji.visibility, 1, 1
              FROM upload_job_items uji
              JOIN upload_jobs uj ON uj.id = uji.job_id
             WHERE uji.id = ?
@@ -1422,18 +1703,36 @@ export async function PATCH(request: Request) {
               AND uj.status = 'PUBLISHING'
               AND uj.revision = ?
               AND (
-                uji.replacement_chapter_id IS NOT NULL
-                OR NOT EXISTS (
-                SELECT 1
-                  FROM chapters duplicate
-                 WHERE duplicate.series_id = uji.series_id
-                   AND LTRIM(duplicate.chapter_number, '0') =
-                       LTRIM(uji.chapter_number, '0')
-                   AND duplicate.language = uji.language
-                   AND COALESCE(duplicate.team_id, '') =
-                       COALESCE(uji.team_id, '')
-                   AND duplicate.version = uji.version
-                   AND duplicate.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
+                (
+                  uji.replacement_chapter_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1
+                      FROM chapters replacement
+                     WHERE replacement.id = uji.replacement_chapter_id
+                       AND replacement.series_id = uji.series_id
+                       AND LTRIM(replacement.chapter_number, '0') =
+                           LTRIM(uji.chapter_number, '0')
+                       AND replacement.language = uji.language
+                       AND COALESCE(replacement.team_id, '') =
+                           COALESCE(uji.team_id, '')
+                       AND replacement.version = uji.version
+                       AND replacement.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
+                  )
+                )
+                OR (
+                  uji.replacement_chapter_id IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                      FROM chapters duplicate
+                     WHERE duplicate.series_id = uji.series_id
+                       AND LTRIM(duplicate.chapter_number, '0') =
+                           LTRIM(uji.chapter_number, '0')
+                       AND duplicate.language = uji.language
+                       AND COALESCE(duplicate.team_id, '') =
+                           COALESCE(uji.team_id, '')
+                       AND duplicate.version = uji.version
+                       AND duplicate.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
+                  )
                 )
               )`,
         ).bind(
@@ -1485,17 +1784,49 @@ export async function PATCH(request: Request) {
           newChapterId,
         ),
       );
+      if (isReplacement) {
+        statements.push(
+          env.DB.prepare(
+            `UPDATE chapters
+                SET state = 'READY_FOR_REVIEW',
+                    revision = revision + 1,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND state = 'DRAFT'
+                AND EXISTS (
+                  SELECT 1
+                    FROM upload_job_items linked_item
+                    JOIN upload_jobs linked_job
+                      ON linked_job.id = linked_item.job_id
+                   WHERE linked_item.id = ?
+                     AND linked_item.job_id = ?
+                     AND linked_item.chapter_id = chapters.id
+                     AND linked_item.replacement_chapter_id IS NOT NULL
+                     AND linked_item.status = 'PENDING_REVIEW'
+                     AND linked_job.status = 'PUBLISHING'
+                     AND linked_job.revision = ?
+                )`,
+          ).bind(
+            newChapterId,
+            item.id,
+            payload.jobId,
+            nextRevision,
+          ),
+        );
+      }
     }
     statements.push(
       env.DB.prepare(
         `INSERT INTO upload_publish_guards (job_id, verified)
          SELECT ?, CASE
-           WHEN (
-             SELECT COUNT(*)
-               FROM upload_job_items
-              WHERE job_id = ?
-                AND chapter_id IS NOT NULL
-                AND status = ?
+	           WHEN (
+	             SELECT COUNT(*)
+	               FROM upload_job_items committed_item
+	               JOIN chapters committed_chapter
+	                 ON committed_chapter.id = committed_item.chapter_id
+	              WHERE committed_item.job_id = ?
+	                AND committed_item.status = ?
+	                AND committed_chapter.state = ?
            ) = (
              SELECT COUNT(*) FROM upload_job_items WHERE job_id = ?
            )
@@ -1512,6 +1843,7 @@ export async function PATCH(request: Request) {
         payload.jobId,
         payload.jobId,
         needsReview ? "PENDING_REVIEW" : finalJobStatus,
+        needsReview ? "READY_FOR_REVIEW" : "PUBLISHED",
         payload.jobId,
         payload.jobId,
         nextRevision,
@@ -1562,12 +1894,10 @@ export async function PATCH(request: Request) {
     try {
       await env.DB.batch(statements);
     } catch (error) {
-      if (
-        error instanceof Error &&
-        /not null constraint failed.*upload_publish_guards\.verified/i.test(
-          error.message,
-        )
-      ) {
+      if (isUploadGuardFailure(error)) {
+        if (paidEconomyRevision !== null) {
+          await assertPaidEconomyGuardFresh(paidEconomyRevision);
+        }
         throw new ApiError(
           409,
           "UPLOAD_PUBLISH_CONFLICT",

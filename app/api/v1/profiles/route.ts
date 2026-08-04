@@ -193,7 +193,9 @@ export async function GET(request: Request) {
             favorites: [],
             favoriteCandidates: favoriteCandidates.results.map(
               (candidate) => ({
-                ...candidate,
+                seriesId: candidate.seriesId,
+                seriesSlug: candidate.seriesSlug,
+                seriesTitle: candidate.seriesTitle,
                 coverUrl: seriesCoverUrl(candidate),
               }),
             ),
@@ -381,16 +383,16 @@ export async function GET(request: Request) {
         ? env.DB.prepare(
             `SELECT s.id AS seriesId, s.slug AS seriesSlug,
                     s.title AS seriesTitle, s.revision,
-                    s.cover_key AS coverKey, le.list_type AS listType,
-                    le.updated_at AS savedAt
-               FROM library_entries le
-               JOIN series s ON s.id = le.series_id
-              WHERE le.user_id = ?
+                    s.cover_key AS coverKey, 'FOLLOWING' AS listType,
+                    f.created_at AS savedAt
+               FROM follows f
+               JOIN series s ON s.id = f.series_id
+              WHERE f.user_id = ?
                 AND s.is_published = 1
                 AND s.archived_at IS NULL
                 AND s.rights_status IN
                   ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-              ORDER BY datetime(le.updated_at) DESC, s.title COLLATE NOCASE
+              ORDER BY datetime(f.created_at) DESC, s.title COLLATE NOCASE
               LIMIT 30`,
           )
             .bind(profile.userId)
@@ -400,7 +402,9 @@ export async function GET(request: Request) {
       isSelf || Boolean(profile.showComments)
         ? env.DB.prepare(
             `SELECT dc.id, dc.body, dc.series_slug AS seriesSlug,
-                    s.title AS seriesTitle, dc.chapter_slug AS chapterSlug,
+                    s.id AS seriesId, s.title AS seriesTitle, s.revision,
+                    s.cover_key AS coverKey,
+                    dc.spoiler, dc.chapter_slug AS chapterSlug,
                     c.chapter_number AS chapterNumber,
                     dc.created_at AS createdAt,
                     (SELECT COUNT(*) FROM discussion_votes dv
@@ -412,10 +416,16 @@ export async function GET(request: Request) {
                FROM discussion_comments dc
                JOIN series s ON s.slug = dc.series_slug
                LEFT JOIN chapters c
-                 ON c.series_id = s.id AND c.slug = dc.chapter_slug
+                 ON c.series_id = s.id
+                AND c.slug = dc.chapter_slug
+                AND c.state = 'PUBLISHED'
+                AND c.visibility = 'PUBLIC'
+                AND c.published_at IS NOT NULL
+                AND datetime(c.published_at) <= datetime('now')
               WHERE dc.user_id = ?
                 AND dc.moderation_status = 'VISIBLE'
                 AND dc.deleted_at IS NULL
+                AND (dc.chapter_slug IS NULL OR c.id IS NOT NULL)
                 AND s.is_published = 1
                 AND s.archived_at IS NULL
                 AND s.rights_status IN
@@ -427,8 +437,12 @@ export async function GET(request: Request) {
             .all<{
               id: string;
               body: string;
+              seriesId: string;
               seriesSlug: string;
               seriesTitle: string;
+              revision: number;
+              coverKey: string | null;
+              spoiler: number;
               chapterSlug: string | null;
               chapterNumber: string | null;
               createdAt: string;
@@ -515,7 +529,8 @@ export async function GET(request: Request) {
               }
             : undefined,
           readingActivity: readingActivity.results.map((activity) => ({
-            ...activity,
+            seriesSlug: activity.seriesSlug,
+            seriesTitle: activity.seriesTitle,
             chapterSlug:
               isSelf || profile.showChapterNumbers
                 ? activity.chapterSlug
@@ -524,10 +539,12 @@ export async function GET(request: Request) {
               isSelf || profile.showChapterNumbers
                 ? activity.chapterNumber
                 : null,
+            readAt: activity.readAt,
             coverUrl: seriesCoverUrl(activity),
           })),
           activity: readingActivity.results.map((activity) => ({
-            ...activity,
+            seriesSlug: activity.seriesSlug,
+            seriesTitle: activity.seriesTitle,
             chapterSlug:
               isSelf || profile.showChapterNumbers
                 ? activity.chapterSlug
@@ -536,14 +553,21 @@ export async function GET(request: Request) {
               isSelf || profile.showChapterNumbers
                 ? activity.chapterNumber
                 : null,
+            readAt: activity.readAt,
             coverUrl: seriesCoverUrl(activity),
           })),
           favorites: favorites.map((favorite) => ({
-            ...favorite,
+            seriesId: favorite.seriesId,
+            seriesSlug: favorite.seriesSlug,
+            seriesTitle: favorite.seriesTitle,
+            position: favorite.position,
             coverUrl: seriesCoverUrl(favorite),
           })),
           favoriteCandidates: favoriteCandidates.map((candidate) => ({
-            ...candidate,
+            seriesId: candidate.seriesId,
+            seriesSlug: candidate.seriesSlug,
+            seriesTitle: candidate.seriesTitle,
+            position: candidate.position,
             coverUrl: seriesCoverUrl(candidate),
           })),
           achievements: achievements.map((achievement) => ({
@@ -558,11 +582,19 @@ export async function GET(request: Request) {
             metadataJson: undefined,
           })),
           bookmarks: bookmarks.map((bookmark) => ({
-            ...bookmark,
+            seriesId: bookmark.seriesId,
+            seriesSlug: bookmark.seriesSlug,
+            seriesTitle: bookmark.seriesTitle,
+            listType: bookmark.listType,
+            savedAt: bookmark.savedAt,
             coverUrl: seriesCoverUrl(bookmark),
           })),
           comments: comments.map((comment) => ({
-            ...comment,
+            id: comment.id,
+            body: comment.body,
+            seriesSlug: comment.seriesSlug,
+            seriesTitle: comment.seriesTitle,
+            spoiler: Boolean(comment.spoiler),
             chapterSlug:
               isSelf || profile.showChapterNumbers
                 ? comment.chapterSlug
@@ -571,6 +603,11 @@ export async function GET(request: Request) {
               isSelf || profile.showChapterNumbers
                 ? comment.chapterNumber
                 : null,
+            createdAt: comment.createdAt,
+            upvotes: Number(comment.upvotes),
+            downvotes: Number(comment.downvotes),
+            reactionCount: Number(comment.reactionCount),
+            coverUrl: seriesCoverUrl(comment),
           })),
           librarySummary: librarySummary.results,
         },

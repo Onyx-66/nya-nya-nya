@@ -12,6 +12,7 @@ export function useCommercialSettings() {
     failClosedCommercialSettings,
   );
   const [revision, setRevision] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -31,9 +32,12 @@ export function useCommercialSettings() {
       })
       .catch(() => {
         // The paid economy remains private until valid settings load.
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoaded(true);
       });
     return () => controller.abort();
   }, []);
 
-  return { settings, revision };
+  return { settings, revision, loaded };
 }

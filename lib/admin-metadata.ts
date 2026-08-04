@@ -334,7 +334,6 @@ export const seriesManagementSchema = z
     synopsis: z.string().trim().min(20).max(10_000),
     type: z.enum(["MANGA", "MANHWA", "MANHUA"]),
     status: z.enum(["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"]),
-    ageRating: z.enum(["EVERYONE", "TEEN", "MATURE"]),
     publicationYear: z.coerce
       .number()
       .int()

@@ -2,7 +2,6 @@
 
 import {
   ArrowClockwise,
-  Check,
   Coins,
   MegaphoneSimple,
   Plus,
@@ -19,6 +18,7 @@ import {
   type MembershipOffer,
 } from "@/lib/commercial-settings";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type StoredDocument = {
   settings: CommercialSettings;
@@ -279,13 +279,10 @@ export function CommercialSettingsPanel({
       ) : null}
 
       {message ? (
-        <div
-          className={`panel-message ${error ? "panel-message-error" : ""}`}
-          role={error ? "alert" : "status"}
-        >
-          {error ? <WarningCircle size={18} /> : <Check size={18} />}
-          {message}
-        </div>
+        <SystemNoticeBridge
+          message={message}
+          kind={error ? "error" : "success"}
+        />
       ) : null}
 
       <section className="commercial-block">

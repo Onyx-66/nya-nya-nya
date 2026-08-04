@@ -36,34 +36,39 @@ export async function GET(request: Request) {
       limit: url.searchParams.get("limit") ?? undefined,
     });
     const records = await env.DB.prepare(
-      `SELECT t.id, t.slug, t.name, t.description, t.revision,
+      `WITH public_releases AS (
+         SELECT c.id, c.team_id AS teamId, c.series_id AS seriesId
+           FROM chapters c
+           JOIN series s ON s.id = c.series_id
+          WHERE c.team_id IS NOT NULL
+            AND c.state = 'PUBLISHED'
+            AND c.visibility = 'PUBLIC'
+            AND c.published_at IS NOT NULL
+            AND datetime(c.published_at) <= datetime('now')
+            AND s.is_published = 1
+            AND s.archived_at IS NULL
+            AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+            AND s.rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+       ),
+       public_team_followers AS (
+         SELECT release.teamId,
+                COUNT(DISTINCT team_follow.user_id) AS followerCount
+           FROM public_releases release
+           JOIN follows team_follow
+             ON team_follow.series_id = release.seriesId
+          GROUP BY release.teamId
+       )
+       SELECT t.id, t.slug, t.name, t.description, t.revision,
               t.logo_key AS logoKey, t.banner_key AS bannerKey,
-              COUNT(DISTINCT CASE
-                WHEN s.is_published = 1
-                 AND s.archived_at IS NULL
-                 AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
-                 AND sta.revoked_at IS NULL
-                 AND s.rights_status IN
-                   ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-                THEN s.id END
-              ) AS publicSeriesCount,
-              COUNT(DISTINCT CASE
-                WHEN c.state = 'PUBLISHED'
-                 AND c.visibility = 'PUBLIC'
-                 AND c.published_at IS NOT NULL
-                 AND datetime(c.published_at) <= datetime('now')
-                 AND s.is_published = 1
-                 AND s.archived_at IS NULL
-                 AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
-                 AND sta.revoked_at IS NULL
-                 AND s.rights_status IN
-                   ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-                THEN c.id END
-              ) AS releaseCount
+              COUNT(DISTINCT release.seriesId) AS publicSeriesCount,
+              COUNT(DISTINCT release.id) AS releaseCount,
+              COALESCE(MAX(public_followers.followerCount), 0)
+                AS followerCount
          FROM teams t
-         LEFT JOIN series_team_assignments sta ON sta.team_id = t.id
-         LEFT JOIN series s ON s.id = sta.series_id
-         LEFT JOIN chapters c ON c.series_id = s.id AND c.team_id = t.id
+         LEFT JOIN public_team_followers public_followers
+           ON public_followers.teamId = t.id
+         LEFT JOIN public_releases release ON release.teamId = t.id
         WHERE t.is_archived = 0
           AND t.verification_status = 'VERIFIED'
         GROUP BY t.id
@@ -82,6 +87,7 @@ export async function GET(request: Request) {
         bannerKey: string | null;
         publicSeriesCount: number;
         releaseCount: number;
+        followerCount: number;
       }>();
     return json(
       requestId,
@@ -93,6 +99,7 @@ export async function GET(request: Request) {
           description: record.description,
           publicSeriesCount: Number(record.publicSeriesCount),
           releaseCount: Number(record.releaseCount),
+          followerCount: Number(record.followerCount),
           logoUrl: publicTeamMediaUrl(
             record.id,
             record.logoKey,

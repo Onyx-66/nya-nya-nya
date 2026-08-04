@@ -27,6 +27,7 @@ type MembershipRow = {
   team_id: string;
   membership_role: string;
   can_request_series: number;
+  verification_status: string;
 };
 
 const validRoles = new Set(Object.values(ROLES));
@@ -302,7 +303,8 @@ export async function getActor(): Promise<Actor | null> {
   const membershipRows = await env.DB.prepare(
     `SELECT tm.team_id,
             tm.membership_role,
-            tm.can_request_series
+            tm.can_request_series,
+            t.verification_status
        FROM team_memberships tm
        JOIN teams t ON t.id = tm.team_id
       WHERE tm.user_id = ?
@@ -338,10 +340,12 @@ export async function getActor(): Promise<Actor | null> {
     roles.includes(ROLES.TEAM_LEADER) ||
     roles.includes(ROLES.UPLOADER)
       ? memberships
-          .filter((membership) =>
-            ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER"].includes(
-              membership.membership_role.toUpperCase(),
-            ),
+          .filter(
+            (membership) =>
+              membership.verification_status === "VERIFIED" &&
+              ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER"].includes(
+                membership.membership_role.toUpperCase(),
+              ),
           )
           .map((membership) => membership.team_id)
       : [];

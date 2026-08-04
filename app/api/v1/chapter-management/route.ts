@@ -11,6 +11,11 @@ import {
   chapterManagementAuthorizationClause,
   requireChapterManagementScope,
 } from "@/lib/server/chapter-management";
+import {
+  assertPaidEconomyRevisionFresh,
+  paidEconomyRevisionGuardSql,
+  requirePaidEconomyPublicDocument,
+} from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
 
 const identifierSchema = z.string().trim().min(3).max(120);
@@ -55,7 +60,10 @@ const updateSchema = z
     publishedAt: z.string().datetime().nullable(),
     accessType: z.enum(["FREE", "PAID"]),
     priceOnyx: z.number().int().min(0).max(100_000),
-    commentsEnabled: z.boolean(),
+    commentsEnabled: z
+      .boolean()
+      .default(true)
+      .transform(() => true),
     pageOrder: z.array(identifierSchema).max(500),
     reason: z.string().trim().min(6).max(500),
   })
@@ -367,6 +375,10 @@ export async function PATCH(request: Request) {
         "This team already has the same chapter, language, and version.",
       );
     }
+    const paidEconomyRevision =
+      payload.accessType === "PAID"
+        ? (await requirePaidEconomyPublicDocument()).revision
+        : null;
 
     const pages = await env.DB.prepare(
       `SELECT id
@@ -400,7 +412,12 @@ export async function PATCH(request: Request) {
        WHERE guard_chapter.id = ?
          AND guard_chapter.revision = ?
          AND ${guardAuthorization.sql}
-    )`;
+    )
+    AND ${
+      paidEconomyRevision === null
+        ? "1 = 1"
+        : paidEconomyRevisionGuardSql(paidEconomyRevision)
+    }`;
     const pageStatements =
       payload.pageOrder.length > 0
         ? [
@@ -471,7 +488,12 @@ export async function PATCH(request: Request) {
                AND duplicate.state IN
                  ('DRAFT', 'READY_FOR_REVIEW', 'PUBLISHED')
           )
-          AND ${updateAuthorization.sql}`,
+          AND ${updateAuthorization.sql}
+          AND ${
+            paidEconomyRevision === null
+              ? "1 = 1"
+              : paidEconomyRevisionGuardSql(paidEconomyRevision)
+          }`,
     ).bind(
       payload.chapterNumber,
       payload.volume,
@@ -485,7 +507,7 @@ export async function PATCH(request: Request) {
       payload.publishedAt,
       payload.accessType,
       payload.accessType === "PAID" ? payload.priceOnyx : 0,
-      payload.commentsEnabled ? 1 : 0,
+      1,
       payload.chapterId,
       payload.seriesId,
       payload.expectedRevision,
@@ -523,6 +545,9 @@ export async function PATCH(request: Request) {
     ]);
     const updateResult = results[pageStatements.length];
     if (!updateResult?.meta.changes) {
+      if (paidEconomyRevision !== null) {
+        await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+      }
       throw new ApiError(
         409,
         "STALE_VERSION",

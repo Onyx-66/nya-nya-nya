@@ -36,7 +36,6 @@ type SeriesRow = {
   originalLanguage: string;
   readingDirection: SeriesManagementInput["readingDirection"];
   publicationYear: number | null;
-  ageRating: SeriesManagementInput["ageRating"];
   accessType: SeriesManagementInput["accessType"];
   rightsStatus: SeriesManagementInput["rightsStatus"];
   coverKey: string | null;
@@ -127,7 +126,6 @@ function mapSeries(row: SeriesRow) {
     synopsis: row.synopsis,
     type: row.type,
     status: row.status,
-    ageRating: row.ageRating,
     publicationYear:
       row.publicationYear === null ? null : Number(row.publicationYear),
     authors: parseJsonArray<{ id: string; name: string }>(row.authorsJson),
@@ -184,7 +182,6 @@ const seriesSelect = `
     s.original_language AS originalLanguage,
     s.reading_direction AS readingDirection,
     s.publication_year AS publicationYear,
-    s.age_rating AS ageRating,
     s.access_type AS accessType,
     s.rights_status AS rightsStatus,
     s.cover_key AS coverKey,
@@ -756,7 +753,7 @@ async function saveSeries(
            SET slug = ?, title = ?, native_title = ?, synopsis = ?, type = ?,
                status = ?, origin_country = ?, original_language = ?,
                reading_direction = ?, publication_year = ?, publisher_id = ?,
-               age_rating = ?, access_type = ?, rights_status = ?,
+               access_type = ?, rights_status = ?,
                is_published = ?,
                cover_key = CASE WHEN ? = 1 THEN NULL ELSE cover_key END,
                banner_key = CASE WHEN ? = 1 THEN NULL ELSE banner_key END,
@@ -777,7 +774,6 @@ async function saveSeries(
           input.readingDirection,
           input.publicationYear,
           relationships.publisher?.id ?? null,
-          input.ageRating,
           input.accessType,
           input.rightsStatus,
           input.isPublished ? 1 : 0,
@@ -797,7 +793,7 @@ async function saveSeries(
             origin_country, original_language, reading_direction,
             publication_year, publisher_id, age_rating, access_type,
             rights_status, is_published, revision, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?, ?, 1, ?, ?)`,
         )
         .bind(
           id,
@@ -812,7 +808,6 @@ async function saveSeries(
           input.readingDirection,
           input.publicationYear,
           relationships.publisher?.id ?? null,
-          input.ageRating,
           input.accessType,
           input.rightsStatus,
           input.isPublished ? 1 : 0,

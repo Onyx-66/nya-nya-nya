@@ -12,6 +12,7 @@ import {
   assertUploadRateLimit,
   isUploadAdmin,
   privatePageObjectKey,
+  reserveUploadRateLimitAttempt,
   requireUploadCapability,
   requireUploadScope,
   uploadFileMutationSchema,
@@ -50,6 +51,7 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
      WHERE live_series.id = ${alias}.series_id
        AND live_series.is_published = 1
        AND live_series.archived_at IS NULL
+       AND live_series.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
        AND live_series.rights_status IN
          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
   )`;
@@ -74,26 +76,28 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
         ${alias}.team_id IS NULL
         OR EXISTS (
           SELECT 1
-            FROM teams live_team
-           WHERE live_team.id = ${alias}.team_id
+            FROM team_memberships live_membership
+            JOIN teams live_team ON live_team.id = live_membership.team_id
+           WHERE live_membership.user_id = ?
+             AND live_membership.team_id = ${alias}.team_id
+             AND live_membership.status = 'ACTIVE'
+             AND UPPER(live_membership.membership_role) IN
+               ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
              AND live_team.is_archived = 0
-             AND live_team.verification_status <> 'SUSPENDED'
+             AND live_team.verification_status = 'VERIFIED'
         )
       )`,
-      bindings: [actor.id] as unknown[],
+      bindings: [actor.id, actor.id] as unknown[],
     };
   }
   return {
     sql: `EXISTS (
       SELECT 1
         FROM users live_actor
-        JOIN series_team_assignments live_assignment
-          ON live_assignment.series_id = ${alias}.series_id
-         AND live_assignment.team_id = ${alias}.team_id
         JOIN team_memberships live_membership
-          ON live_membership.team_id = live_assignment.team_id
+          ON live_membership.team_id = ${alias}.team_id
          AND live_membership.user_id = live_actor.id
-        JOIN teams live_team ON live_team.id = live_assignment.team_id
+        JOIN teams live_team ON live_team.id = live_membership.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
          AND (
@@ -107,25 +111,8 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
            ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-         AND live_assignment.can_upload = 1
-         AND live_assignment.revoked_at IS NULL
          AND live_team.is_archived = 0
-         AND live_team.verification_status <> 'SUSPENDED'
-         AND json_valid(live_assignment.allowed_languages_json) = 1
-         AND (
-           json_array_length(live_assignment.allowed_languages_json) = 0
-           OR NOT EXISTS (
-             SELECT 1
-               FROM upload_job_items live_item
-              WHERE live_item.job_id = ${alias}.id
-                AND NOT EXISTS (
-                  SELECT 1
-                    FROM json_each(live_assignment.allowed_languages_json)
-                   WHERE LOWER(CAST(value AS TEXT)) IN
-                     ('*', LOWER(live_item.language))
-                )
-           )
-         )
+         AND live_team.verification_status = 'VERIFIED'
     )
     AND ${seriesIsEligible}`,
     bindings: [actor.id] as unknown[],
@@ -429,6 +416,12 @@ export async function POST(request: Request) {
         "Choose a chapter page image.",
       );
     }
+    await reserveUploadRateLimitAttempt(env.DB, actor, {
+      jobId,
+      itemId,
+      requestId: id,
+      byteSize: file.size,
+    });
     const job = await mutableJob(env.DB, actor, jobId, itemId);
     if (job.revision !== expectedRevision) {
       throw new ApiError(

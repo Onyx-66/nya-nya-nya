@@ -49,14 +49,19 @@ test("Version 32 migrations add normalized community and Roulette contracts", as
   database.close();
 });
 
-test("team Gifts target verified assigned series and notify staff atomically", async () => {
+test("team Gifts target verified teams' public releases and notify staff atomically", async () => {
   const [route, panel] = await Promise.all([
     read("app/api/v1/gifts/route.ts"),
     read("components/nyascans/GiftStorePanel.tsx"),
   ]);
 
   assert.match(route, /seriesIds:/u);
-  assert.match(route, /FROM series_team_assignments sta/u);
+  assert.match(
+    route,
+    /FROM chapters c[\s\S]+c\.team_id = \?[\s\S]+c\.state = 'PUBLISHED'[\s\S]+c\.visibility = 'PUBLIC'/u,
+  );
+  assert.doesNotMatch(route, /FROM series_team_assignments sta/u);
+  assert.match(route, /t\.verification_status = 'VERIFIED'/u);
   assert.match(route, /TEAM_SERIES_UNAVAILABLE/u);
   assert.match(route, /INSERT INTO team_support_receipt_series/u);
   assert.match(route, /INSERT INTO notifications/u);

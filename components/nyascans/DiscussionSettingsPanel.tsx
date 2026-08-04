@@ -2,13 +2,13 @@
 
 import {
   ChatCenteredDots,
-  CheckCircle,
   FloppyDisk,
   Gif,
   ImageSquare,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {
   defaultDiscussionSettings,
   parseDiscussionSettings,
@@ -153,7 +153,7 @@ export function DiscussionSettingsPanel() {
             Set the attachment and reply policy for every series and chapter
             thread. Use the Reaction library to manage reader reactions.
           </p>
-          <p className="admin-supporting-copy">
+          <p className="discussion-reaction-callout">
             Reaction set management—including Add reaction, ordering, media,
             availability, and archival—lives in the Reaction library tab.
           </p>
@@ -166,7 +166,9 @@ export function DiscussionSettingsPanel() {
               setStatus("idle");
               setMessage("");
             }}
-            disabled={status === "loading" || status === "saving"}
+            disabled={
+              status === "loading" || status === "saving" || !dirty
+            }
           >
             Discard changes
           </button>
@@ -174,7 +176,9 @@ export function DiscussionSettingsPanel() {
             className="button button-primary"
             type="button"
             onClick={save}
-            disabled={status === "loading" || status === "saving"}
+            disabled={
+              status === "loading" || status === "saving" || !dirty
+            }
           >
             <FloppyDisk size={17} />
             {status === "saving" ? "Saving…" : "Save discussions"}
@@ -185,14 +189,18 @@ export function DiscussionSettingsPanel() {
       {status === "loading" ? (
         <div className="settings-loading">Loading discussion controls…</div>
       ) : (
-        <section className="discussion-policy-grid">
-            <article>
-              <div>
+        <div className="discussion-settings-content">
+          <section className="discussion-policy-grid" aria-label="Media policy">
+            <article className="discussion-feature-card">
+              <span className="discussion-feature-icon" aria-hidden="true">
                 <ImageSquare size={22} />
+              </span>
+              <div className="discussion-feature-copy">
+                <span>Static media</span>
                 <h3>Images</h3>
                 <p>Verified JPEG, PNG, and WebP files up to 8 MB.</p>
               </div>
-              <label className="theme-switch">
+              <label className="discussion-policy-toggle">
                 <input
                   type="checkbox"
                   checked={settings.allowImages}
@@ -207,13 +215,16 @@ export function DiscussionSettingsPanel() {
                 <span>Allow images</span>
               </label>
             </article>
-            <article>
-              <div>
+            <article className="discussion-feature-card">
+              <span className="discussion-feature-icon" aria-hidden="true">
                 <Gif size={22} />
+              </span>
+              <div className="discussion-feature-copy">
+                <span>Motion media</span>
                 <h3>Animated GIFs</h3>
                 <p>Direct GIF uploads use the same private media controls.</p>
               </div>
-              <label className="theme-switch">
+              <label className="discussion-policy-toggle">
                 <input
                   type="checkbox"
                   checked={settings.allowGifs}
@@ -228,6 +239,19 @@ export function DiscussionSettingsPanel() {
                 <span>Allow GIFs</span>
               </label>
             </article>
+          </section>
+          <section className="discussion-limit-card">
+            <header>
+              <div>
+                <span>Thread limits</span>
+                <h3>Keep discussions readable</h3>
+              </div>
+              <p>
+                Bound media-heavy comments and deep reply chains without
+                disabling conversation.
+              </p>
+            </header>
+            <div className="discussion-limit-grid">
             <label>
               <span>Attachments per comment</span>
               <select
@@ -266,19 +290,22 @@ export function DiscussionSettingsPanel() {
                 ))}
               </select>
             </label>
-        </section>
+            </div>
+          </section>
+        </div>
       )}
 
       {message ? (
-        <p
-          className={`theme-status ${
-            status === "error" ? "theme-status-error" : ""
-          }`}
-          role="status"
-        >
-          {status === "saved" ? <CheckCircle size={17} weight="fill" /> : null}
-          {message}
-        </p>
+        <SystemNoticeBridge
+          message={message}
+          kind={
+            status === "error"
+              ? "error"
+              : status === "saved"
+                ? "success"
+                : "info"
+          }
+        />
       ) : null}
     </section>
   );

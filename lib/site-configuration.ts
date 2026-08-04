@@ -39,10 +39,10 @@ export const siteSocialLinkSchema = z.object({
   id: z
     .string()
     .trim()
-    .min(2)
+    .min(1)
     .max(60)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  label: z.string().trim().min(2).max(60),
+  label: z.string().trim().min(1).max(60),
   url: destinationSchema,
   enabled: z.boolean(),
   icon: z
@@ -68,7 +68,7 @@ export const siteConfigurationSchema = z
     brand: z.object({
       siteName: z.string().trim().min(2).max(80),
       shortDescription: z.string().trim().max(240).default(""),
-      logoAlt: z.string().trim().min(2).max(160),
+      logoAlt: z.string().trim().max(160).default(""),
       logo: mediaSlotSchema,
       compactLogo: optionalBrandMediaSchema,
       appIcon: optionalBrandMediaSchema,

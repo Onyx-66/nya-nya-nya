@@ -71,7 +71,8 @@ test("locked chapter media stays server-gated and the reader recovers per page",
   assert.match(app, /Try page again/);
   assert.match(reader, /readerContext\?\.chapterManagementHref/);
   assert.match(api, /requireChapterManagementScope/);
-  assert.match(management, /sta\.can_upload = 1/);
+  assert.match(management, /t\.verification_status = 'VERIFIED'/);
+  assert.doesNotMatch(management, /series_team_assignments/);
   assert.doesNotMatch(reader, /chapter-access\?series=/);
 });
 

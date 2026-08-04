@@ -12,6 +12,8 @@ export const SITE_SHORTCUTS = [
   { keys: ["G", "R"], label: "Go to Roulette", href: "/roulette" },
   { keys: ["G", "N"], label: "Go to Notifications", href: "/notifications" },
   { keys: ["G", "A"], label: "Go to Account", href: "/account" },
+  { keys: ["G", "M"], label: "Go to Admin Panel", href: "/onyx/admin/access" },
+  { keys: ["G", "P"], label: "Go to Upload Center", href: "/upload-chapter" },
   { keys: ["?"], label: "Open this shortcut guide", href: null },
 ] as const;
 
@@ -24,4 +26,6 @@ export const SITE_NAVIGATION_CHORDS = Object.freeze({
   r: "/roulette",
   n: "/notifications",
   a: "/account",
+  m: "/onyx/admin/access",
+  p: "/upload-chapter",
 });

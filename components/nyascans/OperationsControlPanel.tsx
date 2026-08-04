@@ -7,6 +7,7 @@ import {
   ArrowRight,
   ArrowUp,
   Books,
+  CaretDown,
   CaretLeft,
   CaretRight,
   ChatCircle,
@@ -24,6 +25,7 @@ import {
   Pulse,
   ShieldCheck,
   ShieldWarning,
+  Sparkle,
   UserGear,
   UsersThree,
   WarningCircle,
@@ -44,6 +46,7 @@ import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold
 import { CommerceOfferManager } from "@/components/nyascans/admin/CommerceOfferManager";
 import { NewSeriesQueuePanel } from "@/components/nyascans/admin/NewSeriesQueuePanel";
 import { SeriesManagementPanel } from "@/components/nyascans/admin/SeriesManagementPanel";
+import { SeriesReportsPanel } from "@/components/nyascans/admin/SeriesReportsPanel";
 import { SupportTicketsAdminPanel } from "@/components/nyascans/admin/SupportTicketsAdminPanel";
 import {
   StoreManagementWorkspace,
@@ -52,6 +55,7 @@ import {
 import { TeamManagementPanel } from "@/components/nyascans/admin/TeamManagementPanel";
 import { UploadCenterWorkspace } from "@/components/nyascans/upload/UploadCenterWorkspace";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { coinLabel } from "@/lib/commercial-settings";
 
 type AdminSummary = {
@@ -194,7 +198,6 @@ type AdminSeries = {
   originCountry: string;
   originalLanguage: string;
   readingDirection: string;
-  ageRating: string;
   coverKey: string | null;
   coverUrl: string | null;
   isPublished: number;
@@ -385,19 +388,13 @@ function PanelMessage({
   children,
 }: {
   kind?: "neutral" | "success" | "error";
-  children: ReactNode;
+  children: string;
 }) {
   return (
-    <p className={`control-message control-message-${kind}`} role="status">
-      {kind === "success" ? (
-        <CheckCircle size={18} weight="fill" />
-      ) : kind === "error" ? (
-        <WarningCircle size={18} />
-      ) : (
-        <Pulse size={18} />
-      )}
-      {children}
-    </p>
+    <SystemNoticeBridge
+      message={children}
+      kind={kind === "neutral" ? "info" : kind}
+    />
   );
 }
 
@@ -1524,6 +1521,8 @@ function UsersManager({
                       return (
                         <label
                           key={role.value}
+                          data-role={role.value}
+                          data-selected={checked ? "true" : "false"}
                           title={
                             ownerOnlyRole
                               ? `${role.description} Owner-only assignment.`
@@ -1593,6 +1592,18 @@ function UsersManager({
 }
 
 type UsersControlView = "overview" | "activity" | "purchases" | "balances";
+type BalanceCurrency = "SHARDS" | "ONYX";
+type BalanceAdjustmentDraft = {
+  mode: "ADD" | "REMOVE";
+  amount: string;
+  reason: string;
+};
+
+const emptyBalanceAdjustment = (): BalanceAdjustmentDraft => ({
+  mode: "ADD",
+  amount: "",
+  reason: "",
+});
 
 type UsersControlPayload = {
   view: UsersControlView;
@@ -1624,16 +1635,27 @@ function UsersControlPanel({
   const [adjustingUser, setAdjustingUser] = useState<Record<string, unknown> | null>(
     null,
   );
-  const [adjustment, setAdjustment] = useState({
-    currency: "SHARDS" as "SHARDS" | "ONYX",
-    delta: 0,
-    reason: "",
+  const [adjustments, setAdjustments] = useState<
+    Record<BalanceCurrency, BalanceAdjustmentDraft>
+  >({
+    SHARDS: emptyBalanceAdjustment(),
+    ONYX: emptyBalanceAdjustment(),
   });
-  const [adjustmentBusy, setAdjustmentBusy] = useState(false);
+  const [openAdjustments, setOpenAdjustments] = useState<
+    Record<BalanceCurrency, boolean>
+  >({ SHARDS: false, ONYX: false });
+  const [adjustmentBusy, setAdjustmentBusy] =
+    useState<BalanceCurrency | null>(null);
+  const adjustmentEditorRef = useRef<HTMLElement | null>(null);
   const loadSequenceRef = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
-  const adjustmentKeyRef = useRef("");
-  const adjustmentSubmittingRef = useRef(false);
+  const adjustmentKeyRef = useRef<Record<BalanceCurrency, string>>({
+    SHARDS: "",
+    ONYX: "",
+  });
+  const adjustmentSubmittingRef = useRef<
+    Record<BalanceCurrency, boolean>
+  >({ SHARDS: false, ONYX: false });
   const ownerActor = actorRoles.includes("OWNER");
 
   async function load(
@@ -1693,68 +1715,111 @@ function UsersControlPanel({
   }, [view]);
 
   function updateAdjustment(
-    patch: Partial<typeof adjustment>,
+    currency: BalanceCurrency,
+    patch: Partial<BalanceAdjustmentDraft>,
   ) {
-    if (adjustmentSubmittingRef.current) return;
-    adjustmentKeyRef.current = "";
-    setAdjustment((current) => ({ ...current, ...patch }));
+    if (adjustmentSubmittingRef.current[currency]) return;
+    adjustmentKeyRef.current[currency] = "";
+    setAdjustments((current) => ({
+      ...current,
+      [currency]: { ...current[currency], ...patch },
+    }));
   }
 
   function openAdjustment(row: Record<string, unknown>) {
-    if (adjustmentSubmittingRef.current) return;
-    adjustmentKeyRef.current = "";
-    setAdjustment({ currency: "SHARDS", delta: 0, reason: "" });
+    if (Object.values(adjustmentSubmittingRef.current).some(Boolean)) return;
+    adjustmentKeyRef.current = { SHARDS: "", ONYX: "" };
+    setAdjustments({
+      SHARDS: emptyBalanceAdjustment(),
+      ONYX: emptyBalanceAdjustment(),
+    });
+    setOpenAdjustments({ SHARDS: false, ONYX: false });
     setAdjustingUser(row);
     setMessage("");
+    window.requestAnimationFrame(() => {
+      adjustmentEditorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+      adjustmentEditorRef.current?.focus({ preventScroll: true });
+    });
   }
 
   function closeAdjustment() {
-    if (adjustmentSubmittingRef.current) return;
-    adjustmentKeyRef.current = "";
-    setAdjustment({ currency: "SHARDS", delta: 0, reason: "" });
+    if (Object.values(adjustmentSubmittingRef.current).some(Boolean)) return;
+    adjustmentKeyRef.current = { SHARDS: "", ONYX: "" };
+    setAdjustments({
+      SHARDS: emptyBalanceAdjustment(),
+      ONYX: emptyBalanceAdjustment(),
+    });
+    setOpenAdjustments({ SHARDS: false, ONYX: false });
     setAdjustingUser(null);
   }
 
-  async function applyAdjustment(event: FormEvent) {
+  async function applyAdjustment(
+    event: FormEvent,
+    currency: BalanceCurrency,
+  ) {
     event.preventDefault();
+    const adjustment = adjustments[currency];
+    const absoluteAmount = Number(adjustment.amount);
+    const delta =
+      adjustment.mode === "REMOVE" ? -absoluteAmount : absoluteAmount;
     if (
-      adjustmentSubmittingRef.current ||
+      adjustmentSubmittingRef.current[currency] ||
       !ownerActor ||
       !payload?.ownerCanAdjust ||
       !adjustingUser ||
-      !Number(adjustment.delta) ||
+      !Number.isInteger(absoluteAmount) ||
+      absoluteAmount <= 0 ||
       adjustment.reason.trim().length < 8
     ) {
+      setMessage(
+        "Enter a whole positive amount and an audit reason of at least 8 characters.",
+      );
+      setError(true);
       return;
     }
-    adjustmentSubmittingRef.current = true;
-    setAdjustmentBusy(true);
+    adjustmentSubmittingRef.current[currency] = true;
+    setAdjustmentBusy(currency);
     setMessage("");
     const idempotencyKey =
-      adjustmentKeyRef.current || crypto.randomUUID();
-    adjustmentKeyRef.current = idempotencyKey;
+      adjustmentKeyRef.current[currency] || crypto.randomUUID();
+    adjustmentKeyRef.current[currency] = idempotencyKey;
     try {
       const response = await fetch("/api/v1/admin/balance-adjustments", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           userId: String(adjustingUser.id),
-          currency: adjustment.currency,
-          delta: Number(adjustment.delta),
+          currency,
+          delta,
           reason: adjustment.reason,
           idempotencyKey,
         }),
       });
       const result = await readJson<{ created: boolean }>(response);
-      adjustmentKeyRef.current = "";
+      adjustmentKeyRef.current[currency] = "";
       setMessage(
         result.created
           ? "The balanced ledger adjustment was posted and audited."
           : "The previous adjustment request was confirmed without posting it twice.",
       );
       setError(false);
-      setAdjustingUser(null);
-      setAdjustment({ currency: "SHARDS", delta: 0, reason: "" });
+      const balanceKey =
+        currency === "ONYX" ? "onyxBalance" : "shardsBalance";
+      setAdjustingUser((current) =>
+        current
+          ? {
+              ...current,
+              [balanceKey]: Number(current[balanceKey] ?? 0) + delta,
+            }
+          : current,
+      );
+      setAdjustments((current) => ({
+        ...current,
+        [currency]: emptyBalanceAdjustment(),
+      }));
       await load(query, { clearMessage: false });
     } catch (reason) {
       setMessage(
@@ -1762,8 +1827,8 @@ function UsersControlPanel({
       );
       setError(true);
     } finally {
-      adjustmentSubmittingRef.current = false;
-      setAdjustmentBusy(false);
+      adjustmentSubmittingRef.current[currency] = false;
+      setAdjustmentBusy(null);
     }
   }
 
@@ -1828,6 +1893,193 @@ function UsersControlPanel({
           ))}
         </div>
       ) : null}
+      {adjustingUser ? (
+        <section
+          className="balance-adjustment-editor"
+          ref={adjustmentEditorRef}
+          tabIndex={-1}
+          aria-labelledby="balance-adjustment-title"
+        >
+          <header>
+            <div>
+              <span>Owner-only ledger action</span>
+              <h3 id="balance-adjustment-title">
+                Adjust {String(adjustingUser.displayName)}’s balances
+              </h3>
+              <p>
+                Choose a currency. Each posted correction creates an equal
+                platform entry and a permanent audit record.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={adjustmentBusy !== null}
+              aria-label="Close balance adjustment"
+              onClick={closeAdjustment}
+            >
+              <X size={17} />
+            </button>
+          </header>
+          <div className="balance-adjustment-panels">
+            {(
+              [
+                {
+                  currency: "SHARDS",
+                  label: "Shards",
+                  description: "Free reading currency",
+                  balanceKey: "shardsBalance",
+                  icon: <Sparkle size={21} weight="fill" />,
+                },
+                {
+                  currency: "ONYX",
+                  label: coinPlural,
+                  description: "Paw Coins balance",
+                  balanceKey: "onyxBalance",
+                  icon: <Coins size={21} weight="fill" />,
+                },
+              ] as const
+            ).map((option) => {
+              const draft = adjustments[option.currency];
+              const currentBalance = Number(
+                adjustingUser[option.balanceKey] ?? 0,
+              );
+              const amount = Number(draft.amount) || 0;
+              const signedAmount =
+                draft.mode === "REMOVE" ? -amount : amount;
+              const projectedBalance = currentBalance + signedAmount;
+              const open = openAdjustments[option.currency];
+              const panelId = `balance-${option.currency.toLowerCase()}-editor`;
+              return (
+                <article
+                  className="balance-currency-panel"
+                  data-currency={option.currency.toLowerCase()}
+                  key={option.currency}
+                >
+                  <button
+                    className="balance-currency-toggle"
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={panelId}
+                    disabled={
+                      adjustmentBusy !== null &&
+                      adjustmentBusy !== option.currency
+                    }
+                    onClick={() =>
+                      setOpenAdjustments((current) => ({
+                        ...current,
+                        [option.currency]: !current[option.currency],
+                      }))
+                    }
+                  >
+                    <span className="balance-currency-icon" aria-hidden="true">
+                      {option.icon}
+                    </span>
+                    <span>
+                      <small>{option.description}</small>
+                      <strong>{option.label}</strong>
+                    </span>
+                    <span className="balance-currency-current">
+                      <small>Current</small>
+                      <strong>{currentBalance.toLocaleString()}</strong>
+                    </span>
+                    <CaretDown size={17} aria-hidden="true" />
+                  </button>
+                  {open ? (
+                    <form
+                      id={panelId}
+                      className="balance-currency-form"
+                      onSubmit={(event) =>
+                        void applyAdjustment(event, option.currency)
+                      }
+                    >
+                      <fieldset>
+                        <legend>Adjustment type</legend>
+                        <div className="balance-mode-toggle">
+                          {(["ADD", "REMOVE"] as const).map((mode) => (
+                            <label key={mode}>
+                              <input
+                                type="radio"
+                                name={`${option.currency}-mode`}
+                                value={mode}
+                                checked={draft.mode === mode}
+                                disabled={adjustmentBusy !== null}
+                                onChange={() =>
+                                  updateAdjustment(option.currency, { mode })
+                                }
+                              />
+                              <span>{mode === "ADD" ? "Add" : "Remove"}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                      <label>
+                        <span>Amount</span>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          inputMode="numeric"
+                          required
+                          value={draft.amount}
+                          disabled={adjustmentBusy !== null}
+                          onChange={(event) =>
+                            updateAdjustment(option.currency, {
+                              amount: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="balance-adjustment-reason">
+                        <span>Reason for audit log</span>
+                        <textarea
+                          minLength={8}
+                          maxLength={500}
+                          required
+                          value={draft.reason}
+                          disabled={adjustmentBusy !== null}
+                          placeholder="Explain why this correction is required"
+                          onChange={(event) =>
+                            updateAdjustment(option.currency, {
+                              reason: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <div
+                        className={`balance-projection ${
+                          projectedBalance < 0 ? "is-invalid" : ""
+                        }`}
+                      >
+                        <span>Projected balance</span>
+                        <strong>{projectedBalance.toLocaleString()}</strong>
+                        <small>
+                          {draft.mode === "REMOVE" ? "−" : "+"}
+                          {amount.toLocaleString()} {option.label}
+                        </small>
+                      </div>
+                      <button
+                        className="button button-primary"
+                        type="submit"
+                        disabled={
+                          adjustmentBusy !== null ||
+                          !Number.isInteger(amount) ||
+                          amount <= 0 ||
+                          projectedBalance < 0 ||
+                          draft.reason.trim().length < 8
+                        }
+                      >
+                        {adjustmentBusy === option.currency
+                          ? "Posting adjustment…"
+                          : `Post ${option.label} adjustment`}
+                      </button>
+                    </form>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
       {loading ? (
         <LoadingPanel />
       ) : payload?.rows.length ? (
@@ -1888,7 +2140,7 @@ function UsersControlPanel({
                           <button
                             type="button"
                             className="button button-secondary button-compact"
-                            disabled={adjustmentBusy}
+                            disabled={adjustmentBusy !== null}
                             onClick={() => openAdjustment(row)}
                           >
                             Adjust
@@ -1924,78 +2176,6 @@ function UsersControlPanel({
           body="Change the filter or search term and try again."
         />
       )}
-      {adjustingUser ? (
-        <form className="balance-adjustment-card" onSubmit={applyAdjustment}>
-          <header>
-            <div>
-              <span>Owner action</span>
-              <h3>Adjust {String(adjustingUser.displayName)}’s balance</h3>
-            </div>
-            <button
-              type="button"
-              disabled={adjustmentBusy}
-              aria-label="Close balance adjustment"
-              onClick={closeAdjustment}
-            >
-              <X size={16} />
-            </button>
-          </header>
-          <label>
-            <span>Currency</span>
-            <select
-              value={adjustment.currency}
-              disabled={adjustmentBusy}
-              onChange={(event) =>
-                updateAdjustment({
-                  currency: event.target.value as "SHARDS" | "ONYX",
-                })
-              }
-            >
-              <option value="SHARDS">Shards</option>
-              <option value="ONYX">{coinPlural}</option>
-            </select>
-          </label>
-          <label>
-            <span>Signed amount</span>
-            <input
-              type="number"
-              required
-              value={adjustment.delta}
-              disabled={adjustmentBusy}
-              onChange={(event) =>
-                updateAdjustment({
-                  delta: Number(event.target.value),
-                })
-              }
-            />
-            <small>Use a negative value to remove balance.</small>
-          </label>
-          <label className="balance-adjustment-reason">
-            <span>Reason for audit log</span>
-            <textarea
-              minLength={8}
-              required
-              value={adjustment.reason}
-              disabled={adjustmentBusy}
-              onChange={(event) =>
-                updateAdjustment({
-                  reason: event.target.value,
-                })
-              }
-            />
-          </label>
-          <button
-            className="button button-primary"
-            disabled={
-              adjustmentBusy ||
-              !adjustment.delta ||
-              adjustment.reason.trim().length < 8
-            }
-          >
-            {adjustmentBusy ? "Posting adjustment…" : "Post balanced adjustment"}
-          </button>
-        </form>
-      ) : null}
       {message ? <PanelMessage kind={error ? "error" : "success"}>{message}</PanelMessage> : null}
     </section>
   );
@@ -3166,8 +3346,7 @@ function AnalyticsPanel() {
       ) : null}
       {error ? (
         <PanelMessage kind="error">
-          {error} Existing figures remain visible until the next successful
-          refresh.
+          {`${error} Existing figures remain visible until the next successful refresh.`}
         </PanelMessage>
       ) : null}
       {!activeData ? (
@@ -4747,6 +4926,9 @@ export function OperationsControlPanel({
     );
   }
   if (section === "Series") return <SeriesManagementPanel />;
+  if (section === "Series Reports" || section === "series-reports") {
+    return <SeriesReportsPanel />;
+  }
   if (section === "New Series Queue") return <NewSeriesQueuePanel />;
   if (section === "Chapter access") return <ChapterAccessPanel />;
   if (section === "Teams") {

@@ -3,6 +3,10 @@ import { z } from "zod";
 import { demoSeries } from "@/lib/catalog";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import {
+  continuityFallbackReason,
+  selectPreferredRelease,
+} from "@/lib/reader-continuity";
+import {
   countryCodeSchema,
   languageCodeSchema,
   normalizedLookupKey,
@@ -25,8 +29,11 @@ import {
   saveDiscussionSettings,
 } from "@/lib/server/discussion-settings";
 import {
+  assertPaidEconomyRevisionFresh,
   getCommercialSettingsDocument,
+  paidEconomyRevisionGuardSql,
   requirePaidEconomyPublic,
+  requirePaidEconomyPublicDocument,
   saveCommercialSettings,
 } from "@/lib/server/commercial-settings";
 import {
@@ -226,7 +233,6 @@ const adminSeriesSchema = z.object({
   originCountry: countryCodeSchema,
   originalLanguage: languageCodeSchema,
   readingDirection: z.enum(["VERTICAL", "RIGHT_TO_LEFT", "LEFT_TO_RIGHT"]),
-  ageRating: z.enum(["EVERYONE", "TEEN", "MATURE"]),
   accessType: z.enum(["FREE", "PAID"]),
   teamId: z
     .union([z.string().min(3).max(120), z.literal("")])
@@ -853,24 +859,33 @@ async function requireSeriesModerator(
       "This account cannot moderate series discussions.",
     );
   }
-  const assignment = await env.DB.prepare(
+  const participation = await env.DB.prepare(
     `SELECT s.id
-       FROM series s
-       JOIN series_team_assignments sta ON sta.series_id = s.id
-       JOIN team_memberships tm ON tm.team_id = sta.team_id
-       JOIN teams t ON t.id = sta.team_id
+      FROM series s
+      JOIN team_memberships tm ON tm.user_id = ?
+      JOIN teams t ON t.id = tm.team_id
       WHERE s.slug = ?
-        AND tm.user_id = ?
+        AND ${publicSeriesPredicate("s")}
         AND tm.status = 'ACTIVE'
         AND t.is_archived = 0
-        AND t.verification_status <> 'SUSPENDED'
+        AND t.verification_status = 'VERIFIED'
         AND UPPER(tm.membership_role) IN
           ('OWNER', 'MANAGER', 'TEAM_LEADER')
+        AND EXISTS (
+          SELECT 1
+            FROM chapters team_release
+           WHERE team_release.series_id = s.id
+             AND team_release.team_id = t.id
+             AND team_release.state = 'PUBLISHED'
+             AND team_release.visibility = 'PUBLIC'
+             AND team_release.published_at IS NOT NULL
+             AND datetime(team_release.published_at) <= datetime('now')
+        )
       LIMIT 1`,
   )
-    .bind(seriesSlug, actor.id)
+    .bind(actor.id, seriesSlug)
     .first();
-  if (!assignment) {
+  if (!participation) {
     throw new ApiError(
       403,
       "SERIES_MODERATION_SCOPE_REQUIRED",
@@ -928,21 +943,29 @@ async function resolveCommentAffiliation(
             CASE
               WHEN ? IS NOT NULL AND chapter.team_id = t.id THEN 0
               WHEN ? IS NOT NULL AND t.id = ? THEN 1
-              WHEN sta.is_primary = 1 THEN 2
-              WHEN tm.is_primary = 1 THEN 3
-              ELSE 4
+              WHEN tm.is_primary = 1 THEN 2
+              ELSE 3
             END AS precedence
      FROM series s
-     JOIN series_team_assignments sta ON sta.series_id = s.id
-     JOIN teams t ON t.id = sta.team_id
-     JOIN team_memberships tm
-       ON tm.team_id = t.id AND tm.user_id = ?
+     JOIN team_memberships tm ON tm.user_id = ?
+     JOIN teams t ON t.id = tm.team_id
      LEFT JOIN chapters chapter
        ON chapter.series_id = s.id AND chapter.slug = ?
      WHERE s.slug = ?
+       AND ${publicSeriesPredicate("s")}
        AND tm.status = 'ACTIVE'
        AND t.is_archived = 0
-       AND t.verification_status <> 'SUSPENDED'
+       AND t.verification_status = 'VERIFIED'
+       AND EXISTS (
+         SELECT 1
+           FROM chapters team_release
+          WHERE team_release.series_id = s.id
+            AND team_release.team_id = t.id
+            AND team_release.state = 'PUBLISHED'
+            AND team_release.visibility = 'PUBLIC'
+            AND team_release.published_at IS NOT NULL
+            AND datetime(team_release.published_at) <= datetime('now')
+       )
      ORDER BY precedence, t.name COLLATE NOCASE`,
   )
     .bind(
@@ -961,7 +984,7 @@ async function resolveCommentAffiliation(
     throw new ApiError(
       422,
       "TEAM_AFFILIATION_INVALID",
-      "Choose an active team affiliation assigned to this series.",
+      "Choose an active verified team that has published this series.",
     );
   }
   // The server-side ordering is authoritative: a chapter release team wins
@@ -1428,75 +1451,103 @@ export async function GET(request: Request, context: RouteContext) {
           "This chapter is not available.",
         );
       }
-      const [previous, next] = await Promise.all([
+      const [previousTarget, nextTarget] = await Promise.all([
         env.DB.prepare(
-          `SELECT slug,
-                  chapter_number AS chapterNumber,
-                  title
+          `SELECT chapter_number AS chapterNumber
              FROM chapters
             WHERE series_id = ?
               AND state = 'PUBLISHED'
               AND visibility = 'PUBLIC'
               AND published_at IS NOT NULL
               AND datetime(published_at) <= datetime('now')
-              AND language = ?
-              AND (
-                team_id = ?
-                OR (? IS NULL AND team_id IS NULL)
-              )
               AND CAST(chapter_number AS REAL) < CAST(? AS REAL)
-            ORDER BY CAST(chapter_number AS REAL) DESC,
-                     version DESC,
-                     datetime(published_at) DESC,
-                     id DESC
+            ORDER BY CAST(chapter_number AS REAL) DESC, chapter_number DESC
             LIMIT 1`,
         )
-          .bind(
-            record.seriesId,
-            record.language,
-            record.teamId,
-            record.teamId,
-            record.chapterNumber,
-          )
-          .first<{
-            slug: string;
-            chapterNumber: string;
-            title: string;
-          }>(),
+          .bind(record.seriesId, record.chapterNumber)
+          .first<{ chapterNumber: string }>(),
         env.DB.prepare(
-        `SELECT slug,
-                chapter_number AS chapterNumber,
-                title
+        `SELECT chapter_number AS chapterNumber
            FROM chapters
           WHERE series_id = ?
             AND state = 'PUBLISHED'
             AND visibility = 'PUBLIC'
             AND published_at IS NOT NULL
             AND datetime(published_at) <= datetime('now')
-            AND language = ?
-            AND (
-              team_id = ?
-              OR (? IS NULL AND team_id IS NULL)
-            )
             AND CAST(chapter_number AS REAL) > CAST(? AS REAL)
-          ORDER BY CAST(chapter_number AS REAL) ASC,
-                   version DESC,
-                   datetime(published_at) DESC,
-                   id DESC
+          ORDER BY CAST(chapter_number AS REAL) ASC, chapter_number ASC
           LIMIT 1`,
         )
-          .bind(
-            record.seriesId,
-            record.language,
-            record.teamId,
-            record.teamId,
-            record.chapterNumber,
-          )
-          .first<{
-            slug: string;
-            chapterNumber: string;
-            title: string;
-          }>(),
+          .bind(record.seriesId, record.chapterNumber)
+          .first<{ chapterNumber: string }>(),
+      ]);
+      type ContinuityCandidate = {
+        chapterSlug: string;
+        chapterNumber: string;
+        title: string;
+        language: string;
+        version: number;
+        teamId: string | null;
+        teamName: string | null;
+        publishedAt: string | null;
+      };
+      const loadContinuityCandidates = async (
+        chapterNumber: string | undefined,
+      ) => {
+        if (!chapterNumber) return [] as ContinuityCandidate[];
+        const rows = await env.DB.prepare(
+          `SELECT c.slug AS chapterSlug,
+                  c.chapter_number AS chapterNumber,
+                  c.title,
+                  c.language,
+                  c.version,
+                  c.team_id AS teamId,
+                  t.name AS teamName,
+                  c.published_at AS publishedAt
+             FROM chapters c
+             LEFT JOIN teams t ON t.id = c.team_id
+            WHERE c.series_id = ?
+              AND c.chapter_number = ?
+              AND c.state = 'PUBLISHED'
+              AND c.visibility = 'PUBLIC'
+              AND c.published_at IS NOT NULL
+              AND datetime(c.published_at) <= datetime('now')
+            ORDER BY c.version DESC,
+                     datetime(c.published_at) DESC,
+                     c.id DESC
+            LIMIT 50`,
+        )
+          .bind(record.seriesId, chapterNumber)
+          .all<ContinuityCandidate>();
+        return rows.results;
+      };
+      const [previousCandidates, nextCandidates] = await Promise.all([
+        loadContinuityCandidates(previousTarget?.chapterNumber),
+        loadContinuityCandidates(nextTarget?.chapterNumber),
+      ]);
+      const preference = {
+        teamId: record.teamId,
+        language: record.language,
+      };
+      const previous = selectPreferredRelease(
+        previousCandidates,
+        preference,
+      );
+      const next = selectPreferredRelease(nextCandidates, preference);
+      const alternativeContract = async (candidate: ContinuityCandidate) => {
+        const decision = await resolveChapterAccess(
+          actor,
+          record.seriesSlug,
+          candidate.chapterSlug,
+        );
+        return {
+          ...chapterAccessContract(decision),
+          title: candidate.title,
+        };
+      };
+      const [previousAlternatives, nextAlternatives] = await Promise.all([
+        Promise.all(previousCandidates.map(alternativeContract)),
+        Promise.all(nextCandidates.map(alternativeContract)),
       ]);
       const coverKey = record.coverKey?.trim() ?? "";
       let chapterManagementHref: string | null = null;
@@ -1544,18 +1595,27 @@ export async function GET(request: Request, context: RouteContext) {
           },
           previousChapter: previous
             ? {
-                slug: previous.slug,
+                slug: previous.chapterSlug,
                 number: normalizeChapterNumber(previous.chapterNumber),
                 title: previous.title,
               }
             : null,
           nextChapter: next
             ? {
-                slug: next.slug,
+                slug: next.chapterSlug,
                 number: normalizeChapterNumber(next.chapterNumber),
                 title: next.title,
               }
             : null,
+          previousAlternatives,
+          nextAlternatives,
+          previousFallbackReason: previous
+            ? null
+            : continuityFallbackReason(previousCandidates, preference),
+          nextFallbackReason: next
+            ? null
+            : continuityFallbackReason(nextCandidates, preference),
+          nextFallbackRequired: !next && nextAlternatives.length > 0,
           chapterManagementHref,
           access: chapterAccessContract(access),
         },
@@ -1607,6 +1667,10 @@ export async function GET(request: Request, context: RouteContext) {
                 c.thumbnail_key AS thumbnailKey,
                 c.revision AS chapterRevision,
                 t.name AS teamName,
+                t.slug AS teamSlug,
+                c.uploader_user_id AS uploaderUserId,
+                uploader.display_name AS uploaderName,
+                uploader_profile.username AS uploaderUsername,
                 c.access_type AS accessType,
                 c.price_onyx AS priceOnyx,
                 c.published_at AS publishedAt,
@@ -1619,18 +1683,17 @@ export async function GET(request: Request, context: RouteContext) {
                 s.rights_status AS rightsStatus,
                 EXISTS (
                   SELECT 1
-                    FROM series_team_assignments sta
-                    JOIN teams preview_team ON preview_team.id = sta.team_id
-                   WHERE sta.series_id = c.series_id
-                     AND sta.team_id = c.team_id
-                     AND sta.can_upload = 1
-                     AND sta.revoked_at IS NULL
+                    FROM teams preview_team
+                   WHERE preview_team.id = c.team_id
                      AND preview_team.is_archived = 0
-                     AND preview_team.verification_status <> 'SUSPENDED'
+                     AND preview_team.verification_status = 'VERIFIED'
                 ) AS teamPreviewAllowed
            FROM chapters c
            JOIN series s ON s.id = c.series_id
            LEFT JOIN teams t ON t.id = c.team_id
+           LEFT JOIN users uploader ON uploader.id = c.uploader_user_id
+           LEFT JOIN user_profiles uploader_profile
+             ON uploader_profile.user_id = c.uploader_user_id
           WHERE c.series_id = ?
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
@@ -1639,7 +1702,7 @@ export async function GET(request: Request, context: RouteContext) {
                    c.version DESC,
                    datetime(c.published_at) DESC,
                    c.id DESC
-          LIMIT 250`,
+          LIMIT 1000`,
       )
         .bind(seriesRecord.id)
         .all<
@@ -1653,10 +1716,15 @@ export async function GET(request: Request, context: RouteContext) {
             isFresh: number;
             thumbnailKey: string | null;
             chapterRevision: number;
+            uploaderUserId: string | null;
+            uploaderName: string | null;
+            uploaderUsername: string | null;
+            teamSlug: string | null;
           }
         >();
       const actor = await getActor();
       const unlockedIds = new Set<string>();
+      let canUploadChapter = false;
       if (actor) {
         const entitlements = await env.DB.prepare(
           `SELECT e.chapter_id AS chapterId
@@ -1672,6 +1740,26 @@ export async function GET(request: Request, context: RouteContext) {
           .all<{ chapterId: string }>();
         for (const entitlement of entitlements.results) {
           unlockedIds.add(entitlement.chapterId);
+        }
+        const roles = [actor.primaryRole, ...(actor.roles ?? [])];
+        if (isAdminActor(actor)) {
+          canUploadChapter = canAny(roles, "upload.create");
+        } else if (canAny(roles, "upload.create")) {
+          const verifiedMembership = await env.DB.prepare(
+            `SELECT 1
+               FROM team_memberships tm
+               JOIN teams t ON t.id = tm.team_id
+              WHERE tm.user_id = ?
+                AND tm.status = 'ACTIVE'
+                AND UPPER(tm.membership_role) IN
+                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+                AND t.is_archived = 0
+                AND t.verification_status = 'VERIFIED'
+              LIMIT 1`,
+          )
+            .bind(actor.id)
+            .first();
+          canUploadChapter = Boolean(verifiedMembership);
         }
       }
       const decisions = releaseRows.results.map((chapter) => ({
@@ -1694,11 +1782,18 @@ export async function GET(request: Request, context: RouteContext) {
             const source = releaseRows.results[index];
             return {
               ...chapterAccessContract(chapter),
+              uploaderUserId: source?.uploaderUserId ?? null,
+              uploaderName: source?.uploaderName ?? "NyaScans member",
+              uploaderUsername: source?.uploaderUsername ?? null,
+              teamSlug: source?.teamSlug ?? null,
               thumbnailUrl: source?.thumbnailKey
                 ? `/api/v1/chapter-thumbnail?id=${encodeURIComponent(chapter.chapterId)}&v=${Number(source.chapterRevision ?? 1)}`
                 : null,
             };
           }),
+          permissions: {
+            canUploadChapter,
+          },
         },
         {
           headers: {
@@ -2004,14 +2099,17 @@ export async function GET(request: Request, context: RouteContext) {
                   s.origin_country AS originCountry,
                   s.original_language AS originalLanguage,
                   s.reading_direction AS readingDirection,
-                  s.age_rating AS ageRating,
                   s.access_type AS accessType,
                   s.cover_key AS coverKey,
                   s.rating_tenths AS ratingTenths,
                   s.follower_count AS followerCount,
                   s.view_count AS viewCount,
                   MAX(c.published_at) AS latestPublishedAt,
-                  COUNT(c.id) AS chapterCount,
+                  COUNT(DISTINCT CASE
+                    WHEN c.id IS NULL THEN NULL
+                    WHEN LTRIM(c.chapter_number, '0') = '' THEN '0'
+                    ELSE LTRIM(c.chapter_number, '0')
+                  END) AS chapterCount,
                   (
                     SELECT latest.chapter_number
                       FROM chapters latest
@@ -2134,6 +2232,7 @@ export async function GET(request: Request, context: RouteContext) {
         .enum(["today", "week", "month", "all"])
         .catch("all")
         .parse(url.searchParams.get("period"));
+      const viewer = await getActor().catch(() => null);
       const seriesPeriodPredicate = {
         today: "AND date(newest.published_at) = date('now')",
         week:
@@ -2222,6 +2321,20 @@ export async function GET(request: Request, context: RouteContext) {
                           c.access_type AS effectiveAccessType,
                           c.price_onyx AS priceOnyx,
                           c.published_at AS publishedAt,
+                          CASE WHEN EXISTS (
+                            SELECT 1
+                              FROM reading_progress rp
+                              JOIN chapters read_chapter
+                                ON read_chapter.id = rp.chapter_id
+                             WHERE rp.user_id = ?
+                               AND read_chapter.series_id = c.series_id
+                               AND CAST(read_chapter.chapter_number AS REAL) =
+                                   CAST(c.chapter_number AS REAL)
+                               AND (
+                                 rp.completed_at IS NOT NULL
+                                 OR rp.progress_basis_points >= 9200
+                               )
+                          ) THEN 1 ELSE 0 END AS isRead,
                           datetime(c.published_at) >
                             datetime('now', '-36 hours') AS isFresh,
                           CASE WHEN ${newInPeriodExpression}
@@ -2229,6 +2342,7 @@ export async function GET(request: Request, context: RouteContext) {
                           c.created_at AS createdAt,
                           c.id,
                           t.name AS teamName,
+                          t.slug AS teamSlug,
                           ROW_NUMBER() OVER (
                             PARTITION BY LTRIM(c.chapter_number, '0')
                             ORDER BY datetime(c.published_at) DESC,
@@ -2251,17 +2365,19 @@ export async function GET(request: Request, context: RouteContext) {
                         effectiveAccessType,
                         priceOnyx,
                         publishedAt,
+                        isRead,
                         isFresh,
                         isNewInPeriod,
-                        teamName
+                        teamName,
+                        teamSlug
                    FROM ranked
                   WHERE releaseRank = 1
                   ORDER BY CAST(chapterNumber AS REAL) DESC,
                            datetime(publishedAt) DESC,
                            datetime(createdAt) DESC,
                            id DESC
-                  `,
-              ).bind(seriesRecord.id),
+                  LIMIT 4`,
+              ).bind(viewer?.id ?? "", seriesRecord.id),
             ),
           )
         : [];
@@ -2288,6 +2404,7 @@ export async function GET(request: Request, context: RouteContext) {
                   ),
                   isFresh: Boolean(chapter.isFresh),
                   isNewInPeriod: Boolean(chapter.isNewInPeriod),
+                  isRead: Boolean(chapter.isRead),
                 }),
               ),
             };
@@ -2303,7 +2420,10 @@ export async function GET(request: Request, context: RouteContext) {
           period,
         },
         {
-          headers: { "cache-control": "no-store" },
+          headers: {
+            "cache-control": "private, no-store",
+            vary: "cookie",
+          },
         },
       );
     }
@@ -2653,9 +2773,9 @@ export async function GET(request: Request, context: RouteContext) {
                 ), 0) AS chapterCount,
                 COALESCE((
                   SELECT COUNT(*)
-                    FROM library_entries library_count
-                   WHERE library_count.series_id = s.id
-                ), 0) AS bookmarkCount,
+                    FROM follows follower_count
+                   WHERE follower_count.series_id = s.id
+                ), 0) AS followerCount,
                 COALESCE((
                   SELECT COUNT(*)
                     FROM discussion_comments comment_count
@@ -2711,7 +2831,7 @@ export async function GET(request: Request, context: RouteContext) {
         revision: number;
         ratingTenths: number;
         chapterCount: number;
-        bookmarkCount: number;
+        followerCount: number;
         commentCount: number;
         latestChapterSlug: string | null;
         genres: string;
@@ -2723,7 +2843,7 @@ export async function GET(request: Request, context: RouteContext) {
           data: rows.results.map((row) => ({
             ...row,
             chapterCount: Number(row.chapterCount ?? 0),
-            bookmarkCount: Number(row.bookmarkCount ?? 0),
+            followerCount: Number(row.followerCount ?? 0),
             commentCount: Number(row.commentCount ?? 0),
             genres: row.genres ? row.genres.split("||").filter(Boolean) : [],
             alternativeTitles: row.alternativeTitles
@@ -3328,8 +3448,7 @@ export async function GET(request: Request, context: RouteContext) {
                 AND asset_key IS NOT NULL
                 AND is_animated = 1
               ORDER BY category COLLATE NOCASE, display_order,
-                       name COLLATE NOCASE
-              LIMIT 120`,
+                       name COLLATE NOCASE`,
           ).all<{
             id: string;
             name: string;
@@ -3357,16 +3476,23 @@ export async function GET(request: Request, context: RouteContext) {
         ? await env.DB.prepare(
             `SELECT t.id, t.name
              FROM series s
-             JOIN series_team_assignments sta ON sta.series_id = s.id
-             JOIN teams t ON t.id = sta.team_id
-             JOIN team_memberships tm
-               ON tm.team_id = t.id AND tm.user_id = ?
+             JOIN team_memberships tm ON tm.user_id = ?
+             JOIN teams t ON t.id = tm.team_id
              WHERE s.slug = ?
                AND tm.status = 'ACTIVE'
                AND t.is_archived = 0
-               AND t.verification_status <> 'SUSPENDED'
-             ORDER BY sta.is_primary DESC, tm.is_primary DESC,
-                      t.name COLLATE NOCASE`,
+               AND t.verification_status = 'VERIFIED'
+               AND EXISTS (
+                 SELECT 1
+                   FROM chapters team_release
+                  WHERE team_release.series_id = s.id
+                    AND team_release.team_id = t.id
+                    AND team_release.state = 'PUBLISHED'
+                    AND team_release.visibility = 'PUBLIC'
+                    AND team_release.published_at IS NOT NULL
+                    AND datetime(team_release.published_at) <= datetime('now')
+               )
+             ORDER BY tm.is_primary DESC, t.name COLLATE NOCASE`,
           )
             .bind(viewerActor.id, seriesSlug)
             .all<{ id: string; name: string }>()
@@ -4610,7 +4736,9 @@ export async function GET(request: Request, context: RouteContext) {
         env.DB.prepare("SELECT COUNT(*) AS count FROM teams"),
         env.DB.prepare("SELECT COUNT(*) AS count FROM chapters WHERE state = 'PUBLISHED'"),
         env.DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions WHERE status NOT IN ('READY', 'FAILED')"),
-        env.DB.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = 'OPEN'"),
+        env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM reports WHERE status IN ('OPEN', 'IN_REVIEW')",
+        ),
         env.DB.prepare("SELECT COUNT(*) AS count FROM chapters WHERE state = 'READY_FOR_REVIEW'"),
         env.DB.prepare(
           "SELECT COUNT(DISTINCT user_id) AS count FROM reading_progress WHERE updated_at > datetime('now', '-7 days')",
@@ -5282,7 +5410,6 @@ export async function GET(request: Request, context: RouteContext) {
                 s.origin_country AS originCountry,
                 s.original_language AS originalLanguage,
                 s.reading_direction AS readingDirection,
-                s.age_rating AS ageRating,
                 s.cover_key AS coverKey,
                 s.is_published AS isPublished,
                 s.revision,
@@ -5303,7 +5430,6 @@ export async function GET(request: Request, context: RouteContext) {
         originCountry: string;
         originalLanguage: string;
         readingDirection: string;
-        ageRating: string;
         coverKey: string | null;
         isPublished: number;
         revision: number;
@@ -6346,6 +6472,7 @@ export async function PUT(request: Request, context: RouteContext) {
                 c.series_id AS seriesId,
                 c.team_id AS teamId,
                 c.state,
+                c.access_type AS accessType,
                 c.revision,
                 c.page_count AS pageCount,
                 s.rights_status AS rightsStatus,
@@ -6378,6 +6505,7 @@ export async function PUT(request: Request, context: RouteContext) {
           seriesId: string;
           teamId: string | null;
           state: string;
+          accessType: "FREE" | "PAID";
           revision: number;
           pageCount: number;
           rightsStatus: string;
@@ -6502,6 +6630,10 @@ export async function PUT(request: Request, context: RouteContext) {
           "Publication is blocked by the current rights state.",
         );
       }
+      const paidEconomyRevision =
+        payload.action === "PUBLISH" && chapter.accessType === "PAID"
+          ? (await requirePaidEconomyPublicDocument()).revision
+          : null;
       if (
         chapter.replacementChapterId &&
         chapter.uploadItemId &&
@@ -6701,7 +6833,12 @@ export async function PUT(request: Request, context: RouteContext) {
                        AND COALESCE(proposed.team_id, '') =
                            COALESCE(chapters.team_id, '')
                        AND proposed.version = chapters.version
-                  )`,
+                  )
+                  AND ${
+                    paidEconomyRevision === null
+                      ? "1 = 1"
+                      : paidEconomyRevisionGuardSql(paidEconomyRevision)
+                  }`,
             ).bind(
               chapter.id,
               chapter.id,
@@ -6816,6 +6953,9 @@ export async function PUT(request: Request, context: RouteContext) {
             error instanceof Error &&
             /upload_publish_guards\.verified/i.test(error.message)
           ) {
+            if (paidEconomyRevision !== null) {
+              await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+            }
             throw new ApiError(
               409,
               "REPLACEMENT_REVIEW_CHANGED",
@@ -6825,6 +6965,9 @@ export async function PUT(request: Request, context: RouteContext) {
           throw error;
         }
         if (!replacementResults[1]?.meta.changes) {
+          if (paidEconomyRevision !== null) {
+            await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+          }
           throw new ApiError(
             409,
             "REPLACEMENT_REVIEW_CHANGED",
@@ -6918,7 +7061,12 @@ export async function PUT(request: Request, context: RouteContext) {
                      AND t.is_archived = 0
                      AND t.verification_status <> 'SUSPENDED'
                 )
-              )`,
+              )
+              AND ${
+                paidEconomyRevision === null
+                  ? "1 = 1"
+                  : paidEconomyRevisionGuardSql(paidEconomyRevision)
+              }`,
         ).bind(
           nextState,
           nextState,
@@ -7022,6 +7170,9 @@ export async function PUT(request: Request, context: RouteContext) {
           error instanceof Error &&
           /upload_publish_guards\.verified/i.test(error.message)
         ) {
+          if (paidEconomyRevision !== null) {
+            await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+          }
           throw new ApiError(
             409,
             "STALE_VERSION",
@@ -7031,6 +7182,9 @@ export async function PUT(request: Request, context: RouteContext) {
         throw error;
       }
       if (!reviewResults[chapterUpdateIndex]?.meta.changes) {
+        if (paidEconomyRevision !== null) {
+          await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+        }
         throw new ApiError(
           409,
           "STALE_VERSION",
@@ -7629,6 +7783,10 @@ export async function PUT(request: Request, context: RouteContext) {
       }
       const priceOnyx =
         payload.accessType === "PAID" ? payload.priceOnyx : 0;
+      const paidEconomyRevision =
+        payload.accessType === "PAID"
+          ? (await requirePaidEconomyPublicDocument()).revision
+          : null;
       if (
         payload.state === "PUBLISHED" &&
         Number(current.pageCount) <= 0 &&
@@ -7663,7 +7821,12 @@ export async function PUT(request: Request, context: RouteContext) {
       const mutationGuard = `EXISTS (
         SELECT 1 FROM chapters
         WHERE id = ? AND revision = ?
-      )`;
+      )
+      AND ${
+        paidEconomyRevision === null
+          ? "1 = 1"
+          : paidEconomyRevisionGuardSql(paidEconomyRevision)
+      }`;
       const pageStatements =
         payload.pageOrder.length > 0
           ? [
@@ -7714,7 +7877,13 @@ export async function PUT(request: Request, context: RouteContext) {
                 END,
                 revision = revision + 1,
                 updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND revision = ?`,
+          WHERE id = ?
+            AND revision = ?
+            AND ${
+              paidEconomyRevision === null
+                ? "1 = 1"
+                : paidEconomyRevisionGuardSql(paidEconomyRevision)
+            }`,
       ).bind(
         payload.chapterNumber,
         payload.title,
@@ -7766,6 +7935,9 @@ export async function PUT(request: Request, context: RouteContext) {
       ]);
       const updateResult = results[pageStatements.length];
       if (!updateResult?.meta.changes) {
+        if (paidEconomyRevision !== null) {
+          await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+        }
         throw new ApiError(
           409,
           "STALE_VERSION",
@@ -9151,7 +9323,7 @@ export async function POST(request: Request, context: RouteContext) {
              (id, slug, title, native_title, synopsis, type, status,
               origin_country, original_language, reading_direction, age_rating,
               access_type, cover_key, rights_status, is_published)
-             SELECT ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             SELECT ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?,
                     'PENDING_REVIEW', 0
               WHERE ${eligibilitySql}`,
           ).bind(
@@ -9165,7 +9337,6 @@ export async function POST(request: Request, context: RouteContext) {
             payload.originCountry,
             payload.originalLanguage,
             payload.readingDirection,
-            payload.ageRating,
             payload.accessType,
             coverKey,
             ...eligibilityBindings,
@@ -9412,7 +9583,6 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "store/purchases") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      const commercial = await requirePaidEconomyPublic();
       const payload = storePurchaseSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -9475,21 +9645,29 @@ export async function POST(request: Request, context: RouteContext) {
         .bind(actor.id, item.id)
         .first<{ purchasedAt: string }>();
       if (priorOwnership) {
+        const currentCommercial = await getCommercialSettingsDocument();
+        const premiumEconomyPublic =
+          !currentCommercial.recoveredFromInvalid &&
+          currentCommercial.settings.economy.premiumEconomyPublic;
         return json(id, {
           ok: true,
           alreadyOwned: true,
           itemId: item.id,
           purchasedAt: priorOwnership.purchasedAt,
-          wallet: await walletSnapshot(actor.id),
+          wallet: premiumEconomyPublic
+            ? await walletSnapshot(actor.id)
+            : null,
         });
       }
+      const commercial = await requirePaidEconomyPublicDocument();
+      const paidEconomyRevision = commercial.revision;
       const priceOnyx = Number(item.priceOnyx);
       const wallet = await walletSnapshot(actor.id);
       if (wallet.balance < priceOnyx) {
         throw new ApiError(
           409,
           "INSUFFICIENT_ONYX",
-          `Your ${commercial.economy.coinPlural} balance is too low for this cosmetic.`,
+          `Your ${commercial.settings.economy.coinPlural} balance is too low for this cosmetic.`,
         );
       }
       const platformAccountId = "la_platform_store_onyx";
@@ -9510,7 +9688,8 @@ export async function POST(request: Request, context: RouteContext) {
         env.DB.prepare(
           `INSERT OR IGNORE INTO ledger_accounts
            (id, owner_type, owner_id, currency, account_type)
-           VALUES (?, 'PLATFORM', 'NYASCANS_STORE', 'ONYX', 'EARNED')`,
+           SELECT ?, 'PLATFORM', 'NYASCANS_STORE', 'ONYX', 'EARNED'
+            WHERE ${paidEconomyRevisionGuardSql(paidEconomyRevision)}`,
         ).bind(platformAccountId),
         env.DB.prepare(
           `INSERT OR IGNORE INTO ledger_transactions
@@ -9542,6 +9721,7 @@ export async function POST(request: Request, context: RouteContext) {
                          OR datetime(current_collection.ends_at) > datetime('now')
                        )
                   )
+              AND ${paidEconomyRevisionGuardSql(paidEconomyRevision)}
               AND NOT EXISTS (
                     SELECT 1
                       FROM user_store_items
@@ -9635,6 +9815,7 @@ export async function POST(request: Request, context: RouteContext) {
           .bind(actor.id, item.id)
           .first<{ purchasedAt: string }>();
         if (!ownership) {
+          await assertPaidEconomyRevisionFresh(paidEconomyRevision);
           throw new ApiError(
             409,
             "STORE_PURCHASE_CONFLICT",
@@ -10769,7 +10950,7 @@ export async function POST(request: Request, context: RouteContext) {
              (id, slug, title, native_title, synopsis, type, status,
               origin_country, original_language, reading_direction, age_rating,
               access_type, cover_key, rights_status, is_published)
-             VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?,
                      'PENDING_REVIEW', 0)`,
           ).bind(
             seriesId,
@@ -10782,7 +10963,6 @@ export async function POST(request: Request, context: RouteContext) {
             payload.originCountry,
             payload.originalLanguage,
             payload.readingDirection,
-            payload.ageRating,
             payload.accessType,
             coverKey,
           ),
@@ -11441,6 +11621,13 @@ export async function POST(request: Request, context: RouteContext) {
           "This comment is no longer available.",
         );
       }
+      if (comment.authorUserId === actor.id) {
+        throw new ApiError(
+          409,
+          "SELF_VOTE_NOT_ALLOWED",
+          "You cannot vote on your own comment.",
+        );
+      }
       await assertDiscussionAllowed(actor.id, comment.seriesSlug);
       if (payload.value === 0) {
         await env.DB.prepare(
@@ -11812,8 +11999,8 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
 
-      await requirePaidEconomyPublic();
-      const commercial = await getCommercialSettingsDocument();
+      const commercial = await requirePaidEconomyPublicDocument();
+      const paidEconomyRevision = commercial.revision;
       const wallet = await walletSnapshot(actor.id);
       if (wallet.balance < access.priceOnyx) {
         throw new ApiError(
@@ -11822,7 +12009,11 @@ export async function POST(request: Request, context: RouteContext) {
           `Your ${commercial.settings.economy.coinPlural} balance is too low for this unlock.`,
         );
       }
-      const platformAccountId = "la_platform_earned_onyx";
+      const creditAccountId = access.teamId
+        ? `la_team_${access.teamId}_earned_onyx`
+        : "la_platform_earned_onyx";
+      const creditOwnerType = access.teamId ? "TEAM" : "PLATFORM";
+      const creditOwnerId = access.teamId ?? "NYASCANS";
       const transactionId = randomId();
       const entitlementId = randomId();
       const unlockIdempotencyKey = `${actor.id}:${payload.idempotencyKey}`;
@@ -11841,7 +12032,7 @@ export async function POST(request: Request, context: RouteContext) {
         : "Permanent chapter unlock";
       const entries = [
         { accountId: wallet.accountId, amount: -access.priceOnyx },
-        { accountId: platformAccountId, amount: access.priceOnyx },
+        { accountId: creditAccountId, amount: access.priceOnyx },
       ];
       if (sumBalancedEntries(entries) !== 0) {
         throw new ApiError(500, "LEDGER_UNBALANCED", "The ledger transaction is not balanced.");
@@ -11851,8 +12042,9 @@ export async function POST(request: Request, context: RouteContext) {
         env.DB.prepare(
           `INSERT OR IGNORE INTO ledger_accounts
            (id, owner_type, owner_id, currency, account_type)
-           VALUES (?, 'PLATFORM', 'NYASCANS', 'ONYX', 'EARNED')`,
-        ).bind(platformAccountId),
+           SELECT ?, ?, ?, 'ONYX', 'EARNED'
+            WHERE ${paidEconomyRevisionGuardSql(paidEconomyRevision)}`,
+        ).bind(creditAccountId, creditOwnerType, creditOwnerId),
         env.DB.prepare(
           `INSERT OR IGNORE INTO ledger_transactions
            (id, kind, reference_type, reference_id, idempotency_key, memo)
@@ -11870,6 +12062,10 @@ export async function POST(request: Request, context: RouteContext) {
                      WHERE current_chapter.id = ?
                        AND current_chapter.access_type = 'PAID'
                        AND current_chapter.price_onyx = ?
+                       AND (
+                         current_chapter.team_id = ?
+                         OR (? IS NULL AND current_chapter.team_id IS NULL)
+                       )
                        AND current_chapter.state = 'PUBLISHED'
                        AND current_chapter.visibility <> 'HIDDEN'
                        AND current_chapter.published_at IS NOT NULL
@@ -11879,6 +12075,7 @@ export async function POST(request: Request, context: RouteContext) {
                        AND current_series.rights_status IN
                          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
                   )
+              AND ${paidEconomyRevisionGuardSql(paidEconomyRevision)}
               AND NOT EXISTS (
                     SELECT 1
                       FROM entitlements
@@ -11897,6 +12094,8 @@ export async function POST(request: Request, context: RouteContext) {
           access.priceOnyx,
           access.chapterId,
           access.priceOnyx,
+          access.teamId,
+          access.teamId,
           actor.id,
           access.chapterId,
         ),
@@ -11920,7 +12119,7 @@ export async function POST(request: Request, context: RouteContext) {
             WHERE id = ?`,
         ).bind(
           randomId(),
-          platformAccountId,
+          creditAccountId,
           access.priceOnyx,
           transactionId,
         ),
@@ -11931,7 +12130,6 @@ export async function POST(request: Request, context: RouteContext) {
              FROM ledger_transactions
             WHERE id = ?
            ON CONFLICT(user_id, chapter_id) DO UPDATE SET
-             id = excluded.id,
              source_type = excluded.source_type,
              source_id = excluded.source_id,
              starts_at = CURRENT_TIMESTAMP,
@@ -11942,6 +12140,26 @@ export async function POST(request: Request, context: RouteContext) {
           actor.id,
           access.chapterId,
           entitlementExpiresAt,
+          transactionId,
+        ),
+        env.DB.prepare(
+          `INSERT INTO chapter_unlock_receipts
+           (id, transaction_id, entitlement_id, buyer_user_id,
+            chapter_id, team_id, amount, currency)
+           SELECT ?, lt.id, e.id, ?, ?, ?, ?, 'ONYX'
+             FROM ledger_transactions lt
+             JOIN entitlements e
+               ON e.user_id = ?
+              AND e.chapter_id = ?
+            WHERE lt.id = ?`,
+        ).bind(
+          randomId(),
+          actor.id,
+          access.chapterId,
+          access.teamId,
+          access.priceOnyx,
+          actor.id,
+          access.chapterId,
           transactionId,
         ),
         env.DB.prepare(
@@ -11958,7 +12176,7 @@ export async function POST(request: Request, context: RouteContext) {
           JSON.stringify({
             priceOnyx: access.priceOnyx,
             accessType: access.accessType,
-            entitlementId,
+            teamId: access.teamId,
             entitlementExpiresAt,
           }),
           transactionId,
@@ -12001,6 +12219,7 @@ export async function POST(request: Request, context: RouteContext) {
             { headers: { "cache-control": "private, no-store" } },
           );
         }
+        await assertPaidEconomyRevisionFresh(paidEconomyRevision);
         const refreshedWallet = await walletSnapshot(actor.id);
         if (refreshedWallet.balance < access.priceOnyx) {
           throw new ApiError(
@@ -12015,13 +12234,21 @@ export async function POST(request: Request, context: RouteContext) {
           "The chapter access state changed. Refresh and try again.",
         );
       }
+      const unlockReceipt = await env.DB.prepare(
+        `SELECT entitlement_id AS entitlementId
+           FROM chapter_unlock_receipts
+          WHERE transaction_id = ?
+          LIMIT 1`,
+      )
+        .bind(transactionId)
+        .first<{ entitlementId: string }>();
       const updatedWallet = await walletSnapshot(actor.id);
 
       return json(
         id,
         {
           ok: true,
-          entitlementId,
+          entitlementId: unlockReceipt?.entitlementId ?? entitlementId,
           entitlementExpiresAt,
           balance: updatedWallet.balance,
           access: chapterAccessContract({
@@ -12052,29 +12279,32 @@ export async function POST(request: Request, context: RouteContext) {
       const actor = await requireActor("report.create");
       const payload = z
         .object({
-          targetType: z.enum(["SERIES", "CHAPTER", "COMMENT", "TEAM", "PROFILE"]),
+          targetType: z.literal("COMMENT"),
           targetId: z.string().min(3).max(120),
-          category: z.string().min(3).max(80),
+          category: z.enum([
+            "Spoilers without a warning",
+            "Harassment or hate",
+            "Spam or promotion",
+            "Illegal content",
+          ]),
           detail: z.string().min(12).max(2000),
         })
         .parse(await request.json());
       if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Report storage is unavailable.");
-      if (payload.targetType === "COMMENT") {
-        const target = await env.DB.prepare(
-          `SELECT id
+      const target = await env.DB.prepare(
+        `SELECT id
            FROM discussion_comments
            WHERE id = ? AND moderation_status = 'VISIBLE'
            LIMIT 1`,
-        )
-          .bind(payload.targetId)
-          .first();
-        if (!target) {
-          throw new ApiError(
-            404,
-            "COMMENT_NOT_FOUND",
-            "This comment is no longer available.",
-          );
-        }
+      )
+        .bind(payload.targetId)
+        .first();
+      if (!target) {
+        throw new ApiError(
+          404,
+          "COMMENT_NOT_FOUND",
+          "This comment is no longer available.",
+        );
       }
       const reportId = randomId();
       await env.DB.prepare(
@@ -12096,6 +12326,19 @@ export async function POST(request: Request, context: RouteContext) {
 
     throw new ApiError(404, "NOT_FOUND", "The requested API resource does not exist.");
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("discussion_vote_target_unavailable")
+    ) {
+      return errorResponse(
+        id,
+        new ApiError(
+          409,
+          "VOTE_TARGET_CHANGED",
+          "That discussion comment is no longer available.",
+        ),
+      );
+    }
     if (error instanceof z.ZodError) {
       return errorResponse(
         id,

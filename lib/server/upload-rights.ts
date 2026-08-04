@@ -23,7 +23,7 @@ async function assertRightTargets(
         `SELECT id FROM teams
           WHERE id = ?
             AND is_archived = 0
-            AND verification_status <> 'SUSPENDED'
+            AND verification_status = 'VERIFIED'
           LIMIT 1`,
       )
       .bind(teamId),
@@ -189,7 +189,7 @@ export async function grantUploadRight(
               SELECT 1 FROM teams
                WHERE id = ?
                  AND is_archived = 0
-                 AND verification_status <> 'SUSPENDED'
+                 AND verification_status = 'VERIFIED'
             )
             AND EXISTS (
               SELECT 1 FROM users live_actor
@@ -278,7 +278,7 @@ export async function updateUploadRight(
               SELECT 1 FROM teams live_team
                WHERE live_team.id = series_team_assignments.team_id
                  AND live_team.is_archived = 0
-                 AND live_team.verification_status <> 'SUSPENDED'
+                 AND live_team.verification_status = 'VERIFIED'
             )
             AND EXISTS (
               SELECT 1 FROM users live_actor

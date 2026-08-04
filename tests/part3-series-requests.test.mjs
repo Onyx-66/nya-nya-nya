@@ -468,7 +468,7 @@ test("request, review, media and rights routes expose real protected workflows",
     /live_actor\.primary_role IN \('OWNER', 'ADMINISTRATOR'\)/,
   );
   assert.match(rightsServer, /live_series\.archived_at IS NULL/);
-  assert.match(rightsServer, /live_team\.verification_status <> 'SUSPENDED'/);
+  assert.match(rightsServer, /live_team\.verification_status = 'VERIFIED'/);
   assert.match(approval, /await db\.batch\(statements\)/);
   assert.match(approval, /APPROVAL_CONFLICT/);
   assert.match(approval, /approved_series_id IS NULL/);

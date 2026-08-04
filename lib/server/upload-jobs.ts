@@ -58,7 +58,10 @@ export const uploadItemInputSchema = z
     priceOnyx: z.number().int().min(0).max(100_000).default(0),
     visibility: z.enum(["PUBLIC", "UNLISTED", "HIDDEN"]).default("PUBLIC"),
     scheduledAt: z.string().datetime().nullable().default(null),
-    commentsEnabled: z.boolean().default(true),
+    commentsEnabled: z
+      .boolean()
+      .default(true)
+      .transform(() => true),
     replacementChapterId: z
       .string()
       .trim()
@@ -104,6 +107,25 @@ export const createUploadJobSchema = z
         message: "A single upload must contain exactly one chapter.",
       });
     }
+    if (value.kind === "BATCH" && !value.teamId) {
+      context.addIssue({
+        code: "custom",
+        path: ["teamId"],
+        message: "Choose a verified publishing team before creating a batch.",
+      });
+    }
+    const paidPrices = new Set(
+      value.items
+        .filter((item) => item.accessType === "PAID")
+        .map((item) => item.priceOnyx),
+    );
+    if (value.kind === "BATCH" && paidPrices.size > 1) {
+      context.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: "All paid chapters in a batch must use the same price.",
+      });
+    }
     const clientKeys = new Set<string>();
     const identities = new Set<string>();
     value.items.forEach((item, index) => {
@@ -140,6 +162,15 @@ export const uploadJobMutationSchema = z.discriminatedUnion("action", [
     itemId: z.string().min(3).max(120),
     expectedRevision: z.number().int().min(1),
     item: uploadItemInputSchema,
+  }),
+  z.object({
+    action: z.literal("UPDATE_BATCH_COMMERCE"),
+    jobId: z.string().min(3).max(120),
+    expectedRevision: z.number().int().min(1),
+    priceOnyx: z.number().int().min(1).max(100_000),
+    paidItemIds: z
+      .array(z.string().min(3).max(120))
+      .max(UPLOAD_LIMITS.maxChaptersPerJob),
   }),
   z.object({
     action: z.literal("REORDER"),
@@ -183,39 +214,257 @@ export function isUploadAdmin(actor: Actor) {
   return roles.has("OWNER") || roles.has("ADMINISTRATOR");
 }
 
+export type UploadRateLimitDetails = Readonly<{
+  retryAfterSeconds: number;
+}>;
+
+const JOB_RATE_LIMIT = Object.freeze({
+  count: 30,
+  windowSeconds: 60 * 60,
+});
+
+const FILE_BURST_RATE_LIMIT = Object.freeze({
+  count: UPLOAD_LIMITS.maxPagesPerChapter + 100,
+  bytes: UPLOAD_LIMITS.maxChapterBytes * 4,
+  windowSeconds: 60,
+});
+
+const FILE_SUSTAINED_RATE_LIMIT = Object.freeze({
+  count:
+    UPLOAD_LIMITS.maxChaptersPerJob * UPLOAD_LIMITS.maxPagesPerChapter +
+    UPLOAD_LIMITS.maxPagesPerChapter * 5,
+  bytes:
+    UPLOAD_LIMITS.maxJobBytes + UPLOAD_LIMITS.maxChapterBytes * 12,
+  windowSeconds: 60 * 60,
+});
+
+function boundedRetryAfter(value: unknown, windowSeconds: number) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) {
+    return windowSeconds;
+  }
+  return Math.max(1, Math.min(windowSeconds, Math.ceil(seconds)));
+}
+
+function uploadRateLimitError(
+  kind: "JOB" | "FILE",
+  retryAfterSeconds: number,
+) {
+  const details = {
+    retryAfterSeconds,
+  } satisfies UploadRateLimitDetails;
+  return new ApiError(
+    429,
+    "UPLOAD_RATE_LIMITED",
+    kind === "JOB"
+      ? "Too many upload drafts were created. Retry after the suggested delay."
+      : "This upload is moving too quickly. Pause the queue and retry after the suggested delay.",
+    undefined,
+    details,
+  );
+}
+
+function normalizedUploadAttemptBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new ApiError(
+      422,
+      "UPLOAD_ATTEMPT_SIZE_INVALID",
+      "The upload attempt size is invalid.",
+    );
+  }
+  return Math.min(Math.ceil(value), UPLOAD_LIMITS.maxPageBytes);
+}
+
+function cleanupUploadRateLimitAttemptsStatement(
+  db: D1Database,
+  actorId: string,
+) {
+  return db
+    .prepare(
+      `DELETE FROM upload_rate_limit_attempts
+        WHERE user_id = ?
+          AND created_at < datetime('now', '-1 day')`,
+    )
+    .bind(actorId);
+}
+
+export async function reserveUploadRateLimitAttempt(
+  db: D1Database,
+  actor: Actor,
+  input: {
+    jobId: string;
+    itemId: string;
+    requestId: string;
+    byteSize: number;
+  },
+) {
+  const byteSize = normalizedUploadAttemptBytes(input.byteSize);
+  const results = await db.batch<{ admitted: number }>([
+    cleanupUploadRateLimitAttemptsStatement(db, actor.id),
+    db
+      .prepare(
+        `WITH usage AS (
+           SELECT
+             COALESCE(SUM(
+               CASE
+                 WHEN created_at >= datetime('now', '-1 minute') THEN 1
+                 ELSE 0
+               END
+             ), 0) AS burst_count,
+             COALESCE(SUM(
+               CASE
+                 WHEN created_at >= datetime('now', '-1 minute')
+                   THEN byte_size
+                 ELSE 0
+               END
+             ), 0) AS burst_bytes,
+             COUNT(*) AS sustained_count,
+             COALESCE(SUM(byte_size), 0) AS sustained_bytes
+            FROM upload_rate_limit_attempts
+           WHERE user_id = ?
+             AND created_at >= datetime('now', '-1 hour')
+         )
+         INSERT INTO upload_rate_limit_attempts
+         (id, user_id, upload_job_id, upload_job_item_id, request_id, byte_size,
+          admitted)
+         SELECT ?, ?, ?, ?, ?, ?, CASE
+                  WHEN burst_bytes + ? <= ?
+                   AND sustained_bytes + ? <= ?
+                    THEN 1
+                  ELSE 0
+                END
+           FROM usage
+          WHERE burst_count < ?
+            AND sustained_count < ?
+         RETURNING admitted`,
+      )
+      .bind(
+        actor.id,
+        `ura_${randomId()}`,
+        actor.id,
+        input.jobId,
+        input.itemId,
+        input.requestId,
+        byteSize,
+        byteSize,
+        FILE_BURST_RATE_LIMIT.bytes,
+        byteSize,
+        FILE_SUSTAINED_RATE_LIMIT.bytes,
+        FILE_BURST_RATE_LIMIT.count,
+        FILE_SUSTAINED_RATE_LIMIT.count,
+      ),
+  ]);
+  const reservation = results[1]?.results?.[0];
+  if (Number(reservation?.admitted ?? 0) === 1) {
+    return;
+  }
+  await assertUploadRateLimit(db, actor, "FILE");
+  throw uploadRateLimitError("FILE", 1);
+}
+
 export async function assertUploadRateLimit(
   db: D1Database,
   actor: Actor,
   kind: "JOB" | "FILE",
 ) {
-  const row =
-    kind === "JOB"
-      ? await db
-          .prepare(
-            `SELECT COUNT(*) AS count
-               FROM upload_jobs
-              WHERE user_id = ?
-                AND created_at >= datetime('now', '-1 hour')`,
-          )
-          .bind(actor.id)
-          .first<{ count: number }>()
-      : await db
-          .prepare(
-            `SELECT COUNT(*) AS count
-               FROM upload_sessions
-              WHERE user_id = ?
-                AND created_at >= datetime('now', '-1 minute')`,
-          )
-          .bind(actor.id)
-          .first<{ count: number }>();
-  const limit = kind === "JOB" ? 30 : 120;
-  if (Number(row?.count ?? 0) >= limit) {
-    throw new ApiError(
-      429,
-      "UPLOAD_RATE_LIMITED",
-      kind === "JOB"
-        ? "Too many upload drafts were created. Wait before starting another."
-        : "Too many pages were sent at once. Wait a minute, then retry.",
+  if (kind === "JOB") {
+    const row = await db
+      .prepare(
+        `SELECT COUNT(*) AS count,
+                CAST(
+                  strftime('%s', MIN(datetime(created_at, '+1 hour')))
+                  AS INTEGER
+                ) - CAST(strftime('%s', 'now') AS INTEGER)
+                  AS retryAfterSeconds
+           FROM upload_jobs
+          WHERE user_id = ?
+            AND created_at >= datetime('now', '-1 hour')`,
+      )
+      .bind(actor.id)
+      .first<{
+        count: number;
+        retryAfterSeconds: number | null;
+      }>();
+    if (Number(row?.count ?? 0) >= JOB_RATE_LIMIT.count) {
+      throw uploadRateLimitError(
+        kind,
+        boundedRetryAfter(
+          row?.retryAfterSeconds,
+          JOB_RATE_LIMIT.windowSeconds,
+        ),
+      );
+    }
+    return;
+  }
+
+  const row = await db
+    .prepare(
+      `SELECT
+          COALESCE(SUM(
+            CASE
+              WHEN created_at >= datetime('now', '-1 minute') THEN 1
+              ELSE 0
+            END
+          ), 0) AS burstCount,
+          COALESCE(SUM(
+            CASE
+              WHEN created_at >= datetime('now', '-1 minute') THEN byte_size
+              ELSE 0
+            END
+          ), 0) AS burstBytes,
+          CAST(strftime('%s', MIN(
+            CASE
+              WHEN created_at >= datetime('now', '-1 minute')
+                THEN datetime(created_at, '+1 minute')
+              ELSE NULL
+            END
+          )) AS INTEGER) - CAST(strftime('%s', 'now') AS INTEGER)
+            AS burstRetryAfterSeconds,
+          COUNT(*) AS sustainedCount,
+          COALESCE(SUM(byte_size), 0) AS sustainedBytes,
+          CAST(
+            strftime('%s', MIN(datetime(created_at, '+1 hour')))
+            AS INTEGER
+          ) - CAST(strftime('%s', 'now') AS INTEGER)
+            AS sustainedRetryAfterSeconds
+       FROM upload_rate_limit_attempts
+      WHERE user_id = ?
+        AND created_at >= datetime('now', '-1 hour')`,
+    )
+    .bind(actor.id)
+    .first<{
+      burstCount: number;
+      burstBytes: number;
+      burstRetryAfterSeconds: number | null;
+      sustainedCount: number;
+      sustainedBytes: number;
+      sustainedRetryAfterSeconds: number | null;
+    }>();
+
+  const burstExceeded =
+    Number(row?.burstCount ?? 0) >= FILE_BURST_RATE_LIMIT.count ||
+    Number(row?.burstBytes ?? 0) >= FILE_BURST_RATE_LIMIT.bytes;
+  const sustainedExceeded =
+    Number(row?.sustainedCount ?? 0) >= FILE_SUSTAINED_RATE_LIMIT.count ||
+    Number(row?.sustainedBytes ?? 0) >= FILE_SUSTAINED_RATE_LIMIT.bytes;
+
+  if (burstExceeded || sustainedExceeded) {
+    throw uploadRateLimitError(
+      kind,
+      Math.max(
+        burstExceeded
+          ? boundedRetryAfter(
+              row?.burstRetryAfterSeconds,
+              FILE_BURST_RATE_LIMIT.windowSeconds,
+            )
+          : 0,
+        sustainedExceeded
+          ? boundedRetryAfter(
+              row?.sustainedRetryAfterSeconds,
+              FILE_SUSTAINED_RATE_LIMIT.windowSeconds,
+            )
+          : 0,
+      ),
     );
   }
 }
@@ -590,27 +839,14 @@ export type UploadScope = {
   allowedLanguages: string[];
 };
 
-function parseAllowedLanguages(value: string | null) {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed
-          .filter((entry): entry is string => typeof entry === "string")
-          .map((entry) => entry.toLowerCase())
-      : [];
-  } catch {
-    return [];
-  }
-}
-
 export async function requireUploadScope(
   db: D1Database,
   actor: Actor,
   seriesId: string,
   teamId: string | null,
-  languages: string[] = [],
+  _languages: string[] = [],
 ): Promise<UploadScope> {
+  void _languages;
   requireUploadCapability(actor);
   const seriesRecord = await db
     .prepare(
@@ -619,6 +855,7 @@ export async function requireUploadScope(
         WHERE id = ?
           AND is_published = 1
           AND archived_at IS NULL
+          AND status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
           AND rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
         LIMIT 1`,
@@ -629,11 +866,12 @@ export async function requireUploadScope(
     throw new ApiError(
       404,
       "APPROVED_SERIES_REQUIRED",
-      "Choose an approved, public series before uploading a chapter.",
+      "Choose a public, rights-safe series before uploading a chapter.",
     );
   }
 
-  if (isUploadAdmin(actor)) {
+  const administrator = isUploadAdmin(actor);
+  if (administrator) {
     const liveAdministrator = await db
       .prepare(
         `SELECT id
@@ -671,34 +909,6 @@ export async function requireUploadScope(
         allowedLanguages: [],
       };
     }
-    const team = await db
-      .prepare(
-        `SELECT id, name
-           FROM teams
-          WHERE id = ?
-            AND is_archived = 0
-            AND verification_status <> 'SUSPENDED'
-          LIMIT 1`,
-      )
-      .bind(teamId)
-      .first<{ id: string; name: string }>();
-    if (!team) {
-      throw new ApiError(
-        422,
-        "TEAM_NOT_AVAILABLE",
-        "Choose an active publishing team.",
-      );
-    }
-    return {
-      seriesId: seriesRecord.id,
-      seriesSlug: seriesRecord.slug,
-      seriesTitle: seriesRecord.title,
-      teamId: team.id,
-      teamName: team.name,
-      canPublish: true,
-      uploadRequiresReview: false,
-      allowedLanguages: [],
-    };
   }
 
   if (!teamId) {
@@ -708,85 +918,57 @@ export async function requireUploadScope(
       "Choose one of your active publishing teams.",
     );
   }
-  const assignment = await db
+  const membership = await db
     .prepare(
       `SELECT t.id AS teamId,
               t.name AS teamName,
-              sta.can_publish AS canPublish,
-              sta.upload_requires_review AS uploadRequiresReview,
-              sta.allowed_languages_json AS allowedLanguagesJson
-         FROM series_team_assignments sta
-         JOIN team_memberships tm
-           ON tm.team_id = sta.team_id
+              UPPER(tm.membership_role) AS membershipRole
+         FROM team_memberships tm
          JOIN users live_actor
            ON live_actor.id = tm.user_id
          JOIN teams t
-           ON t.id = sta.team_id
-        WHERE sta.series_id = ?
-          AND sta.team_id = ?
-          AND sta.can_upload = 1
-          AND sta.revoked_at IS NULL
-          AND tm.user_id = ?
+           ON t.id = tm.team_id
+        WHERE tm.team_id = ?
+         AND tm.user_id = ?
           AND tm.status = 'ACTIVE'
           AND live_actor.status = 'ACTIVE'
-          AND (
-            live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-            OR EXISTS (
-              SELECT 1 FROM user_roles live_role
-               WHERE live_role.user_id = live_actor.id
-                 AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
-            )
-          )
           AND UPPER(tm.membership_role) IN
             ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
           AND t.is_archived = 0
-          AND t.verification_status <> 'SUSPENDED'
+          AND t.verification_status = 'VERIFIED'
         LIMIT 1`,
     )
-    .bind(seriesId, teamId, actor.id)
+    .bind(teamId, actor.id)
     .first<{
       teamId: string;
       teamName: string;
-      canPublish: number;
-      uploadRequiresReview: number;
-      allowedLanguagesJson: string | null;
+      membershipRole: string;
     }>();
-  if (!assignment) {
+  if (!membership) {
     throw new ApiError(
       403,
-      "SERIES_ASSIGNMENT_REQUIRED",
-      "Your active team is not allowed to upload releases for this series.",
+      "VERIFIED_TEAM_MEMBERSHIP_REQUIRED",
+      "Choose a verified team where you are an active publishing member.",
     );
   }
-  const allowedLanguages = parseAllowedLanguages(
-    assignment.allowedLanguagesJson,
-  );
-  const blockedLanguage = languages.find(
-    (language) =>
-      allowedLanguages.length > 0 &&
-      !allowedLanguages.includes("*") &&
-      !allowedLanguages.includes(language.toLowerCase()),
-  );
-  if (blockedLanguage) {
-    throw new ApiError(
-      403,
-      "RELEASE_LANGUAGE_NOT_ALLOWED",
-      `Your team is not authorized to publish ${blockedLanguage} releases for this series.`,
-    );
-  }
+  const canPublish =
+    administrator ||
+    (canAny(
+      [actor.primaryRole, ...(actor.roles ?? [])],
+      "chapter.publish.assigned",
+    ) &&
+      ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
+        membership.membershipRole,
+      ));
   return {
     seriesId: seriesRecord.id,
     seriesSlug: seriesRecord.slug,
     seriesTitle: seriesRecord.title,
-    teamId: assignment.teamId,
-    teamName: assignment.teamName,
-    canPublish:
-      canAny(
-        [actor.primaryRole, ...(actor.roles ?? [])],
-        "chapter.publish.assigned",
-      ) && Boolean(assignment.canPublish),
-    uploadRequiresReview: Boolean(assignment.uploadRequiresReview),
-    allowedLanguages,
+    teamId: membership.teamId,
+    teamName: membership.teamName,
+    canPublish,
+    uploadRequiresReview: !canPublish,
+    allowedLanguages: [],
   };
 }
 

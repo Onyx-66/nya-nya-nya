@@ -27,9 +27,9 @@ export const UPLOAD_METHODS = Object.freeze([
   {
     id: "ZIP",
     label: "ZIP / CBZ",
-    supported: false,
+    supported: true,
     reason:
-      "Disabled until a bounded archive-extraction worker with bomb and traversal protection is configured.",
+      "Extracted locally with traversal, compression-ratio, file-count, and byte limits before verified page upload.",
   },
   {
     id: "RAR",
@@ -48,6 +48,7 @@ export const UPLOAD_METHODS = Object.freeze([
 ] as const);
 
 export type SupportedUploadMethod = "DIRECT_IMAGES" | "DIRECT_FOLDER";
+export type ClientUploadMethod = SupportedUploadMethod | "ZIP";
 export type UploadJobKind = "SINGLE" | "BATCH";
 
 const naturalCollator = new Intl.Collator("en", {

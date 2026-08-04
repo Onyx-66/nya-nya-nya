@@ -167,15 +167,23 @@ async function responseData(userId: string) {
         }>(),
       database()
         .prepare(
-          `SELECT sta.team_id AS teamId, s.id, s.slug, s.title
-             FROM series_team_assignments sta
-             JOIN series s ON s.id = sta.series_id
-            WHERE sta.revoked_at IS NULL
+          `SELECT DISTINCT c.team_id AS teamId, s.id, s.slug, s.title
+             FROM chapters c
+             JOIN series s ON s.id = c.series_id
+             JOIN teams t ON t.id = c.team_id
+            WHERE c.team_id IS NOT NULL
+              AND c.state = 'PUBLISHED'
+              AND c.visibility = 'PUBLIC'
+              AND c.published_at IS NOT NULL
+              AND datetime(c.published_at) <= datetime('now')
+              AND t.verification_status = 'VERIFIED'
+              AND t.is_archived = 0
               AND s.is_published = 1
               AND s.archived_at IS NULL
+              AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
               AND s.rights_status IN
                 ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-            ORDER BY sta.team_id, s.title COLLATE NOCASE, s.id`,
+            ORDER BY c.team_id, s.title COLLATE NOCASE, s.id`,
         )
         .all<{
           teamId: string;
@@ -696,15 +704,20 @@ async function supportTeam(
       ? await db
           .prepare(
             `SELECT s.id, s.slug, s.title
-               FROM series_team_assignments sta
-               JOIN series s ON s.id = sta.series_id
-              WHERE sta.team_id = ?
-                AND sta.revoked_at IS NULL
+               FROM chapters c
+               JOIN series s ON s.id = c.series_id
+              WHERE c.team_id = ?
                 AND s.id IN (${payload.seriesIds.map(() => "?").join(",")})
+                AND c.state = 'PUBLISHED'
+                AND c.visibility = 'PUBLIC'
+                AND c.published_at IS NOT NULL
+                AND datetime(c.published_at) <= datetime('now')
                 AND s.is_published = 1
                 AND s.archived_at IS NULL
+                AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
                 AND s.rights_status IN
                   ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+              GROUP BY s.id, s.slug, s.title
               ORDER BY s.id`,
           )
           .bind(team.id, ...payload.seriesIds)

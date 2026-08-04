@@ -11,6 +11,7 @@ import {
   siteThemeDataAttributes,
   siteThemeVariables,
 } from "@/lib/site-theme";
+import { SystemNotificationProvider } from "@/components/nyascans/SystemNotifications";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -99,7 +100,7 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <SystemNotificationProvider>{children}</SystemNotificationProvider>
       </body>
     </html>
   );

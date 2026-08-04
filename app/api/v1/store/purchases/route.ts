@@ -9,7 +9,12 @@ import {
   platformAccountId,
   walletSnapshot,
 } from "@/lib/server/economy";
-import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import {
+  assertPaidEconomyRevisionFresh,
+  getCommercialSettingsDocument,
+  paidEconomyRevisionGuardSql,
+  requirePaidEconomyPublicDocument,
+} from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { storePurchaseSchema } from "@/lib/storefront";
@@ -38,6 +43,7 @@ export async function POST(request: Request) {
     const payload = storePurchaseSchema.parse(await request.json());
     const commercial = await getCommercialSettingsDocument();
     const premiumEconomyPublic =
+      !commercial.recoveredFromInvalid &&
       commercial.settings.economy.premiumEconomyPublic;
     if (!env.DB) {
       throw new ApiError(
@@ -77,13 +83,6 @@ export async function POST(request: Request) {
         "This cosmetic is not currently available.",
       );
     }
-    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic) {
-      throw new ApiError(
-        403,
-        "PAID_ECONOMY_HIDDEN",
-        "Premium coin purchases are currently private.",
-      );
-    }
     const existingOwnership = await env.DB.prepare(
       `SELECT created_at AS purchasedAt
          FROM user_store_items
@@ -107,6 +106,18 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "private, no-store", vary: "Cookie" } },
       );
     }
+    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic) {
+      throw new ApiError(
+        403,
+        "PAID_ECONOMY_HIDDEN",
+        "Premium coin purchases are currently private.",
+      );
+    }
+    const paidCommercial =
+      item.priceCurrency === "ONYX"
+        ? await requirePaidEconomyPublicDocument()
+        : null;
+    const paidEconomyRevision = paidCommercial?.revision ?? null;
     const amount = Number(item.priceAmount);
     const wallet = await walletSnapshot(
       env.DB,
@@ -122,7 +133,7 @@ export async function POST(request: Request) {
         `Your ${
           item.priceCurrency === "SHARDS"
             ? "Shard"
-            : commercial.settings.economy.coinName
+            : paidCommercial!.settings.economy.coinName
         } balance is too low for this cosmetic.`,
       );
     }
@@ -133,7 +144,12 @@ export async function POST(request: Request) {
       env.DB.prepare(
         `INSERT OR IGNORE INTO ledger_accounts
          (id, owner_type, owner_id, currency, account_type)
-         VALUES (?, 'PLATFORM', 'NYASCANS_STORE', ?, 'EARNED')`,
+         SELECT ?, 'PLATFORM', 'NYASCANS_STORE', ?, 'EARNED'
+          WHERE ${
+            paidEconomyRevision === null
+              ? "1 = 1"
+              : paidEconomyRevisionGuardSql(paidEconomyRevision)
+          }`,
       ).bind(platformId, item.priceCurrency),
       env.DB.prepare(
         `INSERT OR IGNORE INTO ledger_transactions
@@ -164,6 +180,11 @@ export async function POST(request: Request) {
                        OR datetime(current_collection.ends_at) > datetime('now')
                      )
                 )
+            AND ${
+              paidEconomyRevision === null
+                ? "1 = 1"
+                : paidEconomyRevisionGuardSql(paidEconomyRevision)
+            }
             AND NOT EXISTS (
                   SELECT 1 FROM user_store_items
                    WHERE user_id = ? AND item_id = ?
@@ -175,7 +196,7 @@ export async function POST(request: Request) {
         `Store purchase: ${item.name} · ${amount} ${
           item.priceCurrency === "SHARDS"
             ? "Shards"
-            : commercial.settings.economy.coinPlural
+            : paidCommercial!.settings.economy.coinPlural
         }`,
         wallet.accountId,
         amount,
@@ -246,6 +267,9 @@ export async function POST(request: Request) {
         .bind(actor.id, item.id)
         .first<{ purchasedAt: string }>();
       if (!ownership) {
+        if (paidEconomyRevision !== null) {
+          await assertPaidEconomyRevisionFresh(paidEconomyRevision);
+        }
         throw new ApiError(
           409,
           "STORE_PURCHASE_CONFLICT",

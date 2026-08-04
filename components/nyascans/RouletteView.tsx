@@ -44,6 +44,8 @@ type RouletteTask = {
   claimedAt: string | null;
 };
 
+type SpinKey = "DAILY" | "TASK" | "PAID_SHARDS" | "PAID_ONYX";
+
 type Spin = {
   id: string;
   rewardKey: string;
@@ -104,6 +106,18 @@ type RouletteState = {
   error?: { message?: string };
 };
 
+function compactSpinTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return `${date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} · ${date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
+
 function RouletteCoinMark({
   coin,
   size = 18,
@@ -160,15 +174,23 @@ export function RouletteView({
   const [claimingTask, setClaimingTask] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const animationTimer = useRef<number | null>(null);
-  const spinKeys = useRef<Record<"DAILY" | "TASK" | "PAID", string | null>>({
+  const mutationController = useRef<AbortController | null>(null);
+  const mutationLock = useRef(false);
+  const mounted = useRef(true);
+  const spinKeys = useRef<Record<SpinKey, string | null>>({
     DAILY: null,
     TASK: null,
-    PAID: null,
+    PAID_SHARDS: null,
+    PAID_ONYX: null,
   });
 
   useEffect(() => {
+    mounted.current = true;
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => {
+      mounted.current = false;
+      mutationLock.current = false;
+      mutationController.current?.abort();
       window.clearInterval(timer);
       if (animationTimer.current !== null) {
         window.clearTimeout(animationTimer.current);
@@ -191,6 +213,7 @@ export function RouletteView({
           );
         }
         setData(payload);
+        setLoadError("");
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
@@ -254,6 +277,7 @@ export function RouletteView({
       ? Number(data?.balances?.shards?.balance ?? 0)
       : Number(data?.balances?.onyx?.balance ?? 0);
   const canPaidSpin =
+    data?.canPaidSpin !== false &&
     Boolean(data?.settings?.roulettePaidSpinsEnabled) &&
     paidRewards.length > 0 &&
     paidBalance >= paidCost;
@@ -263,6 +287,7 @@ export function RouletteView({
 
   async function spin(mode: "DAILY" | "TASK" | "PAID") {
     if (
+      mutationLock.current ||
       mutationBusy ||
       (mode === "DAILY"
         ? !canDailySpin
@@ -272,13 +297,19 @@ export function RouletteView({
     ) {
       return;
     }
+    mutationLock.current = true;
     setSpinning(true);
-    const idempotencyKey = spinKeys.current[mode] ?? clientId();
-    spinKeys.current[mode] = idempotencyKey;
+    const controller = new AbortController();
+    mutationController.current = controller;
+    const spinKey: SpinKey =
+      mode === "PAID" ? `PAID_${selectedPaidCurrency}` : mode;
+    const idempotencyKey = spinKeys.current[spinKey] ?? clientId();
+    spinKeys.current[spinKey] = idempotencyKey;
     try {
       const response = await fetch("/api/v1/roulette", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           idempotencyKey,
           mode,
@@ -296,10 +327,13 @@ export function RouletteView({
       );
       const slice = rewards.length ? 360 / rewards.length : 360;
       const finish = () => {
-        spinKeys.current[mode] = null;
+        if (!mounted.current) return;
+        spinKeys.current[spinKey] = null;
         setLastSpin(payload.spin ?? null);
         setData(payload.state ?? null);
         setSpinning(false);
+        mutationLock.current = false;
+        mutationController.current = null;
         animationTimer.current = null;
       };
       const reduceMotion = window.matchMedia(
@@ -315,22 +349,30 @@ export function RouletteView({
         animationTimer.current = window.setTimeout(finish, 1_850);
       }
     } catch (error) {
-      setSpinning(false);
-      showToast(
-        error instanceof Error
-          ? error.message
-          : "The Roulette spin could not be completed.",
-      );
+      mutationLock.current = false;
+      mutationController.current = null;
+      if (!controller.signal.aborted && mounted.current) {
+        setSpinning(false);
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "The Roulette spin could not be completed.",
+        );
+      }
     }
   }
 
   async function claimTask(taskId: string) {
-    if (mutationBusy) return;
+    if (mutationLock.current || mutationBusy) return;
+    mutationLock.current = true;
     setClaimingTask(taskId);
+    const controller = new AbortController();
+    mutationController.current = controller;
     try {
       const response = await fetch("/api/v1/roulette", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           action: "CLAIM_TASK",
           taskId,
@@ -343,16 +385,22 @@ export function RouletteView({
           payload.error?.message ?? "The free spin could not be claimed.",
         );
       }
-      setData(payload.state);
-      showToast("Free spin added to your balance.");
+      if (mounted.current) {
+        setData(payload.state);
+        showToast("Free spin added to your balance.");
+      }
     } catch (error) {
-      showToast(
-        error instanceof Error
-          ? error.message
-          : "The free spin could not be claimed.",
-      );
+      if (!controller.signal.aborted && mounted.current) {
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "The free spin could not be claimed.",
+        );
+      }
     } finally {
-      setClaimingTask(null);
+      mutationLock.current = false;
+      mutationController.current = null;
+      if (mounted.current) setClaimingTask(null);
     }
   }
 
@@ -528,7 +576,7 @@ export function RouletteView({
               <ul>
                 {rewards.map((reward, index) => (
                   <li key={reward.id}>
-                    <span>
+                    <span className="roulette-reward-icon">
                       {reward.imageUrl ? (
                         <img src={reward.imageUrl} alt="" />
                       ) : reward.type === "STORE_ITEM" ? (
@@ -537,16 +585,18 @@ export function RouletteView({
                         index + 1
                       )}
                     </span>
-                    <strong>{reward.label}</strong>
-                    <small>
-                      {reward.type === "STORE_ITEM"
-                        ? "Cosmetic"
-                        : `${reward.amount.toLocaleString("en-US")} ${
-                            reward.type === "ONYX"
-                              ? coinPlural
-                              : data.settings?.shardPlural ?? "Shards"
-                          }`}
-                    </small>
+                    <span className="roulette-reward-copy">
+                      <strong>{reward.label}</strong>
+                      <small>
+                        {reward.type === "STORE_ITEM"
+                          ? "Cosmetic"
+                          : `${reward.amount.toLocaleString("en-US")} ${
+                              reward.type === "ONYX"
+                                ? coinPlural
+                                : data.settings?.shardPlural ?? "Shards"
+                            }`}
+                      </small>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -685,8 +735,13 @@ export function RouletteView({
             <span>Week of {data.weekly?.weekStart ? new Date(`${data.weekly.weekStart}T00:00:00Z`).toLocaleDateString() : "this week"}</span>
           </header>
           <div>
-            {data.weekly?.tasks?.map((task) => {
+            {data.weekly?.tasks?.length ? data.weekly.tasks.map((task) => {
               const percent = Math.min(100, Math.round((task.progress / task.target) * 100));
+              const taskStatus = task.claimed
+                ? "Claimed"
+                : task.complete
+                  ? "Ready to claim"
+                  : "In progress";
               return (
                 <article
                   key={task.id}
@@ -698,12 +753,21 @@ export function RouletteView({
                         : "is-progress"
                   }
                 >
-                  <span className={task.claimed ? "complete" : ""}>
-                    {task.claimed ? <CheckCircle size={22} weight="fill" /> : <Sparkle size={22} />}
-                  </span>
-                  <div>
+                  <header className="roulette-task-title-row">
+                    <span className={task.claimed ? "complete" : ""}>
+                      {task.claimed ? <CheckCircle size={22} weight="fill" /> : <Sparkle size={22} />}
+                    </span>
                     <strong>{task.label}</strong>
+                    <em>{taskStatus}</em>
+                  </header>
+                  <div className="roulette-task-body">
                     <p>{task.description}</p>
+                    <div className="roulette-task-progress-meta">
+                      <span>
+                        {Math.min(task.progress, task.target)}/{task.target}
+                      </span>
+                      <strong>{percent}%</strong>
+                    </div>
                     <div
                       className="roulette-task-progress"
                       role="progressbar"
@@ -714,18 +778,39 @@ export function RouletteView({
                     >
                       <span style={{ width: `${percent}%` }} />
                     </div>
-                    <small>{task.progress}/{task.target} · {task.rewardSpins} free spin{task.rewardSpins === 1 ? "" : "s"}</small>
+                    <small>
+                      Reward: {task.rewardSpins} free spin
+                      {task.rewardSpins === 1 ? "" : "s"}
+                    </small>
                   </div>
                   <button
                     type="button"
-                    disabled={!task.complete || task.claimed || mutationBusy}
+                    className={
+                      task.complete && !task.claimed
+                        ? undefined
+                        : "roulette-task-status"
+                    }
+                    aria-label={`${task.label}: ${taskStatus}`}
+                    disabled={
+                      task.claimed || !task.complete || mutationBusy
+                    }
                     onClick={() => void claimTask(task.id)}
                   >
-                    {task.claimed ? "Claimed" : claimingTask === task.id ? "Claiming…" : task.complete ? "Claim" : "In progress"}
+                    {claimingTask === task.id
+                      ? "Claiming…"
+                      : task.complete && !task.claimed
+                        ? "Claim free spin"
+                        : taskStatus}
                   </button>
                 </article>
               );
-            })}
+            }) : (
+              <div className="roulette-tasks-empty">
+                <Sparkle size={24} weight="duotone" />
+                <strong>No weekly tasks are active</strong>
+                <span>New ways to earn free spins will appear here.</span>
+              </div>
+            )}
           </div>
         </section>
       ) : null}
@@ -749,25 +834,27 @@ export function RouletteView({
           <div>
             {data.history.map((spinItem) => (
               <article key={spinItem.id}>
-                <span>
+                <span className="roulette-history-icon">
                   {spinItem.rewardType === "STORE_ITEM" ? (
                     <Gift size={18} />
                   ) : (
                     <Sparkle size={18} />
                   )}
                 </span>
-                <strong>{spinItem.label ?? spinItem.rewardKey}</strong>
-                <span>
-                  {spinItem.spinMode === "PAID"
-                    ? `${spinItem.costAmount || spinItem.costShards} ${
-                        spinItem.costCurrency === "ONYX" ? coinPlural : "Shards"
-                      }`
-                    : spinItem.spinMode === "TASK"
-                      ? "Weekly-task spin"
-                      : "Daily free spin"}
+                <span className="roulette-history-copy">
+                  <strong>{spinItem.label ?? spinItem.rewardKey}</strong>
+                  <small>
+                    {spinItem.spinMode === "PAID"
+                      ? `${spinItem.costAmount || spinItem.costShards} ${
+                          spinItem.costCurrency === "ONYX" ? coinPlural : "Shards"
+                        }`
+                      : spinItem.spinMode === "TASK"
+                        ? "Weekly-task spin"
+                        : "Daily free spin"}
+                  </small>
                 </span>
                 <time dateTime={spinItem.spunAt}>
-                  {new Date(spinItem.spunAt).toLocaleString()}
+                  {compactSpinTime(spinItem.spunAt)}
                 </time>
               </article>
             ))}

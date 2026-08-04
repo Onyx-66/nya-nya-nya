@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  CheckCircle,
   LockKey,
   WarningCircle,
 } from "@phosphor-icons/react";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {
   type ReactNode,
   useEffect,
@@ -128,17 +128,14 @@ export function AdminPageScaffold({
         </div>
       ) : null}
       {message ? (
-        <div
-          className={`admin-notice admin-notice-${message.kind}`}
-          role={message.kind === "error" ? "alert" : "status"}
-        >
-          {message.kind === "success" ? (
-            <CheckCircle size={18} weight="fill" />
-          ) : (
-            <WarningCircle size={18} />
-          )}
-          <span>{message.text}</span>
-        </div>
+        <SystemNoticeBridge
+          message={message.text}
+          kind={
+            message.kind === "neutral"
+              ? "info"
+              : message.kind
+          }
+        />
       ) : null}
       {state.kind === "loading" ? (
         <div className="admin-state-card" role="status" aria-live="polite">

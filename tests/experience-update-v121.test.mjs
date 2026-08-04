@@ -28,7 +28,8 @@ test("public cover and team media preserve valid local assets and hide invalid r
     assert.match(source, /https\?:\\\/\\\/|parsed\.protocol === "https:"/);
   }
   assert.match(teams, /verification_status = 'VERIFIED'/);
-  assert.match(teams, /sta\.revoked_at IS NULL/);
+  assert.match(teams, /WITH public_releases AS/);
+  assert.match(teams, /c\.visibility = 'PUBLIC'/);
   assert.match(teamDetail, /s\.status NOT IN \('DRAFT', 'REJECTED', 'ARCHIVED'\)/);
   assert.match(profiles, /c\.visibility = 'PUBLIC'/);
   assert.match(library, /c\.visibility = 'PUBLIC'/);
@@ -154,8 +155,9 @@ test("reader chapter drawer and release-scoped Previous/Next navigation are wire
   assert.doesNotMatch(reader, /Manage chapter/);
   assert.match(context, /previousChapter: previous/);
   assert.match(context, /nextChapter: next/);
-  assert.match(context, /AND language = \?/);
-  assert.match(context, /team_id = \?/);
+  assert.match(context, /selectPreferredRelease/);
+  assert.match(context, /previousAlternatives/);
+  assert.match(context, /nextFallbackReason/);
   assert.match(css, /\.reader-chapter-drawer/);
   assert.match(css, /\.reader-chapter-navigation[\s\S]*grid-template-columns: repeat\(2/);
 });
@@ -178,6 +180,12 @@ test("series Follow is persisted and Follow/Share share one professional two-col
   assert.match(title, /navigator\.share/);
   assert.match(title, /navigator\.clipboard\.writeText/);
   assert.match(css, /\.title-actions[\s\S]*grid-template-columns: repeat\(2/);
-  assert.match(css, /\.title-actions > \.button-primary[\s\S]*grid-column: 1 \/ -1/);
   assert.match(css, /\.title-actions \.series-secondary-action[\s\S]*width: 100%/);
+  const heroActions = title.slice(
+    title.indexOf('<div className="title-actions">'),
+    title.indexOf("</div>", title.indexOf('<div className="title-actions">')),
+  );
+  assert.match(heroActions, /Follow series/u);
+  assert.match(heroActions, /Share series/u);
+  assert.doesNotMatch(heroActions, /Read Latest/u);
 });

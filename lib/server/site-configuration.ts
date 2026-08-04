@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import {
   defaultSiteConfiguration,
-  parseSiteConfiguration,
   siteConfigurationSchema,
   type SiteConfiguration,
 } from "@/lib/site-configuration";
@@ -56,8 +55,19 @@ export async function getSiteConfigurationDocument(): Promise<SiteConfigurationD
     };
   }
   try {
+    const parsed = siteConfigurationSchema.safeParse(
+      JSON.parse(row.settings_json),
+    );
+    if (!parsed.success) {
+      return {
+        settings: defaultSiteConfiguration,
+        revision: Number(row.revision),
+        updatedAt: row.updated_at,
+        recoveredFromInvalid: true,
+      };
+    }
     return {
-      settings: parseSiteConfiguration(JSON.parse(row.settings_json)),
+      settings: parsed.data,
       revision: Number(row.revision),
       updatedAt: row.updated_at,
     };

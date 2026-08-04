@@ -25,6 +25,7 @@ import {
   useUnsavedChanges,
 } from "@/components/nyascans/admin/AdminPageScaffold";
 import { TaxonomyManager } from "@/components/nyascans/admin/TaxonomyManager";
+import { SeriesGalleryModerationPanel } from "@/components/nyascans/admin/SeriesGalleryModerationPanel";
 
 type Entity = { id?: string; name: string };
 type TeamOption = { id: string; name: string; verificationStatus: string };
@@ -37,7 +38,6 @@ type SeriesRecord = {
   synopsis: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
   status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
-  ageRating: "EVERYONE" | "TEEN" | "MATURE";
   publicationYear: number | null;
   authors: Entity[];
   artists: Entity[];
@@ -114,7 +114,6 @@ type FormState = {
   synopsis: string;
   type: SeriesRecord["type"];
   status: SeriesRecord["status"];
-  ageRating: SeriesRecord["ageRating"];
   publicationYear: string;
   authors: Entity[];
   artists: Entity[];
@@ -144,7 +143,6 @@ const emptyForm: FormState = {
   synopsis: "",
   type: "MANGA",
   status: "ONGOING",
-  ageRating: "TEEN",
   publicationYear: "",
   authors: [],
   artists: [],
@@ -197,7 +195,6 @@ function fromRecord(record: SeriesRecord): FormState {
     synopsis: record.synopsis,
     type: record.type,
     status: record.status,
-    ageRating: record.ageRating,
     publicationYear:
       record.publicationYear === null ? "" : String(record.publicationYear),
     authors: record.authors,
@@ -359,7 +356,7 @@ function EntityInput({
     <div className="admin-entity-field">
       <label>
         <span>{label}</span>
-        <div>
+        <div className="admin-inline-field admin-entity-input-row">
           <input
             value={draft}
             list={listId}
@@ -869,6 +866,7 @@ export function SeriesManagementPanel() {
       state={state}
       message={message}
     >
+      <SeriesGalleryModerationPanel />
       <div className="admin-master-detail">
         <aside className="admin-record-browser">
           <form
@@ -883,11 +881,19 @@ export function SeriesManagementPanel() {
               placeholder="Search titles and aliases"
               onChange={(event) => setQuery(event.target.value)}
             />
-            <button type="submit" aria-label="Search series">
+            <button
+              className="admin-icon-action"
+              type="submit"
+              aria-label="Search series"
+            >
               <Check size={16} />
             </button>
           </form>
-          <button type="button" onClick={() => void load(query, page)}>
+          <button
+            className="admin-record-refresh"
+            type="button"
+            onClick={() => void load(query, page)}
+          >
             <ArrowClockwise size={15} /> Refresh
           </button>
           <div>
@@ -899,7 +905,7 @@ export function SeriesManagementPanel() {
                   key={record.id}
                   onClick={() => selectRecord(record)}
                 >
-                  <span>
+                  <span className="series-record-cover">
                     {record.coverUrl ? (
                       <img src={record.coverUrl} alt="" />
                     ) : (
@@ -1008,22 +1014,6 @@ export function SeriesManagementPanel() {
                     <option value="HIATUS">Hiatus</option>
                     <option value="PAUSED">Paused</option>
                     <option value="UPCOMING">Upcoming</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Content rating</span>
-                  <select
-                    value={form.ageRating}
-                    onChange={(event) =>
-                      setField(
-                        "ageRating",
-                        event.target.value as FormState["ageRating"],
-                      )
-                    }
-                  >
-                    <option value="EVERYONE">Everyone</option>
-                    <option value="TEEN">Teen</option>
-                    <option value="MATURE">Mature</option>
                   </select>
                 </label>
                 <label>
@@ -1311,15 +1301,15 @@ export function SeriesManagementPanel() {
                   </button>
                 </div>
               </label>
-              <div className="admin-team-selection">
+              <div className="admin-team-selection admin-team-picker">
                 {selectedTeams.length ? (
                   selectedTeams.map((team) => (
-                    <article key={team.id}>
-                      <div>
+                    <article className="admin-team-row" key={team.id}>
+                      <div className="admin-team-identity">
                         <strong>{team.name}</strong>
                         <small>{team.verificationStatus}</small>
                       </div>
-                      <label>
+                      <label className="admin-team-primary">
                         <input
                           type="radio"
                           name="primary-team"
@@ -1684,7 +1674,7 @@ export function SeriesManagementPanel() {
           </details>
 
           <footer className="admin-sticky-actions">
-            <div>
+            <div className="admin-save-state">
               <strong>{dirty ? "Unsaved changes" : "All changes saved"}</strong>
               <small>
                 {form.id

@@ -113,8 +113,12 @@ test("paid Roulette spins use an admin-configured Shard charge", async () => {
   assert.match(route, /ROULETTE_REWARD_UNAVAILABLE/u);
   assert.match(view, /spin\("PAID"\)/u);
   assert.match(view, /paidSpinCostShards/u);
-  assert.match(view, /spinKeys\.current\[mode\] \?\? clientId\(\)/u);
-  assert.match(view, /spinKeys\.current\[mode\] = null/u);
+  assert.match(
+    view,
+    /mode === "PAID" \? `PAID_\$\{selectedPaidCurrency\}` : mode/u,
+  );
+  assert.match(view, /spinKeys\.current\[spinKey\] \?\? clientId\(\)/u);
+  assert.match(view, /spinKeys\.current\[spinKey\] = null/u);
   assert.match(route, /si\.is_published = 1/u);
   assert.match(route, /si\.is_hidden = 0/u);
 });

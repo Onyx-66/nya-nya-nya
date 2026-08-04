@@ -7,6 +7,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {
   applySitePalettePreset,
   defaultSiteTheme,
@@ -227,19 +228,10 @@ export function ThemePalettePresetsPanel() {
       </header>
 
       {message ? (
-        <div
-          className={`admin-notice admin-notice-${
-            status === "error" ? "error" : "success"
-          }`}
-          role={status === "error" ? "alert" : "status"}
-        >
-          {status === "error" ? (
-            <WarningCircle size={18} />
-          ) : (
-            <CheckCircle size={18} weight="fill" />
-          )}
-          <span>{message}</span>
-        </div>
+        <SystemNoticeBridge
+          message={message}
+          kind={status === "error" ? "error" : "success"}
+        />
       ) : null}
 
       <div className="palette-preset-grid">

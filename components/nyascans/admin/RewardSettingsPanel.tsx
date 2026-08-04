@@ -10,6 +10,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import {
   defaultRewardSettings,
@@ -1282,7 +1283,10 @@ export function RewardSettingsPanel() {
         </fieldset>
       )}
       {message ? (
-        <p className={`settings-status settings-status-${status}`}>{message}</p>
+        <SystemNoticeBridge
+          message={message}
+          kind={status === "error" ? "error" : status === "saved" ? "success" : "info"}
+        />
       ) : null}
     </section>
   );

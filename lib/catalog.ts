@@ -22,7 +22,6 @@ export type SeriesCard = {
   originalLanguage: string;
   originCountry: string;
   releaseYear: number | null;
-  ageRating: string;
   chapterCount: number;
   team: {
     name: string;
@@ -55,7 +54,6 @@ const coreSeries: SeriesCard[] = [
     originalLanguage: "Japanese",
     originCountry: "Japan",
     releaseYear: 2024,
-    ageRating: "Teen 13+",
     chapterCount: 48,
     team: { name: "Black Kite", slug: "black-kite", initials: "BK" },
   },
@@ -82,7 +80,6 @@ const coreSeries: SeriesCard[] = [
     originalLanguage: "Korean",
     originCountry: "South Korea",
     releaseYear: 2025,
-    ageRating: "Teen 13+",
     chapterCount: 31,
     team: { name: "Lumen House", slug: "lumen-house", initials: "LH" },
   },
@@ -109,7 +106,6 @@ const coreSeries: SeriesCard[] = [
     originalLanguage: "Korean",
     originCountry: "South Korea",
     releaseYear: 2025,
-    ageRating: "Mature 16+",
     chapterCount: 22,
     team: { name: "Black Kite", slug: "black-kite", initials: "BK" },
   },
@@ -136,7 +132,6 @@ const coreSeries: SeriesCard[] = [
     originalLanguage: "Chinese",
     originCountry: "China",
     releaseYear: 2022,
-    ageRating: "Teen 13+",
     chapterCount: 86,
     team: { name: "Tide Letter", slug: "tide-letter", initials: "TL" },
   },
@@ -163,7 +158,6 @@ const coreSeries: SeriesCard[] = [
     originalLanguage: "English",
     originCountry: "United States",
     releaseYear: 2025,
-    ageRating: "Everyone 10+",
     chapterCount: 17,
     team: { name: "Lumen House", slug: "lumen-house", initials: "LH" },
   },
@@ -190,7 +184,6 @@ const coreSeries: SeriesCard[] = [
     originalLanguage: "Japanese",
     originCountry: "Japan",
     releaseYear: 2026,
-    ageRating: "Teen 13+",
     chapterCount: 5,
     team: { name: "Paper Lantern", slug: "paper-lantern", initials: "PL" },
   },
@@ -265,7 +258,6 @@ const testingSeries: SeriesCard[] = testingSeriesRows.map((row, index) => {
     originalLanguage,
     originCountry,
     releaseYear: 2026 - (index % 4),
-    ageRating: index % 7 === 0 ? "Mature 16+" : "Teen 13+",
     chapterCount,
     team: {
       name: index % 2 ? "Black Kite" : "Lumen House",

@@ -88,7 +88,7 @@ export async function generateMetadata({
     orders: "Orders",
     notifications: "Notifications",
     latest: "Latest Updates",
-    rankings: "Reader Leaderboard",
+    rankings: "Users Ranking",
     roulette: "Daily Roulette",
     status: "System Status",
     support: "Support",

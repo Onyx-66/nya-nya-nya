@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import {
-  defaultCommercialSettings,
+  commercialSettingsSchema,
+  failClosedCommercialSettings,
   parseCommercialSettings,
   type CommercialSettings,
 } from "@/lib/commercial-settings";
@@ -17,9 +18,10 @@ export type CommercialSettingsDocument = {
 export async function getCommercialSettingsDocument(): Promise<CommercialSettingsDocument> {
   if (!env.DB) {
     return {
-      settings: defaultCommercialSettings,
+      settings: failClosedCommercialSettings,
       revision: 0,
       updatedAt: null,
+      recoveredFromInvalid: true,
     };
   }
   let row:
@@ -51,20 +53,32 @@ export async function getCommercialSettingsDocument(): Promise<CommercialSetting
   }
   if (!row) {
     return {
-      settings: defaultCommercialSettings,
+      settings: failClosedCommercialSettings,
       revision: 0,
       updatedAt: null,
+      recoveredFromInvalid: true,
     };
   }
   try {
+    const parsed = commercialSettingsSchema.safeParse(
+      JSON.parse(row.settingsJson),
+    );
+    if (!parsed.success) {
+      return {
+        settings: failClosedCommercialSettings,
+        revision: Number(row.revision),
+        updatedAt: row.updatedAt,
+        recoveredFromInvalid: true,
+      };
+    }
     return {
-      settings: parseCommercialSettings(JSON.parse(row.settingsJson)),
+      settings: parseCommercialSettings(parsed.data),
       revision: Number(row.revision),
       updatedAt: row.updatedAt,
     };
   } catch {
     return {
-      settings: defaultCommercialSettings,
+      settings: failClosedCommercialSettings,
       revision: Number(row.revision),
       updatedAt: row.updatedAt,
       recoveredFromInvalid: true,
@@ -72,16 +86,64 @@ export async function getCommercialSettingsDocument(): Promise<CommercialSetting
   }
 }
 
-export async function requirePaidEconomyPublic() {
+export async function requirePaidEconomyPublicDocument() {
   const document = await getCommercialSettingsDocument();
-  if (!document.settings.economy.premiumEconomyPublic) {
+  if (
+    document.recoveredFromInvalid ||
+    !Number.isSafeInteger(document.revision) ||
+    document.revision < 1 ||
+    !document.settings.economy.premiumEconomyPublic
+  ) {
     throw new ApiError(
       403,
       "PAID_ECONOMY_HIDDEN",
       "The premium coin economy is currently private.",
     );
   }
-  return document.settings;
+  return document;
+}
+
+export async function requirePaidEconomyPublic() {
+  return (await requirePaidEconomyPublicDocument()).settings;
+}
+
+export function paidEconomyRevisionGuardSql(expectedRevision: number) {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    throw new ApiError(
+      403,
+      "PAID_ECONOMY_HIDDEN",
+      "The premium coin economy is currently private.",
+    );
+  }
+  return `EXISTS (
+    SELECT 1
+      FROM commercial_settings live_commercial
+     WHERE live_commercial.id = 'active'
+       AND live_commercial.revision = ${expectedRevision}
+       AND json_valid(live_commercial.settings_json)
+       AND json_type(
+             CASE
+               WHEN json_valid(live_commercial.settings_json)
+                 THEN live_commercial.settings_json
+               ELSE '{}'
+             END,
+             '$.economy.premiumEconomyPublic'
+           ) = 'true'
+  )`;
+}
+
+export async function assertPaidEconomyRevisionFresh(
+  expectedRevision: number,
+) {
+  const current = await requirePaidEconomyPublicDocument();
+  if (current.revision !== expectedRevision) {
+    throw new ApiError(
+      409,
+      "COMMERCIAL_SETTINGS_CHANGED",
+      "Commercial settings changed while this paid operation was being saved. Review it and retry.",
+    );
+  }
+  return current;
 }
 
 export async function saveCommercialSettings(

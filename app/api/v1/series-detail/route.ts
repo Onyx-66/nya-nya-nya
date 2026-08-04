@@ -74,7 +74,7 @@ export async function GET(request: Request) {
               s.original_language AS languageCode,
               s.reading_direction AS readingDirection,
               s.publication_year AS publicationYear,
-              s.age_rating AS ageRating, s.access_type AS accessType,
+              s.access_type AS accessType,
               s.rating_tenths AS ratingTenths,
               s.follower_count AS followerCount,
               s.view_count AS viewCount,
@@ -146,7 +146,6 @@ export async function GET(request: Request) {
         languageCode: string;
         readingDirection: string;
         publicationYear: number | null;
-        ageRating: string;
         accessType: string;
         ratingTenths: number;
         followerCount: number;
@@ -174,9 +173,14 @@ export async function GET(request: Request) {
               c.title, c.volume, c.language, c.version,
               c.access_type AS accessType, c.price_onyx AS priceOnyx,
               c.published_at AS publishedAt, c.page_count AS pageCount,
-              t.id AS teamId, t.name AS teamName
+              t.id AS teamId, t.name AS teamName,
+              c.uploader_user_id AS uploaderUserId,
+              u.display_name AS uploaderName,
+              up.username AS uploaderUsername
        FROM chapters c
        LEFT JOIN teams t ON t.id = c.team_id
+       LEFT JOIN users u ON u.id = c.uploader_user_id
+       LEFT JOIN user_profiles up ON up.user_id = c.uploader_user_id
        WHERE c.series_id = ? AND c.state = 'PUBLISHED'
          AND c.visibility = 'PUBLIC'
          AND c.published_at IS NOT NULL
@@ -186,7 +190,7 @@ export async function GET(request: Request) {
                 COALESCE(c.published_at, c.created_at) DESC,
                 c.created_at DESC,
                 c.id DESC
-       LIMIT 100`,
+       LIMIT 1000`,
     )
       .bind(row.id)
       .all();
@@ -201,7 +205,6 @@ export async function GET(request: Request) {
           synopsis: row.synopsis,
           type: row.type,
           status: row.status,
-          ageRating: row.ageRating,
           publicationYear:
             row.publicationYear === null
               ? null

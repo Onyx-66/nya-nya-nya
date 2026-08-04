@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type EntityType = "GENRE" | "CREATOR" | "PUBLISHER";
 
@@ -281,12 +282,10 @@ export function TaxonomyManager() {
         </div>
       </header>
       {message ? (
-        <div
-          className={`admin-notice admin-notice-${message.kind}`}
-          role={message.kind === "error" ? "alert" : "status"}
-        >
-          {message.text}
-        </div>
+        <SystemNoticeBridge
+          message={message.text}
+          kind={message.kind === "neutral" ? "info" : message.kind}
+        />
       ) : null}
       <div className="admin-filter-bar">
         <label>

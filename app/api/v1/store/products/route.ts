@@ -59,6 +59,7 @@ export async function storeProductsResponse(request: Request) {
     const actor = await getActor().catch(() => null);
     const commercial = await getCommercialSettingsDocument();
     const premiumEconomyPublic =
+      !commercial.recoveredFromInvalid &&
       commercial.settings.economy.premiumEconomyPublic;
     const nowClause = `
       active = 1
@@ -95,7 +96,8 @@ export async function storeProductsResponse(request: Request) {
                   revision
            FROM products
            WHERE kind = ? AND ${nowClause}
-           ORDER BY sort_order, name COLLATE NOCASE`,
+           ORDER BY price_minor ASC, sort_order ASC,
+                    name COLLATE NOCASE, id ASC`,
         )
           .bind(productKind)
           .all<{
@@ -135,6 +137,9 @@ export async function storeProductsResponse(request: Request) {
     const cosmeticCategory = ["banners", "cosmetics", "logo-effects"].includes(
       category,
     );
+    const publicCosmeticCurrencyClause = premiumEconomyPublic
+      ? "1 = 1"
+      : "si.price_currency = 'SHARDS'";
     const [collectionRows, itemRows, inventoryRows, loadoutRows, counts] =
       await Promise.all([
         cosmeticCategory
@@ -151,6 +156,7 @@ export async function storeProductsResponse(request: Request) {
                  AND (sc.ends_at IS NULL OR datetime(sc.ends_at) > datetime('now'))
                  AND si.is_published = 1 AND si.is_hidden = 0
                  AND si.archived_at IS NULL AND ${itemCategoryClause}
+                 AND ${publicCosmeticCurrencyClause}
                ORDER BY sc.sort_order, sc.name COLLATE NOCASE`,
             ).all()
           : Promise.resolve({ results: [] }),
@@ -170,6 +176,7 @@ export async function storeProductsResponse(request: Request) {
                  AND (sc.starts_at IS NULL OR datetime(sc.starts_at) <= datetime('now'))
                  AND (sc.ends_at IS NULL OR datetime(sc.ends_at) > datetime('now'))
                  AND ${itemCategoryClause}
+                 AND ${publicCosmeticCurrencyClause}
                ORDER BY sc.sort_order, si.sort_order, si.name COLLATE NOCASE`,
             ).all<{
               id: string;
@@ -217,6 +224,7 @@ export async function storeProductsResponse(request: Request) {
              WHERE si.is_published = 1 AND si.is_hidden = 0
                AND si.archived_at IS NULL
                AND si.category = 'PROFILE_BANNER'
+               AND ${publicCosmeticCurrencyClause}
                AND sc.enabled = 1
                AND (sc.starts_at IS NULL OR datetime(sc.starts_at) <= datetime('now'))
                AND (sc.ends_at IS NULL OR datetime(sc.ends_at) > datetime('now'))`,
@@ -227,6 +235,7 @@ export async function storeProductsResponse(request: Request) {
              WHERE si.is_published = 1 AND si.is_hidden = 0
                AND si.archived_at IS NULL
                AND si.category NOT IN ('PROFILE_BANNER', 'LOGO_EFFECT')
+               AND ${publicCosmeticCurrencyClause}
                AND sc.enabled = 1
                AND (sc.starts_at IS NULL OR datetime(sc.starts_at) <= datetime('now'))
                AND (sc.ends_at IS NULL OR datetime(sc.ends_at) > datetime('now'))`,
@@ -237,6 +246,7 @@ export async function storeProductsResponse(request: Request) {
              WHERE si.is_published = 1 AND si.is_hidden = 0
                AND si.archived_at IS NULL
                AND si.category = 'LOGO_EFFECT'
+               AND ${publicCosmeticCurrencyClause}
                AND sc.enabled = 1
                AND (sc.starts_at IS NULL OR datetime(sc.starts_at) <= datetime('now'))
                AND (sc.ends_at IS NULL OR datetime(sc.ends_at) > datetime('now'))`,

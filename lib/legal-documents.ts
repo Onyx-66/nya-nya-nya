@@ -37,7 +37,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
         id: "information",
         title: "Information we process",
         bullets: [
-          "Profile information, avatar, banner, favorite series, follows, bookmarks, privacy choices, and achievements.",
+          "Profile information, avatar, banner, favorite series, follows, Library statuses, privacy choices, and achievements.",
           "Reading activity, chapter progress, unlocks, library imports and exports, task progress, and accessibility or reader preferences.",
           "Comments, votes, reactions, curated GIF selections, reports, support tickets, and moderation history.",
           "Publishing-team membership, rights records, series requests, chapter uploads, review decisions, and audit logs.",
@@ -78,7 +78,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
         title: "Your choices and rights",
         bullets: [
           "Edit profile data and choose which supported profile sections are public.",
-          "Export or import Library data, manage bookmarks and follows, and adjust reader or consent settings.",
+          "Export or import Library data, manage followed series, and adjust reader or consent settings.",
           "Request access, correction, deletion, restriction, or portability where applicable to you.",
           "Object to or withdraw consent for optional processing without affecting earlier lawful processing.",
           "Appeal a privacy decision or complain to an applicable data-protection authority.",
@@ -242,7 +242,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
         id: "standards",
         title: "Core standards",
         bullets: [
-          "Publish only material you are authorized to distribute and label its language, format, age rating, spoilers, and content warnings accurately.",
+          "Publish only material you are authorized to distribute and label its language, format, spoilers, and content warnings accurately.",
           "Do not post child sexual abuse material, sexual exploitation, non-consensual intimate imagery, grooming, or sexualized depictions of minors.",
           "Do not threaten, harass, dehumanize, promote hate, coordinate abuse, or reveal another person’s private information.",
           "Do not glorify self-harm, provide instructions for serious wrongdoing, distribute malware, impersonate others, manipulate metrics, or spam.",

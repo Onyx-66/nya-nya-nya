@@ -55,18 +55,12 @@ export function chapterManagementAuthorizationClause(
     };
   }
 
-  const languageExpression = input.language
-    ? "LOWER(?)"
-    : `LOWER(${chapterAlias}.language)`;
   return {
     sql: `EXISTS (
       SELECT 1
         FROM users live_actor
         JOIN team_memberships live_membership
           ON live_membership.user_id = live_actor.id
-        JOIN series_team_assignments live_assignment
-          ON live_assignment.team_id = live_membership.team_id
-         AND live_assignment.series_id = ${chapterAlias}.series_id
         JOIN teams live_team ON live_team.id = live_membership.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
@@ -82,19 +76,8 @@ export function chapterManagementAuthorizationClause(
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
            ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-         AND live_assignment.can_upload = 1
-         AND live_assignment.revoked_at IS NULL
          AND live_team.is_archived = 0
-         AND live_team.verification_status <> 'SUSPENDED'
-         AND json_valid(live_assignment.allowed_languages_json) = 1
-         AND (
-           json_array_length(live_assignment.allowed_languages_json) = 0
-           OR EXISTS (
-             SELECT 1
-               FROM json_each(live_assignment.allowed_languages_json)
-              WHERE LOWER(CAST(value AS TEXT)) IN ('*', ${languageExpression})
-           )
-         )
+         AND live_team.verification_status = 'VERIFIED'
          ${
            input.requirePublish
              ? `AND (
@@ -106,16 +89,11 @@ export function chapterManagementAuthorizationClause(
                   )
                 )
                 AND UPPER(live_membership.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')
-                AND live_assignment.can_publish = 1
-                AND live_assignment.upload_requires_review = 0`
+                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')`
              : ""
          }
     )`,
-    bindings: [
-      actor.id,
-      ...(input.language ? [input.language.toLowerCase()] : []),
-    ] as unknown[],
+    bindings: [actor.id] as unknown[],
   };
 }
 
@@ -186,16 +164,10 @@ export async function requireChapterManagementScope(
 
   const membership = await env.DB.prepare(
     `SELECT c.team_id AS teamId,
-            UPPER(tm.membership_role) AS membershipRole,
-            sta.can_publish AS canPublish,
-            sta.upload_requires_review AS uploadRequiresReview,
-            sta.allowed_languages_json AS allowedLanguagesJson
+            UPPER(tm.membership_role) AS membershipRole
        FROM chapters c
        JOIN teams t
          ON t.id = c.team_id
-       JOIN series_team_assignments sta
-         ON sta.series_id = c.series_id
-        AND sta.team_id = c.team_id
        JOIN team_memberships tm
          ON tm.team_id = c.team_id
         AND tm.user_id = ?
@@ -216,19 +188,14 @@ export async function requireChapterManagementScope(
         )
         AND UPPER(tm.membership_role) IN
           ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-        AND sta.can_upload = 1
-        AND sta.revoked_at IS NULL
         AND t.is_archived = 0
-        AND t.verification_status <> 'SUSPENDED'
+        AND t.verification_status = 'VERIFIED'
       LIMIT 1`,
   )
     .bind(actor.id, chapterId, seriesId)
     .first<{
       teamId: string;
       membershipRole: ManagementMembershipRole;
-      canPublish: number;
-      uploadRequiresReview: number;
-      allowedLanguagesJson: string;
     }>();
   if (!membership) {
     throw new ApiError(
@@ -243,18 +210,6 @@ export async function requireChapterManagementScope(
     ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
       membership.membershipRole,
     );
-  let allowedLanguages: string[] = [];
-  try {
-    const parsed = JSON.parse(membership.allowedLanguagesJson) as unknown;
-    if (Array.isArray(parsed)) {
-      allowedLanguages = parsed
-        .filter((entry): entry is string => typeof entry === "string")
-        .map((entry) => entry.trim().toLowerCase())
-        .filter(Boolean);
-    }
-  } catch {
-    allowedLanguages = [];
-  }
   return {
     actorId: actor.id,
     actorRole: actor.primaryRole,
@@ -264,11 +219,8 @@ export async function requireChapterManagementScope(
     administrator: false,
     canEditMetadata: true,
     canManagePages: true,
-    canPublish:
-      leader &&
-      Boolean(membership.canPublish) &&
-      !Boolean(membership.uploadRequiresReview),
+    canPublish: leader,
     canManageCommerce: false,
-    allowedLanguages,
+    allowedLanguages: [],
   };
 }

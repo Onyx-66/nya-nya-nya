@@ -34,6 +34,7 @@ import {
   type DiscussionSettings,
 } from "@/lib/discussion-settings";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
+import type { EmojiCatalogEntry } from "@/lib/emoji-catalog";
 
 type DiscussionActor = {
   displayName: string;
@@ -138,21 +139,6 @@ type PendingMedia = DiscussionMedia & {
   uploadState: "ready" | "removing";
 };
 
-const emojiGroups = [
-  {
-    label: "Manga",
-    values: ["🔥", "💯", "👑", "⚔️", "🗡️", "🌙", "✨", "🫶"],
-  },
-  {
-    label: "Reactions",
-    values: ["😀", "😂", "😍", "🤯", "😭", "😡", "😮", "🤔"],
-  },
-  {
-    label: "Community",
-    values: ["👍", "👎", "👏", "🙏", "❤️", "💔", "🧠", "🗿"],
-  },
-];
-
 const COMMENTS_PAGE_SIZE = 10;
 
 function roleLabel(role: string) {
@@ -241,6 +227,14 @@ export function EnhancedDiscussionSection({
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiCatalog, setEmojiCatalog] = useState<EmojiCatalogEntry[]>([]);
+  const [emojiGroupOptions, setEmojiGroupOptions] = useState<
+    Array<{ slug: string; name: string }>
+  >([{ slug: "all", name: "All" }]);
+  const [emojiQuery, setEmojiQuery] = useState("");
+  const [emojiGroup, setEmojiGroup] = useState("all");
+  const [emojiLimit, setEmojiLimit] = useState(240);
+  const [emojiLoading, setEmojiLoading] = useState(false);
   const [reactionPickerId, setReactionPickerId] = useState<string | null>(null);
   const [eligibleAffiliations, setEligibleAffiliations] = useState<
     AffiliationOption[]
@@ -268,6 +262,8 @@ export function EnhancedDiscussionSection({
   const [refreshKey, setRefreshKey] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const gifButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const scopeLabel = chapterSlug ? "Chapter comments" : "Series discussion";
   const gifCategories = useMemo(
     () => [
@@ -289,6 +285,19 @@ export function EnhancedDiscussionSection({
           gif.category.toLowerCase().includes(term)),
     );
   }, [curatedGifs, gifCategory, gifQuery]);
+  const matchingEmojis = useMemo(() => {
+    const terms = emojiQuery
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    return emojiCatalog.filter(
+      (entry) =>
+        (emojiGroup === "all" || entry.groupSlug === emojiGroup) &&
+        terms.every((term) => entry.searchText.includes(term)),
+    );
+  }, [emojiCatalog, emojiGroup, emojiQuery]);
+  const visibleEmojis = matchingEmojis.slice(0, emojiLimit);
 
   const loadComments = useCallback(
     async ({
@@ -362,13 +371,108 @@ export function EnhancedDiscussionSection({
   }, [loadComments, refreshKey]);
 
   useEffect(() => {
-    if (!gifPickerOpen) return;
-    function closeGifPicker(event: KeyboardEvent) {
-      if (event.key === "Escape") setGifPickerOpen(false);
+    if (!emojiOpen || emojiCatalog.length > 0 || emojiLoading) return;
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      setEmojiLoading(true);
+      void import("@/lib/emoji-catalog")
+        .then((catalog) => {
+          if (cancelled) return;
+          setEmojiCatalog(catalog.emojiCatalog);
+          setEmojiGroupOptions(catalog.emojiGroups);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            showToast("The emoji catalog could not be loaded.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setEmojiLoading(false);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [emojiCatalog.length, emojiLoading, emojiOpen, showToast]);
+
+  useEffect(() => {
+    if (!gifPickerOpen && !emojiOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [emojiOpen, gifPickerOpen]);
+
+  useEffect(() => {
+    if (!gifPickerOpen && !emojiOpen) return;
+    function closeMediaPicker(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        const focusTarget = gifPickerOpen
+          ? gifButtonRef.current
+          : emojiButtonRef.current;
+        setGifPickerOpen(false);
+        setEmojiOpen(false);
+        window.requestAnimationFrame(() => focusTarget?.focus());
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const picker = document.getElementById(
+        gifPickerOpen ? "comment-gif-picker" : "discussion-emoji-picker",
+      );
+      const focusable = Array.from(
+        picker?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
-    document.addEventListener("keydown", closeGifPicker);
-    return () => document.removeEventListener("keydown", closeGifPicker);
-  }, [gifPickerOpen]);
+    document.addEventListener("keydown", closeMediaPicker);
+    return () => document.removeEventListener("keydown", closeMediaPicker);
+  }, [emojiOpen, gifPickerOpen]);
+
+  useEffect(() => {
+    if (!gifPickerOpen && !emojiOpen) return;
+    const pickerId = gifPickerOpen
+      ? "comment-gif-picker"
+      : "discussion-emoji-picker";
+    const focusFrame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(pickerId)
+        ?.querySelector<HTMLElement>(
+          'input[type="search"], input, select, button',
+        )
+        ?.focus();
+    });
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return;
+      const picker = document.getElementById(pickerId);
+      const trigger = gifPickerOpen
+        ? gifButtonRef.current
+        : emojiButtonRef.current;
+      if (picker?.contains(event.target) || trigger?.contains(event.target)) {
+        return;
+      }
+      setGifPickerOpen(false);
+      setEmojiOpen(false);
+      window.requestAnimationFrame(() => trigger?.focus());
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+    };
+  }, [emojiOpen, gifPickerOpen]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -441,6 +545,7 @@ export function EnhancedDiscussionSection({
     });
     setBody("");
     setSpoiler(false);
+    setGifPickerOpen(false);
     setEmojiOpen(false);
     window.requestAnimationFrame(() => composerRef.current?.focus());
   }
@@ -449,6 +554,7 @@ export function EnhancedDiscussionSection({
     setReplyTo(null);
     setBody("");
     setSpoiler(false);
+    setGifPickerOpen(false);
     setEmojiOpen(false);
   }
 
@@ -951,6 +1057,16 @@ export function EnhancedDiscussionSection({
     }
   }
 
+  function closeGifPicker() {
+    setGifPickerOpen(false);
+    window.requestAnimationFrame(() => gifButtonRef.current?.focus());
+  }
+
+  function closeEmojiPicker() {
+    setEmojiOpen(false);
+    window.requestAnimationFrame(() => emojiButtonRef.current?.focus());
+  }
+
   function renderMediaToolbar() {
     return (
       <div className="composer-media-toolbar">
@@ -980,10 +1096,14 @@ export function EnhancedDiscussionSection({
         {settings.allowGifs ? (
           <div className="comment-gif-picker-wrap">
             <button
+              ref={gifButtonRef}
               type="button"
               aria-expanded={gifPickerOpen}
               aria-controls="comment-gif-picker"
-              onClick={() => setGifPickerOpen((current) => !current)}
+              onClick={() => {
+                setEmojiOpen(false);
+                setGifPickerOpen((current) => !current);
+              }}
               disabled={
                 uploadingMedia ||
                 pendingMedia.length + selectedGifIds.length >=
@@ -993,12 +1113,14 @@ export function EnhancedDiscussionSection({
               <FilmStrip size={18} /> GIF
             </button>
             {gifPickerOpen ? (
-              <div
-                className="comment-gif-picker"
-                id="comment-gif-picker"
-                role="dialog"
-                aria-label="Choose a GIF"
-              >
+              <div className="media-picker-backdrop">
+                <div
+                  className="comment-gif-picker"
+                  id="comment-gif-picker"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Choose a GIF"
+                >
                 <header>
                   <div>
                     <strong>NyaScans GIFs</strong>
@@ -1007,7 +1129,7 @@ export function EnhancedDiscussionSection({
                   <button
                     type="button"
                     aria-label="Close GIF picker"
-                    onClick={() => setGifPickerOpen(false)}
+                    onClick={closeGifPicker}
                   >
                     <X size={16} />
                   </button>
@@ -1037,11 +1159,11 @@ export function EnhancedDiscussionSection({
                   </label>
                 </div>
                 {curatedGifs.length === 0 ? (
-                  <p className="comment-gif-empty">
+                  <p className="comment-gif-empty" role="status">
                     The community team has not published any GIFs yet.
                   </p>
                 ) : visibleGifs.length === 0 ? (
-                  <p className="comment-gif-empty">
+                  <p className="comment-gif-empty" role="status">
                     No curated GIF matches this search.
                   </p>
                 ) : (
@@ -1072,53 +1194,117 @@ export function EnhancedDiscussionSection({
                   })}
                   </div>
                 )}
+                </div>
               </div>
             ) : null}
           </div>
         ) : null}
         <div className="emoji-picker-wrap">
           <button
+            ref={emojiButtonRef}
             type="button"
             aria-expanded={emojiOpen}
             aria-controls="discussion-emoji-picker"
-            onClick={() => setEmojiOpen((current) => !current)}
+            onClick={() => {
+              setGifPickerOpen(false);
+              setEmojiOpen((current) => !current);
+            }}
           >
             <Smiley size={18} /> Emoji
           </button>
           {emojiOpen ? (
-            <div
-              className="emoji-picker"
-              id="discussion-emoji-picker"
-              role="dialog"
-              aria-label="Choose an emoji"
-            >
-              <header>
-                <strong>Emoji</strong>
-                <button
-                  type="button"
-                  aria-label="Close emoji picker"
-                  onClick={() => setEmojiOpen(false)}
-                >
-                  <X size={16} />
-                </button>
-              </header>
-              {emojiGroups.map((group) => (
-                <section key={group.label}>
-                  <span>{group.label}</span>
+            <div className="media-picker-backdrop">
+              <div
+                className="emoji-picker"
+                id="discussion-emoji-picker"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Choose an emoji"
+              >
+                <header>
                   <div>
-                    {group.values.map((emoji) => (
+                    <strong>Emoji</strong>
+                    <span>{emojiCatalog.length || "Full Unicode"} emoji catalog</span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close emoji picker"
+                    onClick={closeEmojiPicker}
+                  >
+                    <X size={16} />
+                  </button>
+                </header>
+                <div className="emoji-picker-filters">
+                  <label>
+                    <span className="sr-only">Search emoji by name</span>
+                    <input
+                      type="search"
+                      value={emojiQuery}
+                      placeholder="Search emoji by name or keyword"
+                      onChange={(event) => {
+                        setEmojiQuery(event.target.value);
+                        setEmojiLimit(240);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span className="sr-only">Emoji category</span>
+                    <select
+                      value={emojiGroup}
+                      onChange={(event) => {
+                        setEmojiGroup(event.target.value);
+                        setEmojiLimit(240);
+                      }}
+                    >
+                      {emojiGroupOptions.map((group) => (
+                        <option value={group.slug} key={group.slug}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {emojiLoading ? (
+                  <p className="emoji-picker-status" role="status">
+                    <SpinnerGap size={17} className="spin" /> Loading emoji…
+                  </p>
+                ) : visibleEmojis.length === 0 ? (
+                  <p className="emoji-picker-status" role="status">
+                    No emoji matches this search.
+                  </p>
+                ) : (
+                  <>
+                    <div className="emoji-catalog-grid">
+                      {visibleEmojis.map((entry) => (
                       <button
                         type="button"
-                        key={emoji}
-                        aria-label={`Insert ${emoji}`}
-                        onClick={() => insertEmoji(emoji)}
+                          key={entry.emoji}
+                          aria-label={`Insert ${entry.name}`}
+                          title={entry.name}
+                          onClick={() => insertEmoji(entry.emoji)}
                       >
-                        {emoji}
+                          {entry.emoji}
                       </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
+                      ))}
+                    </div>
+                    <footer>
+                      <span aria-live="polite">
+                        Showing {visibleEmojis.length} of {matchingEmojis.length}
+                      </span>
+                      {visibleEmojis.length < matchingEmojis.length ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEmojiLimit((current) => current + 240)
+                          }
+                        >
+                          Show more
+                        </button>
+                      ) : null}
+                    </footer>
+                  </>
+                )}
+              </div>
             </div>
           ) : null}
         </div>

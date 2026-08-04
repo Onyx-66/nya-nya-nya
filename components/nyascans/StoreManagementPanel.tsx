@@ -14,7 +14,6 @@ import {
   SpinnerGap,
   Storefront,
   Trash,
-  WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -26,6 +25,7 @@ import {
 } from "react";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 import { optimizeReactionAsset } from "@/lib/client/reaction-media";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
@@ -851,12 +851,8 @@ export function StoreManagementPanel({
         </div>
       </header>
 
-      {message ? <p className="store-admin-message">{message}</p> : null}
-      {error ? (
-        <p className="store-admin-error" role="alert">
-          <WarningCircle size={17} /> {error}
-        </p>
-      ) : null}
+      {message ? <SystemNoticeBridge message={message} kind="success" /> : null}
+      {error ? <SystemNoticeBridge message={error} kind="error" /> : null}
 
       {newCollectionOpen ? (
         <form className="store-admin-form" onSubmit={createCollection}>

@@ -176,6 +176,62 @@
       "when": 1785097200000,
       "tag": "0024_manager_role_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1785102416779,
+      "tag": "0025_swift_nuke",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1785161896112,
+      "tag": "0026_fancy_prima",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1785171296678,
+      "tag": "0027_replacement_review_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1785172467308,
+      "tag": "0028_supreme_may_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1785174491699,
+      "tag": "0029_great_trish_tilby",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1785174614364,
+      "tag": "0030_handy_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1785181073698,
+      "tag": "0031_real_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1785186012864,
+      "tag": "0032_volatile_misty_knight",
+      "breakpoints": true
     }
   ]
 }

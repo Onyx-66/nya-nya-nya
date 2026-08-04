@@ -58,8 +58,8 @@ test("paid chapter unlocks keep price, entitlement, idempotency, and image acces
   assert.match(access, /revoked_at IS NULL/);
   assert.match(access, /chapter\.visibility !== "HIDDEN"/);
   assert.match(access, /teamPreviewAllowed/);
-  assert.match(access, /sta\.can_upload = 1/);
-  assert.match(access, /sta\.revoked_at IS NULL/);
+  assert.match(access, /preview_team\.verification_status = 'VERIFIED'/);
+  assert.doesNotMatch(access, /series_team_assignments/);
   assert.match(reader, /const unlockIdempotencyKey = useRef\(""\)/);
   assert.match(reader, /idempotencyKey: unlockIdempotencyKey\.current/);
   assert.match(reader, /authEntryPath\(\s*"signup"/);
@@ -98,14 +98,14 @@ test("reader and workspace use exact server-authorized chapter management routes
     /\/onyx\/admin\/access\/chapter-access\?series=/,
   );
 
-  assert.match(scope, /sta\.can_upload = 1/);
-  assert.match(scope, /sta\.revoked_at IS NULL/);
+  assert.match(scope, /JOIN team_memberships tm/);
   assert.match(scope, /tm\.user_id = \?/);
-  assert.match(scope, /sta\.team_id = c\.team_id/);
-  assert.match(scope, /t\.verification_status <> 'SUSPENDED'/);
-  assert.match(scope, /uploadRequiresReview/);
+  assert.match(scope, /tm\.team_id = c\.team_id/);
+  assert.match(scope, /t\.verification_status = 'VERIFIED'/);
+  assert.doesNotMatch(scope, /series_team_assignments/);
+  assert.doesNotMatch(scope, /verification_status <> 'SUSPENDED'/);
   assert.match(scope, /allowedLanguages/);
-  assert.match(scope, /live_assignment\.upload_requires_review = 0/);
+  assert.match(scope, /allowedLanguages: \[\]/);
   assert.match(scope, /canManageCommerce: false/);
   assert.match(management, /expectedRevision/);
   assert.match(management, /CHAPTER_COMMERCE_FORBIDDEN/);

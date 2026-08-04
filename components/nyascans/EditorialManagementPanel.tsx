@@ -8,9 +8,9 @@ import {
   Plus,
   Sparkle,
   Trash,
-  WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
+import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type EditorialSeries = {
   id: string;
@@ -201,12 +201,8 @@ export function EditorialManagementPanel() {
         </button>
       </header>
 
-      {message ? <p className="store-admin-message">{message}</p> : null}
-      {error ? (
-        <p className="store-admin-error" role="alert">
-          <WarningCircle size={17} /> {error}
-        </p>
-      ) : null}
+      {message ? <SystemNoticeBridge message={message} kind="success" /> : null}
+      {error ? <SystemNoticeBridge message={error} kind="error" /> : null}
 
       <div className="editorial-picker">
         <label>
