@@ -37,7 +37,7 @@ test("Version 42 chapter disclosures keep compact identity and honest Paid state
   );
 
   assert.doesNotMatch(titleView, /<span>\{group\.number\}<\/span>/u);
-  assert.match(titleView, /<strong>Chapter \{group\.number\}<\/strong>/u);
+  assert.match(titleView, /<strong>[\s\S]*Chapter \{group\.number\}[\s\S]*<\/strong>/u);
   assert.match(
     titleView,
     /group\.releases\.every\([\s\S]*release\.accessType === "PAID" && !release\.canRead/u,

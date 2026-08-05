@@ -6,8 +6,10 @@ import {
   BookOpenText,
   Books,
   UsersThree,
+  CaretDown,
+  Medal,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 
@@ -33,6 +35,9 @@ type PublicTeamRecord = {
   followerCount: number;
   logoUrl: string | null;
   bannerUrl: string | null;
+  releaseLanguages: string[];
+  totalViews: number;
+  commentCount: number;
 };
 
 function label(value: string) {
@@ -134,6 +139,11 @@ function PublishingTeamCard({
       data-active={active ? "true" : "false"}
       data-team-index={index}
     >
+      {index < 3 ? (
+        <span className={`team-rank-badge rank-${index + 1}`} aria-label={`Top team rank ${index + 1}`}>
+          <Medal size={17} weight="fill" /> {index + 1}
+        </span>
+      ) : null}
       <span className="team-carousel-banner">
         {record.bannerUrl && !bannerFailed ? (
           <img
@@ -309,6 +319,7 @@ export function PublishingTeamsCarousel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [language, setLanguage] = useState("");
   const railRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -386,6 +397,18 @@ export function PublishingTeamsCarousel() {
     setActiveIndex(closestIndex);
   }
 
+  const visibleRecords = language
+    ? records.filter((record) => record.releaseLanguages.includes(language))
+    : records;
+
+  function selectLanguage(nextLanguage: string) {
+    setLanguage(nextLanguage);
+    setActiveIndex(0);
+    window.requestAnimationFrame(() => {
+      railRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+    });
+  }
+
   if (!loading && !error && records.length === 0) return null;
 
   return (
@@ -396,7 +419,24 @@ export function PublishingTeamsCarousel() {
       <div className="section-heading teams-heading">
         <div>
           <h2 id="publishing-teams-title">Publishing Teams</h2>
-          <p>Meet the verified teams producing releases across NyaScans.</p>
+          <p>Discover our publishing teams</p>
+        </div>
+        <div className="teams-heading-actions">
+          <details>
+            <summary>
+              {language ? <LanguageFlag language={language} showCode={false} /> : "Language"}
+              <CaretDown size={14} />
+            </summary>
+            <div>
+              <button type="button" aria-pressed={!language} onClick={() => selectLanguage("")}>All languages</button>
+              {[...new Set(records.flatMap((record) => record.releaseLanguages))].sort().map((entry) => (
+                <button type="button" key={entry} aria-pressed={language === entry} onClick={() => selectLanguage(entry)}>
+                  <LanguageFlag language={entry} showCode={false} /> {entry.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </details>
+          <a href="/teams">Browse Teams <ArrowRight size={16} /></a>
         </div>
       </div>
       {loading ? (
@@ -411,7 +451,7 @@ export function PublishingTeamsCarousel() {
       ) : (
         <div className="teams-carousel-shell">
           <div
-            className={`teams-carousel ${records.length === 1 ? "is-single" : ""}`}
+            className={`teams-carousel ${visibleRecords.length === 1 ? "is-single" : ""}`}
             ref={railRef}
             tabIndex={0}
             aria-label="Publishing teams carousel"
@@ -426,7 +466,7 @@ export function PublishingTeamsCarousel() {
               }
             }}
           >
-            {records.map((record, index) => (
+            {visibleRecords.map((record, index) => (
               <PublishingTeamCard
                 active={index === activeIndex}
                 index={index}
@@ -437,9 +477,9 @@ export function PublishingTeamsCarousel() {
           </div>
         </div>
       )}
-      {!loading && !error && records.length > 1 ? (
+      {!loading && !error && visibleRecords.length > 1 ? (
         <div className="teams-carousel-dots" aria-label="Choose publishing team">
-          {records.map((record, index) => (
+          {visibleRecords.map((record, index) => (
             <button
               type="button"
               key={record.id}
@@ -451,5 +491,61 @@ export function PublishingTeamsCarousel() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function PublishingTeamsDirectory() {
+  const [records, setRecords] = useState<PublicTeamRecord[]>([]);
+  const [query, setQuery] = useState("");
+  const [language, setLanguage] = useState("");
+  const [view, setView] = useState<"GRID" | "LIST">("GRID");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/public-teams?limit=24", { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json()) as { data?: PublicTeamRecord[]; error?: { message?: string } };
+        if (!response.ok) throw new Error(payload.error?.message ?? "Publishing teams are unavailable.");
+        setRecords(payload.data ?? []);
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Publishing teams are unavailable.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, []);
+
+  const languages = useMemo(
+    () => [...new Set(records.flatMap((record) => record.releaseLanguages))].sort(),
+    [records],
+  );
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return records.filter((record) =>
+      (!term || `${record.name} ${record.description}`.toLowerCase().includes(term)) &&
+      (!language || record.releaseLanguages.includes(language)),
+    );
+  }, [language, query, records]);
+
+  return (
+    <main className="page-main page-wrap teams-directory">
+      <header>
+        <p className="eyebrow">Verified publishers</p>
+        <h1>Publishing teams</h1>
+        <p>Search teams, filter by their actual release languages, and compare their public activity.</p>
+      </header>
+      <section className="teams-directory-controls" aria-label="Team directory controls">
+        <label><span className="sr-only">Search teams</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search teams" /></label>
+        <label><span className="sr-only">Release language</span><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="">All languages</option>{languages.map((entry) => <option key={entry} value={entry}>{entry.toUpperCase()}</option>)}</select></label>
+        <div role="group" aria-label="Team list view"><button type="button" aria-pressed={view === "GRID"} onClick={() => setView("GRID")}>Grid</button><button type="button" aria-pressed={view === "LIST"} onClick={() => setView("LIST")}>List</button></div>
+      </section>
+      {loading ? <div className="public-discovery-loading">Loading teams…</div> : error ? <div className="public-discovery-error" role="alert">{error}</div> : (
+        <section className={`teams-directory-results is-${view.toLowerCase()}`} aria-label={`${filtered.length} publishing teams`}>
+          {filtered.map((record, index) => <PublishingTeamCard key={record.id} record={record} index={index} active />)}
+        </section>
+      )}
+    </main>
   );
 }

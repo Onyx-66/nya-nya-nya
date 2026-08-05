@@ -87,6 +87,7 @@ import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsW
 import {
   NewSeriesSection,
   PublishingTeamsCarousel,
+  PublishingTeamsDirectory,
 } from "@/components/nyascans/PublicDiscoverySections";
 import { PublicProfileView } from "@/components/nyascans/PublicProfileView";
 import { PublicTeamView } from "@/components/nyascans/PublicTeamView";
@@ -151,6 +152,7 @@ export type AppView =
   | "roulette"
   | "orders"
   | "team"
+  | "teams"
   | "status"
   | "support"
   | "legal"
@@ -2065,20 +2067,6 @@ function FreshChapterMark({ fresh }: { fresh?: boolean }) {
   );
 }
 
-function PeriodChapterMark({ active }: { active?: boolean }) {
-  if (!active) return null;
-  return (
-    <>
-      <span
-        className="period-chapter-mark"
-        aria-hidden="true"
-        title="New in the selected period"
-      />
-      <span className="sr-only">New in the selected period: </span>
-    </>
-  );
-}
-
 function LatestUpdatesGrid({
   heading = true,
   pagination = false,
@@ -2101,8 +2089,9 @@ function LatestUpdatesGrid({
   const [revision, setRevision] = useState(0);
   const hasRecordsRef = useRef(false);
   const [homePeriod, setHomePeriod] = useState<
-    "today" | "week" | "month"
+    "today" | "week"
   >("week");
+  const [releaseLanguages, setReleaseLanguages] = useState<string[]>([]);
   const effectivePeriod =
     heading && !pagination ? homePeriod : period;
 
@@ -2118,7 +2107,7 @@ function LatestUpdatesGrid({
       setRefreshWarning("");
       try {
         const response = await fetch(
-          `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${effectivePeriod}`,
+          `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${effectivePeriod}${releaseLanguages.length ? `&languages=${encodeURIComponent(releaseLanguages.join(","))}` : ""}`,
           { signal: controller.signal, cache: "no-store" },
         );
         const payload = (await response.json()) as {
@@ -2174,7 +2163,7 @@ function LatestUpdatesGrid({
       window.removeEventListener("focus", refreshVisible);
       controller.abort();
     };
-  }, [effectivePeriod, page, pageSize, revision]);
+  }, [effectivePeriod, page, pageSize, releaseLanguages, revision]);
 
   const pageNumbers = useMemo(() => {
     const start = Math.max(1, Math.min(page - 2, pageCount - 4));
@@ -2213,16 +2202,46 @@ function LatestUpdatesGrid({
               >
                 This Week
               </button>
-              <button
-                type="button"
-                aria-pressed={homePeriod === "month"}
-                onClick={() => {
-                  setPage(1);
-                  setHomePeriod("month");
-                }}
-              >
-                This Month
-              </button>
+              <details className="latest-language-filter">
+                <summary>
+                  {releaseLanguages.length ? (
+                    releaseLanguages.map((language) => (
+                      <LanguageFlag key={language} language={language} showCode={false} />
+                    ))
+                  ) : (
+                    <>Language <CaretDown size={14} /></>
+                  )}
+                </summary>
+                <div>
+                  <strong>Release languages</strong>
+                  <small>Select up to two.</small>
+                  {["en", "ar", "fr", "es", "pt", "id", "ko", "ja", "zh"].map((language) => {
+                    const selected = releaseLanguages.includes(language);
+                    return (
+                      <label key={language}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={!selected && releaseLanguages.length >= 2}
+                          onChange={() => {
+                            setPage(1);
+                            setReleaseLanguages((current) =>
+                              selected
+                                ? current.filter((entry) => entry !== language)
+                                : [...current, language].slice(0, 2),
+                            );
+                          }}
+                        />
+                        <LanguageFlag language={language} showCode={false} />
+                        <span>{languageName(language)}</span>
+                      </label>
+                    );
+                  })}
+                  {releaseLanguages.length ? (
+                    <button type="button" onClick={() => setReleaseLanguages([])}>Clear</button>
+                  ) : null}
+                </div>
+              </details>
             </div>
             <a href="/latest">
               View All <ArrowRight size={17} />
@@ -2300,31 +2319,22 @@ function LatestUpdatesGrid({
                               href={`/title/${update.slug}/chapter/${chapter.slug}`}
                             >
                               <span
-                                className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
-                                aria-label={
-                                  chapter.isRead
-                                    ? "Chapter already read"
-                                    : "Chapter not read yet"
-                                }
-                                title={
-                                  chapter.isRead
-                                    ? "Already read"
-                                    : "Not read yet"
-                                }
-                              >
-                                <Eye
-                                  size={15}
-                                  weight={chapter.isRead ? "fill" : "regular"}
-                                  aria-hidden="true"
-                                />
-                              </span>
-                              <PeriodChapterMark active={chapter.isNewInPeriod} />
+                                className={`latest-age-dot${chapter.isFresh ? " is-new" : " is-old"}`}
+                                aria-label={chapter.isFresh ? "Released within 24 hours" : "Released more than 24 hours ago"}
+                              />
                               Chapter{" "}
                               {normalizeChapterNumber(chapter.chapterNumber)}
+                              <span
+                                className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
+                                aria-label={chapter.isRead ? "Chapter already read" : "Chapter not read yet"}
+                              >
+                                <Eye size={15} weight={chapter.isRead ? "fill" : "regular"} aria-hidden="true" />
+                              </span>
+                              <time className="latest-chapter-period" dateTime={chapter.publishedAt}>
+                                {releaseTime(chapter.publishedAt)} ago
+                              </time>
+                              <ChapterAccessBadge accessType={chapter.effectiveAccessType ?? chapter.accessType} />
                             </a>
-                            <time dateTime={chapter.publishedAt}>
-                              {releaseTime(chapter.publishedAt)} ago
-                            </time>
                           </span>
                           <span className="latest-chapter-attribution">
                             <LanguageFlag
@@ -2344,11 +2354,6 @@ function LatestUpdatesGrid({
                             )}
                           </span>
                         </span>
-                        <ChapterAccessBadge
-                          accessType={
-                            chapter.effectiveAccessType ?? chapter.accessType
-                          }
-                        />
                       </li>
                     ))}
                   </ul>
@@ -5867,6 +5872,7 @@ type SeriesChapterAccess = {
   thumbnailUrl?: string | null;
   publishedAt: string | null;
   isFresh?: boolean;
+  isRead?: boolean;
   accessType: "FREE" | "PAID";
   priceOnyx: number;
   canRead: boolean;
@@ -6069,6 +6075,7 @@ function TitleView({
   );
   const [chapterQuery, setChapterQuery] = useState("");
   const [chapterOrder, setChapterOrder] = useState<"newest" | "oldest">("newest");
+  const [seriesReleaseLanguage, setSeriesReleaseLanguage] = useState("");
   const [collapsedChapterNumbers, setCollapsedChapterNumbers] = useState<
     Set<string>
   >(new Set());
@@ -6171,6 +6178,7 @@ function TitleView({
   }, [actor, available, item.slug]);
   const chapters = chapterPolicies
     .filter((chapter) =>
+      (!seriesReleaseLanguage || chapter.language.toLowerCase() === seriesReleaseLanguage) &&
       `${chapter.chapterLabel} ${chapter.accessType} ${chapter.language} ${chapter.teamName ?? ""}`
         .toLowerCase()
         .includes(chapterQuery.toLowerCase()),
@@ -6234,6 +6242,7 @@ function TitleView({
     .sort((left, right) => compareChapterNumbers(left.number, right.number));
   const latestChapter = allGroupsAscending.at(-1)?.releases[0] ?? null;
   const firstChapter = allGroupsAscending[0]?.releases[0] ?? null;
+  const seriesReleaseLanguages = [...new Set(chapterPolicies.map((chapter) => chapter.language.toLowerCase()))].sort();
 
   function applyCollapsedChapters(next: Set<string>) {
     setCollapsedChapterNumbers(next);
@@ -6545,7 +6554,7 @@ function TitleView({
                   className="button button-secondary"
                   href={`/title/${item.slug}/chapter/${firstChapter.chapterSlug}`}
                 >
-                  <Play size={16} /> Read First
+                  <Play size={16} /> <span className="desktop-action-label">Read First</span><span className="mobile-action-label">First</span>
                 </a>
               ) : (
                 <span
@@ -6560,7 +6569,7 @@ function TitleView({
                   className="button button-primary"
                   href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}
                 >
-                  <Play size={16} weight="fill" /> Read Latest
+                  <Play size={16} weight="fill" /> <span className="desktop-action-label">Read Latest</span><span className="mobile-action-label">Latest</span>
                 </a>
               ) : (
                 <span
@@ -6570,6 +6579,28 @@ function TitleView({
                   Read Latest
                 </span>
               )}
+              <button
+                className="button button-danger report-link"
+                type="button"
+                ref={reportTriggerRef}
+                onClick={() => setReportDialogOpen(true)}
+              >
+                <WarningCircle size={17} /> <span className="desktop-action-label">Report title</span><span className="mobile-action-label">Report</span>
+              </button>
+              <details className="series-language-action">
+                <summary className="button button-secondary">
+                  <LanguageFlag language={seriesReleaseLanguage || seriesReleaseLanguages[0] || "en"} showCode={false} />
+                  <span className="desktop-action-label">Language filter</span><span className="mobile-action-label">Language</span>
+                </summary>
+                <div>
+                  <button type="button" aria-pressed={!seriesReleaseLanguage} onClick={() => setSeriesReleaseLanguage("")}>All languages</button>
+                  {seriesReleaseLanguages.map((language) => (
+                    <button type="button" key={language} aria-pressed={seriesReleaseLanguage === language} onClick={() => setSeriesReleaseLanguage(language)}>
+                      <LanguageFlag language={language} showCode={false} /> {languageName(language)}
+                    </button>
+                  ))}
+                </div>
+              </details>
               {canUploadChapter ? (
                 <a
                   className="button button-secondary chapter-upload-action"
@@ -6578,14 +6609,6 @@ function TitleView({
                   <CloudArrowUp size={17} /> Upload Chapter
                 </a>
               ) : null}
-              <button
-                className="button button-danger report-link"
-                type="button"
-                ref={reportTriggerRef}
-                onClick={() => setReportDialogOpen(true)}
-              >
-                <WarningCircle size={17} /> Report title
-              </button>
             </div>
             <div
               className={`chapter-group-list ${
@@ -6614,7 +6637,11 @@ function TitleView({
                     >
                       <header>
                         <div>
-                          <strong>Chapter {group.number}</strong>
+                          <strong>
+                            {groupLocked ? <LockSimple size={15} aria-label="Paid chapter" /> : null}
+                            Chapter {group.number}
+                            <Eye size={15} weight={group.releases.some((release) => release.isRead) ? "fill" : "regular"} aria-label={group.releases.some((release) => release.isRead) ? "Viewed" : "Not viewed"} />
+                          </strong>
                           <span
                             className="chapter-language-counts"
                             aria-label={`${group.releases.length} available translation ${
@@ -6687,7 +6714,7 @@ function TitleView({
                                   <FreshChapterMark fresh={chapter.isFresh} />
                                 </a>
                                 <small>
-                                  <span className="chapter-credit-chip">
+                                  <span className="chapter-credit-chip chapter-variant-uploader">
                                     <span>Uploader</span>
                                     {chapter.uploaderUsername ? (
                                       <a
@@ -6784,6 +6811,7 @@ function TitleView({
                               />
                             ) : null}
                             Chapter {group.number}
+                            <Eye size={15} weight={group.releases.some((release) => release.isRead) ? "fill" : "regular"} aria-label={group.releases.some((release) => release.isRead) ? "Viewed" : "Not viewed"} />
                           </strong>
                         </span>
                         <span className="chapter-language-counts">
@@ -6941,6 +6969,16 @@ type ReaderContextData = {
   nextFallbackRequired: boolean;
   chapterManagementHref: string | null;
   access: ChapterAccessData;
+};
+
+type ChapterReaction = {
+  id: string;
+  name: string;
+  accessibleLabel: string;
+  emojiFallback: string;
+  imageUrl: string | null;
+  count: number;
+  selected: boolean;
 };
 
 async function fetchReaderResource<T>(
@@ -7155,6 +7193,9 @@ function ReaderView({
   const [pagesError, setPagesError] = useState("");
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletError, setWalletError] = useState("");
+  const [chapterReactions, setChapterReactions] = useState<ChapterReaction[]>([]);
+  const [reactionBusy, setReactionBusy] = useState("");
+  const [commentReplyBadge, setCommentReplyBadge] = useState({ count: 0, enabled: true });
   const completedAnalyticsKey = useRef("");
   const rewardedChapterKey = useRef("");
   const currentReaderPage = useRef(page);
@@ -7347,15 +7388,41 @@ function ReaderView({
             language: context.chapter.language,
           }),
         );
-        if (
-          !window.localStorage.getItem("nyascans:reader-settings:v1")
-        ) {
-          const readingDirection =
-            context.series.readingDirection === "RTL" ? "rtl" : "ltr";
-          setReaderSettings((current) => ({
-            ...current,
-            readingDirection,
-          }));
+        const seriesOverride = window.localStorage.getItem(
+          `nyascans:reader-series-override:${context.series.slug}`,
+        );
+        if (!seriesOverride) {
+          const manga = ["RTL", "RIGHT_TO_LEFT"].includes(context.series.readingDirection);
+          const systemMode = manga ? "single" : "vertical";
+          const systemDirection = manga ? "rtl" : "ltr";
+          if (!actor) {
+            setReaderSettings((current) => ({ ...current, mode: systemMode, readingDirection: systemDirection }));
+          } else {
+            void fetch("/api/v1/account-settings", {
+              cache: "no-store",
+              signal: controller.signal,
+            })
+              .then(async (response) => (response.ok ? response.json() : null))
+              .then((payload: { data?: { readerTypeDefaults?: { manga?: string; vertical?: string } } } | null) => {
+                const selected = manga
+                  ? payload?.data?.readerTypeDefaults?.manga
+                  : payload?.data?.readerTypeDefaults?.vertical;
+                if (!selected || selected === "SYSTEM") {
+                  setReaderSettings((current) => ({ ...current, mode: systemMode, readingDirection: systemDirection }));
+                  return;
+                }
+                const [modeValue, directionValue] = selected.split("_");
+                setReaderSettings((current) => ({
+                  ...current,
+                  mode: modeValue === "VERTICAL" ? "vertical" : modeValue === "DOUBLE" ? "double" : "single",
+                  readingDirection: directionValue === "RTL" ? "rtl" : "ltr",
+                }));
+              })
+              .catch((error: unknown) => {
+                if ((error as Error).name === "AbortError") return;
+                setReaderSettings((current) => ({ ...current, mode: systemMode, readingDirection: systemDirection }));
+              });
+          }
         }
       })
       .catch((error: unknown) => {
@@ -7367,7 +7434,45 @@ function ReaderView({
         );
       });
     return () => controller.abort();
-  }, [contextRevision, routeChapterSlug, routeSeriesSlug]);
+  }, [actor, contextRevision, routeChapterSlug, routeSeriesSlug]);
+
+  useEffect(() => {
+    if (!readerContext?.chapter.id) return;
+    const controller = new AbortController();
+    void fetch(`/api/v1/chapter-reactions?chapterId=${encodeURIComponent(readerContext.chapter.id)}`, { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as { data?: ChapterReaction[]; meta?: { replyCount?: number; showReplyBadge?: boolean } };
+        if (response.ok) {
+          setChapterReactions(payload.data ?? []);
+          setCommentReplyBadge({ count: Number(payload.meta?.replyCount ?? 0), enabled: payload.meta?.showReplyBadge !== false });
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [readerContext?.chapter.id]);
+
+  async function toggleChapterReaction(reactionId: string) {
+    if (!actor) {
+      window.location.assign(authEntryPath("login", `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`));
+      return;
+    }
+    if (!readerContext?.chapter.id || reactionBusy) return;
+    setReactionBusy(reactionId);
+    try {
+      const response = await fetch("/api/v1/chapter-reactions", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chapterId: readerContext.chapter.id, reactionId }),
+      });
+      const payload = (await response.json()) as { data?: ChapterReaction[]; error?: { message?: string } };
+      if (!response.ok) throw new Error(payload.error?.message ?? "Reaction could not be saved.");
+      setChapterReactions(payload.data ?? []);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Reaction could not be saved.");
+    } finally {
+      setReactionBusy("");
+    }
+  }
 
   useEffect(() => {
     if (!access?.canRead) return;
@@ -7763,6 +7868,12 @@ function ReaderView({
   ]);
 
   function updateReaderSettings(patch: Partial<ReaderSettings>) {
+    if (readerContext?.series.slug) {
+      window.localStorage.setItem(
+        `nyascans:reader-series-override:${readerContext.series.slug}`,
+        "1",
+      );
+    }
     setReaderSettings((current) => ({ ...current, ...patch }));
   }
 
@@ -8119,7 +8230,7 @@ function ReaderView({
             <CaretLeft size={21} />
           </a>
           <div>
-            <strong>{seriesTitle}</strong>
+            <a className="reader-series-title-link" href={`/title/${routeSeriesSlug}`}><strong>{seriesTitle}</strong></a>
             <span>{access.chapterLabel} • {teamName}</span>
           </div>
           <div className="reader-header-actions">
@@ -8186,7 +8297,17 @@ function ReaderView({
           <ReaderSettingsPanel
             settings={readerSettings}
             onChange={updateReaderSettings}
-            onReset={() => setReaderSettings(defaultReaderSettings)}
+            onReset={() => {
+              if (readerContext?.series.slug) {
+                window.localStorage.removeItem(`nyascans:reader-series-override:${readerContext.series.slug}`);
+              }
+              const manga = ["RTL", "RIGHT_TO_LEFT"].includes(readerContext?.series.readingDirection ?? "");
+              setReaderSettings({
+                ...defaultReaderSettings,
+                mode: manga ? "single" : "vertical",
+                readingDirection: manga ? "rtl" : "ltr",
+              });
+            }}
             wakeLockSupported={wakeLockSupported}
             volumeNavigationSupported={false}
           />
@@ -8413,6 +8534,27 @@ function ReaderView({
         ) : null}
       </section>
 
+      {panelCount > 0 && chapterReactions.length ? (
+        <section className="chapter-reactions-box" aria-labelledby="chapter-reactions-title">
+          <div><p className="eyebrow">Chapter reactions</p><h2 id="chapter-reactions-title">How did this chapter feel?</h2><span>{actor ? "Choose one reaction." : "Sign in to react."}</span></div>
+          <div>
+            {chapterReactions.map((reaction) => (
+              <button
+                type="button"
+                key={reaction.id}
+                aria-pressed={reaction.selected}
+                disabled={Boolean(reactionBusy)}
+                onClick={() => void toggleChapterReaction(reaction.id)}
+              >
+                {reaction.imageUrl ? <img src={reaction.imageUrl} alt="" width={48} height={48} /> : <span aria-hidden="true">{reaction.emojiFallback || "♡"}</span>}
+                <strong>{reaction.name}</strong>
+                <small>{reaction.count}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {panelCount > 0 ? (
         <section className="reader-chapter-complete" id="chapter-end">
           <div>
@@ -8420,11 +8562,7 @@ function ReaderView({
             <span>
               <strong>Chapter complete</strong>
               <small>
-                Continue within this{" "}
-                {readerContext ? (
-                  <LanguageFlag language={readerContext.chapter.language} />
-                ) : null}{" "}
-                release.
+                Continue with {teamName} translation.
               </small>
             </span>
           </div>
@@ -8605,12 +8743,16 @@ function ReaderView({
               ? `${panelCount} pages · Continuous`
               : `Page ${page} of ${panelCount}`}
         </span>
-        <div className="reader-progress">
+        <div className="reader-progress-shell">
+          {previousChapter ? <a href={`/title/${routeSeriesSlug}/chapter/${previousChapter.slug}`} aria-label={`Previous chapter ${previousChapter.number}`}><CaretLeft size={18} /></a> : <span aria-hidden="true" />}
+          <div className="reader-progress" role="progressbar" aria-valuemin={0} aria-valuemax={panelCount} aria-valuenow={page}>
           <i
             style={{
               width: `${panelCount ? (page / panelCount) * 100 : 0}%`,
             }}
           />
+          </div>
+          {nextChapter ? <a href={`/title/${routeSeriesSlug}/chapter/${nextChapter.slug}`} aria-label={`Next chapter ${nextChapter.number}`}><CaretRight size={18} /></a> : <span aria-hidden="true" />}
         </div>
         <a href={`/title/${routeSeriesSlug}`}>
           Series details <ArrowRight size={17} />
@@ -8636,12 +8778,14 @@ function ReaderView({
         </button>
         {readerContext?.chapter.commentsEnabled ? (
           <button
+            className="reader-comment-jump"
             type="button"
             title="Go to comments"
             aria-label="Go to chapter comments"
             onClick={() => jumpToReaderSection("comments", true)}
           >
             <ChatCircle size={20} />
+            {commentReplyBadge.enabled && commentReplyBadge.count > 0 ? <span>{Math.min(99, commentReplyBadge.count)}</span> : null}
           </button>
         ) : null}
       </nav>
@@ -8862,6 +9006,7 @@ function WalletOrdersPanel({
   const [redeemCode, setRedeemCode] = useState("");
   const [giftStatus, setGiftStatus] = useState("");
   const [redeeming, setRedeeming] = useState(false);
+  const [transactionTab, setTransactionTab] = useState<"PURCHASES" | "ROULETTE">("PURCHASES");
   const commerce = useCommerceData(actor, premiumEconomyPublic);
   const activeTab = premiumEconomyPublic ? tab : "wallet";
   const walletActivity = premiumEconomyPublic
@@ -8971,10 +9116,23 @@ function WalletOrdersPanel({
           <section className="ledger-section">
             <SectionHeading
               title="Transaction history"
-              body="Every grant, spend, purchase, and reversal appears here."
+              body="Real-money purchases and Roulette activity are kept separate."
             />
-            {walletActivity?.activity.length ? (
-              walletActivity.activity.map((item) => (
+            <div className="transaction-history-tabs" role="tablist" aria-label="Transaction history type">
+              <button type="button" role="tab" aria-selected={transactionTab === "PURCHASES"} onClick={() => setTransactionTab("PURCHASES")}><CreditCard size={16} /> Purchases</button>
+              <button type="button" role="tab" aria-selected={transactionTab === "ROULETTE"} onClick={() => setTransactionTab("ROULETTE")}><Sparkle size={16} /> Roulette</button>
+            </div>
+            {transactionTab === "PURCHASES" && commerce.orders.length ? (
+              commerce.orders.map((order) => (
+                <div className="ledger-row" key={order.id}>
+                  <span className="ledger-out"><CreditCard size={18} /></span>
+                  <div><strong>Order {order.id.slice(0, 8)}</strong><small>{order.provider} · {order.status.toLowerCase()}</small></div>
+                  <time>{new Date(order.createdAt).toLocaleDateString()}</time>
+                  <b>{new Intl.NumberFormat("en", { style: "currency", currency: order.billingCurrency }).format(order.totalMinor / 100)}</b>
+                </div>
+              ))
+            ) : transactionTab === "ROULETTE" && walletActivity?.activity.filter((item) => item.kind.includes("ROULETTE")).length ? (
+              walletActivity.activity.filter((item) => item.kind.includes("ROULETTE")).map((item) => (
                 <div className="ledger-row" key={item.id}>
                   <span className={item.amount >= 0 ? "ledger-in" : "ledger-out"}>
                     {item.amount >= 0 ? <Plus size={18} /> : <ArrowUpRight size={18} />}
@@ -8994,12 +9152,8 @@ function WalletOrdersPanel({
               ))
             ) : (
               <EmptyState
-                title="No wallet activity yet"
-                body={
-                  premiumEconomyPublic
-                    ? `${commercialSettings.economy.coinPlural} grants and purchases will appear here.`
-                    : "Shard rewards and spending will appear here."
-                }
+                title={transactionTab === "PURCHASES" ? "No purchases yet" : "No Roulette activity yet"}
+                body={transactionTab === "PURCHASES" ? "Only completed real-money orders appear here." : "Roulette rewards and paid spins will appear here."}
                 compact
               />
             )}
@@ -9286,6 +9440,8 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
     readerMode: "VERTICAL",
     readingDirection: "AUTO",
     brightness: 100,
+    readerTypeDefaults: { manga: "SYSTEM", vertical: "SYSTEM" },
+    commentReplyBadge: true,
     matureContent: false,
     notifications: {
       newChapters: true,
@@ -9556,6 +9712,10 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
           </>
         ) : section === "Reader settings" ? (
           <form className="settings-form">
+            <div className="reader-defaults-intro">
+              <strong>Default reader by series type</strong>
+              <p>System defaults use right-to-left pages for manga and long strip for vertical releases.</p>
+            </div>
             <div className="form-grid">
               <label>
                 <span>Reading mode</span>
@@ -9590,6 +9750,31 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                 </select>
               </label>
             </div>
+            <div className="form-grid">
+              {(["manga", "vertical"] as const).map((kind) => (
+                <label key={kind}>
+                  <span>{kind === "manga" ? "Manga default" : "Manhwa / manhua default"}</span>
+                  <select
+                    value={accountSettings.readerTypeDefaults[kind]}
+                    onChange={(event) => setAccountSettings((current) => ({
+                      ...current,
+                      readerTypeDefaults: { ...current.readerTypeDefaults, [kind]: event.target.value },
+                    }))}
+                  >
+                    <option value="SYSTEM">System default</option>
+                    <option value="VERTICAL">Long strip</option>
+                    <option value="SINGLE_RTL">Single page · right to left</option>
+                    <option value="SINGLE_LTR">Single page · left to right</option>
+                    <option value="DOUBLE_RTL">Double page · right to left</option>
+                    <option value="DOUBLE_LTR">Double page · left to right</option>
+                  </select>
+                </label>
+              ))}
+            </div>
+            <label className="settings-check">
+              <input type="checkbox" checked={accountSettings.commentReplyBadge} onChange={(event) => setAccountSettings((current) => ({ ...current, commentReplyBadge: event.target.checked }))} />
+              <span>Show reply count on the reader comment button</span>
+            </label>
             <label>
               <span>Default brightness</span>
               <input
@@ -9615,6 +9800,8 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                     readerMode: accountSettings.readerMode,
                     readingDirection: accountSettings.readingDirection,
                     brightness: accountSettings.brightness,
+                    readerTypeDefaults: accountSettings.readerTypeDefaults,
+                    commentReplyBadge: accountSettings.commentReplyBadge,
                   },
                   "Reader settings saved.",
                 )
@@ -11067,6 +11254,8 @@ export function NyaScansApp({
       <NotificationsView actor={actor} />
     ) : view === "team" ? (
       <PublicTeamView slug={resourceSlug} signedIn={Boolean(actor)} />
+    ) : view === "teams" ? (
+      <PublishingTeamsDirectory />
     ) : view === "status" ? (
       <StatusView />
     ) : (

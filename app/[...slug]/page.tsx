@@ -46,6 +46,7 @@ function resolveView(slug: string[]): {
     return { view: "rankings" };
   }
   if (root === "team") return { view: "team", resourceSlug: second };
+  if (root === "teams") return { view: "teams" };
   if (root === "status") return { view: "status" };
   if (root === "support" || root === "report") return { view: "support" };
   if (root === "legal") return { view: "legal", resourceSlug: second };
@@ -89,6 +90,7 @@ export async function generateMetadata({
     notifications: "Notifications",
     latest: "Latest Updates",
     rankings: "Users Ranking",
+    teams: "Publishing Teams",
     roulette: "Daily Roulette",
     status: "System Status",
     support: "Support",

@@ -204,6 +204,11 @@ const accountSettingsSchema = z
     matureContent: z.boolean().optional(),
     readingDirection: z.enum(["AUTO", "LTR", "RTL"]).optional(),
     brightness: z.number().int().min(40).max(100).optional(),
+    readerTypeDefaults: z.object({
+      manga: z.enum(["SYSTEM", "VERTICAL", "SINGLE_LTR", "SINGLE_RTL", "DOUBLE_LTR", "DOUBLE_RTL"]),
+      vertical: z.enum(["SYSTEM", "VERTICAL", "SINGLE_LTR", "SINGLE_RTL", "DOUBLE_LTR", "DOUBLE_RTL"]),
+    }).optional(),
+    commentReplyBadge: z.boolean().optional(),
     notifications: z
       .record(z.string().max(60), z.boolean())
       .optional(),
@@ -1652,6 +1657,7 @@ export async function GET(request: Request, context: RouteContext) {
           "This series is not available.",
         );
       }
+      const actor = await getActor();
       const releaseRows = await env.DB.prepare(
         `SELECT c.id,
                 c.team_id AS teamId,
@@ -1676,6 +1682,11 @@ export async function GET(request: Request, context: RouteContext) {
                 c.published_at AS publishedAt,
                 datetime(c.published_at) >
                   datetime('now', '-36 hours') AS isFresh,
+                EXISTS (
+                  SELECT 1 FROM reading_progress rp
+                   WHERE rp.user_id = ? AND rp.chapter_id = c.id
+                     AND (rp.completed_at IS NOT NULL OR rp.progress_basis_points >= 9200)
+                ) AS isRead,
                 c.state,
                 c.visibility,
                 s.is_published AS seriesPublished,
@@ -1704,7 +1715,7 @@ export async function GET(request: Request, context: RouteContext) {
                    c.id DESC
           LIMIT 1000`,
       )
-        .bind(seriesRecord.id)
+        .bind(actor?.id ?? "", seriesRecord.id)
         .all<
           Omit<
             ChapterAccessRecord,
@@ -1714,6 +1725,7 @@ export async function GET(request: Request, context: RouteContext) {
             priceOnyx: number;
             teamPreviewAllowed: number;
             isFresh: number;
+            isRead: number;
             thumbnailKey: string | null;
             chapterRevision: number;
             uploaderUserId: string | null;
@@ -1722,7 +1734,6 @@ export async function GET(request: Request, context: RouteContext) {
             teamSlug: string | null;
           }
         >();
-      const actor = await getActor();
       const unlockedIds = new Set<string>();
       let canUploadChapter = false;
       if (actor) {
@@ -1774,6 +1785,7 @@ export async function GET(request: Request, context: RouteContext) {
           unlockedIds.has(chapter.id),
         ),
         isFresh: Boolean(chapter.isFresh),
+        isRead: Boolean(chapter.isRead),
       }));
       return json(
         id,
@@ -1786,6 +1798,7 @@ export async function GET(request: Request, context: RouteContext) {
               uploaderName: source?.uploaderName ?? "NyaScans member",
               uploaderUsername: source?.uploaderUsername ?? null,
               teamSlug: source?.teamSlug ?? null,
+              isRead: Boolean(source?.isRead),
               thumbnailUrl: source?.thumbnailKey
                 ? `/api/v1/chapter-thumbnail?id=${encodeURIComponent(chapter.chapterId)}&v=${Number(source.chapterRevision ?? 1)}`
                 : null,
@@ -2232,6 +2245,22 @@ export async function GET(request: Request, context: RouteContext) {
         .enum(["today", "week", "month", "all"])
         .catch("all")
         .parse(url.searchParams.get("period"));
+      const languages = z
+        .array(languageCodeSchema)
+        .max(2)
+        .parse(
+          (url.searchParams.get("languages") ?? "")
+            .split(",")
+            .map((value) => value.trim().toLowerCase())
+            .filter(Boolean),
+        );
+      const languagePlaceholders = languages.map(() => "?").join(", ");
+      const newestLanguagePredicate = languages.length
+        ? `AND LOWER(newest.language) IN (${languagePlaceholders})`
+        : "";
+      const chapterLanguagePredicate = languages.length
+        ? `AND LOWER(c.language) IN (${languagePlaceholders})`
+        : "";
       const viewer = await getActor().catch(() => null);
       const seriesPeriodPredicate = {
         today: "AND date(newest.published_at) = date('now')",
@@ -2272,6 +2301,7 @@ export async function GET(request: Request, context: RouteContext) {
                     AND newest.state = 'PUBLISHED'
                     AND newest.visibility = 'PUBLIC'
                     AND datetime(newest.published_at) <= datetime('now')
+                    ${newestLanguagePredicate}
                     ${seriesPeriodPredicate}
                   ORDER BY datetime(newest.published_at) DESC,
                            datetime(newest.created_at) DESC,
@@ -2285,7 +2315,7 @@ export async function GET(request: Request, context: RouteContext) {
                      s.id ASC
             LIMIT ? OFFSET ?`,
         )
-          .bind(pageSize, (page - 1) * pageSize)
+          .bind(...languages, pageSize, (page - 1) * pageSize)
           .all<{
             id: string;
             slug: string;
@@ -2304,8 +2334,9 @@ export async function GET(request: Request, context: RouteContext) {
               AND c.state = 'PUBLISHED'
               AND c.visibility = 'PUBLIC'
               AND datetime(c.published_at) <= datetime('now')
+              ${chapterLanguagePredicate}
               ${countPeriodPredicate}`,
-        ).first<{ count: number }>(),
+        ).bind(...languages).first<{ count: number }>(),
       ]);
       const chapterResults = seriesRows.results.length
         ? await env.DB.batch(
@@ -2336,7 +2367,7 @@ export async function GET(request: Request, context: RouteContext) {
                                )
                           ) THEN 1 ELSE 0 END AS isRead,
                           datetime(c.published_at) >
-                            datetime('now', '-36 hours') AS isFresh,
+                            datetime('now', '-24 hours') AS isFresh,
                           CASE WHEN ${newInPeriodExpression}
                                THEN 1 ELSE 0 END AS isNewInPeriod,
                           c.created_at AS createdAt,
@@ -2355,6 +2386,7 @@ export async function GET(request: Request, context: RouteContext) {
                       AND c.state = 'PUBLISHED'
                       AND c.visibility = 'PUBLIC'
                       AND datetime(c.published_at) <= datetime('now')
+                      ${chapterLanguagePredicate}
                  )
                  SELECT slug,
                         chapterNumber,
@@ -2377,7 +2409,7 @@ export async function GET(request: Request, context: RouteContext) {
                            datetime(createdAt) DESC,
                            id DESC
                   LIMIT 4`,
-              ).bind(viewer?.id ?? "", seriesRecord.id),
+              ).bind(viewer?.id ?? "", seriesRecord.id, ...languages),
             ),
           )
         : [];
@@ -3890,6 +3922,8 @@ export async function GET(request: Request, context: RouteContext) {
           matureContent: Boolean(record?.matureContent),
           readingDirection: settings.readingDirection ?? "AUTO",
           brightness: settings.brightness ?? 100,
+          readerTypeDefaults: settings.readerTypeDefaults ?? { manga: "SYSTEM", vertical: "SYSTEM" },
+          commentReplyBadge: settings.commentReplyBadge ?? true,
           notifications: settings.notifications ?? {},
           privacy: settings.privacy ?? {},
         },
@@ -8855,6 +8889,12 @@ export async function PATCH(request: Request, context: RouteContext) {
         ...(payload.brightness !== undefined
           ? { brightness: payload.brightness }
           : {}),
+        ...(payload.readerTypeDefaults
+          ? { readerTypeDefaults: payload.readerTypeDefaults }
+          : {}),
+        ...(payload.commentReplyBadge !== undefined
+          ? { commentReplyBadge: payload.commentReplyBadge }
+          : {}),
         ...(payload.notifications
           ? { notifications: payload.notifications }
           : {}),
@@ -12879,7 +12919,7 @@ export async function DELETE(request: Request, context: RouteContext) {
       ),
     ]);
     if (env.BUCKET) {
-      await Promise.all(
+      await Promise.allSettled(
         media.results.map((entry) =>
           deleteMediaObject(env.DB!, env.BUCKET!, entry.objectKey, {
             mediaKind: "DISCUSSION_ATTACHMENT",

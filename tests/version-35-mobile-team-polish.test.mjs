@@ -32,24 +32,31 @@ test("publishing-team aggregates count unique public followers and releases", as
     );
     CREATE TABLE series (
       id TEXT PRIMARY KEY, is_published INTEGER, archived_at TEXT,
-      status TEXT, rights_status TEXT
+      status TEXT, rights_status TEXT, slug TEXT
     );
     CREATE TABLE series_team_assignments (
       team_id TEXT, series_id TEXT, revoked_at TEXT
     );
     CREATE TABLE chapters (
       id TEXT PRIMARY KEY, series_id TEXT, team_id TEXT,
-      state TEXT, visibility TEXT, published_at TEXT
+      state TEXT, visibility TEXT, published_at TEXT, language TEXT
     );
     CREATE TABLE follows (user_id TEXT, series_id TEXT);
+    CREATE TABLE analytics_events (
+      id TEXT PRIMARY KEY, event_type TEXT, series_slug TEXT
+    );
+    CREATE TABLE discussion_comments (
+      id TEXT PRIMARY KEY, series_slug TEXT, moderation_status TEXT,
+      deleted_at TEXT
+    );
 
     INSERT INTO teams VALUES
       ('team-1', 'team-one', 'Team One', '', 1, NULL, NULL, 0, 'VERIFIED');
     INSERT INTO series VALUES
-      ('series-1', 1, NULL, 'ONGOING', 'AUTHORIZED'),
-      ('series-2', 1, NULL, 'ONGOING', 'LICENSED'),
-      ('series-draft', 0, NULL, 'DRAFT', 'AUTHORIZED'),
-      ('series-revoked', 1, NULL, 'ONGOING', 'AUTHORIZED');
+      ('series-1', 1, NULL, 'ONGOING', 'AUTHORIZED', 'series-one'),
+      ('series-2', 1, NULL, 'ONGOING', 'LICENSED', 'series-two'),
+      ('series-draft', 0, NULL, 'DRAFT', 'AUTHORIZED', 'series-draft'),
+      ('series-revoked', 1, NULL, 'ONGOING', 'AUTHORIZED', 'series-revoked');
     INSERT INTO series_team_assignments VALUES
       ('team-1', 'series-1', NULL),
       ('team-1', 'series-2', NULL),
@@ -62,11 +69,11 @@ test("publishing-team aggregates count unique public followers and releases", as
       ('reader-c', 'series-draft'),
       ('reader-d', 'series-revoked');
     INSERT INTO chapters VALUES
-      ('chapter-public', 'series-1', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z'),
-      ('chapter-future', 'series-2', 'team-1', 'PUBLISHED', 'PUBLIC', '2999-01-01T00:00:00Z'),
-      ('chapter-draft-series', 'series-draft', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z'),
-      ('chapter-revoked', 'series-revoked', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z'),
-      ('chapter-private', 'series-1', 'team-1', 'PUBLISHED', 'PRIVATE', '2020-01-01T00:00:00Z');
+      ('chapter-public', 'series-1', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en'),
+      ('chapter-future', 'series-2', 'team-1', 'PUBLISHED', 'PUBLIC', '2999-01-01T00:00:00Z', 'en'),
+      ('chapter-draft-series', 'series-draft', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en'),
+      ('chapter-revoked', 'series-revoked', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en'),
+      ('chapter-private', 'series-1', 'team-1', 'PUBLISHED', 'PRIVATE', '2020-01-01T00:00:00Z', 'en');
   `);
 
   const row = database.prepare(query).get(10);

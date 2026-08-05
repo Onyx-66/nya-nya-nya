@@ -37,7 +37,7 @@ test("home discovery is compact and keeps swipe or keyboard navigation", async (
   assert.match(discovery, /onKeyDown/);
 });
 
-test("Latest Updates defaults to This Week and marks only period chapters", async () => {
+test("Latest Updates defaults to This Week and exposes the compact language filter", async () => {
   const [app, api, styles] = await Promise.all([
     read("components/nyascans/NyaScansApp.tsx"),
     read("app/api/v1/[...resource]/route.ts"),
@@ -57,9 +57,10 @@ test("Latest Updates defaults to This Week and marks only period chapters", asyn
   );
 
   assert.match(latestGrid, /useState<[\s\S]*>\("week"\)/);
-  assert.match(latestGrid, /This Month/);
+  assert.doesNotMatch(latestGrid, /This Month/);
+  assert.match(latestGrid, /releaseLanguages/);
   assert.match(latestPage, />\("week"\)/);
-  assert.match(latestGrid, /PeriodChapterMark active=\{chapter\.isNewInPeriod\}/);
+  assert.match(latestGrid, /latest-age-dot/);
   assert.match(latestApi, /CASE WHEN \$\{newInPeriodExpression\}/);
   assert.match(latestApi, /isNewInPeriod: Boolean\(chapter\.isNewInPeriod\)/);
   assert.doesNotMatch(

@@ -37,7 +37,8 @@ export async function GET(request: Request) {
     });
     const records = await env.DB.prepare(
       `WITH public_releases AS (
-         SELECT c.id, c.team_id AS teamId, c.series_id AS seriesId
+         SELECT c.id, c.team_id AS teamId, c.series_id AS seriesId,
+                LOWER(c.language) AS language
            FROM chapters c
            JOIN series s ON s.id = c.series_id
           WHERE c.team_id IS NOT NULL
@@ -58,21 +59,46 @@ export async function GET(request: Request) {
            JOIN follows team_follow
              ON team_follow.series_id = release.seriesId
           GROUP BY release.teamId
+       ),
+       public_team_series AS (
+         SELECT DISTINCT release.teamId, release.seriesId, s.slug
+           FROM public_releases release
+           JOIN series s ON s.id = release.seriesId
+       ),
+       public_team_activity AS (
+         SELECT team_series.teamId,
+                COUNT(DISTINCT CASE WHEN ae.event_type IN
+                  ('SERIES_VIEW', 'CHAPTER_START', 'CHAPTER_COMPLETE')
+                  THEN ae.id END) AS totalViews,
+                COUNT(DISTINCT dc.id) AS commentCount
+           FROM public_team_series team_series
+           LEFT JOIN analytics_events ae ON ae.series_slug = team_series.slug
+           LEFT JOIN discussion_comments dc
+             ON dc.series_slug = team_series.slug
+            AND dc.moderation_status = 'VISIBLE'
+            AND dc.deleted_at IS NULL
+          GROUP BY team_series.teamId
        )
        SELECT t.id, t.slug, t.name, t.description, t.revision,
               t.logo_key AS logoKey, t.banner_key AS bannerKey,
               COUNT(DISTINCT release.seriesId) AS publicSeriesCount,
               COUNT(DISTINCT release.id) AS releaseCount,
+              GROUP_CONCAT(DISTINCT release.language) AS releaseLanguages,
               COALESCE(MAX(public_followers.followerCount), 0)
-                AS followerCount
+                AS followerCount,
+              COALESCE(MAX(public_activity.totalViews), 0) AS totalViews,
+              COALESCE(MAX(public_activity.commentCount), 0) AS commentCount
          FROM teams t
          LEFT JOIN public_team_followers public_followers
            ON public_followers.teamId = t.id
          LEFT JOIN public_releases release ON release.teamId = t.id
+         LEFT JOIN public_team_activity public_activity
+           ON public_activity.teamId = t.id
         WHERE t.is_archived = 0
           AND t.verification_status = 'VERIFIED'
         GROUP BY t.id
-        ORDER BY publicSeriesCount DESC, releaseCount DESC,
+        ORDER BY releaseCount DESC, totalViews DESC, commentCount DESC,
+                 followerCount DESC,
                  t.name COLLATE NOCASE, t.id
         LIMIT ?`,
     )
@@ -88,6 +114,9 @@ export async function GET(request: Request) {
         publicSeriesCount: number;
         releaseCount: number;
         followerCount: number;
+        releaseLanguages: string | null;
+        totalViews: number;
+        commentCount: number;
       }>();
     return json(
       requestId,
@@ -100,6 +129,12 @@ export async function GET(request: Request) {
           publicSeriesCount: Number(record.publicSeriesCount),
           releaseCount: Number(record.releaseCount),
           followerCount: Number(record.followerCount),
+          releaseLanguages: (record.releaseLanguages ?? "")
+            .split(",")
+            .map((language) => language.trim())
+            .filter(Boolean),
+          totalViews: Number(record.totalViews),
+          commentCount: Number(record.commentCount),
           logoUrl: publicTeamMediaUrl(
             record.id,
             record.logoKey,

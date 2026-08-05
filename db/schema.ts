@@ -1654,6 +1654,29 @@ export const discussionReactionEvents = sqliteTable(
   ],
 );
 
+export const chapterReactions = sqliteTable(
+  "chapter_reactions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapters.id, { onDelete: "cascade" }),
+    reactionId: text("reaction_id")
+      .notNull()
+      .references(() => customReactions.id, { onDelete: "restrict" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.chapterId] }),
+    index("chapter_reactions_chapter_idx").on(
+      table.chapterId,
+      table.reactionId,
+    ),
+  ],
+);
+
 export const discussionVotes = sqliteTable(
   "discussion_votes",
   {
