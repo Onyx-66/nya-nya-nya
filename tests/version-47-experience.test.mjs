@@ -103,12 +103,14 @@ test("anchored menus are opaque, positioned below their triggers, and dismiss ou
     read("components/nyascans/NyaScansApp.tsx"),
     read("components/nyascans/PublicDiscoverySections.tsx"),
   ]);
-  const authority = css.slice(css.lastIndexOf("/* Version 47"));
-  assert.match(authority, /top: calc\(100% \+ \.5rem\) !important/u);
-  assert.match(authority, /background-color: var\(--surface-strong\) !important/u);
+  const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  assert.match(authority, /top: var\(--anchored-menu-top, 0\) !important/u);
+  assert.match(authority, /background: var\(--surface-strong\) !important/u);
   assert.match(authority, /opacity: 1 !important/u);
-  assert.doesNotMatch(authority, /position: fixed/u);
+  assert.match(authority, /position: fixed !important/u);
+  assert.match(authority, /z-index: var\(--z-dropdown\)/u);
   assert.match(app, /useAnchoredMenuDismissal/u);
+  assert.match(app, /getBoundingClientRect/u);
   assert.match(app, /document\.addEventListener\("pointerdown"/u);
   assert.match(app, /document\.addEventListener\("toggle"/u);
   assert.match(teams, /closest\("details"\)\?\.removeAttribute\("open"\)/u);
@@ -116,12 +118,10 @@ test("anchored menus are opaque, positioned below their triggers, and dismiss ou
 
 test("team list and grid have distinct responsive geometry", async () => {
   const css = await read("app/globals.css");
-  const authority = css.slice(css.lastIndexOf("/* Version 47"));
-  assert.match(authority, /\.teams-directory-results\.is-grid[\s\S]*auto-fill/u);
-  assert.match(authority, /\.teams-directory-results\.is-list \.team-directory-card[\s\S]*grid-template-areas: "banner identity"/u);
-  assert.match(authority, /grid-template-areas: "logo identity"/u);
-  assert.match(authority, /\.team-carousel-banner \{[\s\S]*display: none/u);
-  assert.match(authority, /\.public-team-series-grid[\s\S]*repeat\(2/u);
+  const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  assert.match(authority, /\.team-directory-card \{[\s\S]*grid-template-areas: "banner" "logo" "identity"/u);
+  assert.match(authority, /\.team-carousel-card a\.team-card-action/u);
+  assert.match(authority, /\.teams-directory-results\.is-list \.team-release-languages/u);
 });
 
 test("announcement formatting and floating ad previews are safe and immediate", async () => {
@@ -157,8 +157,8 @@ test("slider fallback and reading progress share the intended visual system", as
     read("app/globals.css"),
     read("components/nyascans/upload/UploadCenterWorkspace.tsx"),
   ]);
-  assert.match(route, /row\.seriesSliderKey \|\| row\.coverKey \|\| row\.bannerKey/u);
-  assert.match(route, /row\.seriesSliderKey \? "slider" : row\.coverKey \? "cover" : "banner"/u);
+  assert.match(route, /preferredSeriesArtworkUrl/u);
+  assert.match(route, /\["slider", row\.seriesSliderKey\][\s\S]*\["cover", row\.coverKey\][\s\S]*\["banner", row\.bannerKey\]/u);
   const authority = css.slice(css.lastIndexOf("/* Version 47"));
   assert.match(authority, /\.continue-reading-progress > b,[\s\S]*background: var\(--brand-gradient\) !important/u);
   assert.match(upload, /aria-label="Remove selected page"[\s\S]*<Trash size=\{16\}/u);

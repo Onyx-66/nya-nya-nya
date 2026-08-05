@@ -267,7 +267,6 @@ export function TeamManagementPanel() {
     setSelectedId("");
     setDraft(emptyDraft);
     setSaved(emptyDraft);
-    setTab("identity");
     setLogoFile(null);
     setBannerFile(null);
     setBadgeFile(null);

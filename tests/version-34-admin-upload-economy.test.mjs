@@ -271,7 +271,6 @@ test("Users Control and the administrator shell are complete, safe, and responsi
   ]);
 
   for (const label of [
-    "Users Control",
     "Users & roles",
     "User activity",
     "Purchases",

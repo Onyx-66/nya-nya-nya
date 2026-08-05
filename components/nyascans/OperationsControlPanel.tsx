@@ -15,6 +15,7 @@ import {
   CheckCircle,
   CloudArrowUp,
   Coins,
+  Copy,
   Database,
   FileImage,
   FileText,
@@ -28,6 +29,7 @@ import {
   Sparkle,
   UserGear,
   UsersThree,
+  Wallet,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -53,6 +55,7 @@ import {
   type StoreAdminCategory,
 } from "@/components/nyascans/admin/StoreManagementWorkspace";
 import { TeamManagementPanel } from "@/components/nyascans/admin/TeamManagementPanel";
+import { TaxonomyManager } from "@/components/nyascans/admin/TaxonomyManager";
 import { SliderManagementPanel } from "@/components/nyascans/admin/SliderManagementPanel";
 import { HomePromotionsPanel } from "@/components/nyascans/admin/HomePromotionsPanel";
 import { ApiControlPanel } from "@/components/nyascans/admin/ApiControlPanel";
@@ -280,6 +283,8 @@ type AdminUser = {
   status: "ACTIVE" | "SUSPENDED";
   teamCount: number;
   avatarUrl: string | null;
+  emailVerifiedAt: string | null;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -1474,8 +1479,16 @@ function UsersManager({
       {loading ? (
         <LoadingPanel />
       ) : visible.length ? (
-        <div className="user-admin-list">
-          {visible.map((user) => {
+        <div className="user-admin-table">
+          <div className="user-admin-columns" aria-hidden="true">
+            <span>Name &amp; email</span>
+            <span>Primary role</span>
+            <span>Status</span>
+            <span>Joined</span>
+            <span />
+          </div>
+          <div className="user-admin-list">
+            {visible.map((user) => {
             const isSelf = user.id === currentActorId;
             const protectedRole = user.roles.some((role) =>
               ownerManagedRoles.has(role),
@@ -1484,104 +1497,129 @@ function UsersManager({
             const accessDisabled =
               isSelf || protectedForActor || busy === user.id;
             return (
-              <article key={user.id}>
-                <span className="user-admin-avatar" aria-hidden="true">
-                  {user.avatarUrl ? (
-                    <img
-                      src={user.avatarUrl}
-                      alt=""
-                      loading="lazy"
-                    />
-                  ) : (
-                    user.displayName.slice(0, 1).toUpperCase()
-                  )}
-                </span>
-                <div>
-                  <strong>
-                    {user.displayName}
-                    {isSelf ? <em>You</em> : null}
-                  </strong>
-                  <small>{user.email}</small>
-                  <span>{Number(user.teamCount)} team assignment{Number(user.teamCount) === 1 ? "" : "s"}</span>
-                </div>
-                <fieldset
-                  className="user-role-picker"
-                  disabled={accessDisabled}
-                  title={
-                    isSelf
-                      ? "Use a second authorized account to change your own access."
-                      : protectedForActor
-                        ? "Only an Owner may change an Owner, Administrator, or Manager account."
-                      : undefined
-                  }
-                >
-                  <legend>Roles</legend>
-                  <div className="user-role-chips" aria-label={`Roles for ${user.displayName}`}>
-                    {assignableRoles.map((role) => {
-                      const checked = user.roles.includes(role.value);
-                      const ownerOnlyRole =
-                        !ownerActor && ownerManagedRoles.has(role.value);
-                      return (
-                        <label
-                          key={role.value}
-                          data-role={role.value}
-                          data-selected={checked ? "true" : "false"}
-                          title={
-                            ownerOnlyRole
-                              ? `${role.description} Owner-only assignment.`
-                              : role.description
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={ownerOnlyRole}
-                            onChange={(event) => {
-                              const roles = event.target.checked
-                                ? [...new Set([...user.roles, role.value])]
-                                : user.roles.filter((entry) => entry !== role.value);
-                              if (!roles.length) return;
-                              void update(user, { roles });
-                            }}
-                          />
-                          <span>{role.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {!ownerActor ? (
-                    <small>
-                      Owner, Administrator, and Manager roles—and accounts that
-                      hold them—can only be changed by an Owner.
-                    </small>
-                  ) : null}
-                </fieldset>
-                <label
-                  title={
-                    isSelf
-                      ? "Use a second authorized account to change your own status."
-                      : protectedForActor
-                        ? "Only an Owner may change this protected account."
-                        : undefined
-                  }
-                >
-                  <span>Status</span>
-                  <select
-                    value={user.status}
+              <details className="user-admin-record" key={user.id}>
+                <summary>
+                  <span className="user-admin-avatar" aria-hidden="true">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" loading="lazy" />
+                    ) : (
+                      user.displayName.slice(0, 1).toUpperCase()
+                    )}
+                  </span>
+                  <span className="user-admin-primary">
+                    <strong>
+                      {user.displayName}
+                      {isSelf ? <em>You</em> : null}
+                    </strong>
+                    <small>{user.email}</small>
+                  </span>
+                  <span className="user-admin-role-badge">
+                    {humanize(user.primaryRole)}
+                  </span>
+                  <span className={`user-admin-status is-${user.status.toLowerCase()}`}>
+                    {humanize(user.status)}
+                  </span>
+                  <time dateTime={user.createdAt}>{formatDate(user.createdAt)}</time>
+                  <CaretDown size={17} aria-hidden="true" />
+                </summary>
+                <div className="user-admin-details">
+                  <dl>
+                    <div>
+                      <dt>Team access</dt>
+                      <dd>{Number(user.teamCount)} assignment{Number(user.teamCount) === 1 ? "" : "s"}</dd>
+                    </div>
+                    <div>
+                      <dt>Email verification</dt>
+                      <dd>{user.emailVerifiedAt ? formatDate(user.emailVerifiedAt) : "Not verified"}</dd>
+                    </div>
+                    <div>
+                      <dt>Last access update</dt>
+                      <dd>{formatDate(user.updatedAt)}</dd>
+                    </div>
+                  </dl>
+                  <fieldset
+                    className="user-role-picker"
                     disabled={accessDisabled}
-                    onChange={(event) =>
-                      void update(user, {
-                        status: event.target.value as AdminUser["status"],
-                      })
+                    title={
+                      isSelf
+                        ? "Use a second authorized account to change your own access."
+                        : protectedForActor
+                          ? "Only an Owner may change an Owner, Administrator, or Manager account."
+                          : undefined
                     }
                   >
-                    <option value="ACTIVE">Active</option>
-                    <option value="SUSPENDED">Suspended</option>
-                  </select>
-                </label>
-              </article>
+                    <legend>Roles and permissions</legend>
+                    <div className="user-role-chips" aria-label={`Roles for ${user.displayName}`}>
+                      {assignableRoles.map((role) => {
+                        const checked = user.roles.includes(role.value);
+                        const ownerOnlyRole =
+                          !ownerActor && ownerManagedRoles.has(role.value);
+                        return (
+                          <label
+                            key={role.value}
+                            data-role={role.value}
+                            data-selected={checked ? "true" : "false"}
+                            title={ownerOnlyRole ? `${role.description} Owner-only assignment.` : role.description}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={ownerOnlyRole}
+                              onChange={(event) => {
+                                const roles = event.target.checked
+                                  ? [...new Set([...user.roles, role.value])]
+                                  : user.roles.filter((entry) => entry !== role.value);
+                                if (!roles.length) return;
+                                void update(user, { roles });
+                              }}
+                            />
+                            <span>{role.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {!ownerActor ? (
+                      <small>Privileged roles and accounts can only be changed by an Owner.</small>
+                    ) : null}
+                  </fieldset>
+                  <label className="user-admin-status-control">
+                    <span>Status</span>
+                    <select
+                      value={user.status}
+                      disabled={accessDisabled}
+                      onChange={(event) =>
+                        void update(user, {
+                          status: event.target.value as AdminUser["status"],
+                        })
+                      }
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="SUSPENDED">Suspended</option>
+                    </select>
+                  </label>
+                  <details className="technical-reference">
+                    <summary>Technical reference</summary>
+                    <div>
+                      <code>{user.id}</code>
+                      <button
+                        type="button"
+                        aria-label={`Copy technical reference for ${user.displayName}`}
+                        title="Copy technical reference"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(user.id);
+                          setMessage("Technical reference copied.");
+                          setKind("success");
+                        }}
+                      >
+                        <Copy size={16} />
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              </details>
             );
-          })}
+            })}
+          </div>
         </div>
       ) : (
         <EmptyPanel
@@ -1618,8 +1656,35 @@ type UsersControlPayload = {
     purchasedChapters: number;
   };
   rows: Array<Record<string, unknown>>;
+  balanceSummary?: {
+    onyxBalance: number;
+    shardsBalance: number;
+    fundedAccounts: number;
+  } | null;
+  balanceHistory?: Array<Record<string, unknown>>;
   ownerCanAdjust: boolean;
 };
+
+function userActivityPresentation(row: Record<string, unknown>) {
+  const type = String(row.activityType ?? "ACTIVITY").toUpperCase();
+  const user = String(row.displayName ?? "System");
+  if (type === "CHAPTER_READ") {
+    return { icon: <Books size={18} />, text: `${user} read a chapter` };
+  }
+  if (type === "COMMENT_CREATED") {
+    return { icon: <ChatCircle size={18} />, text: `${user} posted a comment` };
+  }
+  if (type === "ROULETTE_SPIN") {
+    return { icon: <Sparkle size={18} />, text: `${user} used the reward roulette` };
+  }
+  if (type === "CHAPTER_UNLOCK") {
+    return { icon: <LockKey size={18} />, text: `${user} unlocked a chapter` };
+  }
+  return {
+    icon: <Pulse size={18} />,
+    text: `${user} · ${humanize(type).toLowerCase()}`,
+  };
+}
 
 function UsersControlPanel({
   view,
@@ -1649,9 +1714,12 @@ function UsersControlPanel({
   >({ SHARDS: false, ONYX: false });
   const [adjustmentBusy, setAdjustmentBusy] =
     useState<BalanceCurrency | null>(null);
+  const [balanceHistory, setBalanceHistory] = useState<Array<Record<string, unknown>>>([]);
+  const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false);
   const adjustmentEditorRef = useRef<HTMLElement | null>(null);
   const loadSequenceRef = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
+  const balanceHistoryControllerRef = useRef<AbortController | null>(null);
   const adjustmentKeyRef = useRef<Record<BalanceCurrency, string>>({
     SHARDS: "",
     ONYX: "",
@@ -1712,6 +1780,8 @@ function UsersControlPanel({
       loadSequenceRef.current += 1;
       loadControllerRef.current?.abort();
       loadControllerRef.current = null;
+      balanceHistoryControllerRef.current?.abort();
+      balanceHistoryControllerRef.current = null;
     };
     // Reload only when the selected Users Control page changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1738,7 +1808,9 @@ function UsersControlPanel({
     });
     setOpenAdjustments({ SHARDS: false, ONYX: false });
     setAdjustingUser(row);
+    setBalanceHistory([]);
     setMessage("");
+    void loadBalanceHistory(String(row.id));
     window.requestAnimationFrame(() => {
       adjustmentEditorRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -1748,8 +1820,40 @@ function UsersControlPanel({
     });
   }
 
+  async function loadBalanceHistory(userId: string) {
+    balanceHistoryControllerRef.current?.abort();
+    const controller = new AbortController();
+    balanceHistoryControllerRef.current = controller;
+    setBalanceHistoryLoading(true);
+    try {
+      const response = await fetch(
+        `/api/v1/admin/user-control?view=balances&historyUserId=${encodeURIComponent(userId)}`,
+        { cache: "no-store", signal: controller.signal },
+      );
+      const next = await readJson<UsersControlPayload>(response);
+      if (controller.signal.aborted) return;
+      setBalanceHistory(next.balanceHistory ?? []);
+    } catch (reason) {
+      if (controller.signal.aborted) return;
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Balance adjustment history could not be loaded.",
+      );
+      setError(true);
+    } finally {
+      if (balanceHistoryControllerRef.current === controller) {
+        balanceHistoryControllerRef.current = null;
+        setBalanceHistoryLoading(false);
+      }
+    }
+  }
+
   function closeAdjustment() {
     if (Object.values(adjustmentSubmittingRef.current).some(Boolean)) return;
+    balanceHistoryControllerRef.current?.abort();
+    balanceHistoryControllerRef.current = null;
+    setBalanceHistoryLoading(false);
     adjustmentKeyRef.current = { SHARDS: "", ONYX: "" };
     setAdjustments({
       SHARDS: emptyBalanceAdjustment(),
@@ -1824,6 +1928,7 @@ function UsersControlPanel({
         [currency]: emptyBalanceAdjustment(),
       }));
       await load(query, { clearMessage: false });
+      await loadBalanceHistory(String(adjustingUser.id));
     } catch (reason) {
       setMessage(
         reason instanceof Error ? reason.message : "The balance could not be adjusted.",
@@ -1845,8 +1950,8 @@ function UsersControlPanel({
       "Audited account, publishing, moderation, and economy events in one timeline.",
     ],
     purchases: [
-      "Purchases & unlocks",
-      "Real-money orders and chapter unlock activity without mixing fiat and internal currencies.",
+      "Transactions",
+      "Real-money orders and chapter unlock transactions without mixing fiat and internal currencies.",
     ],
     balances: [
       "Balances & adjustments",
@@ -1854,6 +1959,24 @@ function UsersControlPanel({
     ],
   };
   const [title, description] = labels[view];
+  const balanceRows = view === "balances" ? (payload?.rows ?? []) : [];
+  const balanceSummary = payload?.balanceSummary;
+  const metricCards = view === "balances"
+    ? [
+        [coinPlural, balanceSummary?.onyxBalance ?? 0],
+        ["Shards", balanceSummary?.shardsBalance ?? 0],
+        ["Funded accounts", balanceSummary?.fundedAccounts ?? 0],
+        ["Accounts shown", balanceRows.length],
+      ]
+    : payload
+      ? [
+          ["Registered", payload.summary.registeredUsers],
+          ["New · 30d", payload.summary.newUsers30d],
+          ["Active readers · 30d", payload.summary.activeReaders30d],
+          ["Purchased chapters", payload.summary.purchasedChapters],
+          ["Suspended", payload.summary.suspendedUsers],
+        ]
+      : [];
 
   return (
     <section className="control-panel users-control-panel">
@@ -1882,13 +2005,7 @@ function UsersControlPanel({
       />
       {payload ? (
         <div className="users-control-metrics">
-          {[
-            ["Registered", payload.summary.registeredUsers],
-            ["New · 30d", payload.summary.newUsers30d],
-            ["Active readers · 30d", payload.summary.activeReaders30d],
-            ["Purchased chapters", payload.summary.purchasedChapters],
-            ["Suspended", payload.summary.suspendedUsers],
-          ].map(([label, value]) => (
+          {metricCards.map(([label, value]) => (
             <article key={String(label)}>
               <span>{label}</span>
               <strong>{Number(value).toLocaleString()}</strong>
@@ -2081,13 +2198,43 @@ function UsersControlPanel({
               );
             })}
           </div>
+          <section className="balance-adjustment-history" aria-label="Recent balance adjustments">
+            <header>
+              <div>
+                <span>Audit trail</span>
+                <h4>Recent adjustments</h4>
+              </div>
+              {balanceHistoryLoading ? <small>Loading…</small> : null}
+            </header>
+            {balanceHistory.length ? (
+              <div>
+                {balanceHistory.map((entry) => (
+                  <details key={String(entry.id)}>
+                    <summary>
+                      <span>
+                        <strong>{Number(entry.delta ?? 0) > 0 ? "+" : ""}{Number(entry.delta ?? 0).toLocaleString()} {String(entry.currency ?? "")}</strong>
+                        <small>{entry.createdAt ? formatDate(String(entry.createdAt)) : "—"}</small>
+                      </span>
+                      <CaretDown size={15} />
+                    </summary>
+                    <div>
+                      <p>{String(entry.reason ?? "No reason recorded.")}</p>
+                      <code>{String(entry.id)}</code>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : balanceHistoryLoading ? null : (
+              <p>No owner adjustment has been recorded for this account.</p>
+            )}
+          </section>
         </section>
       ) : null}
       {loading ? (
         <LoadingPanel />
       ) : payload?.rows.length ? (
         <div className="users-control-table-wrap">
-          <table className="users-control-table">
+          <table className="users-control-table" data-view={view}>
             <thead>
               <tr>
                 {view === "balances" ? (
@@ -2105,6 +2252,13 @@ function UsersControlPanel({
                     <th>Spins</th>
                     <th>Chapters read</th>
                     <th>Purchases</th>
+                  </>
+                ) : view === "activity" ? (
+                  <>
+                    <th>Time</th>
+                    <th>Activity</th>
+                    <th>Result</th>
+                    <th><span className="sr-only">Technical details</span></th>
                   </>
                 ) : (
                   <>
@@ -2131,7 +2285,7 @@ function UsersControlPanel({
                           )}
                           <span>
                             <strong>{String(row.displayName ?? "Reader")}</strong>
-                            <small>{String(row.email ?? "")}</small>
+                            <small>{String(row.email ?? "")} · {humanize(String(row.primaryRole ?? "USER"))}</small>
                           </span>
                         </span>
                       </td>
@@ -2142,11 +2296,13 @@ function UsersControlPanel({
                         {payload.ownerCanAdjust && actorRoles.includes("OWNER") ? (
                           <button
                             type="button"
-                            className="button button-secondary button-compact"
+                            className="button button-secondary button-compact icon-action"
                             disabled={adjustmentBusy !== null}
                             onClick={() => openAdjustment(row)}
+                            aria-label={`Adjust balances for ${String(row.displayName ?? "this user")}`}
+                            title="Adjust balances"
                           >
-                            Adjust
+                            <Wallet size={17} />
                           </button>
                         ) : null}
                       </td>
@@ -2159,6 +2315,42 @@ function UsersControlPanel({
                       <td>{Number(row.chaptersRead ?? 0).toLocaleString()}</td>
                       <td>{Number(row.purchases ?? 0).toLocaleString()}</td>
                     </>
+                  ) : view === "activity" ? (
+                    (() => {
+                      const activity = userActivityPresentation(row);
+                      const reference = String(row.targetId ?? row.id ?? "—");
+                      return (
+                        <>
+                          <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
+                          <td>
+                            <span className="user-activity-copy">
+                              <i aria-hidden="true">{activity.icon}</i>
+                              <span>
+                                <strong>{activity.text}</strong>
+                                <small>{String(row.email ?? "")}</small>
+                              </span>
+                            </span>
+                          </td>
+                          <td>{humanize(String(row.result ?? "Recorded"))}</td>
+                          <td>
+                            <details className="technical-reference is-inline">
+                              <summary>Details</summary>
+                              <div>
+                                <code>{reference}</code>
+                                <button
+                                  type="button"
+                                  aria-label="Copy activity reference"
+                                  title="Copy activity reference"
+                                  onClick={() => void navigator.clipboard.writeText(reference)}
+                                >
+                                  <Copy size={15} />
+                                </button>
+                              </div>
+                            </details>
+                          </td>
+                        </>
+                      );
+                    })()
                   ) : (
                     <>
                       <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
@@ -4929,14 +5121,10 @@ export function OperationsControlPanel({
     );
   }
   if (section === "Overview") {
-    return (
-      <>
-        <AdminOverview onNavigate={onNavigate} actorRole={actorRole} />
-        <AnalyticsPanel />
-      </>
-    );
+    return <AdminOverview onNavigate={onNavigate} actorRole={actorRole} />;
   }
   if (section === "Series") return <SeriesManagementPanel />;
+  if (section === "Categories & genres") return <TaxonomyManager />;
   if (section === "Series Reports" || section === "series-reports") {
     return <SeriesReportsPanel />;
   }
@@ -4952,7 +5140,7 @@ export function OperationsControlPanel({
   if (section === "User activity") {
     return <UsersControlPanel view="activity" actorRoles={actorRoles} />;
   }
-  if (section === "Purchases") {
+  if (section === "Transactions" || section === "Purchases") {
     return <UsersControlPanel view="purchases" actorRoles={actorRoles} />;
   }
   if (section === "Balances") {

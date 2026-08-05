@@ -43,10 +43,21 @@ export function computeCropRect(
 }
 
 async function decode(file: File) {
-  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
+  const declaredType = file.type.trim().toLowerCase();
+  if (
+    declaredType === "image/svg+xml" ||
+    (declaredType &&
+      declaredType !== "application/octet-stream" &&
+      declaredType !== "binary/octet-stream" &&
+      !declaredType.startsWith("image/"))
+  ) {
     throw new Error("Choose a JPEG, PNG, or WebP image.");
   }
-  return createImageBitmap(file, { imageOrientation: "from-image" });
+  try {
+    return await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    throw new Error("This image could not be decoded. Choose a valid JPEG, PNG, or WebP file.");
+  }
 }
 
 async function canvasFile(
@@ -70,9 +81,21 @@ async function canvasFile(
       "The image is still too large after optimization. Choose a simpler image.",
     );
   }
+  const outputType = blob.type.trim().toLowerCase();
+  const extension =
+    outputType === "image/webp"
+      ? "webp"
+      : outputType === "image/png"
+        ? "png"
+        : outputType === "image/jpeg"
+          ? "jpg"
+          : "";
+  if (!extension) {
+    throw new Error("This browser returned an unsupported image format.");
+  }
   const base = originalName.replace(/\.[^.]+$/, "") || "image";
-  return new File([blob], `${base}.webp`, {
-    type: "image/webp",
+  return new File([blob], `${base}.${extension}`, {
+    type: outputType,
     lastModified: Date.now(),
   });
 }

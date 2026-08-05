@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import { preferredSeriesArtworkUrl } from "@/lib/server/series-media-url";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +33,16 @@ export async function GET(request: Request) {
         ...row,
         imageUrl: row.imageKey
           ? `/api/v1/homepage-slider-media?id=${encodeURIComponent(String(row.id))}&v=${Number(row.revision)}`
-          : row.seriesId && (row.seriesSliderKey || row.coverKey || row.bannerKey)
-            ? `/api/v1/series-media?id=${encodeURIComponent(String(row.seriesId))}&slot=${row.seriesSliderKey ? "slider" : row.coverKey ? "cover" : "banner"}&v=${Number(row.seriesRevision ?? row.revision)}`
+          : row.seriesId
+            ? preferredSeriesArtworkUrl(
+                String(row.seriesId),
+                row.seriesRevision ?? row.revision,
+                [
+                  ["slider", row.seriesSliderKey],
+                  ["cover", row.coverKey],
+                  ["banner", row.bannerKey],
+                ],
+              )
             : null,
         href: String(row.destinationUrl || (row.seriesSlug ? `/title/${row.seriesSlug}` : "/browse")),
       })),

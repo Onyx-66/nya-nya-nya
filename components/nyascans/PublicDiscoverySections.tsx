@@ -183,6 +183,16 @@ function PublishingTeamCard({
           {record.description ||
             "Verified publishing team on NyaScans."}
         </p>
+        {record.releaseLanguages.length ? (
+          <span className="team-release-languages" aria-label="Published release languages">
+            {record.releaseLanguages.map((language) => (
+              <span key={language} title={languageName(language)}>
+                <LanguageFlag language={language} showCode={false} />
+                <small>{languageName(language)}</small>
+              </span>
+            ))}
+          </span>
+        ) : null}
         <span className="team-public-metrics">
           <small>
             <Books size={15} /> {record.publicSeriesCount} series
@@ -194,7 +204,7 @@ function PublishingTeamCard({
             <UsersThree size={15} /> {record.followerCount} followers
           </small>
         </span>
-        <a href={`/team/${record.slug}`}>
+        <a className="team-card-action" href={`/team/${record.slug}`}>
           View team <ArrowRight size={16} />
         </a>
       </div>

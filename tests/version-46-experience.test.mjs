@@ -321,7 +321,8 @@ test("Latest Updates derives selectable languages from currently public releases
   assert.match(availableQuery, /datetime\(c\.published_at\) <= datetime\('now'\)/u);
   assert.doesNotMatch(availableQuery, /chapterLanguagePredicate/u);
   assert.match(latestRoute, /availableLanguages:/u);
-  assert.match(latestRoute, /\.array\(languageCodeSchema\)[\s\S]*\.max\(2\)/u);
+  assert.match(latestRoute, /\.array\(languageCodeSchema\)[\s\S]*\.max\(languageOptions\.length\)/u);
+  assert.match(latestRoute, /\[\.\.\.new Set\(parsedLanguages\)\]/u);
 
   const latestGrid = app.slice(
     app.indexOf("function LatestUpdatesGrid"),
@@ -329,7 +330,8 @@ test("Latest Updates derives selectable languages from currently public releases
   );
   assert.match(latestGrid, /setAvailableLanguages\(payload\.availableLanguages \?\? \[\]\)/u);
   assert.match(latestGrid, /availableLanguages\.map/u);
-  assert.match(latestGrid, /releaseLanguages\.length >= 2/u);
+  assert.doesNotMatch(latestGrid, /releaseLanguages\.length >= 2/u);
+  assert.doesNotMatch(latestGrid, /slice\(0, 2\)/u);
 });
 
 test("announcements accept exactly four typed variants and publish only in their active window", async () => {

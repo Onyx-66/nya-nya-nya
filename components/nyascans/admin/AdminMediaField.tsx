@@ -57,6 +57,7 @@ export function AdminMediaField({
 }) {
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState("");
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState("");
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [zoom, setZoom] = useState(1);
   const [positionX, setPositionX] = useState(0.5);
@@ -234,17 +235,27 @@ export function AdminMediaField({
     positionY,
     zoom,
   ]);
+  const previewLoadError = Boolean(
+    previewUrl && failedPreviewUrl === previewUrl,
+  );
   return (
     <div className="admin-media-field">
       <div className="admin-media-preview">
-        {previewUrl ? (
-          <img src={previewUrl} alt={`${label} preview`} />
+        {previewUrl && !previewLoadError ? (
+          <img
+            src={previewUrl}
+            alt={`${label} preview`}
+            onError={() => setFailedPreviewUrl(previewUrl)}
+          />
         ) : (
           <span>
             <FileImage size={28} />
-            No image
+            {previewLoadError ? "Preview unavailable" : "No image"}
           </span>
         )}
+        <small className="admin-media-state" data-state={file ? "pending" : currentUrl ? "saved" : "empty"}>
+          {file ? "Pending upload" : currentUrl ? "Saved" : "Empty"}
+        </small>
         {fieldBusy ? (
           <span className="admin-media-progress">
             {preparing ? "Optimizing…" : "Uploading…"}
@@ -279,7 +290,7 @@ export function AdminMediaField({
               onClick={onRemove}
             >
               <Trash size={16} />
-              Remove
+              {file ? "Discard pending" : "Remove saved"}
             </button>
           ) : null}
         </div>

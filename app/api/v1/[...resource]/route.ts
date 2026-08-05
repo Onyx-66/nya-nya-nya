@@ -9,6 +9,7 @@ import {
 import {
   countryCodeSchema,
   languageCodeSchema,
+  languageOptions,
   normalizedLookupKey,
 } from "@/lib/admin-metadata";
 import {
@@ -2323,15 +2324,16 @@ export async function GET(request: Request, context: RouteContext) {
         .enum(["today", "week", "month", "all"])
         .catch("all")
         .parse(url.searchParams.get("period"));
-      const languages = z
+      const parsedLanguages = z
         .array(languageCodeSchema)
-        .max(2)
+        .max(languageOptions.length)
         .parse(
           (url.searchParams.get("languages") ?? "")
             .split(",")
             .map((value) => value.trim().toLowerCase())
             .filter(Boolean),
         );
+      const languages = [...new Set(parsedLanguages)];
       const languagePlaceholders = languages.map(() => "?").join(", ");
       const newestLanguagePredicate = languages.length
         ? `AND LOWER(newest.language) IN (${languagePlaceholders})`
@@ -5881,6 +5883,13 @@ export async function GET(request: Request, context: RouteContext) {
         .default("overview")
         .parse(url.searchParams.get("view") ?? "overview");
       const query = (url.searchParams.get("query") ?? "").trim().slice(0, 160);
+      const historyUserId = z
+        .string()
+        .trim()
+        .min(3)
+        .max(160)
+        .optional()
+        .parse(url.searchParams.get("historyUserId") || undefined);
       const search = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
       const summaryResults = await env.DB.batch([
         env.DB.prepare("SELECT COUNT(*) AS count FROM users"),
@@ -5909,9 +5918,12 @@ export async function GET(request: Request, context: RouteContext) {
         purchasedChapters: countValue(summaryResults[4]),
       };
       let rows: unknown[] = [];
+      let balanceHistory: unknown[] = [];
+      let balanceSummary: Record<string, number> | null = null;
       if (view === "balances") {
-        const result = await env.DB.prepare(
+        const rowsPromise = env.DB.prepare(
           `SELECT u.id, u.display_name AS displayName, u.email, u.status,
+                  u.primary_role AS primaryRole,
                   up.username, up.revision AS avatarRevision,
                   CASE WHEN up.avatar_key IS NULL THEN 0 ELSE 1 END AS hasAvatar,
                   COALESCE((
@@ -5939,6 +5951,43 @@ export async function GET(request: Request, context: RouteContext) {
         )
           .bind(query, search, search)
           .all<Record<string, unknown>>();
+        const totalsPromise = env.DB.prepare(
+          `WITH user_balances AS (
+             SELECT la.owner_id AS ownerId, la.currency,
+                    COALESCE(SUM(le.amount), 0) AS balance
+               FROM ledger_accounts la
+               LEFT JOIN ledger_entries le ON le.account_id = la.id
+              WHERE la.owner_type = 'USER'
+              GROUP BY la.owner_id, la.currency
+           )
+           SELECT COALESCE(SUM(CASE WHEN currency = 'ONYX' THEN balance ELSE 0 END), 0) AS onyxBalance,
+                  COALESCE(SUM(CASE WHEN currency = 'SHARDS' THEN balance ELSE 0 END), 0) AS shardsBalance,
+                  COUNT(DISTINCT CASE WHEN balance <> 0 THEN ownerId END) AS fundedAccounts
+             FROM user_balances`,
+        ).first<Record<string, unknown>>();
+        const historyPromise = historyUserId
+          ? env.DB.prepare(
+              `SELECT lt.id, lt.memo AS reason, lt.created_at AS createdAt,
+                      la.currency, le.amount AS delta
+                 FROM ledger_transactions lt
+                 JOIN ledger_entries le ON le.transaction_id = lt.id
+                 JOIN ledger_accounts la ON la.id = le.account_id
+                WHERE lt.kind = 'OWNER_BALANCE_ADJUSTMENT'
+                  AND lt.reference_type = 'USER'
+                  AND lt.reference_id = ?
+                  AND la.owner_type = 'USER'
+                  AND la.owner_id = ?
+                ORDER BY datetime(lt.created_at) DESC, lt.id DESC
+                LIMIT 25`,
+            )
+              .bind(historyUserId, historyUserId)
+              .all()
+          : Promise.resolve({ results: [] as unknown[] });
+        const [result, totals, history] = await Promise.all([
+          rowsPromise,
+          totalsPromise,
+          historyPromise,
+        ]);
         rows = result.results.map((row) => ({
           ...row,
           avatarUrl:
@@ -5946,6 +5995,12 @@ export async function GET(request: Request, context: RouteContext) {
               ? `/api/v1/profile-media?username=${encodeURIComponent(String(row.username))}&slot=avatar&v=${Number(row.avatarRevision ?? 1)}&admin=1`
               : null,
         }));
+        balanceSummary = {
+          onyxBalance: Number(totals?.onyxBalance ?? 0),
+          shardsBalance: Number(totals?.shardsBalance ?? 0),
+          fundedAccounts: Number(totals?.fundedAccounts ?? 0),
+        };
+        balanceHistory = history.results;
       } else if (view === "purchases") {
         const result = await env.DB.prepare(
           `SELECT o.id, 'ORDER' AS kind, u.display_name AS displayName,
@@ -6063,7 +6118,14 @@ export async function GET(request: Request, context: RouteContext) {
       }
       return json(
         id,
-        { view, summary, rows, ownerCanAdjust: actor.roles.includes("OWNER") },
+        {
+          view,
+          summary,
+          rows,
+          balanceSummary,
+          balanceHistory,
+          ownerCanAdjust: actor.roles.includes("OWNER"),
+        },
         { headers: { "cache-control": "private, no-store" } },
       );
     }

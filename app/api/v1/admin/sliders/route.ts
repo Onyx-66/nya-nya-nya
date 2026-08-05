@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/admin-utils";
 import { requireActor, requireAdmin } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { preferredSeriesArtworkUrl } from "@/lib/server/series-media-url";
 
 export const dynamic = "force-dynamic";
 
@@ -73,8 +74,12 @@ async function listSliders() {
       const revision = Number(row.revision ?? 1);
       const imageUrl = row.imageKey
         ? `/api/v1/homepage-slider-media?id=${encodeURIComponent(String(row.id))}&v=${revision}`
-        : row.seriesId && (row.seriesSliderKey || row.bannerKey || row.coverKey)
-          ? `/api/v1/series-media?id=${encodeURIComponent(String(row.seriesId))}&slot=${row.seriesSliderKey ? "slider" : row.bannerKey ? "banner" : "cover"}&v=${revision}`
+        : row.seriesId
+          ? preferredSeriesArtworkUrl(String(row.seriesId), revision, [
+              ["slider", row.seriesSliderKey],
+              ["cover", row.coverKey],
+              ["banner", row.bannerKey],
+            ])
           : null;
       return { ...row, isActive: Boolean(row.isActive), imageUrl };
     }),
@@ -82,9 +87,11 @@ async function listSliders() {
       const row = record as Record<string, unknown>;
       return {
         ...row,
-        imageUrl: row.sliderKey || row.bannerKey || row.coverKey
-          ? `/api/v1/series-media?id=${encodeURIComponent(String(row.id))}&slot=${row.sliderKey ? "slider" : row.bannerKey ? "banner" : "cover"}`
-          : null,
+        imageUrl: preferredSeriesArtworkUrl(String(row.id), undefined, [
+          ["slider", row.sliderKey],
+          ["cover", row.coverKey],
+          ["banner", row.bannerKey],
+        ]),
       };
     }),
   };

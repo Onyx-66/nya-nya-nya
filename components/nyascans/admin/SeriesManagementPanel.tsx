@@ -166,20 +166,41 @@ const emptyForm: FormState = {
 };
 
 async function api<T>(response: Response) {
-  const payload = (await response.json()) as T & {
+  const responseText = await response.text();
+  let payload = {} as T & {
     error?: {
       code?: string;
       message?: string;
       fields?: Array<{ path: string; message: string }>;
+      requestId?: string;
+      details?: { retryable?: boolean } | null;
     };
   };
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText) as typeof payload;
+    } catch {
+      if (response.ok) {
+        throw new Error("The server returned an unreadable response.");
+      }
+    }
+  }
   if (!response.ok) {
     const fieldMessage = payload.error?.fields?.[0]?.message;
+    const requestId =
+      payload.error?.requestId ?? response.headers.get("x-request-id") ?? "";
     const error = new Error(
-      fieldMessage ?? payload.error?.message ?? "The request could not be completed.",
-    ) as Error & { code?: string; status?: number };
+      `${fieldMessage ?? payload.error?.message ?? `The request failed with HTTP ${response.status}.`}${requestId ? ` Reference: ${requestId}.` : ""}`,
+    ) as Error & {
+      code?: string;
+      status?: number;
+      requestId?: string;
+      retryable?: boolean;
+    };
     error.code = payload.error?.code;
     error.status = response.status;
+    error.requestId = requestId;
+    error.retryable = Boolean(payload.error?.details?.retryable);
     throw error;
   }
   return payload;
@@ -423,9 +444,11 @@ export function SeriesManagementPanel() {
   const [forceRefresh, setForceRefresh] = useState(false);
   const [importFields, setImportFields] = useState<Set<string>>(new Set());
   const [importApplied, setImportApplied] = useState(false);
+  const metadataDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
+  const mediaDirty = Boolean(coverFile || bannerFile || sliderFile);
   const dirty =
-    JSON.stringify(form) !== JSON.stringify(savedForm) ||
-    Boolean(coverFile || bannerFile || sliderFile);
+    metadataDirty || mediaDirty ||
+    Boolean(imported && importApplied);
   useUnsavedChanges(dirty, "series changes");
 
   async function load(search = query, requestedPage = page) {
@@ -596,6 +619,9 @@ export function SeriesManagementPanel() {
     setSaving(true);
     setMessage(null);
     let persistedRecord: SeriesRecord | null = null;
+    let metadataPersisted = false;
+    let mediaAttempted = mediaDirty;
+    let saveStage = "series metadata";
     const applyPersistedRecord = (record: SeriesRecord) => {
       const next = fromRecord(record);
       setForm(next);
@@ -614,31 +640,49 @@ export function SeriesManagementPanel() {
         !coverFile
           ? imported
           : null;
-      const saved = await fetch("/api/v1/admin/series-management", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          publicationYear: form.publicationYear
-            ? Number(form.publicationYear)
-            : null,
-          coverUrl: undefined,
-          bannerUrl: undefined,
-          sliderUrl: undefined,
-          externalSources: form.externalSources,
-          importApplied,
-        }),
-      }).then((response) =>
-        api<{ data: SeriesRecord }>(response),
-      );
-      let current = saved.data;
-      persistedRecord = current;
-      applyPersistedRecord(current);
-      setImportApplied(false);
+      const selectedRecord = records.find((record) => record.id === form.id);
+      if (!selectedRecord) {
+        throw new Error("Reload this series before saving changes.");
+      }
+      let current = selectedRecord;
+      if (metadataDirty) {
+        const requestId = crypto.randomUUID();
+        const saved = await fetch("/api/v1/admin/series-management", {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+          },
+          body: JSON.stringify({
+            ...form,
+            publicationYear: form.publicationYear
+              ? Number(form.publicationYear)
+              : null,
+            coverUrl: undefined,
+            bannerUrl: undefined,
+            sliderUrl: undefined,
+            externalSources: form.externalSources,
+            importApplied,
+          }),
+        }).then((response) =>
+          api<{ data: SeriesRecord }>(response),
+        );
+        current = saved.data;
+        persistedRecord = current;
+        metadataPersisted = true;
+        applyPersistedRecord(current);
+        setImportApplied(false);
+      }
       if (importedCover) {
+        mediaAttempted = true;
+        saveStage = "imported cover";
+        const requestId = crypto.randomUUID();
         const media = await fetch("/api/v1/admin/series-media", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+          },
           body: JSON.stringify({
             seriesId: current.id,
             revision: current.revision,
@@ -663,6 +707,7 @@ export function SeriesManagementPanel() {
         ["slider", sliderFile] as const,
       ]) {
         if (!file) continue;
+        saveStage = `${slot} upload`;
         const upload = new FormData();
         upload.set("seriesId", current.id);
         upload.set("slot", slot);
@@ -670,6 +715,7 @@ export function SeriesManagementPanel() {
         upload.set("file", file);
         const media = await fetch("/api/v1/admin/series-media", {
           method: "PUT",
+          headers: { "x-request-id": crypto.randomUUID() },
           body: upload,
         }).then((response) =>
           api<{ data: { revision: number; url: string } }>(response),
@@ -691,18 +737,19 @@ export function SeriesManagementPanel() {
         else if (slot === "banner") setBannerFile(null);
         else setSliderFile(null);
       }
+      setImportApplied(false);
       setMessage({
         kind: "success",
         text: `${current.title} was saved successfully.`,
       });
     } catch (error) {
-      if (persistedRecord) {
-        applyPersistedRecord(persistedRecord);
+      if (persistedRecord || mediaAttempted) {
+        if (persistedRecord) applyPersistedRecord(persistedRecord);
         setMessage({
           kind: "error",
-          text: `Series metadata was saved, but one media upload failed: ${
+          text: `${metadataPersisted ? "Series metadata was saved, but the" : "The"} ${saveStage} failed: ${
             error instanceof Error ? error.message : "retry the remaining image"
-          }. The saved record and revision have been retained.`,
+          }${metadataPersisted ? " The saved metadata and revision were retained." : ""}`,
         });
         return;
       }
@@ -1375,8 +1422,12 @@ export function SeriesManagementPanel() {
                   setField("removeCover", false);
                 }}
                 onRemove={() => {
-                  setCoverFile(null);
-                  setField("removeCover", true);
+                  if (coverFile) {
+                    setCoverFile(null);
+                    setField("removeCover", false);
+                  } else {
+                    setField("removeCover", true);
+                  }
                 }}
               />
               <AdminMediaField
@@ -1398,8 +1449,12 @@ export function SeriesManagementPanel() {
                   setField("removeBanner", false);
                 }}
                 onRemove={() => {
-                  setBannerFile(null);
-                  setField("removeBanner", true);
+                  if (bannerFile) {
+                    setBannerFile(null);
+                    setField("removeBanner", false);
+                  } else {
+                    setField("removeBanner", true);
+                  }
                 }}
               />
               <AdminMediaField
@@ -1421,8 +1476,12 @@ export function SeriesManagementPanel() {
                   setField("removeSlider", false);
                 }}
                 onRemove={() => {
-                  setSliderFile(null);
-                  setField("removeSlider", true);
+                  if (sliderFile) {
+                    setSliderFile(null);
+                    setField("removeSlider", false);
+                  } else {
+                    setField("removeSlider", true);
+                  }
                 }}
               />
             </section>

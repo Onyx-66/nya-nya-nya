@@ -31,7 +31,8 @@ test("Version 44 exposes compact Home, team directory, language, reader, and tra
     read("app/[...slug]/page.tsx"),
   ]);
   assert.doesNotMatch(app, /This Month/u);
-  assert.match(app, /Select up to two/u);
+  assert.doesNotMatch(app, /Select up to two/u);
+  assert.match(app, /className="release-language-options"/u);
   assert.match(api, /languages\.map\(\(\) => "\?"\)/u);
   assert.match(app, /Released within 24 hours/u);
   assert.match(css, /grid-auto-columns: minmax\(19rem, calc\(\(100% - 2rem\) \/ 3\)\)/u);

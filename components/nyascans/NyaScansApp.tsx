@@ -54,6 +54,7 @@ import {
   Star,
   Storefront,
   Sun,
+  Tag,
   Trash,
   Trophy,
   Translate,
@@ -2230,46 +2231,50 @@ function LatestUpdatesGrid({
             </div>
             <details className="latest-language-filter">
               <summary aria-label={releaseLanguages.length ? `Languages: ${releaseLanguages.map(languageName).join(", ")}` : "Choose release languages"}>
+                <Translate size={18} />
+                <span className="sr-only">Language</span>
                 {releaseLanguages.length ? (
-                  releaseLanguages.map((language) => (
-                    <LanguageFlag key={language} language={language} showCode={false} />
-                  ))
-                ) : (
-                  <><Translate size={18} /><span className="sr-only">Language</span></>
-                )}
+                  <small aria-hidden="true">{releaseLanguages.length}</small>
+                ) : null}
               </summary>
               <div>
-                <strong>Release languages</strong>
-                <small>Select up to two.</small>
-                {availableLanguages.map((language) => {
-                  const selected = releaseLanguages.includes(language);
-                  return (
-                    <label key={language}>
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        disabled={!selected && releaseLanguages.length >= 2}
-                        onChange={() => {
-                          setPage(1);
-                          setReleaseLanguages((current) =>
-                            selected
-                              ? current.filter((entry) => entry !== language)
-                              : [...current, language].slice(0, 2),
-                          );
-                        }}
-                      />
-                      <LanguageFlag language={language} showCode={false} />
-                      <span>{languageName(language)}</span>
-                    </label>
-                  );
-                })}
+                <header>
+                  <strong>Release languages</strong>
+                  <small>{availableLanguages.length} published language{availableLanguages.length === 1 ? "" : "s"}</small>
+                </header>
+                <div className="release-language-options">
+                  {availableLanguages.map((language) => {
+                    const selected = releaseLanguages.includes(language);
+                    return (
+                      <label key={language}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => {
+                            setPage(1);
+                            setReleaseLanguages((current) =>
+                              selected
+                                ? current.filter((entry) => entry !== language)
+                                : [...current, language],
+                            );
+                          }}
+                        />
+                        <LanguageFlag language={language} showCode={false} />
+                        <span>{languageName(language)}</span>
+                      </label>
+                    );
+                  })}
+                  {!availableLanguages.length ? (
+                    <p>No published release languages are available for this period.</p>
+                  ) : null}
+                </div>
                 {releaseLanguages.length ? (
                   <button type="button" onClick={() => setReleaseLanguages([])}>Clear</button>
                 ) : null}
               </div>
             </details>
-            <a href="/latest">
-              View All <ArrowRight size={17} />
+            <a className="latest-all-action" href="/latest">
+              All <ArrowRight size={17} />
             </a>
           </div>
         </div>
@@ -3070,7 +3075,7 @@ function FeaturedSliderArtwork({
   item: EditorPick;
   main?: boolean;
 }) {
-  const artwork = item.slider ?? item.cover;
+  const artwork = item.slider?.trim() || item.cover?.trim() || null;
   if (!artwork && !item.banner) {
     return <Books size={main ? 42 : 28} />;
   }
@@ -3129,9 +3134,9 @@ function FeaturedSeriesSlider() {
           synopsis: String(slide.synopsis ?? slide.shortDescription ?? ""),
           shortDescription: String(slide.shortDescription ?? ""),
           categoryLabel: String(slide.categoryLabel ?? "Featured"),
-          cover: slide.imageUrl ?? slide.cover ?? null,
-          banner: slide.imageUrl ?? slide.banner ?? null,
-          slider: slide.imageUrl ?? slide.slider ?? null,
+          cover: slide.cover?.trim() || slide.imageUrl?.trim() || null,
+          banner: slide.banner?.trim() || null,
+          slider: slide.imageUrl?.trim() || slide.slider?.trim() || null,
           ratingTenths: Number(slide.ratingTenths ?? 0),
           latestChapterSlug: slide.latestChapterSlug ?? null,
           chapterCount: Number(slide.chapterCount ?? 0),
@@ -10183,68 +10188,67 @@ function OperationsView({
     }
     return [
       {
-        id: "catalogue",
-        label: "Catalogue & publishing",
+        id: "overview",
+        label: "Overview",
+        items: [["Overview", SquaresFour]] as const,
+      },
+      {
+        id: "content",
+        label: "Content",
         items: [
-          ["Overview", SquaresFour],
+          ["Series", Books],
+          ["Chapter access", LockSimple],
+          ["Teams", ShieldCheck],
+          ["Sliders", SlidersHorizontal],
+          ["Categories & genres", Tag],
           ["Upload center", CloudArrowUp],
           ["New Series Queue", FileText],
-          ["Series", Books],
-          ["Series Reports", WarningCircle],
-          ["Chapter access", LockSimple],
+          ["Review queue", CheckCircle],
           ["Access decisions", WarningCircle],
-          ["Teams", ShieldCheck],
+          ["Editorial", Star],
         ] as const,
       },
       {
         id: "community",
         label: "Community",
         items: [
-          ["Review queue", CheckCircle],
+          ["Users & roles", UsersThree],
+          ["Series Reports", WarningCircle],
           ["Discussions", ChatCircle],
           ["Support tickets", Lifebuoy],
         ] as const,
       },
       {
-        id: "users-control",
-        label: "Users Control",
+        id: "finance",
+        label: "Finance",
         items: [
-          ["Users & roles", UsersThree],
-          ["User activity", Pulse],
-          ["Purchases", Storefront],
           ["Balances", Wallet],
-        ] as const,
-      },
-      {
-        id: "growth",
-        label: "Insights & editorial",
-        items: [
-          ["Analytics", ChartLineUp],
-          ["Editorial", Star],
-          ["Sliders", SlidersHorizontal],
-          ["Announcements & ads", Megaphone],
-        ] as const,
-      },
-      {
-        id: "commerce",
-        label: "Commerce",
-        items: [
+          ["Transactions", Storefront],
           ["Commerce", Coins],
           ["Store Management", Storefront],
           ["Roulette", Sparkle],
         ] as const,
       },
       {
+        id: "insights",
+        label: "Insights",
+        items: [
+          ["User activity", Pulse],
+          ["Analytics", ChartLineUp],
+          ...((actor.roles ?? [actor.role]).includes("OWNER")
+            ? ([["Audit log", FileText]] as const)
+            : []),
+        ] as const,
+      },
+      {
         id: "system",
-        label: "Site administration",
+        label: "System",
         items: [
           ["Appearance", GearSix],
+          ["Announcements & ads", Megaphone],
           ["Security", Key],
           ...((actor.roles ?? [actor.role]).includes("OWNER")
             ? ([["API Control", Key]] as const)
-            : []),
-          ...((actor.roles ?? [actor.role]).includes("OWNER")
-            ? ([["Audit log", FileText]] as const)
             : []),
         ] as const,
       },
@@ -11187,11 +11191,65 @@ function useAnchoredMenuDismissal() {
     const openMenuSelector = menuSelectors
       .map((selector) => `${selector}[open]`)
       .join(",");
+    let positionFrame = 0;
+    const positionMenu = (menu: HTMLDetailsElement) => {
+      const summary = menu.querySelector<HTMLElement>(":scope > summary");
+      const panel = menu.querySelector<HTMLElement>(":scope > div");
+      if (!summary || !panel || !menu.open) return;
+      const gutter = 12;
+      const gap = 8;
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight;
+      const summaryRect = summary.getBoundingClientRect();
+      const desiredWidth = Math.min(
+        Math.max(panel.scrollWidth, 232),
+        viewportWidth - gutter * 2,
+      );
+      const alignLeft = Boolean(
+        menu.closest(".catalog-toolbar, .catalog-summary"),
+      );
+      const left = Math.min(
+        viewportWidth - desiredWidth - gutter,
+        Math.max(
+          gutter,
+          alignLeft ? summaryRect.left : summaryRect.right - desiredWidth,
+        ),
+      );
+      let top = summaryRect.bottom + gap;
+      panel.style.setProperty("--anchored-menu-left", `${left}px`);
+      panel.style.setProperty("--anchored-menu-top", `${top}px`);
+      panel.style.setProperty("--anchored-menu-width", `${desiredWidth}px`);
+      const measuredHeight = Math.min(panel.scrollHeight, viewportHeight - gutter * 2);
+      if (
+        menu.matches(".ops-account-menu") &&
+        viewportHeight - top < Math.min(160, measuredHeight) &&
+        summaryRect.top > measuredHeight + gap + gutter
+      ) {
+        top = summaryRect.top - measuredHeight - gap;
+        panel.style.setProperty("--anchored-menu-top", `${top}px`);
+      }
+      panel.style.setProperty(
+        "--anchored-menu-max-height",
+        `${Math.max(120, viewportHeight - top - gutter)}px`,
+      );
+      menu.dataset.anchored = "true";
+    };
+    const queueOpenMenuPosition = () => {
+      window.cancelAnimationFrame(positionFrame);
+      positionFrame = window.requestAnimationFrame(() => {
+        document
+          .querySelectorAll<HTMLDetailsElement>(openMenuSelector)
+          .forEach(positionMenu);
+      });
+    };
     const closeMenus = (except?: HTMLDetailsElement | null) => {
       document
         .querySelectorAll<HTMLDetailsElement>(openMenuSelector)
         .forEach((menu) => {
-          if (menu !== except) menu.removeAttribute("open");
+          if (menu !== except) {
+            menu.removeAttribute("open");
+            delete menu.dataset.anchored;
+          }
         });
     };
     const onPointerDown = (event: PointerEvent) => {
@@ -11200,7 +11258,10 @@ function useAnchoredMenuDismissal() {
       document
         .querySelectorAll<HTMLDetailsElement>(openMenuSelector)
         .forEach((menu) => {
-          if (!menu.contains(target)) menu.removeAttribute("open");
+          if (!menu.contains(target)) {
+            menu.removeAttribute("open");
+            delete menu.dataset.anchored;
+          }
         });
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -11211,25 +11272,37 @@ function useAnchoredMenuDismissal() {
       if (!openMenu) return;
       event.preventDefault();
       openMenu.removeAttribute("open");
+      delete openMenu.dataset.anchored;
       openMenu.querySelector<HTMLElement>("summary")?.focus();
     };
     const onToggle = (event: Event) => {
       const menu = event.target;
       if (
         menu instanceof HTMLDetailsElement &&
-        menu.open &&
         menu.matches(menuSelector)
       ) {
-        closeMenus(menu);
+        if (menu.open) {
+          closeMenus(menu);
+          menu.dataset.anchored = "false";
+          queueOpenMenuPosition();
+        } else {
+          delete menu.dataset.anchored;
+        }
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("toggle", onToggle, true);
+    window.addEventListener("resize", queueOpenMenuPosition);
+    const passiveCapture = { capture: true, passive: true } as const;
+    document.addEventListener("scroll", queueOpenMenuPosition, passiveCapture);
     return () => {
+      window.cancelAnimationFrame(positionFrame);
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("toggle", onToggle, true);
+      window.removeEventListener("resize", queueOpenMenuPosition);
+      document.removeEventListener("scroll", queueOpenMenuPosition, passiveCapture);
     };
   }, []);
 }

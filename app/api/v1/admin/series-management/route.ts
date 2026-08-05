@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import {
   collapseSpaces,
   normalizedLookupKey,
@@ -20,6 +20,29 @@ import { randomId } from "@/lib/server/random-id";
 import { findNormalizedEquivalent } from "@/lib/server/taxonomy-equivalence";
 
 export const dynamic = "force-dynamic";
+
+function normalizeSeriesManagementError(
+  requestId: string,
+  operation: "read" | "create" | "update",
+  error: unknown,
+) {
+  if (error instanceof ApiError || error instanceof ZodError) return error;
+  console.error("series_management_operation_failed", {
+    requestId,
+    operation,
+    errorName: error instanceof Error ? error.name : "UnknownError",
+    errorMessage: (error instanceof Error ? error.message : String(error))
+      .replace(/[\r\n\t]+/g, " ")
+      .slice(0, 300),
+  });
+  return new ApiError(
+    500,
+    "SERIES_MANAGEMENT_FAILED",
+    "The series changes could not be saved. Try again with the reference shown.",
+    undefined,
+    { retryable: true, operation },
+  );
+}
 
 type Database = NonNullable<typeof env.DB>;
 type Statement = ReturnType<Database["prepare"]>;
@@ -714,7 +737,13 @@ async function saveSeries(
           `SELECT team_id AS teamId, can_upload AS canUpload,
                   can_publish AS canPublish,
                   assigned_by_user_id AS assignedByUserId,
-                  assigned_at AS assignedAt
+                  assigned_at AS assignedAt,
+                  allowed_languages_json AS allowedLanguagesJson,
+                  upload_requires_review AS uploadRequiresReview,
+                  revoked_at AS revokedAt,
+                  revoked_by_user_id AS revokedByUserId,
+                  restriction_reason AS restrictionReason,
+                  revision AS assignmentRevision
            FROM series_team_assignments
            WHERE series_id = ?`,
         )
@@ -725,6 +754,12 @@ async function saveSeries(
           canPublish: number;
           assignedByUserId: string | null;
           assignedAt: string;
+          allowedLanguagesJson: string;
+          uploadRequiresReview: number;
+          revokedAt: string | null;
+          revokedByUserId: string | null;
+          restrictionReason: string;
+          assignmentRevision: number;
         }>()
     : { results: [] };
   const assignmentByTeam = new Map(
@@ -887,8 +922,10 @@ async function saveSeries(
         .prepare(
           `INSERT INTO series_team_assignments
            (series_id, team_id, can_upload, can_publish, is_primary,
-            assigned_by_user_id, assigned_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?
+            assigned_by_user_id, assigned_at, allowed_languages_json,
+            upload_requires_review, revoked_at, revoked_by_user_id,
+            restriction_reason, revision)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE ${gate.clause}`,
         )
         .bind(
@@ -899,6 +936,12 @@ async function saveSeries(
           isPrimary ? 1 : 0,
           existingAssignment?.assignedByUserId ?? actor.id,
           existingAssignment?.assignedAt ?? operationTime,
+          existingAssignment?.allowedLanguagesJson ?? "[]",
+          existingAssignment?.uploadRequiresReview ?? 1,
+          existingAssignment?.revokedAt ?? null,
+          existingAssignment?.revokedByUserId ?? null,
+          existingAssignment?.restrictionReason ?? "",
+          existingAssignment?.assignmentRevision ?? 1,
           ...gateValues,
         ),
     );
@@ -1177,7 +1220,10 @@ export async function GET(request: Request) {
       { headers: { "cache-control": "private, no-store" } },
     );
   } catch (error) {
-    return errorResponse(requestId, error);
+    return errorResponse(
+      requestId,
+      normalizeSeriesManagementError(requestId, "read", error),
+    );
   }
 }
 
@@ -1201,7 +1247,10 @@ export async function POST(request: Request) {
       { status: 201, headers: { "cache-control": "private, no-store" } },
     );
   } catch (error) {
-    return errorResponse(requestId, error);
+    return errorResponse(
+      requestId,
+      normalizeSeriesManagementError(requestId, "create", error),
+    );
   }
 }
 
@@ -1225,6 +1274,9 @@ export async function PUT(request: Request) {
       { headers: { "cache-control": "private, no-store" } },
     );
   } catch (error) {
-    return errorResponse(requestId, error);
+    return errorResponse(
+      requestId,
+      normalizeSeriesManagementError(requestId, "update", error),
+    );
   }
 }
