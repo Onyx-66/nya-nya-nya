@@ -45,7 +45,6 @@ type OwnProfile = {
     followersVisibility?: "PUBLIC" | "PRIVATE";
     showReadingHistory?: boolean;
     showChapterNumbers?: boolean;
-    showLibrarySummary?: boolean;
     showFavorites?: boolean;
     showAchievements?: boolean;
     showBookmarks?: boolean;
@@ -493,7 +492,6 @@ function profileUpdatePayload(profile: OwnProfile) {
     followersVisibility: profile.privacy?.followersVisibility ?? "PUBLIC",
     showReadingHistory: Boolean(profile.privacy?.showReadingHistory),
     showChapterNumbers: Boolean(profile.privacy?.showChapterNumbers),
-    showLibrarySummary: Boolean(profile.privacy?.showLibrarySummary),
     showFavorites: Boolean(profile.privacy?.showFavorites),
     showAchievements: Boolean(profile.privacy?.showAchievements),
     showBookmarks: Boolean(profile.privacy?.showBookmarks),
@@ -513,8 +511,10 @@ function profileUpdatePayload(profile: OwnProfile) {
 
 export function ProfileSettingsWorkspace({
   onSaved,
+  mode = "profile",
 }: {
   onSaved?: (message: string) => void;
+  mode?: "profile" | "privacy";
 }) {
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [initial, setInitial] = useState("");
@@ -821,14 +821,14 @@ export function ProfileSettingsWorkspace({
   }
 
   return (
-    <form className="profile-settings-workspace" onSubmit={save}>
+    <form className={`profile-settings-workspace is-${mode}`} onSubmit={save}>
       <header>
         <div>
-          <p className="eyebrow">Public identity</p>
-          <h2>Profile</h2>
-          <p>Control what other readers see. Reading history remains private until you explicitly share it.</p>
+          <p className="eyebrow">{mode === "profile" ? "Public identity" : "Public privacy"}</p>
+          <h2>{mode === "profile" ? "Profile" : "Profile visibility"}</h2>
+          <p>{mode === "profile" ? "Build the identity other readers see across NyaScans." : "Choose exactly which parts of your public activity other readers can see."}</p>
         </div>
-        {profile.revision > 0 ? (
+        {mode === "profile" && profile.revision > 0 ? (
           <a
             className="button button-secondary"
             href={`/u/${encodeURIComponent(profile.username)}`}
@@ -1116,7 +1116,7 @@ export function ProfileSettingsWorkspace({
           )}
         </div>
       </section>
-      <section className="profile-settings-card">
+      <section className="profile-settings-card profile-privacy-card">
         <div>
           <h3>Privacy</h3>
           <p>These settings are enforced by the public profile API.</p>
@@ -1181,11 +1181,6 @@ export function ProfileSettingsWorkspace({
                 "showChapterNumbers",
                 "Show chapter numbers",
                 "Only applies when recent reading is shared.",
-              ],
-              [
-                "showLibrarySummary",
-                "Share Library summary",
-                "Shows counts by reading status, never individual private entries.",
               ],
               [
                 "showFavorites",
@@ -1253,7 +1248,7 @@ export function ProfileSettingsWorkspace({
           disabled={!dirty || saving}
         >
           <FloppyDisk size={17} />
-          {saving ? "Saving…" : "Save profile"}
+          {saving ? "Saving…" : mode === "profile" ? "Save profile" : "Save visibility"}
         </button>
       </footer>
       {avatarCropSource ? (

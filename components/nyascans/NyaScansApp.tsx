@@ -2202,47 +2202,47 @@ function LatestUpdatesGrid({
               >
                 This Week
               </button>
-              <details className="latest-language-filter">
-                <summary>
-                  {releaseLanguages.length ? (
-                    releaseLanguages.map((language) => (
-                      <LanguageFlag key={language} language={language} showCode={false} />
-                    ))
-                  ) : (
-                    <>Language <CaretDown size={14} /></>
-                  )}
-                </summary>
-                <div>
-                  <strong>Release languages</strong>
-                  <small>Select up to two.</small>
-                  {["en", "ar", "fr", "es", "pt", "id", "ko", "ja", "zh"].map((language) => {
-                    const selected = releaseLanguages.includes(language);
-                    return (
-                      <label key={language}>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          disabled={!selected && releaseLanguages.length >= 2}
-                          onChange={() => {
-                            setPage(1);
-                            setReleaseLanguages((current) =>
-                              selected
-                                ? current.filter((entry) => entry !== language)
-                                : [...current, language].slice(0, 2),
-                            );
-                          }}
-                        />
-                        <LanguageFlag language={language} showCode={false} />
-                        <span>{languageName(language)}</span>
-                      </label>
-                    );
-                  })}
-                  {releaseLanguages.length ? (
-                    <button type="button" onClick={() => setReleaseLanguages([])}>Clear</button>
-                  ) : null}
-                </div>
-              </details>
             </div>
+            <details className="latest-language-filter">
+              <summary>
+                {releaseLanguages.length ? (
+                  releaseLanguages.map((language) => (
+                    <LanguageFlag key={language} language={language} showCode={false} />
+                  ))
+                ) : (
+                  <>Language <CaretDown size={14} /></>
+                )}
+              </summary>
+              <div>
+                <strong>Release languages</strong>
+                <small>Select up to two.</small>
+                {["en", "ar", "fr", "es", "pt", "id", "ko", "ja", "zh"].map((language) => {
+                  const selected = releaseLanguages.includes(language);
+                  return (
+                    <label key={language}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={!selected && releaseLanguages.length >= 2}
+                        onChange={() => {
+                          setPage(1);
+                          setReleaseLanguages((current) =>
+                            selected
+                              ? current.filter((entry) => entry !== language)
+                              : [...current, language].slice(0, 2),
+                          );
+                        }}
+                      />
+                      <LanguageFlag language={language} showCode={false} />
+                      <span>{languageName(language)}</span>
+                    </label>
+                  );
+                })}
+                {releaseLanguages.length ? (
+                  <button type="button" onClick={() => setReleaseLanguages([])}>Clear</button>
+                ) : null}
+              </div>
+            </details>
             <a href="/latest">
               View All <ArrowRight size={17} />
             </a>
@@ -2318,17 +2318,20 @@ function LatestUpdatesGrid({
                             <a
                               href={`/title/${update.slug}/chapter/${chapter.slug}`}
                             >
-                              <span
-                                className={`latest-age-dot${chapter.isFresh ? " is-new" : " is-old"}`}
-                                aria-label={chapter.isFresh ? "Released within 24 hours" : "Released more than 24 hours ago"}
-                              />
-                              Chapter{" "}
-                              {normalizeChapterNumber(chapter.chapterNumber)}
-                              <span
-                                className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
-                                aria-label={chapter.isRead ? "Chapter already read" : "Chapter not read yet"}
-                              >
-                                <Eye size={15} weight={chapter.isRead ? "fill" : "regular"} aria-hidden="true" />
+                              <span className="latest-chapter-identity">
+                                <span
+                                  className={`latest-age-dot${chapter.isFresh ? " is-new" : " is-old"}`}
+                                  aria-label={chapter.isFresh ? "Released within 24 hours" : "Released more than 24 hours ago"}
+                                />
+                                <span>
+                                  Chapter {normalizeChapterNumber(chapter.chapterNumber)}
+                                </span>
+                                <span
+                                  className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
+                                  aria-label={chapter.isRead ? "Chapter already read" : "Chapter not read yet"}
+                                >
+                                  <Eye size={15} weight={chapter.isRead ? "fill" : "regular"} aria-hidden="true" />
+                                </span>
                               </span>
                               <time className="latest-chapter-period" dateTime={chapter.publishedAt}>
                                 {releaseTime(chapter.publishedAt)} ago
@@ -3396,6 +3399,19 @@ function FeaturedSeriesSlider() {
             </div>
           ) : null}
         </div>
+        {picks.length > 1 ? (
+          <div className="featured-slider-dots" aria-label="Choose featured series">
+            {picks.map((pick, index) => (
+              <button
+                type="button"
+                key={pick.id}
+                aria-label={`Show ${pick.title}`}
+                aria-pressed={index === safeActive}
+                onClick={() => setActive(index)}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -3717,6 +3733,8 @@ function HomeView({
         settings={commercial.announcement}
       />
 
+      <FloatingHomeAd />
+
       <FeaturedSeriesSlider />
 
       <main className="home-main">
@@ -3739,6 +3757,43 @@ function HomeView({
         <CommunityHighlights />
       </main>
     </>
+  );
+}
+
+function FloatingHomeAd() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const key = "nyascans:home-release-ad:2026-08";
+    if (window.localStorage.getItem(key)) return;
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(key, "seen");
+      setOpen(true);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+  if (!open) return null;
+  return (
+    <aside className="floating-home-ad" role="dialog" aria-modal="false" aria-label="Featured release">
+      <button type="button" onClick={() => setOpen(false)} aria-label="Close featured release">
+        <X size={18} />
+      </button>
+      <a href="/browse?sort=latest">
+        <img src="/art/hero-onyx-archive.png" alt="Explore the newest NyaScans releases" />
+        <span>
+          <small>Official release spotlight</small>
+          <strong>Discover what just landed</strong>
+          <em>Open latest releases <ArrowRight size={16} /></em>
+        </span>
+      </a>
+    </aside>
   );
 }
 
@@ -4114,22 +4169,26 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
               ))}
             </select>
           </label>
-          <button
-            type="button"
-            onClick={() => setMode("grid")}
-            aria-pressed={mode === "grid"}
-            aria-label="Grid view"
-          >
-            <SquaresFour size={19} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("list")}
-            aria-pressed={mode === "list"}
-            aria-label="List view"
-          >
-            <List size={19} />
-          </button>
+          <div className="view-mode-toggle" role="group" aria-label="Catalog view">
+            <button
+              type="button"
+              onClick={() => setMode("grid")}
+              aria-pressed={mode === "grid"}
+              aria-label="Grid view"
+              title="Grid view"
+            >
+              <SquaresFour size={19} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("list")}
+              aria-pressed={mode === "list"}
+              aria-label="List view"
+              title="List view"
+            >
+              <List size={19} />
+            </button>
+          </div>
         </div>
       </div>
       {moreOpen ? (
@@ -4212,7 +4271,6 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                 <a className="cover-link" href={`/title/${item.slug}`}>
                   <CatalogCover item={item} />
                   <span className="cover-shade" />
-                  <SeriesTypeBadge type={item.type} flagOnly />
                   <span className="quick-read">
                     <Play size={14} weight="fill" /> Read
                   </span>
@@ -4221,9 +4279,10 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                   <a href={`/title/${item.slug}`}>
                     <h3>{item.title}</h3>
                   </a>
-                  <p>
-                    {catalogLabel(item.type)} · {catalogLabel(item.status)}
-                  </p>
+                  <div className="catalog-badge-row">
+                    <SeriesTypeBadge type={item.type} />
+                    <SeriesStatusBadge status={item.status} />
+                  </div>
                   <div className="series-meta">
                     <span>
                       <Star size={14} weight="fill" />{" "}
@@ -4243,12 +4302,12 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                   <CatalogCover item={item} compact />
                 </span>
                 <div>
-                  <SeriesTypeBadge type={item.type} />
+                  <div className="catalog-badge-row">
+                    <SeriesTypeBadge type={item.type} />
+                    <SeriesStatusBadge status={item.status} />
+                  </div>
                   <h2>{item.title}</h2>
                   <p>{item.synopsis}</p>
-                  <span>
-                    {catalogLabel(item.type)} · {catalogLabel(item.status)}
-                  </span>
                 </div>
                 <div className="list-stats">
                   <span>
@@ -4282,7 +4341,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
             disabled={!pagination.hasPrevious}
             onClick={() => navigate({ page: Math.max(1, page - 1) })}
           >
-            <CaretLeft size={16} /> Previous
+            <CaretLeft size={16} /> <span>Previous</span>
           </button>
           <div>
             {visiblePages.map((pageNumber) => (
@@ -4303,7 +4362,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
               navigate({ page: Math.min(pagination.pageCount, page + 1) })
             }
           >
-            Next <CaretRight size={16} />
+            <span>Next</span> <CaretRight size={16} />
           </button>
         </nav>
       ) : null}
@@ -7403,17 +7462,24 @@ function ReaderView({
               signal: controller.signal,
             })
               .then(async (response) => (response.ok ? response.json() : null))
-              .then((payload: { data?: { readerTypeDefaults?: { manga?: string; vertical?: string } } } | null) => {
+              .then((payload: { data?: { readerTypeDefaults?: { manga?: string; vertical?: string }; readerSettings?: Partial<ReaderSettings> } } | null) => {
+                const accountDefaults = payload?.data?.readerSettings ?? {};
                 const selected = manga
                   ? payload?.data?.readerTypeDefaults?.manga
                   : payload?.data?.readerTypeDefaults?.vertical;
                 if (!selected || selected === "SYSTEM") {
-                  setReaderSettings((current) => ({ ...current, mode: systemMode, readingDirection: systemDirection }));
+                  setReaderSettings((current) => ({
+                    ...current,
+                    ...accountDefaults,
+                    mode: systemMode,
+                    readingDirection: systemDirection,
+                  }));
                   return;
                 }
                 const [modeValue, directionValue] = selected.split("_");
                 setReaderSettings((current) => ({
                   ...current,
+                  ...accountDefaults,
                   mode: modeValue === "VERTICAL" ? "vertical" : modeValue === "DOUBLE" ? "double" : "single",
                   readingDirection: directionValue === "RTL" ? "rtl" : "ltr",
                 }));
@@ -9442,6 +9508,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
     brightness: 100,
     readerTypeDefaults: { manga: "SYSTEM", vertical: "SYSTEM" },
     commentReplyBadge: true,
+    readerSettings: { ...defaultReaderSettings },
     matureContent: false,
     notifications: {
       newChapters: true,
@@ -9526,6 +9593,10 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
             privacy: {
               ...current.privacy,
               ...(payload.data?.privacy ?? {}),
+            },
+            readerSettings: {
+              ...current.readerSettings,
+              ...(payload.data?.readerSettings ?? {}),
             },
           }));
         }
@@ -9716,40 +9787,40 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
               <strong>Default reader by series type</strong>
               <p>System defaults use right-to-left pages for manga and long strip for vertical releases.</p>
             </div>
-            <div className="form-grid">
-              <label>
-                <span>Reading mode</span>
-                <select
-                  value={accountSettings.readerMode}
-                  onChange={(event) =>
-                    setAccountSettings((current) => ({
-                      ...current,
-                      readerMode: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="VERTICAL">Vertical</option>
-                  <option value="SINGLE">Single page</option>
-                  <option value="DOUBLE">Double page</option>
-                </select>
-              </label>
-              <label>
-                <span>Reading direction</span>
-                <select
-                  value={accountSettings.readingDirection}
-                  onChange={(event) =>
-                    setAccountSettings((current) => ({
-                      ...current,
-                      readingDirection: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="AUTO">Automatic</option>
-                  <option value="LTR">Left to right</option>
-                  <option value="RTL">Right to left</option>
-                </select>
-              </label>
-            </div>
+            <ReaderSettingsPanel
+              settings={accountSettings.readerSettings}
+              onChange={(patch) =>
+                setAccountSettings((current) => ({
+                  ...current,
+                  readerSettings: { ...current.readerSettings, ...patch },
+                }))
+              }
+              onReset={() => {
+                window.localStorage.removeItem("nyascans:reader-settings:v1");
+                setAccountSettings((current) => ({
+                  ...current,
+                  readerMode: "VERTICAL",
+                  readingDirection: "LTR",
+                  brightness: 100,
+                  readerTypeDefaults: { manga: "SYSTEM", vertical: "SYSTEM" },
+                  commentReplyBadge: true,
+                  readerSettings: { ...defaultReaderSettings },
+                }));
+                void saveAccountSettings(
+                  {
+                    readerMode: "VERTICAL",
+                    readingDirection: "LTR",
+                    brightness: 100,
+                    readerTypeDefaults: { manga: "SYSTEM", vertical: "SYSTEM" },
+                    commentReplyBadge: true,
+                    readerSettings: defaultReaderSettings,
+                  },
+                  "Reader settings restored to defaults.",
+                );
+              }}
+              wakeLockSupported={typeof navigator !== "undefined" && "wakeLock" in navigator}
+              volumeNavigationSupported={false}
+            />
             <div className="form-grid">
               {(["manga", "vertical"] as const).map((kind) => (
                 <label key={kind}>
@@ -9775,21 +9846,6 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
               <input type="checkbox" checked={accountSettings.commentReplyBadge} onChange={(event) => setAccountSettings((current) => ({ ...current, commentReplyBadge: event.target.checked }))} />
               <span>Show reply count on the reader comment button</span>
             </label>
-            <label>
-              <span>Default brightness</span>
-              <input
-                type="range"
-                min="40"
-                max="100"
-                value={accountSettings.brightness}
-                onChange={(event) =>
-                  setAccountSettings((current) => ({
-                    ...current,
-                    brightness: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
             <button
               className="button button-primary"
               type="button"
@@ -9797,11 +9853,12 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
               onClick={() =>
                 void saveAccountSettings(
                   {
-                    readerMode: accountSettings.readerMode,
-                    readingDirection: accountSettings.readingDirection,
-                    brightness: accountSettings.brightness,
+                    readerMode: accountSettings.readerSettings.mode.toUpperCase(),
+                    readingDirection: accountSettings.readerSettings.readingDirection.toUpperCase(),
+                    brightness: Math.min(100, accountSettings.readerSettings.brightness),
                     readerTypeDefaults: accountSettings.readerTypeDefaults,
                     commentReplyBadge: accountSettings.commentReplyBadge,
+                    readerSettings: accountSettings.readerSettings,
                   },
                   "Reader settings saved.",
                 )
@@ -9886,15 +9943,21 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
             </button>
           </form>
         ) : (
-          <form className="settings-form">
-            {[
+          <div className="preferences-workspace">
+            <ProfileSettingsWorkspace mode="privacy" onSaved={showToast} />
+            <form className="settings-form">
+              <div className="reader-defaults-intro">
+                <strong>Personalization and cookies</strong>
+                <p>These choices affect recommendations and optional analytics, not your public profile.</p>
+              </div>
+              {[
               ["showReadingActivity", "Show reading activity on my profile"],
               [
                 "personalizedRecommendations",
                 "Allow personalized recommendations",
               ],
               ["analyticsCookies", "Use optional analytics cookies"],
-            ].map(([key, label]) => (
+              ].filter(([key]) => key !== "showReadingActivity").map(([key, label]) => (
               <label className="settings-check" key={key}>
                 <input
                   type="checkbox"
@@ -9916,7 +9979,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                 <span>{label}</span>
               </label>
             ))}
-            <button
+              <button
               className="button button-primary"
               type="button"
               disabled={settingsBusy}
@@ -9928,8 +9991,9 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
               }
             >
               {settingsBusy ? "Saving…" : "Save privacy choices"}
-            </button>
-          </form>
+              </button>
+            </form>
+          </div>
         )}
       </section>
     </main>
@@ -10058,6 +10122,7 @@ function OperationsView({
         items: [
           ["Analytics", ChartLineUp],
           ["Editorial", Star],
+          ["Sliders", SlidersHorizontal],
         ] as const,
       },
       {

@@ -209,6 +209,24 @@ const accountSettingsSchema = z
       vertical: z.enum(["SYSTEM", "VERTICAL", "SINGLE_LTR", "SINGLE_RTL", "DOUBLE_LTR", "DOUBLE_RTL"]),
     }).optional(),
     commentReplyBadge: z.boolean().optional(),
+    readerSettings: z.object({
+      mode: z.enum(["vertical", "single", "double"]),
+      imageFit: z.enum(["width", "height", "page", "original", "smart"]),
+      imageSpacing: z.number().int().min(0).max(40),
+      topMargin: z.number().int().min(56).max(180),
+      bottomMargin: z.number().int().min(64).max(220),
+      brightness: z.number().int().min(35).max(120),
+      backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      readerTheme: z.enum(["dark", "paper", "sepia"]),
+      tapZones: z.boolean(),
+      readingDirection: z.enum(["ltr", "rtl"]),
+      volumeNavigation: z.boolean(),
+      keepAwake: z.boolean(),
+      autoMarkRead: z.boolean(),
+      preloadNextChapter: z.boolean(),
+      saveReadingProgress: z.boolean(),
+      rememberSettings: z.boolean(),
+    }).optional(),
     notifications: z
       .record(z.string().max(60), z.boolean())
       .optional(),
@@ -310,7 +328,9 @@ const teamMembershipWriteSchema = z.object({
   teamId: z.string().trim().min(3).max(120),
   userId: z.string().trim().min(3).max(120),
   membershipRole: z.enum([
+    "OWNER",
     "LEADER",
+    "TEAM_LEADER",
     "MANAGER",
     "UPLOADER",
     "TRANSLATOR",
@@ -1075,6 +1095,7 @@ async function fixedReaderManifest(
   pages: Array<Record<string, unknown>>,
   seriesSlug: string,
   chapterSlug: string,
+  fixedPages: { first: boolean; last: boolean } = { first: true, last: true },
 ) {
   const configuration = await getSiteConfiguration();
   const first = configuration.reader.firstPage;
@@ -1092,7 +1113,7 @@ async function fixedReaderManifest(
     contentPageIndex: Number(pageRecord.pageIndex ?? index),
   }));
   return [
-    ...(first.enabled && first.key
+    ...(fixedPages.first && first.enabled && first.key
       ? [
           {
             id: `fixed_first_${first.revision}`,
@@ -1108,7 +1129,7 @@ async function fixedReaderManifest(
         ]
       : []),
     ...content,
-    ...(last.enabled && last.key
+    ...(fixedPages.last && last.enabled && last.key
       ? [
           {
             id: `fixed_last_${last.revision}`,
@@ -1844,6 +1865,17 @@ export async function GET(request: Request, context: RouteContext) {
           "This chapter is not available to this account.",
         );
       }
+      const chapterFixedPages = await env.DB.prepare(
+        `SELECT include_fixed_first_page AS includeFirst,
+                include_fixed_last_page AS includeLast
+           FROM chapters WHERE id = ? LIMIT 1`,
+      )
+        .bind(decision.chapterId)
+        .first<{ includeFirst: number; includeLast: number }>();
+      const fixedPages = {
+        first: chapterFixedPages?.includeFirst !== 0,
+        last: chapterFixedPages?.includeLast !== 0,
+      };
       const pages = await env.DB.prepare(
         `SELECT id,
                 page_index AS pageIndex,
@@ -1903,6 +1935,7 @@ export async function GET(request: Request, context: RouteContext) {
             ],
             seriesSlug,
             chapterSlug,
+            fixedPages,
           );
           return json(
             id,
@@ -1943,6 +1976,7 @@ export async function GET(request: Request, context: RouteContext) {
             })),
             seriesSlug,
             chapterSlug,
+            fixedPages,
           ),
         },
         {
@@ -3924,6 +3958,24 @@ export async function GET(request: Request, context: RouteContext) {
           brightness: settings.brightness ?? 100,
           readerTypeDefaults: settings.readerTypeDefaults ?? { manga: "SYSTEM", vertical: "SYSTEM" },
           commentReplyBadge: settings.commentReplyBadge ?? true,
+          readerSettings: settings.readerSettings ?? {
+            mode: "vertical",
+            imageFit: "smart",
+            imageSpacing: 8,
+            topMargin: 76,
+            bottomMargin: 86,
+            brightness: 100,
+            backgroundColor: "#090b09",
+            readerTheme: "dark",
+            tapZones: true,
+            readingDirection: "ltr",
+            volumeNavigation: false,
+            keepAwake: false,
+            autoMarkRead: true,
+            preloadNextChapter: true,
+            saveReadingProgress: true,
+            rememberSettings: true,
+          },
           notifications: settings.notifications ?? {},
           privacy: settings.privacy ?? {},
         },
@@ -8894,6 +8946,9 @@ export async function PATCH(request: Request, context: RouteContext) {
           : {}),
         ...(payload.commentReplyBadge !== undefined
           ? { commentReplyBadge: payload.commentReplyBadge }
+          : {}),
+        ...(payload.readerSettings
+          ? { readerSettings: payload.readerSettings }
           : {}),
         ...(payload.notifications
           ? { notifications: payload.notifications }

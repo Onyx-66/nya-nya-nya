@@ -4,14 +4,20 @@ import {
   ArrowClockwise,
   CaretLeft,
   CaretRight,
+  ChatCircle,
+  Clock,
+  Eye,
+  EyeSlash,
+  Images,
   Plus,
   ShieldCheck,
+  Smiley,
   UsersThree,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import {
   type CSSProperties,
   type FormEvent,
-  type ReactNode,
   useEffect,
   useMemo,
   useState,
@@ -39,6 +45,7 @@ type TeamRecord = {
   };
   verificationStatus: "PENDING" | "VERIFIED" | "SUSPENDED";
   isArchived: boolean;
+  canControlFixedReaderPages: boolean;
   revision: number;
   memberCount: number;
   seriesCount: number;
@@ -48,6 +55,30 @@ type TeamRecord = {
     email: string;
     role: string;
     status: string;
+    isPrimary: boolean;
+    revision: number;
+  }>;
+  activity: Array<{
+    chapterId: string;
+    chapterSlug: string;
+    chapterNumber: string;
+    chapterTitle: string | null;
+    language: string;
+    version: number;
+    state: string;
+    visibility: string;
+    accessType: string;
+    revision: number;
+    pageCount: number;
+    createdAt: string;
+    publishedAt: string | null;
+    seriesId: string;
+    seriesSlug: string;
+    seriesTitle: string;
+    uploaderName: string | null;
+    commentCount: number;
+    reportCount: number;
+    reactionCount: number;
   }>;
   series: Array<{
     seriesId: string;
@@ -69,10 +100,12 @@ type TeamDraft = Pick<
   | "description"
   | "verificationStatus"
   | "isArchived"
+  | "canControlFixedReaderPages"
   | "effect"
   | "logoUrl"
   | "bannerUrl"
   | "staffBadgeUrl"
+  | "activity"
 > & {
   members: TeamRecord["members"];
   series: TeamRecord["series"];
@@ -86,6 +119,7 @@ const emptyDraft: TeamDraft = {
   description: "",
   verificationStatus: "PENDING",
   isArchived: false,
+  canControlFixedReaderPages: false,
   effect: {
     type: "NONE",
     enabled: false,
@@ -96,6 +130,7 @@ const emptyDraft: TeamDraft = {
   logoUrl: null,
   bannerUrl: null,
   staffBadgeUrl: null,
+  activity: [],
   members: [],
   series: [],
 };
@@ -124,11 +159,7 @@ async function api<T>(input: RequestInfo | URL, init?: RequestInit) {
   return payload;
 }
 
-export function TeamManagementPanel({
-  membersPanel,
-}: {
-  membersPanel?: ReactNode;
-}) {
+export function TeamManagementPanel() {
   const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<TeamDraft>(emptyDraft);
@@ -136,6 +167,8 @@ export function TeamManagementPanel({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [memberBusy, setMemberBusy] = useState("");
+  const [chapterBusy, setChapterBusy] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -231,6 +264,76 @@ export function TeamManagementPanel({
     setRemoveMedia({ logo: false, banner: false, badge: false });
   }
 
+  async function updateMember(
+    member: TeamRecord["members"][number],
+    patch: { role?: string; status?: string },
+  ) {
+    if (!draft.id || memberBusy || dirty) {
+      if (dirty) {
+        setMessage({
+          kind: "neutral",
+          text: "Save or reset the current team before changing member access.",
+        });
+      }
+      return;
+    }
+    setMemberBusy(member.userId);
+    setMessage(null);
+    try {
+      await api<{ ok: boolean }>("/api/v1/admin/team-memberships", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          teamId: draft.id,
+          userId: member.userId,
+          membershipRole: patch.role ?? member.role,
+          status: patch.status ?? member.status,
+          expectedRevision: member.revision,
+        }),
+      });
+      await load(draft.id, page);
+      setMessage({ kind: "success", text: `${member.displayName}'s team access was updated.` });
+    } catch (error) {
+      setMessage({ kind: "error", text: error instanceof Error ? error.message : "Membership could not be updated." });
+    } finally {
+      setMemberBusy("");
+    }
+  }
+
+  async function hideChapter(chapter: TeamRecord["activity"][number]) {
+    if (!draft.id || chapterBusy || dirty) {
+      if (dirty) {
+        setMessage({
+          kind: "neutral",
+          text: "Save or reset the current team before using chapter quick actions.",
+        });
+      }
+      return;
+    }
+    if (!window.confirm(`Move ${chapter.seriesTitle} chapter ${chapter.chapterNumber} back to draft?`)) return;
+    setChapterBusy(chapter.chapterId);
+    setMessage(null);
+    try {
+      await api<{ ok: boolean }>("/api/v1/admin/team-management", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "HIDE_CHAPTER",
+          teamId: draft.id,
+          chapterId: chapter.chapterId,
+          expectedRevision: chapter.revision,
+          reason: "Hidden from selected-team activity quick action.",
+        }),
+      });
+      await load(draft.id, page);
+      setMessage({ kind: "success", text: "The chapter is now a private draft." });
+    } catch (error) {
+      setMessage({ kind: "error", text: error instanceof Error ? error.message : "Chapter could not be hidden." });
+    } finally {
+      setChapterBusy("");
+    }
+  }
+
   async function uploadMedia(
     teamId: string,
     revision: number,
@@ -320,6 +423,7 @@ export function TeamManagementPanel({
             description: draft.description,
             verificationStatus: draft.verificationStatus,
             isArchived: draft.isArchived,
+            canControlFixedReaderPages: draft.canControlFixedReaderPages,
             effect: draft.effect,
           }),
         },
@@ -534,12 +638,48 @@ export function TeamManagementPanel({
         <div className="admin-team-editor-stack">
           <details className="admin-editor-box" open>
             <summary>Members &amp; roles</summary>
-            <div className="admin-detail-form">
-              {membersPanel ?? (
+            <div className="admin-detail-form admin-team-members">
+              {draft.id && draft.members.length ? (
+                draft.members.map((member) => (
+                  <article key={member.userId}>
+                    <span className="admin-list-avatar">{member.displayName.slice(0, 2).toUpperCase()}</span>
+                    <div>
+                      <strong>{member.displayName}</strong>
+                      <small>{member.email}{member.isPrimary ? " · Primary team" : ""}</small>
+                    </div>
+                    <label>
+                      <span className="sr-only">Role for {member.displayName}</span>
+                      <select
+                        value={member.role}
+                        disabled={dirty || Boolean(memberBusy) || saving}
+                        title={dirty ? "Save or reset the team before changing member access." : undefined}
+                        onChange={(event) => void updateMember(member, { role: event.target.value })}
+                      >
+                        {["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER", "TRANSLATOR", "EDITOR", "CLEANER", "REDRAWER", "TYPESETTER", "PROOFREADER", "QUALITY_CONTROL", "MEMBER"].map((role) => (
+                          <option key={role} value={role}>{role.replaceAll("_", " ").toLowerCase()}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="sr-only">Status for {member.displayName}</span>
+                      <select
+                        value={member.status}
+                        disabled={dirty || Boolean(memberBusy) || saving}
+                        title={dirty ? "Save or reset the team before changing member access." : undefined}
+                        onChange={(event) => void updateMember(member, { status: event.target.value })}
+                      >
+                        <option value="ACTIVE">Active</option>
+                        <option value="INACTIVE">Inactive</option>
+                      </select>
+                    </label>
+                    {memberBusy === member.userId ? <ArrowClockwise className="is-spinning" size={18} /> : <ShieldCheck size={18} />}
+                  </article>
+                ))
+              ) : (
                 <div className="admin-state-card">
                   <UsersThree size={24} />
-                  <h3>No membership editor available</h3>
-                  <p>Membership authorization remains unchanged.</p>
+                  <h3>No team members yet</h3>
+                  <p>Add members through Users &amp; roles, then manage their team role here.</p>
                 </div>
               )}
             </div>
@@ -835,16 +975,66 @@ export function TeamManagementPanel({
                 />
                 Archive this team and remove it from new assignments
               </label>
+              <label className="admin-check-row">
+                <input
+                  type="checkbox"
+                  checked={draft.canControlFixedReaderPages}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      canControlFixedReaderPages: event.target.checked,
+                    }))
+                  }
+                />
+                Allow this team to choose whether the global first and last reader pages appear on its uploaded chapters
+              </label>
             </div>
           </details>
 
           <details className="admin-editor-box">
             <summary>Activity</summary>
-            <div className="admin-summary-grid">
-              <article><strong>{draft.members.length}</strong><span>Members</span></article>
-              <article><strong>{draft.series.length}</strong><span>Series</span></article>
-              <article><strong>{draft.revision}</strong><span>Record version</span></article>
-              <p>Detailed immutable changes are available in the owner-only Audit Log.</p>
+            <div className="admin-team-activity">
+              <div className="admin-summary-grid">
+                <article><strong>{draft.members.length}</strong><span>Members</span></article>
+                <article><strong>{draft.series.length}</strong><span>Series</span></article>
+                <article><strong>{draft.activity.length}</strong><span>Recent chapters</span></article>
+              </div>
+              {draft.activity.length ? (
+                <div className="admin-team-activity-list">
+                  {draft.activity.map((chapter) => (
+                    <article key={chapter.chapterId}>
+                      <header>
+                        <div>
+                          <strong>{chapter.seriesTitle} · Chapter {chapter.chapterNumber}</strong>
+                          <small>{chapter.chapterTitle || `${chapter.language.toUpperCase()} release`} · v{chapter.version} · {chapter.accessType.toLowerCase()}</small>
+                        </div>
+                        <span className={`admin-release-state is-${chapter.state.toLowerCase()}`}>{chapter.state.replaceAll("_", " ")}</span>
+                      </header>
+                      <div className="admin-team-activity-meta">
+                        <span><Clock size={15} /> {new Date(chapter.publishedAt ?? chapter.createdAt).toLocaleString()}</span>
+                        <span><UsersThree size={15} /> {chapter.uploaderName ?? "System uploader"}</span>
+                        <span><Images size={15} /> {chapter.pageCount} pages</span>
+                        <span><ChatCircle size={15} /> {chapter.commentCount} comments</span>
+                        <span><WarningCircle size={15} /> {chapter.reportCount} reports</span>
+                        <span><Smiley size={15} /> {chapter.reactionCount} reactions</span>
+                      </div>
+                      <footer>
+                        <a className="button button-secondary" href={`/onyx/admin/access/series/${chapter.seriesId}/chapters/${chapter.chapterId}`}>
+                          <Eye size={16} /> Preview images
+                        </a>
+                        {chapter.state === "PUBLISHED" ? (
+                          <a className="button button-secondary" href={`/title/${chapter.seriesSlug}/chapter/${chapter.chapterSlug}`} target="_blank" rel="noreferrer">
+                            <Eye size={16} /> Public view
+                          </a>
+                        ) : null}
+                        <button className="button button-secondary" type="button" disabled={dirty || Boolean(chapterBusy) || saving || chapter.state === "DRAFT"} title={dirty ? "Save or reset the team before using chapter quick actions." : undefined} onClick={() => void hideChapter(chapter)}>
+                          <EyeSlash size={16} /> {chapterBusy === chapter.chapterId ? "Hiding…" : "Move to draft"}
+                        </button>
+                      </footer>
+                    </article>
+                  ))}
+                </div>
+              ) : <p>No uploaded chapters are linked to this team yet.</p>}
             </div>
           </details>
 

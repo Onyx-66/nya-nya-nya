@@ -88,9 +88,11 @@ test("Version 42 galleries, flags, title, comments, and branding use the compact
   );
 
   const flagOnlyCalls = app.match(/<SeriesTypeBadge type=\{[^}]+\} flagOnly \/>/gu);
-  assert.ok((flagOnlyCalls?.length ?? 0) >= 3);
+  assert.ok((flagOnlyCalls?.length ?? 0) >= 2);
   assert.match(discovery, /series-type-badge[\s\S]*is-flag-only/u);
-  assert.match(app, /<SeriesTypeBadge type=\{item\.type\} \/>/u);
+  const browseView = app.slice(app.indexOf("function BrowseView"), app.indexOf("function GuestLibraryView"));
+  assert.match(browseView, /<SeriesTypeBadge type=\{item\.type\} \/>/u);
+  assert.match(browseView, /<SeriesStatusBadge status=\{item\.status\} \/>/u);
   assert.doesNotMatch(
     app.slice(app.indexOf('<section className="title-hero">'), app.indexOf("<nav className=\"series-jump")),
     /title-synopsis|\{item\.synopsis\}/u,

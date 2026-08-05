@@ -10,6 +10,7 @@ import {
   ChatCircle,
   Heart,
   Trophy,
+  UploadSimple,
   UserMinus,
   UserPlus,
   UsersThree,
@@ -39,7 +40,20 @@ type ProfileRecord = {
     readAt: string;
     coverUrl: string | null;
   }>;
-  librarySummary: Array<{ status?: string; count?: number }>;
+  uploads: Array<{
+    id: string;
+    chapterSlug: string;
+    chapterNumber: string;
+    language: string;
+    version: number;
+    accessType: string;
+    publishedAt: string;
+    seriesSlug: string;
+    seriesTitle: string;
+    coverUrl: string | null;
+    teamSlug: string | null;
+    teamName: string | null;
+  }>;
   favorites: Array<{
     seriesId: string;
     seriesSlug: string;
@@ -75,6 +89,20 @@ type ProfileRecord = {
     reactionCount: number;
     spoiler: boolean;
     coverUrl: string | null;
+    media: Array<{
+      id: string;
+      filename: string;
+      contentType: string;
+      kind: string;
+      altText: string;
+      url: string;
+    }>;
+    gifs: Array<{
+      id: string;
+      name: string;
+      altText: string;
+      url: string;
+    }>;
   }>;
 };
 
@@ -92,6 +120,7 @@ export function PublicProfileView({ username }: { username: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
   const favoritesRailRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,6 +144,7 @@ export function PublicProfileView({ username }: { username: string }) {
           achievements: payload.data.achievements ?? [],
           bookmarks: payload.data.bookmarks ?? [],
           comments: payload.data.comments ?? [],
+          uploads: payload.data.uploads ?? [],
         });
       } catch (loadError) {
         if (!controller.signal.aborted) {
@@ -197,6 +227,44 @@ export function PublicProfileView({ username }: { username: string }) {
     });
   }
 
+  function commentContent(comment: ProfileRecord["comments"][number]) {
+    const assets = [
+      ...(comment.media ?? []).map((media) => ({
+        id: media.id,
+        url: media.url,
+        alt: media.altText || media.filename,
+        label: media.filename,
+      })),
+      ...(comment.gifs ?? []).map((gif) => ({
+        id: gif.id,
+        url: gif.url,
+        alt: gif.altText || gif.name,
+        label: gif.name,
+      })),
+    ];
+    return (
+      <div className="public-profile-comment-content">
+        {comment.body ? <p>{comment.body}</p> : null}
+        {assets.length ? (
+          <div className="public-profile-comment-media">
+            {assets.map((asset) => (
+              <a
+                key={`${comment.id}-${asset.id}`}
+                href={asset.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${asset.label}`}
+              >
+                <img src={asset.url} alt={asset.alt} loading="lazy" />
+                <span>Open image</span>
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <main className="page-main page-wrap public-profile-state" role="status">
@@ -214,6 +282,9 @@ export function PublicProfileView({ username }: { username: string }) {
     );
   }
   if (!profile) return null;
+  const visibleComments = commentsExpanded
+    ? profile.comments
+    : profile.comments.slice(0, 6);
 
   return (
     <main className="page-main public-profile-page">
@@ -285,7 +356,7 @@ export function PublicProfileView({ username }: { username: string }) {
           </div>
         ) : null}
         {profile.teams.length ? (
-          <section className="public-profile-panel">
+          <section className="public-profile-panel public-profile-teams-panel">
             <h2>Teams</h2>
             <div className="public-profile-teams">
               {profile.teams.map((team) => (
@@ -504,6 +575,49 @@ export function PublicProfileView({ username }: { username: string }) {
             </div>
           </section>
         ) : null}
+        {profile.uploads.length ? (
+          <section className="public-profile-panel public-profile-uploads-panel">
+            <div className="section-heading public-profile-section-heading">
+              <div>
+                <h2>Uploads</h2>
+                <p>Latest public chapters released by this uploader.</p>
+              </div>
+              <span className="public-profile-section-count">
+                <UploadSimple size={18} /> {profile.uploads.length}
+              </span>
+            </div>
+            <div className="public-profile-uploads">
+              {profile.uploads.map((upload) => (
+                <a
+                  key={upload.id}
+                  href={`/title/${upload.seriesSlug}/chapter/${upload.chapterSlug}`}
+                >
+                  <span className="public-profile-upload-cover">
+                    {upload.coverUrl ? (
+                      <img src={upload.coverUrl} alt="" loading="lazy" />
+                    ) : (
+                      <Books size={20} />
+                    )}
+                  </span>
+                  <span>
+                    <strong>{upload.seriesTitle}</strong>
+                    <small>
+                      Chapter {upload.chapterNumber} · {upload.language.toUpperCase()}
+                      {upload.version > 1 ? ` · v${upload.version}` : ""}
+                    </small>
+                    <small>
+                      {upload.teamName ?? "Independent release"} · {timeLabel(upload.publishedAt)}
+                    </small>
+                  </span>
+                  <span className={`public-profile-upload-access is-${upload.accessType.toLowerCase()}`}>
+                    {upload.accessType === "FREE" ? "Free" : "Paid"}
+                  </span>
+                  <ArrowRight size={17} />
+                </a>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {profile.comments.length ? (
           <section className="public-profile-panel">
             <div className="section-heading public-profile-section-heading">
@@ -511,14 +625,24 @@ export function PublicProfileView({ username }: { username: string }) {
                 <h2>Comments</h2>
                 <p>Recent visible comments and community reactions.</p>
               </div>
+              {profile.comments.length > 6 ? (
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  aria-expanded={commentsExpanded}
+                  onClick={() => setCommentsExpanded((current) => !current)}
+                >
+                  {commentsExpanded ? "Show fewer" : `Show all ${profile.comments.length}`}
+                </button>
+              ) : null}
             </div>
             <div className="public-profile-comments">
-              {profile.comments.map((comment) => {
+              {visibleComments.map((comment) => {
                 const commentHref = `/title/${comment.seriesSlug}${
                   comment.chapterSlug ? `/chapter/${comment.chapterSlug}` : ""
-                }`;
+                }#comment-${comment.id}`;
                 return (
-                  <article key={comment.id}>
+                  <article key={comment.id} id={`profile-comment-${comment.id}`}>
                     <span
                       className="public-profile-comment-cover"
                       aria-hidden="true"
@@ -555,10 +679,10 @@ export function PublicProfileView({ username }: { username: string }) {
                       {comment.spoiler ? (
                         <details className="public-profile-comment-spoiler">
                           <summary>Reveal spoiler comment</summary>
-                          <p>{comment.body}</p>
+                          {commentContent(comment)}
                         </details>
                       ) : (
-                        <p>{comment.body}</p>
+                        commentContent(comment)
                       )}
                       <small>
                         {timeLabel(comment.createdAt)} · {comment.upvotes} up ·{" "}
@@ -569,21 +693,6 @@ export function PublicProfileView({ username }: { username: string }) {
                   </article>
                 );
               })}
-            </div>
-          </section>
-        ) : null}
-        {profile.librarySummary.length ? (
-          <section className="public-profile-panel">
-            <h2>Library summary</h2>
-            <div className="public-library-summary">
-              {profile.librarySummary.map((entry) => (
-                <span key={entry.status}>
-                  <strong>{Number(entry.count ?? 0)}</strong>
-                  <small>
-                    {(entry.status ?? "saved").replaceAll("_", " ").toLowerCase()}
-                  </small>
-                </span>
-              ))}
             </div>
           </section>
         ) : null}

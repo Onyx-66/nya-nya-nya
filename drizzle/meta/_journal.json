@@ -239,6 +239,13 @@
       "when": 1785887540834,
       "tag": "0033_melted_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1785892312898,
+      "tag": "0034_kind_longshot",
+      "breakpoints": true
     }
   ]
 }

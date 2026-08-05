@@ -108,6 +108,8 @@ type UploadItemRow = {
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
   scheduledAt: string | null;
   commentsEnabled: number;
+  includeFixedFirstPage: number;
+  includeFixedLastPage: number;
   status: string;
   pageCount: number;
   errorCode: string | null;
@@ -325,6 +327,8 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
                 visibility,
                 scheduled_at AS scheduledAt,
                 comments_enabled AS commentsEnabled,
+                include_fixed_first_page AS includeFixedFirstPage,
+                include_fixed_last_page AS includeFixedLastPage,
                 status,
                 page_count AS pageCount,
                 error_code AS errorCode,
@@ -380,6 +384,8 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
       ...item,
       credits: parseJson(item.creditsJson, {}),
       commentsEnabled: Boolean(item.commentsEnabled),
+      includeFixedFirstPage: Boolean(item.includeFixedFirstPage),
+      includeFixedLastPage: Boolean(item.includeFixedLastPage),
       thumbnailUrl: item.thumbnailKey
         ? `/api/v1/upload-job-thumbnail?jobId=${encodeURIComponent(jobId)}&itemId=${encodeURIComponent(item.id)}&v=${item.revision}`
         : null,
@@ -412,6 +418,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
     db
       .prepare(
         `SELECT DISTINCT t.id, t.slug, t.name, t.revision,
+                t.can_control_fixed_reader_pages AS canControlFixedReaderPages,
                 UPPER(tm.membership_role) AS membershipRole,
                 CASE WHEN t.logo_key IS NULL THEN NULL
                   ELSE '/api/v1/team-media?id=' || t.id ||
@@ -438,6 +445,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
         name: string;
         revision: number;
         membershipRole: string;
+        canControlFixedReaderPages: number;
         logoUrl: string | null;
         bannerUrl: string | null;
       }>(),
@@ -459,6 +467,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
           ));
       return {
         ...team,
+        canControlFixedReaderPages: Boolean(team.canControlFixedReaderPages),
         canPublish,
         requiresReview: !canPublish,
       };
@@ -467,6 +476,46 @@ async function uploadOptions(db: D1Database, actor: Actor) {
     limits: UPLOAD_LIMITS,
     admin,
   };
+}
+
+async function assertFixedReaderPageControl(
+  db: D1Database,
+  teamId: string | null,
+  items: Array<{
+    includeFixedFirstPage: boolean;
+    includeFixedLastPage: boolean;
+  }>,
+) {
+  if (
+    items.every(
+      (item) => item.includeFixedFirstPage && item.includeFixedLastPage,
+    )
+  ) {
+    return;
+  }
+  if (!teamId) {
+    throw new ApiError(
+      403,
+      "FIXED_READER_PAGE_CONTROL_FORBIDDEN",
+      "Independent releases must include the configured first and last reader pages.",
+    );
+  }
+  const team = await db
+    .prepare(
+      `SELECT can_control_fixed_reader_pages AS allowed
+         FROM teams
+        WHERE id = ? AND is_archived = 0
+        LIMIT 1`,
+    )
+    .bind(teamId)
+    .first<{ allowed: number }>();
+  if (!team?.allowed) {
+    throw new ApiError(
+      403,
+      "FIXED_READER_PAGE_CONTROL_FORBIDDEN",
+      "This team is not allowed to remove the configured first or last reader page.",
+    );
+  }
 }
 
 export async function GET(request: Request) {
@@ -643,6 +692,7 @@ export async function POST(request: Request) {
       payload.teamId,
       payload.items.map((item) => item.language),
     );
+    await assertFixedReaderPageControl(env.DB, scope.teamId, payload.items);
     for (const item of payload.items) {
       const duplicate = await env.DB.prepare(
         `SELECT c.id, c.state
@@ -741,8 +791,9 @@ export async function POST(request: Request) {
             replacement_chapter_id, volume, chapter_number, title, language,
             version, release_notes,
             credits_json, access_type, price_onyx, visibility, scheduled_at,
+            include_fixed_first_page, include_fixed_last_page,
             comments_enabled, status, page_count, revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    'DRAFT', 0, 1)`,
         ).bind(
           item.id,
@@ -763,6 +814,8 @@ export async function POST(request: Request) {
           item.priceOnyx,
           item.visibility,
           item.scheduledAt,
+          item.includeFixedFirstPage ? 1 : 0,
+          item.includeFixedLastPage ? 1 : 0,
           1,
         ),
       ),
@@ -902,6 +955,7 @@ export async function PATCH(request: Request) {
         job.teamId,
         [payload.item.language],
       );
+      await assertFixedReaderPageControl(env.DB, job.teamId, [payload.item]);
       const duplicate = await env.DB.prepare(
         `SELECT id
            FROM chapters
@@ -984,6 +1038,8 @@ export async function PATCH(request: Request) {
                     CASE WHEN ? = 'BATCH' THEN price_onyx ELSE ? END,
                   visibility = ?,
                   scheduled_at = ?,
+                  include_fixed_first_page = ?,
+                  include_fixed_last_page = ?,
                   comments_enabled = ?,
                   revision = revision + 1,
                   updated_at = CURRENT_TIMESTAMP
@@ -1037,6 +1093,8 @@ export async function PATCH(request: Request) {
           payload.item.priceOnyx,
           payload.item.visibility,
           payload.item.scheduledAt,
+          payload.item.includeFixedFirstPage ? 1 : 0,
+          payload.item.includeFixedLastPage ? 1 : 0,
           1,
           payload.itemId,
           payload.jobId,
@@ -1536,8 +1594,10 @@ export async function PATCH(request: Request) {
     }
     const detail = await jobDetail(env.DB, actor, payload.jobId);
     const items = detail.items as unknown as Array<
-      Omit<UploadItemRow, "commentsEnabled"> & {
+      Omit<UploadItemRow, "commentsEnabled" | "includeFixedFirstPage" | "includeFixedLastPage"> & {
         commentsEnabled: boolean;
+        includeFixedFirstPage: boolean;
+        includeFixedLastPage: boolean;
         files: UploadFileRow[];
       }
     >;
@@ -1580,6 +1640,7 @@ export async function PATCH(request: Request) {
       job.teamId,
       items.map((item) => item.language),
     );
+    await assertFixedReaderPageControl(env.DB, scope.teamId, items);
     for (const item of items) {
       const duplicate = await env.DB.prepare(
         `SELECT id
@@ -1687,13 +1748,15 @@ export async function PATCH(request: Request) {
            (id, series_id, team_id, uploader_user_id, slug, volume,
             chapter_number, title, language, format, state, access_type,
             price_onyx, page_count, published_at, free_at, version,
-            release_notes, credits_json, thumbnail_key, visibility, comments_enabled,
-            revision)
+            release_notes, credits_json, thumbnail_key, visibility,
+            comments_enabled, revision, include_fixed_first_page,
+            include_fixed_last_page)
            SELECT ?, uji.series_id, uji.team_id, ?, ?, uji.volume,
                   uji.chapter_number, uji.title, uji.language, 'VERTICAL',
                   ?, uji.access_type, uji.price_onyx, uji.page_count, ?,
                   NULL, uji.version, uji.release_notes, uji.credits_json,
-                  uji.thumbnail_key, uji.visibility, 1, 1
+                  uji.thumbnail_key, uji.visibility, 1, 1,
+                  uji.include_fixed_first_page, uji.include_fixed_last_page
              FROM upload_job_items uji
              JOIN upload_jobs uj ON uj.id = uji.job_id
             WHERE uji.id = ?

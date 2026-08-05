@@ -39,7 +39,6 @@ const patchSchema = z.object({
   followersVisibility: z.enum(["PUBLIC", "PRIVATE"]).default("PUBLIC"),
   showReadingHistory: z.boolean().default(false),
   showChapterNumbers: z.boolean().default(false),
-  showLibrarySummary: z.boolean().default(false),
   showFavorites: z.boolean().default(false),
   showAchievements: z.boolean().default(false),
   showBookmarks: z.boolean().default(false),
@@ -103,7 +102,6 @@ export async function GET(request: Request) {
               up.followers_visibility AS followersVisibility,
               up.show_reading_history AS showReadingHistory,
               up.show_chapter_numbers AS showChapterNumbers,
-              up.show_library_summary AS showLibrarySummary,
               up.show_favorites AS showFavorites,
               up.show_achievements AS showAchievements,
               up.show_bookmarks AS showBookmarks,
@@ -130,7 +128,6 @@ export async function GET(request: Request) {
         followersVisibility: string;
         showReadingHistory: number;
         showChapterNumbers: number;
-        showLibrarySummary: number;
         showFavorites: number;
         showAchievements: number;
         showBookmarks: number;
@@ -202,7 +199,7 @@ export async function GET(request: Request) {
             achievements: [],
             bookmarks: [],
             comments: [],
-            librarySummary: [],
+            uploads: [],
             avatarUrl: null,
             bannerUrl: null,
             privacy: {
@@ -210,7 +207,6 @@ export async function GET(request: Request) {
               followersVisibility: "PUBLIC",
               showReadingHistory: false,
               showChapterNumbers: false,
-              showLibrarySummary: false,
               showFavorites: false,
               showAchievements: false,
               showBookmarks: false,
@@ -308,18 +304,6 @@ export async function GET(request: Request) {
               readAt: string;
             }>()
         : { results: [] };
-    const librarySummary =
-      isSelf || Boolean(profile.showLibrarySummary)
-        ? await env.DB.prepare(
-            `SELECT list_type AS status, COUNT(*) AS count
-               FROM library_entries
-              WHERE user_id = ?
-              GROUP BY list_type
-              ORDER BY list_type`,
-          )
-            .bind(profile.userId)
-            .all()
-        : { results: [] };
     type SeriesRow = {
       seriesId: string;
       seriesSlug: string;
@@ -336,6 +320,7 @@ export async function GET(request: Request) {
       bookmarks,
       comments,
       favoriteCandidates,
+      uploads,
     ] = await Promise.all([
       isSelf || Boolean(profile.showFavorites)
         ? env.DB.prepare(
@@ -477,7 +462,130 @@ export async function GET(request: Request) {
             .all<SeriesRow>()
             .then((result) => result.results)
         : Promise.resolve([] as SeriesRow[]),
+      env.DB.prepare(
+        `SELECT c.id, c.slug AS chapterSlug,
+                c.chapter_number AS chapterNumber, c.language,
+                c.version, c.access_type AS accessType,
+                c.published_at AS publishedAt,
+                s.id AS seriesId, s.slug AS seriesSlug,
+                s.title AS seriesTitle, s.revision,
+                s.cover_key AS coverKey,
+                t.slug AS teamSlug, t.name AS teamName
+           FROM chapters c
+           JOIN series s ON s.id = c.series_id
+           LEFT JOIN teams t ON t.id = c.team_id
+          WHERE c.uploader_user_id = ?
+            AND c.state = 'PUBLISHED'
+            AND c.visibility = 'PUBLIC'
+            AND c.published_at IS NOT NULL
+            AND datetime(c.published_at) <= datetime('now')
+            AND s.is_published = 1
+            AND s.archived_at IS NULL
+            AND s.rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+          ORDER BY datetime(c.published_at) DESC, c.id DESC
+          LIMIT 24`,
+      )
+        .bind(profile.userId)
+        .all<{
+          id: string;
+          chapterSlug: string;
+          chapterNumber: string;
+          language: string;
+          version: number;
+          accessType: string;
+          publishedAt: string;
+          seriesId: string;
+          seriesSlug: string;
+          seriesTitle: string;
+          revision: number;
+          coverKey: string | null;
+          teamSlug: string | null;
+          teamName: string | null;
+        }>()
+        .then((result) => result.results),
     ]);
+    const visibleCommentIdList = comments.map((comment) => comment.id);
+    const visibleCommentIds = new Set(visibleCommentIdList);
+    const commentIdPlaceholders = visibleCommentIdList.map(() => "?").join(", ");
+    const [commentMediaResult, commentGifsResult] = comments.length
+      ? await Promise.all([
+          env.DB.prepare(
+            `SELECT dm.id, dm.comment_id AS commentId, dm.filename,
+                    dm.content_type AS contentType, dm.byte_size AS byteSize,
+                    dm.kind, dm.alt_text AS altText
+               FROM discussion_media dm
+               JOIN discussion_comments dc ON dc.id = dm.comment_id
+              WHERE dm.comment_id IN (${commentIdPlaceholders})
+                AND dc.user_id = ?
+                AND dc.moderation_status = 'VISIBLE'
+                AND dc.deleted_at IS NULL
+                AND dm.moderation_status = 'READY'
+              ORDER BY datetime(dm.created_at), dm.id`,
+          )
+            .bind(...visibleCommentIdList, profile.userId)
+            .all<{
+              id: string;
+              commentId: string;
+              filename: string;
+              contentType: string;
+              byteSize: number;
+              kind: string;
+              altText: string;
+            }>(),
+          env.DB.prepare(
+            `SELECT dcg.comment_id AS commentId, cr.id,
+                    cr.name, cr.accessible_label AS altText, cr.revision
+               FROM discussion_comment_gifs dcg
+               JOIN discussion_comments dc ON dc.id = dcg.comment_id
+               JOIN custom_reactions cr ON cr.id = dcg.gif_id
+              WHERE dcg.comment_id IN (${commentIdPlaceholders})
+                AND dc.user_id = ?
+                AND dc.moderation_status = 'VISIBLE'
+                AND dc.deleted_at IS NULL
+              ORDER BY dcg.display_order, datetime(dcg.created_at)`,
+          )
+            .bind(...visibleCommentIdList, profile.userId)
+            .all<{
+              commentId: string;
+              id: string;
+              name: string;
+              altText: string;
+              revision: number;
+            }>(),
+        ])
+      : [{ results: [] }, { results: [] }];
+    const mediaByComment = new Map<string, Array<Record<string, unknown>>>();
+    for (const media of commentMediaResult.results) {
+      if (!visibleCommentIds.has(media.commentId)) continue;
+      const entry = {
+        id: media.id,
+        filename: media.filename,
+        contentType: media.contentType,
+        byteSize: media.byteSize,
+        kind: media.kind,
+        altText: media.altText,
+        url: `/api/v1/discussion-media?id=${encodeURIComponent(media.id)}`,
+      };
+      mediaByComment.set(media.commentId, [
+        ...(mediaByComment.get(media.commentId) ?? []),
+        entry,
+      ]);
+    }
+    const gifsByComment = new Map<string, Array<Record<string, unknown>>>();
+    for (const gif of commentGifsResult.results) {
+      if (!visibleCommentIds.has(gif.commentId)) continue;
+      const entry = {
+        id: gif.id,
+        name: gif.name,
+        altText: gif.altText,
+        url: `/api/v1/reaction-asset?id=${encodeURIComponent(gif.id)}&v=${gif.revision}`,
+      };
+      gifsByComment.set(gif.commentId, [
+        ...(gifsByComment.get(gif.commentId) ?? []),
+        entry,
+      ]);
+    }
     const followerCount = Number(
       (followers.results[0] as { count?: number } | undefined)?.count ?? 0,
     );
@@ -521,7 +629,6 @@ export async function GET(request: Request) {
                 followersVisibility: profile.followersVisibility,
                 showReadingHistory: Boolean(profile.showReadingHistory),
                 showChapterNumbers: Boolean(profile.showChapterNumbers),
-                showLibrarySummary: Boolean(profile.showLibrarySummary),
                 showFavorites: Boolean(profile.showFavorites),
                 showAchievements: Boolean(profile.showAchievements),
                 showBookmarks: Boolean(profile.showBookmarks),
@@ -608,8 +715,13 @@ export async function GET(request: Request) {
             downvotes: Number(comment.downvotes),
             reactionCount: Number(comment.reactionCount),
             coverUrl: seriesCoverUrl(comment),
+            media: mediaByComment.get(comment.id) ?? [],
+            gifs: gifsByComment.get(comment.id) ?? [],
           })),
-          librarySummary: librarySummary.results,
+          uploads: uploads.map((upload) => ({
+            ...upload,
+            coverUrl: seriesCoverUrl(upload),
+          })),
         },
       },
       {
@@ -692,7 +804,7 @@ export async function PATCH(request: Request) {
           payload.followersVisibility,
           payload.showReadingHistory ? 1 : 0,
           payload.showChapterNumbers ? 1 : 0,
-          payload.showLibrarySummary ? 1 : 0,
+          0,
           payload.showFavorites ? 1 : 0,
           payload.showAchievements ? 1 : 0,
           payload.showBookmarks ? 1 : 0,
@@ -742,7 +854,7 @@ export async function PATCH(request: Request) {
           payload.followersVisibility,
           payload.showReadingHistory ? 1 : 0,
           payload.showChapterNumbers ? 1 : 0,
-          payload.showLibrarySummary ? 1 : 0,
+          0,
           payload.showFavorites ? 1 : 0,
           payload.showAchievements ? 1 : 0,
           payload.showBookmarks ? 1 : 0,

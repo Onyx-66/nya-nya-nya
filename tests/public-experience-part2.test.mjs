@@ -54,7 +54,9 @@ test("public profiles keep private reading data server-gated", async () => {
 
   assert.match(profiles, /profileVisibility !== "PUBLIC"/);
   assert.match(profiles, /showReadingHistory/);
-  assert.match(profiles, /showLibrarySummary/);
+  assert.match(profiles, /c\.uploader_user_id = \?/);
+  assert.match(profiles, /uploads: uploads\.map/);
+  assert.doesNotMatch(view, /Library summary/);
   assert.match(profiles, /u\.status = 'ACTIVE'/);
   assert.doesNotMatch(profiles, /SELECT[\s\S]{0,100}u\.email/i);
   assert.match(follow, /SELF_FOLLOW/);

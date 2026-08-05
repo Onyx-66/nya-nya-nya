@@ -646,7 +646,7 @@ function UploadCenter({
     />
   );
 }
-function TeamsManager() {
+export function TeamsManager() {
   const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [series, setSeries] = useState<AdminSeries[]>([]);
@@ -4932,7 +4932,7 @@ export function OperationsControlPanel({
   if (section === "New Series Queue") return <NewSeriesQueuePanel />;
   if (section === "Chapter access") return <ChapterAccessPanel />;
   if (section === "Teams") {
-    return <TeamManagementPanel membersPanel={<TeamsManager />} />;
+    return <TeamManagementPanel />;
   }
   if (section === "Users & roles") {
     return <UsersManager actorRole={actorRole} actorRoles={actorRoles} />;
@@ -4975,6 +4975,7 @@ export function OperationsControlPanel({
     );
   }
   if (section === "Editorial") return <EditorialManagementPanel />;
+  if (section === "Sliders") return <EditorialManagementPanel mode="sliders" />;
   if (section === "Security") return <SecurityPanel />;
   if (section === "Audit log") {
     return <OwnerAuditLogPanel actorRole={actorRole} />;

@@ -95,7 +95,7 @@ test("public profile comments expose safe covers from public releases only", asy
 
   const payload = route.slice(
     route.indexOf("comments: comments.map"),
-    route.indexOf("librarySummary:", route.indexOf("comments: comments.map")),
+    route.indexOf("uploads:", route.indexOf("comments: comments.map")),
   );
   assert.match(payload, /coverUrl:\s*seriesCoverUrl\(comment\)/u);
   assert.match(payload, /spoiler:\s*Boolean\(comment\.spoiler\)/u);
@@ -103,6 +103,8 @@ test("public profile comments expose safe covers from public releases only", asy
   assert.doesNotMatch(payload, /coverKey:/u);
   assert.doesNotMatch(payload, /seriesId:/u);
   assert.doesNotMatch(payload, /revision:/u);
+  assert.match(payload, /media: mediaByComment\.get/);
+  assert.match(payload, /gifs: gifsByComment\.get/);
 });
 
 test("public profile uses an accessible favorite rail and cover-led records", async () => {
@@ -113,6 +115,8 @@ test("public profile uses an accessible favorite rail and cover-led records", as
   assert.match(view, /aria-hidden="true"/u);
   assert.match(view, /public-profile-comment-spoiler/u);
   assert.match(view, /<details className="public-profile-comment-spoiler">/u);
+  assert.match(view, /public-profile-comment-media/u);
+  assert.match(view, /public-profile-uploads/u);
   assert.match(view, /public-profile-activity/u);
   assert.match(view, /public-profile-bookmarks/u);
   assert.match(view, /role="group"/u);

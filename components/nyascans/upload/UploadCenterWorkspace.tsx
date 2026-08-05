@@ -78,6 +78,7 @@ type UploadTeamOption = {
   membershipRole: string;
   canPublish: boolean;
   requiresReview: boolean;
+  canControlFixedReaderPages: boolean;
 };
 
 type UploadOptions = {
@@ -141,6 +142,8 @@ type UploadItem = {
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
   scheduledAt: string | null;
   commentsEnabled: boolean;
+  includeFixedFirstPage: boolean;
+  includeFixedLastPage: boolean;
   status: string;
   pageCount: number;
   errorCode: string | null;
@@ -215,6 +218,8 @@ type ComposerItem = {
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
   scheduledAt: string;
   commentsEnabled: boolean;
+  includeFixedFirstPage: boolean;
+  includeFixedLastPage: boolean;
   replacementChapterId: string | null;
 };
 
@@ -299,6 +304,8 @@ function newComposerItem(
     visibility: "PUBLIC",
     scheduledAt: "",
     commentsEnabled: true,
+    includeFixedFirstPage: true,
+    includeFixedLastPage: true,
     replacementChapterId: null,
   };
 }
@@ -754,6 +761,7 @@ function ChapterMetadataFields({
   onThumbnailChange,
   coinName = "Paw Coin",
   disabled = false,
+  showFixedPageChoices = false,
 }: {
   item: ComposerItem;
   onChange(next: ComposerItem): void;
@@ -765,6 +773,7 @@ function ChapterMetadataFields({
   onThumbnailChange?(file: File | null): void;
   coinName?: string;
   disabled?: boolean;
+  showFixedPageChoices?: boolean;
 }) {
   return (
     <div
@@ -908,6 +917,30 @@ function ChapterMetadataFields({
           }
         />
       </label>
+      {showFixedPageChoices ? (
+        <fieldset className="upload-fixed-page-options upload-field-wide">
+          <legend>Reader intro and outro</legend>
+          <p>Choose whether the site-wide release pages appear around this chapter.</p>
+          <label>
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={item.includeFixedFirstPage}
+              onChange={(event) => onChange({ ...item, includeFixedFirstPage: event.target.checked })}
+            />
+            <span><strong>Add first page</strong><small>Enabled by default</small></span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={item.includeFixedLastPage}
+              onChange={(event) => onChange({ ...item, includeFixedLastPage: event.target.checked })}
+            />
+            <span><strong>Add last page</strong><small>Enabled by default</small></span>
+          </label>
+        </fieldset>
+      ) : null}
       {!compact ? (
         <>
           <label className="upload-field-wide">
@@ -1498,6 +1531,10 @@ function UploadComposer({
         setTeamId(payload.data.teamId ?? "");
         setTeamStepComplete(true);
         setIngestMethod(payload.data.sourceType);
+        const resumedCanControlFixedPages = Boolean(
+          options.teams.find((team) => team.id === payload.data.teamId)
+            ?.canControlFixedReaderPages,
+        );
         const nextItems = (payload.data.items ?? []).map((item) => ({
             clientKey: item.clientKey,
             sourceLabel: item.sourceLabel,
@@ -1515,6 +1552,12 @@ function UploadComposer({
               ? new Date(item.scheduledAt).toISOString().slice(0, 16)
               : "",
             commentsEnabled: true,
+            includeFixedFirstPage: resumedCanControlFixedPages
+              ? (item.includeFixedFirstPage ?? true)
+              : true,
+            includeFixedLastPage: resumedCanControlFixedPages
+              ? (item.includeFixedLastPage ?? true)
+              : true,
             replacementChapterId: item.replacementChapterId ?? null,
           }));
         const firstPaidItem = nextItems.find(
@@ -2695,6 +2738,17 @@ function UploadComposer({
     [options.series],
   );
   const selectedTeam = options.teams.find((team) => team.id === teamId) ?? null;
+  function selectPublishingTeam(nextTeamId: string) {
+    setTeamId(nextTeamId);
+    const nextTeam = options.teams.find((team) => team.id === nextTeamId);
+    if (!nextTeam?.canControlFixedReaderPages) {
+      setItems((current) => current.map((item) => ({
+        ...item,
+        includeFixedFirstPage: true,
+        includeFixedLastPage: true,
+      })));
+    }
+  }
   const localQueueBytes = localPages.reduce(
     (total, page) => total + page.file.size,
     0,
@@ -2716,11 +2770,9 @@ function UploadComposer({
         <div>
           <span>{kind === "BATCH" ? "Folder batch" : "One release"}</span>
           <h2>{kind === "BATCH" ? "Multi-chapter upload" : "Single chapter upload"}</h2>
-          <p>
-            {kind === "BATCH"
-              ? `Prepare up to ${UPLOAD_LIMITS.maxChaptersPerJob} chapter folders in one private batch, then review every release before submission.`
-              : "Build one release in a focused workspace. Add missing pages later without replacing files that already passed validation."}
-          </p>
+          {kind === "BATCH" ? (
+            <p>Prepare up to {UPLOAD_LIMITS.maxChaptersPerJob} chapter folders, then review every release before submission.</p>
+          ) : null}
         </div>
         {job ? <StatusBadge status={job.status} /> : null}
       </header>
@@ -2760,7 +2812,7 @@ function UploadComposer({
         <BatchTeamStep
           teams={options.teams}
           selectedTeamId={teamId}
-          onSelect={setTeamId}
+          onSelect={selectPublishingTeam}
           onContinue={continueToBatchUpload}
         />
       ) : (
@@ -2770,7 +2822,6 @@ function UploadComposer({
           <FileImage size={28} />
           <div>
             <strong>Single-chapter studio</strong>
-            <span>Metadata, visual page order, and final release review in one focused lane.</span>
           </div>
           <span>250 MB chapter limit</span>
         </div>
@@ -2939,7 +2990,7 @@ function UploadComposer({
                 selectedTeamId={teamId}
                 allowIndependent={options.admin}
                 disabled={busy || Boolean(job)}
-                onSelect={setTeamId}
+                onSelect={selectPublishingTeam}
               />
               <label>
                 <span>Series</span>
@@ -2993,6 +3044,7 @@ function UploadComposer({
                 commercial.economy.premiumEconomyPublic
               }
               item={items[0]!}
+              showFixedPageChoices={Boolean(selectedTeam?.canControlFixedReaderPages)}
               duplicateInvalid={duplicateRejectedKey === items[0]!.clientKey}
               onChange={(next) => updateItem(items[0]!.clientKey, next)}
               thumbnailFile={thumbnailFiles[items[0]!.clientKey] ?? null}
@@ -3565,6 +3617,7 @@ function UploadComposer({
                           compact={false}
                           showCommerce={false}
                           item={item}
+                          showFixedPageChoices={Boolean(selectedTeam?.canControlFixedReaderPages)}
                           duplicateInvalid={
                             duplicateRejectedKey === item.clientKey
                           }

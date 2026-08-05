@@ -28,6 +28,31 @@ test("all database migrations apply cleanly with the production indexes", async 
   assert.ok(chapterColumns.includes("team_id"));
   assert.ok(chapterColumns.includes("credits_json"));
   assert.ok(chapterColumns.includes("release_notes"));
+  assert.ok(chapterColumns.includes("include_fixed_first_page"));
+  assert.ok(chapterColumns.includes("include_fixed_last_page"));
+
+  const teamColumns = database
+    .prepare("PRAGMA table_info(teams)")
+    .all()
+    .map((column) => column.name);
+  assert.ok(teamColumns.includes("can_control_fixed_reader_pages"));
+
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM teams").get().count, 3);
+  assert.deepEqual(
+    database.prepare("SELECT name FROM teams ORDER BY name").all().map((team) => team.name),
+    ["Black Kite", "Lumen House", "Oceana Team"],
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM chapters WHERE team_id IS NULL").get().count, 0);
+  assert.equal(
+    database
+      .prepare(`SELECT COUNT(*) AS count FROM teams t
+                 WHERE NOT EXISTS (SELECT 1 FROM chapters c WHERE c.team_id = t.id)`)
+      .get().count,
+    0,
+  );
+  assert.ok(database.prepare("SELECT COUNT(*) AS count FROM chapters WHERE version > 1").get().count >= 4);
+  assert.ok(database.prepare("SELECT COUNT(*) AS count FROM chapters WHERE access_type = 'FREE'").get().count > 0);
+  assert.ok(database.prepare("SELECT COUNT(*) AS count FROM chapters WHERE access_type = 'PAID'").get().count > 0);
 
   const commentColumns = database
     .prepare("PRAGMA table_info(discussion_comments)")

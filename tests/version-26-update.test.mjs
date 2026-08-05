@@ -48,7 +48,7 @@ test("discussion media compresses static images and only uses curated GIFs", asy
   assert.doesNotMatch(uploadMedia, /await response\.json\(\)/);
 });
 
-test("desktop discovery uses an expanded shortcut search and a wider dotless carousel", async () => {
+test("desktop discovery uses an expanded shortcut search and restored carousel progress", async () => {
   const [app, styles] = await Promise.all([
     read("components/nyascans/NyaScansApp.tsx"),
     read("app/globals.css"),
@@ -64,7 +64,8 @@ test("desktop discovery uses an expanded shortcut search and a wider dotless car
     /showNineCards \? "9" : showFiveCards \? "5" : "3"/,
   );
   assert.match(app, /<span>Search<\/span>\s*<kbd>Ctrl K<\/kbd>/);
-  assert.match(styles, /\.featured-slider-dots\s*\{[^}]*display:\s*none/s);
+  assert.match(app, /className="featured-slider-dots"/);
+  assert.match(styles, /\.featured-slider-dots\s*\{[^}]*display:\s*flex\s*!important/s);
   assert.match(styles, /\.header-search\s+kbd\s*\{/);
 });
 

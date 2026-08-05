@@ -62,6 +62,8 @@ export const uploadItemInputSchema = z
       .boolean()
       .default(true)
       .transform(() => true),
+    includeFixedFirstPage: z.boolean().default(true),
+    includeFixedLastPage: z.boolean().default(true),
     replacementChapterId: z
       .string()
       .trim()

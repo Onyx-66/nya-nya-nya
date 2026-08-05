@@ -40,7 +40,7 @@ async function readJson<T>(response: Response) {
   return payload;
 }
 
-export function EditorialManagementPanel() {
+export function EditorialManagementPanel({ mode = "editorial" }: { mode?: "editorial" | "sliders" }) {
   const [series, setSeries] = useState<EditorialSeries[]>([]);
   const [picks, setPicks] = useState<EditorialPick[]>([]);
   const [query, setQuery] = useState("");
@@ -167,7 +167,7 @@ export function EditorialManagementPanel() {
           sortOrder: (index + 1) * 10,
         })),
       );
-      setMessage("Homepage Editor’s Picks published.");
+      setMessage(mode === "sliders" ? "Homepage sliders saved." : "Homepage Editor’s Picks published.");
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -184,11 +184,10 @@ export function EditorialManagementPanel() {
       <header className="panel-header">
         <span><Sparkle size={20} /></span>
         <div>
-          <p>Homepage curation</p>
-          <h1>Editor&apos;s Picks</h1>
+          <p>{mode === "sliders" ? "Homepage presentation" : "Homepage curation"}</p>
+          <h1>{mode === "sliders" ? "Sliders" : "Editor’s Picks"}</h1>
           <span>
-            Select, describe, publish, and reorder the series shown in the
-            featured homepage carousel.
+            Add series, activate or deactivate each slide, and control the complete homepage carousel order.
           </span>
         </div>
         <button
@@ -197,7 +196,7 @@ export function EditorialManagementPanel() {
           disabled={saving}
           onClick={() => void save()}
         >
-          {saving ? "Publishing…" : "Publish carousel"}
+          {saving ? "Saving…" : mode === "sliders" ? "Save sliders" : "Publish carousel"}
         </button>
       </header>
 
@@ -234,7 +233,7 @@ export function EditorialManagementPanel() {
           disabled={!selectedSeriesId || picks.length >= 12}
           onClick={addPick}
         >
-          <Plus size={16} /> Add to carousel
+          <Plus size={16} /> Add slider
         </button>
       </div>
 
@@ -272,7 +271,7 @@ export function EditorialManagementPanel() {
                           })
                         }
                       />
-                      Published
+                      {mode === "sliders" ? "Active" : "Published"}
                     </label>
                   </header>
                   <label>
@@ -341,8 +340,8 @@ export function EditorialManagementPanel() {
       ) : (
         <div className="store-admin-empty">
           <Sparkle size={28} />
-          <strong>No Editor&apos;s Picks selected</strong>
-          <span>Add up to 12 published series, then publish the carousel.</span>
+          <strong>No sliders selected</strong>
+          <span>Add up to 12 published series, then save the slider list.</span>
         </div>
       )}
     </section>

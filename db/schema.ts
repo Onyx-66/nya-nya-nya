@@ -250,6 +250,11 @@ export const teams = sqliteTable(
     isArchived: integer("is_archived", { mode: "boolean" })
       .notNull()
       .default(false),
+    canControlFixedReaderPages: integer("can_control_fixed_reader_pages", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
     revision: integer("revision").notNull().default(1),
     createdAt,
     updatedAt,
@@ -1228,6 +1233,16 @@ export const chapters = sqliteTable(
     thumbnailKey: text("thumbnail_key"),
     visibility: text("visibility").notNull().default("PUBLIC"),
     commentsEnabled: integer("comments_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    includeFixedFirstPage: integer("include_fixed_first_page", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(true),
+    includeFixedLastPage: integer("include_fixed_last_page", {
+      mode: "boolean",
+    })
       .notNull()
       .default(true),
     revision: integer("revision").notNull().default(1),
@@ -2648,6 +2663,16 @@ export const uploadJobItems = sqliteTable(
     visibility: text("visibility").notNull().default("PUBLIC"),
     scheduledAt: text("scheduled_at"),
     commentsEnabled: integer("comments_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    includeFixedFirstPage: integer("include_fixed_first_page", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(true),
+    includeFixedLastPage: integer("include_fixed_last_page", {
+      mode: "boolean",
+    })
       .notNull()
       .default(true),
     status: text("status").notNull().default("DRAFT"),

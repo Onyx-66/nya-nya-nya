@@ -7,7 +7,9 @@ import {
   Books,
   UsersThree,
   CaretDown,
+  List,
   Medal,
+  SquaresFour,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
@@ -539,7 +541,10 @@ export function PublishingTeamsDirectory() {
       <section className="teams-directory-controls" aria-label="Team directory controls">
         <label><span className="sr-only">Search teams</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search teams" /></label>
         <label><span className="sr-only">Release language</span><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="">All languages</option>{languages.map((entry) => <option key={entry} value={entry}>{entry.toUpperCase()}</option>)}</select></label>
-        <div role="group" aria-label="Team list view"><button type="button" aria-pressed={view === "GRID"} onClick={() => setView("GRID")}>Grid</button><button type="button" aria-pressed={view === "LIST"} onClick={() => setView("LIST")}>List</button></div>
+        <div className="view-mode-toggle" role="group" aria-label="Team list view">
+          <button type="button" aria-label="Grid view" title="Grid view" aria-pressed={view === "GRID"} onClick={() => setView("GRID")}><SquaresFour size={18} /></button>
+          <button type="button" aria-label="List view" title="List view" aria-pressed={view === "LIST"} onClick={() => setView("LIST")}><List size={18} /></button>
+        </div>
       </section>
       {loading ? <div className="public-discovery-loading">Loading teams…</div> : error ? <div className="public-discovery-error" role="alert">{error}</div> : (
         <section className={`teams-directory-results is-${view.toLowerCase()}`} aria-label={`${filtered.length} publishing teams`}>
