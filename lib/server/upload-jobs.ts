@@ -93,8 +93,15 @@ export const createUploadJobSchema = z
   .object({
     kind: z.enum(["SINGLE", "BATCH"]),
     sourceType: z.enum(["DIRECT_IMAGES", "DIRECT_FOLDER"]),
+    sourceUrl: z
+      .string()
+      .url()
+      .max(1_000)
+      .refine((value) => ["drive.google.com", "docs.google.com"].includes(new URL(value).hostname), "Use a Google Drive folder or ZIP link.")
+      .nullable()
+      .default(null),
     seriesId: z.string().trim().min(3).max(120),
-    teamId: z.string().trim().min(3).max(120).nullable(),
+    teamId: z.string().trim().min(3).max(120),
     idempotencyKey: z.string().trim().min(12).max(160),
     items: z
       .array(uploadItemInputSchema)
@@ -107,13 +114,6 @@ export const createUploadJobSchema = z
         code: "custom",
         path: ["items"],
         message: "A single upload must contain exactly one chapter.",
-      });
-    }
-    if (value.kind === "BATCH" && !value.teamId) {
-      context.addIssue({
-        code: "custom",
-        path: ["teamId"],
-        message: "Choose a verified publishing team before creating a batch.",
       });
     }
     const paidPrices = new Set(
@@ -496,14 +496,6 @@ function expiredDraftAuthorization(actor: Actor, alias = "expired_job") {
        WHERE cleanup_actor.id = ?
          AND cleanup_actor.status = 'ACTIVE'
          AND (
-           cleanup_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-           OR EXISTS (
-             SELECT 1 FROM user_roles cleanup_role
-              WHERE cleanup_role.user_id = cleanup_actor.id
-                AND cleanup_role.role IN ('TEAM_LEADER', 'UPLOADER')
-           )
-         )
-         AND (
            ${alias}.user_id = cleanup_actor.id
            OR EXISTS (
              SELECT 1
@@ -514,7 +506,7 @@ function expiredDraftAuthorization(actor: Actor, alias = "expired_job") {
                 AND cleanup_membership.team_id = ${alias}.team_id
                 AND cleanup_membership.status = 'ACTIVE'
                 AND UPPER(cleanup_membership.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')
+                  ('OWNER', 'LEADER')
                 AND cleanup_team.is_archived = 0
                 AND cleanup_team.verification_status <> 'SUSPENDED'
            )
@@ -873,6 +865,7 @@ export async function requireUploadScope(
   }
 
   const administrator = isUploadAdmin(actor);
+  const owner = actor.roles.includes("OWNER");
   if (administrator) {
     const liveAdministrator = await db
       .prepare(
@@ -899,18 +892,6 @@ export async function requireUploadScope(
         "This account no longer has administrator upload access.",
       );
     }
-    if (!teamId) {
-      return {
-        seriesId: seriesRecord.id,
-        seriesSlug: seriesRecord.slug,
-        seriesTitle: seriesRecord.title,
-        teamId: null,
-        teamName: null,
-        canPublish: true,
-        uploadRequiresReview: false,
-        allowedLanguages: [],
-      };
-    }
   }
 
   if (!teamId) {
@@ -919,6 +900,25 @@ export async function requireUploadScope(
       "TEAM_SCOPE_REQUIRED",
       "Choose one of your active publishing teams.",
     );
+  }
+  if (owner) {
+    const selectedTeam = await db.prepare(
+      `SELECT id AS teamId, name AS teamName
+         FROM teams
+        WHERE id = ? AND is_archived = 0 AND verification_status = 'VERIFIED'
+        LIMIT 1`,
+    ).bind(teamId).first<{ teamId: string; teamName: string }>();
+    if (!selectedTeam) throw new ApiError(403, "VERIFIED_TEAM_REQUIRED", "Choose an active verified publishing team.");
+    return {
+      seriesId: seriesRecord.id,
+      seriesSlug: seriesRecord.slug,
+      seriesTitle: seriesRecord.title,
+      teamId: selectedTeam.teamId,
+      teamName: selectedTeam.teamName,
+      canPublish: true,
+      uploadRequiresReview: false,
+      allowedLanguages: [],
+    };
   }
   const membership = await db
     .prepare(
@@ -935,7 +935,7 @@ export async function requireUploadScope(
           AND tm.status = 'ACTIVE'
           AND live_actor.status = 'ACTIVE'
           AND UPPER(tm.membership_role) IN
-            ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+            ('OWNER', 'LEADER', 'UPLOADER')
           AND t.is_archived = 0
           AND t.verification_status = 'VERIFIED'
         LIMIT 1`,
@@ -959,7 +959,7 @@ export async function requireUploadScope(
       [actor.primaryRole, ...(actor.roles ?? [])],
       "chapter.publish.assigned",
     ) &&
-      ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
+      ["OWNER", "LEADER"].includes(
         membership.membershipRole,
       ));
   return {
@@ -976,6 +976,7 @@ export async function requireUploadScope(
 
 export function requireUploadCapability(actor: Actor) {
   if (
+    actor.uploadTeamIds.length === 0 &&
     !canAny(
       [actor.primaryRole, ...(actor.roles ?? [])],
       "upload.create",

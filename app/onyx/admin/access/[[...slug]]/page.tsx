@@ -67,7 +67,11 @@ export default async function AdminPage({ params }: AdminPageProps) {
     ["OWNER", "ADMINISTRATOR"].includes(role),
   );
   const manager = actor.roles.includes("MANAGER");
-  const managerSections = new Set(["new-series-queue", "support-tickets"]);
+  const managerSections = new Set([
+    "new-series-queue",
+    "support-tickets",
+    "access-decisions",
+  ]);
   if (
     !fullAdministrator &&
     (!manager || (slug?.[0] && !managerSections.has(slug[0])))

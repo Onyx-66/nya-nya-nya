@@ -225,7 +225,7 @@ test("Store offers are deterministic from the lowest price upward", async () => 
   );
   assert.match(
     products,
-    /publicCosmeticCurrencyClause[\s\S]+si\.price_currency = 'SHARDS'/u,
+    /publicCosmeticCurrencyClause = lockAndPayVisible[\s\S]+\? "1 = 1"[\s\S]+: "1 = 0"/u,
   );
   assert.match(
     products,

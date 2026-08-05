@@ -246,6 +246,20 @@
       "when": 1785892312898,
       "tag": "0034_kind_longshot",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1785897479103,
+      "tag": "0035_slim_giant_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1785905811907,
+      "tag": "0036_wise_ego",
+      "breakpoints": true
     }
   ]
 }

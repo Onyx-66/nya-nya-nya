@@ -38,6 +38,7 @@ import {
   Lifebuoy,
   LockSimple,
   MagnifyingGlass,
+  Megaphone,
   Moon,
   Play,
   Plus,
@@ -55,6 +56,7 @@ import {
   Sun,
   Trash,
   Trophy,
+  Translate,
   UploadSimple,
   UserCircle,
   UsersThree,
@@ -78,6 +80,7 @@ import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
+import { FormattedAnnouncementText } from "@/components/nyascans/FormattedAnnouncementText";
 import { KeyboardShortcutsDialog } from "@/components/nyascans/KeyboardShortcutsDialog";
 import { SupportTicketPanel } from "@/components/nyascans/SupportTicketPanel";
 import { useSystemNotifications } from "@/components/nyascans/SystemNotifications";
@@ -775,12 +778,14 @@ function SiteHeader({
   theme,
   onTheme,
   onSearch,
+  lockAndPayVisible,
 }: {
   view: AppView;
   actor: Actor | null;
   theme: "dark" | "light";
   onTheme: () => void;
   onSearch: () => void;
+  lockAndPayVisible: boolean;
 }) {
   const elevated = elevatedDestination(actor);
   const canUpload = Boolean(actor?.canUseUploadCenter);
@@ -1008,7 +1013,9 @@ function SiteHeader({
       <div className="site-header-inner">
         <Logo />
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {navItems.map((item) => (
+          {navItems
+            .filter((item) => lockAndPayVisible || item.label !== "Store")
+            .map((item) => (
             <a
               key={item.label}
               href={item.href}
@@ -1375,16 +1382,31 @@ function SiteHeader({
   );
 }
 
-function MobileNav({ view, actor }: { view: AppView; actor: Actor | null }) {
+function MobileNav({
+  view,
+  actor,
+  lockAndPayVisible,
+}: {
+  view: AppView;
+  actor: Actor | null;
+  lockAndPayVisible: boolean;
+}) {
   const accountHref = actor
     ? "/account"
     : authEntryPath("login", "/account");
   const byLabel = new Map(navItems.map((item) => [item.label, item]));
   const mobileItems = ["Browse", "Library", "Home", "Store"]
     .map((label) => byLabel.get(label))
-    .filter((item): item is (typeof navItems)[number] => Boolean(item));
+    .filter(
+      (item): item is (typeof navItems)[number] =>
+        Boolean(item) && (lockAndPayVisible || item?.label !== "Store"),
+    );
   return (
-    <nav className="mobile-nav" aria-label="Mobile navigation">
+    <nav
+      className="mobile-nav"
+      aria-label="Mobile navigation"
+      data-count={mobileItems.length + 1}
+    >
       {mobileItems.map((item) => {
         const Icon = item.icon;
         return (
@@ -2092,6 +2114,7 @@ function LatestUpdatesGrid({
     "today" | "week"
   >("week");
   const [releaseLanguages, setReleaseLanguages] = useState<string[]>([]);
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
   const effectivePeriod =
     heading && !pagination ? homePeriod : period;
 
@@ -2113,6 +2136,7 @@ function LatestUpdatesGrid({
         const payload = (await response.json()) as {
           data?: LatestRelease[];
           pagination?: CatalogPagination;
+          availableLanguages?: string[];
           error?: { message?: string };
         };
         if (!response.ok) {
@@ -2127,6 +2151,7 @@ function LatestUpdatesGrid({
           setPageCount(payload.pagination?.pageCount ?? 1);
           setHasPrevious(Boolean(payload.pagination?.hasPrevious));
           setHasNext(Boolean(payload.pagination?.hasNext));
+          setAvailableLanguages(payload.availableLanguages ?? []);
         }
       } catch (loadError) {
         if (active && !controller.signal.aborted) {
@@ -2204,19 +2229,19 @@ function LatestUpdatesGrid({
               </button>
             </div>
             <details className="latest-language-filter">
-              <summary>
+              <summary aria-label={releaseLanguages.length ? `Languages: ${releaseLanguages.map(languageName).join(", ")}` : "Choose release languages"}>
                 {releaseLanguages.length ? (
                   releaseLanguages.map((language) => (
                     <LanguageFlag key={language} language={language} showCode={false} />
                   ))
                 ) : (
-                  <>Language <CaretDown size={14} /></>
+                  <><Translate size={18} /><span className="sr-only">Language</span></>
                 )}
               </summary>
               <div>
                 <strong>Release languages</strong>
                 <small>Select up to two.</small>
-                {["en", "ar", "fr", "es", "pt", "id", "ko", "ja", "zh"].map((language) => {
+                {availableLanguages.map((language) => {
                   const selected = releaseLanguages.includes(language);
                   return (
                     <label key={language}>
@@ -2728,59 +2753,6 @@ function CommunityHighlights() {
   );
 }
 
-function announcementIsActive(
-  settings: CommercialSettings["announcement"],
-) {
-  if (!settings.enabled) return false;
-  const now = Date.now();
-  const startsAt = settings.startsAt
-    ? new Date(settings.startsAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  const endsAt = settings.endsAt
-    ? new Date(settings.endsAt).getTime()
-    : Number.POSITIVE_INFINITY;
-  return now >= startsAt && now < endsAt;
-}
-
-function AnnouncementBanner({
-  settings,
-}: {
-  settings: CommercialSettings["announcement"];
-}) {
-  const storageKey = `nyascans:announcement:${settings.id}:${settings.resetKey}`;
-  const [dismissed, setDismissed] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDismissed(window.localStorage.getItem(storageKey) === "dismissed");
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [storageKey]);
-
-  if (dismissed !== false || !announcementIsActive(settings)) return null;
-
-  return (
-    <aside className="announcement" role="status">
-      <div className="announcement-inner">
-        {settings.label ? <span>{settings.label}</span> : null}
-        <p>{settings.text}</p>
-        <a href={settings.destinationUrl}>{settings.buttonLabel}</a>
-        <button
-          type="button"
-          aria-label="Dismiss announcement"
-          title="Dismiss announcement"
-          onClick={() => {
-            window.localStorage.setItem(storageKey, "dismissed");
-            setDismissed(true);
-          }}
-        >
-          <X size={16} />
-        </button>
-      </div>
-    </aside>
-  );
-}
-
 type ContinueReadingRecord = {
   seriesId: string;
   seriesSlug: string;
@@ -3075,6 +3047,7 @@ type EditorPick = {
   commentCount: number;
   genres: string[];
   alternativeTitles: string[];
+  href?: string;
 };
 
 function featuredAlternativeTitles(item: EditorPick) {
@@ -3137,13 +3110,37 @@ function FeaturedSeriesSlider() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/v1/editor-picks", {
+    void fetch("/api/v1/homepage-sliders", {
       signal: controller.signal,
       cache: "no-store",
     })
       .then(async (response) => {
-        const payload = (await response.json()) as { data?: EditorPick[] };
-        if (response.ok) setPicks(payload.data ?? []);
+        const payload = (await response.json()) as {
+          data?: Array<Partial<EditorPick> & { imageUrl?: string | null; href?: string; seriesSlug?: string | null }>;
+        };
+        if (response.ok) setPicks((payload.data ?? []).map((slide) => ({
+          id: String(slide.id),
+          seriesId: String(slide.seriesId ?? slide.id),
+          slug: String(slide.slug ?? slide.seriesSlug ?? "browse"),
+          title: String(slide.title ?? "Featured"),
+          nativeTitle: slide.nativeTitle ?? null,
+          type: String(slide.type ?? "SERIES"),
+          status: String(slide.status ?? "ONGOING"),
+          synopsis: String(slide.synopsis ?? slide.shortDescription ?? ""),
+          shortDescription: String(slide.shortDescription ?? ""),
+          categoryLabel: String(slide.categoryLabel ?? "Featured"),
+          cover: slide.imageUrl ?? slide.cover ?? null,
+          banner: slide.imageUrl ?? slide.banner ?? null,
+          slider: slide.imageUrl ?? slide.slider ?? null,
+          ratingTenths: Number(slide.ratingTenths ?? 0),
+          latestChapterSlug: slide.latestChapterSlug ?? null,
+          chapterCount: Number(slide.chapterCount ?? 0),
+          followerCount: Number(slide.followerCount ?? 0),
+          commentCount: Number(slide.commentCount ?? 0),
+          genres: slide.genres ?? [],
+          alternativeTitles: slide.alternativeTitles ?? [],
+          href: slide.href,
+        })));
       })
       .catch(() => {
         // A branded static fallback remains usable while editorial data recovers.
@@ -3309,7 +3306,7 @@ function FeaturedSeriesSlider() {
           ) : null}
           <a
             className="featured-main-card"
-            href={`/title/${item.slug}`}
+            href={item.href ?? `/title/${item.slug}`}
             key={item.id}
           >
             <FeaturedSliderArtwork item={item} main />
@@ -3724,16 +3721,23 @@ function HomeView({
   actor: Actor | null;
   showToast: (text: string) => void;
 }) {
-  const { settings: commercial } = useCommercialSettings();
+  const [promotions, setPromotions] = useState<{
+    announcements: Array<{ id: string; type: "UPDATE" | "ISSUE" | "SUPPORT" | "NOTICE"; title: string; body: string; linkLabel: string; linkUrl: string }>;
+    floatingAd: { id: string; eyebrow: string; title: string; body: string; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null;
+  }>({ announcements: [], floatingAd: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/home-promotions", { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((payload) => { if (payload && !controller.signal.aborted) setPromotions(payload as typeof promotions); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   return (
     <>
-      <AnnouncementBanner
-        key={`${commercial.announcement.id}:${commercial.announcement.resetKey}`}
-        settings={commercial.announcement}
-      />
-
-      <FloatingHomeAd />
+      <FloatingHomeAd campaign={promotions.floatingAd} />
 
       <FeaturedSeriesSlider />
 
@@ -3744,6 +3748,14 @@ function HomeView({
 
         <section className="updates-section">
           <div className="page-wrap">
+            {promotions.announcements.length ? (
+              <div className="v46-announcement-list" aria-label="Site announcements">
+                {promotions.announcements.map((announcement) => {
+                  const Icon = announcement.type === "UPDATE" ? Star : announcement.type === "ISSUE" ? WarningCircle : announcement.type === "SUPPORT" ? Lifebuoy : Bell;
+                  return <article key={announcement.id} data-type={announcement.type.toLowerCase()}><span><Icon size={20} weight="duotone" /></span><div><small>{announcement.type}</small><strong>{announcement.title}</strong><FormattedAnnouncementText body={announcement.body} /></div>{announcement.linkUrl ? <a href={announcement.linkUrl}>{announcement.linkLabel || "Learn more"}<ArrowRight size={15} /></a> : null}</article>;
+                })}
+              </div>
+            ) : null}
             <LatestUpdatesGrid />
           </div>
         </section>
@@ -3760,37 +3772,46 @@ function HomeView({
   );
 }
 
-function FloatingHomeAd() {
+function FloatingHomeAd({ campaign }: { campaign: { id: string; eyebrow: string; title: string; body: string; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null }) {
   const [open, setOpen] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const storageKey = campaign
+    ? `nyascans:floating-ad:${campaign.id}:${campaign.resetKey}`
+    : "";
+  const dismiss = useCallback(() => {
+    if (storageKey) window.localStorage.setItem(storageKey, "seen");
+    setOpen(false);
+  }, [storageKey]);
   useEffect(() => {
-    const key = "nyascans:home-release-ad:2026-08";
-    if (window.localStorage.getItem(key)) return;
+    if (!campaign) return;
+    if (window.localStorage.getItem(storageKey)) return;
     const timer = window.setTimeout(() => {
-      window.localStorage.setItem(key, "seen");
+      setImageFailed(false);
       setOpen(true);
     }, 450);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [campaign, storageKey]);
   useEffect(() => {
     if (!open) return;
     const close = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") dismiss();
     };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
-  }, [open]);
-  if (!open) return null;
+  }, [dismiss, open]);
+  if (!open || !campaign) return null;
   return (
-    <aside className="floating-home-ad" role="dialog" aria-modal="false" aria-label="Featured release">
-      <button type="button" onClick={() => setOpen(false)} aria-label="Close featured release">
+    <aside className="floating-home-ad v46-floating-home-ad" data-effect={campaign.effect.toLowerCase()} role="dialog" aria-modal="false" aria-label={campaign.title}>
+      <button type="button" onClick={dismiss} aria-label="Close featured release">
         <X size={18} />
       </button>
-      <a href="/browse?sort=latest">
-        <img src="/art/hero-onyx-archive.png" alt="Explore the newest NyaScans releases" />
+      <a href={campaign.destinationUrl || "/browse?sort=latest"}>
+        {campaign.imageUrl && !imageFailed ? <img src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} /> : <span className="floating-home-ad-placeholder"><ImageIcon size={32} weight="duotone" /></span>}
         <span>
-          <small>Official release spotlight</small>
-          <strong>Discover what just landed</strong>
-          <em>Open latest releases <ArrowRight size={16} /></em>
+          <small>{campaign.eyebrow}</small>
+          <strong>{campaign.title}</strong>
+          {campaign.body ? <p>{campaign.body}</p> : null}
+          <em>Open <ArrowRight size={16} /></em>
         </span>
       </a>
     </aside>
@@ -3850,6 +3871,53 @@ function CatalogCover({
       <Books size={compact ? 22 : 34} />
       <small>Cover pending</small>
     </span>
+  );
+}
+
+function CompactOptionMenu({
+  label,
+  value,
+  options,
+  onChange,
+  className = "",
+}: {
+  label: string;
+  value: string | number;
+  options: Array<{ value: string | number; label: string }>;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const currentLabel =
+    options.find((option) => String(option.value) === String(value))?.label ??
+    String(value);
+  return (
+    <details className={`compact-option-menu ${className}`.trim()}>
+      <summary aria-label={`${label}: ${currentLabel}`}>
+        <span>{label}</span>
+        <CaretDown size={13} />
+      </summary>
+      <div role="listbox" aria-label={`${label} options`}>
+        <small>Current: {currentLabel}</small>
+        {options.map((option) => {
+          const selected = String(option.value) === String(value);
+          return (
+            <button
+              type="button"
+              role="option"
+              aria-selected={selected}
+              key={String(option.value)}
+              onClick={(event) => {
+                onChange(String(option.value));
+                event.currentTarget.closest("details")?.removeAttribute("open");
+              }}
+            >
+              <span>{option.label}</span>
+              {selected ? <Check size={15} /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 
@@ -4089,21 +4157,18 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
             placeholder="Search title, genre, creator, or team"
           />
         </div>
-        <label>
-          <span>Format</span>
-          <select
-            value={type}
-            onChange={(event) =>
-              navigate({ type: event.target.value, page: 1 })
-            }
-          >
-            <option value="All">All formats</option>
-            <option value="MANHWA">Manhwa</option>
-            <option value="MANGA">Manga</option>
-            <option value="MANHUA">Manhua</option>
-          </select>
-          <CaretDown size={15} />
-        </label>
+        <CompactOptionMenu
+          label="Format"
+          value={type}
+          className="catalog-format-menu"
+          options={[
+            { value: "All", label: "All formats" },
+            { value: "MANHWA", label: "Manhwa" },
+            { value: "MANGA", label: "Manga" },
+            { value: "MANHUA", label: "Manhua" },
+          ]}
+          onChange={(value) => navigate({ type: value, page: 1 })}
+        />
         {premiumEconomyPublic ? (
           <label>
             <span>Access</span>
@@ -4133,42 +4198,27 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
 
       <div className="catalog-summary">
         <div>
-          <label className="catalog-sort-control">
-            Sort
-            <select
-              aria-label="Sort catalog"
-              value={sort}
-              onChange={(event) =>
-                navigate({ sort: event.target.value, page: 1 })
-              }
-            >
-              <option value="latest">Latest Update</option>
-              <option value="added">Recently Added</option>
-              <option value="viewed">Most Viewed</option>
-              <option value="followed">Most Followed</option>
-              <option value="rated">Highest Rated</option>
-              <option value="title">Alphabetical</option>
-            </select>
-          </label>
-          <label className="catalog-page-size-control">
-            Per page
-            <select
-              aria-label="Results per page"
-              value={pageSize}
-              onChange={(event) =>
-                navigate({
-                  pageSize: Number(event.target.value),
-                  page: 1,
-                })
-              }
-            >
-              {[16, 24, 32, 48].map((value) => (
-                <option value={value} key={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CompactOptionMenu
+            label="Sort"
+            value={sort}
+            className="catalog-sort-control"
+            options={[
+              { value: "latest", label: "Latest update" },
+              { value: "added", label: "Recently added" },
+              { value: "viewed", label: "Most viewed" },
+              { value: "followed", label: "Most followed" },
+              { value: "rated", label: "Highest rated" },
+              { value: "title", label: "Alphabetical" },
+            ]}
+            onChange={(value) => navigate({ sort: value, page: 1 })}
+          />
+          <CompactOptionMenu
+            label="Show"
+            value={pageSize}
+            className="catalog-page-size-control"
+            options={[16, 24, 32, 48].map((entry) => ({ value: entry, label: `${entry} results` }))}
+            onChange={(value) => navigate({ pageSize: Number(value), page: 1 })}
+          />
           <div className="view-mode-toggle" role="group" aria-label="Catalog view">
             <button
               type="button"
@@ -6142,11 +6192,21 @@ function TitleView({
     SeriesChapterAccess[]
   >([]);
   const [canUploadChapter, setCanUploadChapter] = useState(false);
+  const [uploadChooserOpen, setUploadChooserOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [seriesMetrics, setSeriesMetrics] = useState<CatalogResult | null>(
     null,
   );
   const reportTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!uploadChooserOpen) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setUploadChooserOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [uploadChooserOpen]);
 
   useEffect(() => {
     if (!slug) return;
@@ -6652,23 +6712,54 @@ function TitleView({
                   <span className="desktop-action-label">Language filter</span><span className="mobile-action-label">Language</span>
                 </summary>
                 <div>
-                  <button type="button" aria-pressed={!seriesReleaseLanguage} onClick={() => setSeriesReleaseLanguage("")}>All languages</button>
+                  <button
+                    type="button"
+                    aria-pressed={!seriesReleaseLanguage}
+                    onClick={(event) => {
+                      setSeriesReleaseLanguage("");
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  >
+                    All languages
+                  </button>
                   {seriesReleaseLanguages.map((language) => (
-                    <button type="button" key={language} aria-pressed={seriesReleaseLanguage === language} onClick={() => setSeriesReleaseLanguage(language)}>
+                    <button
+                      type="button"
+                      key={language}
+                      aria-pressed={seriesReleaseLanguage === language}
+                      onClick={(event) => {
+                        setSeriesReleaseLanguage(language);
+                        event.currentTarget.closest("details")?.removeAttribute("open");
+                      }}
+                    >
                       <LanguageFlag language={language} showCode={false} /> {languageName(language)}
                     </button>
                   ))}
                 </div>
               </details>
               {canUploadChapter ? (
-                <a
+                <button
+                  type="button"
                   className="button button-secondary chapter-upload-action"
-                  href={`/upload-chapter/single?series=${encodeURIComponent(publicDetail?.id ?? item.id)}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={uploadChooserOpen}
+                  onClick={() => setUploadChooserOpen(true)}
                 >
                   <CloudArrowUp size={17} /> Upload Chapter
-                </a>
+                </button>
               ) : null}
             </div>
+            {uploadChooserOpen ? (
+              <div className="v46-upload-chooser-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setUploadChooserOpen(false); }}>
+                <section className="v46-upload-chooser" role="dialog" aria-modal="true" aria-labelledby="upload-choice-title">
+                  <header><div><small>Upload center</small><h2 id="upload-choice-title">Choose an upload workflow</h2><p>Use a focused single-chapter studio or prepare several chapters together.</p></div><button type="button" aria-label="Close upload choices" onClick={() => setUploadChooserOpen(false)}><X size={20} /></button></header>
+                  <div>
+                    <a href={`/upload-chapter/single?series=${encodeURIComponent(publicDetail?.id ?? item.id)}`}><FileText size={25} /><span><strong>Single upload</strong><small>One chapter · images, ZIP, or Google Drive</small></span><ArrowRight /></a>
+                    <a href={`/upload-chapter/multi?series=${encodeURIComponent(publicDetail?.id ?? item.id)}`}><Books size={25} /><span><strong>Multi upload</strong><small>Several chapter folders or archives</small></span><ArrowRight /></a>
+                  </div>
+                </section>
+              </div>
+            ) : null}
             <div
               className={`chapter-group-list ${
                 allChapterDetailsCollapsed ? "is-compact" : "is-detailed"
@@ -8284,6 +8375,36 @@ function ReaderView({
     );
   }
 
+  const chapterReactionPrompt =
+    panelCount > 0 && chapterReactions.length ? (
+      <section className="chapter-reactions-box" aria-labelledby="chapter-reactions-title">
+        <div>
+          <p className="eyebrow">Reaction</p>
+          <h2 id="chapter-reactions-title">What do you think about this chapter?</h2>
+          <span>{actor ? "Choose one reaction." : "Sign in to react."}</span>
+        </div>
+        <div>
+          {chapterReactions.map((reaction) => (
+            <button
+              type="button"
+              key={reaction.id}
+              aria-pressed={reaction.selected}
+              disabled={Boolean(reactionBusy)}
+              onClick={() => void toggleChapterReaction(reaction.id)}
+            >
+              {reaction.imageUrl ? (
+                <img src={reaction.imageUrl} alt="" width={48} height={48} />
+              ) : (
+                <span aria-hidden="true">{reaction.emojiFallback || "♡"}</span>
+              )}
+              <strong>{reaction.name}</strong>
+              <small>{reaction.count}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+    ) : null;
+
   return (
     <main
       className={`reader-page reader-mode-${mode} reader-fit-${readerSettings.imageFit} reader-theme-${readerSettings.readerTheme} ${ui ? "reader-ui-visible" : "reader-ui-hidden"}`}
@@ -8600,27 +8721,6 @@ function ReaderView({
         ) : null}
       </section>
 
-      {panelCount > 0 && chapterReactions.length ? (
-        <section className="chapter-reactions-box" aria-labelledby="chapter-reactions-title">
-          <div><p className="eyebrow">Chapter reactions</p><h2 id="chapter-reactions-title">How did this chapter feel?</h2><span>{actor ? "Choose one reaction." : "Sign in to react."}</span></div>
-          <div>
-            {chapterReactions.map((reaction) => (
-              <button
-                type="button"
-                key={reaction.id}
-                aria-pressed={reaction.selected}
-                disabled={Boolean(reactionBusy)}
-                onClick={() => void toggleChapterReaction(reaction.id)}
-              >
-                {reaction.imageUrl ? <img src={reaction.imageUrl} alt="" width={48} height={48} /> : <span aria-hidden="true">{reaction.emojiFallback || "♡"}</span>}
-                <strong>{reaction.name}</strong>
-                <small>{reaction.count}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {panelCount > 0 ? (
         <section className="reader-chapter-complete" id="chapter-end">
           <div>
@@ -8856,14 +8956,13 @@ function ReaderView({
         ) : null}
       </nav>
 
-      {mode === "vertical" ? (
-        <>
-          <div className="reader-discussion">
+      <div className="reader-discussion">
             {readerContext?.chapter.commentsEnabled ? (
               <EnhancedDiscussionSection
                 actor={actor}
                 seriesSlug={routeSeriesSlug}
                 chapterSlug={routeChapterSlug}
+                reactionPrompt={chapterReactionPrompt}
                 showToast={showToast}
               />
             ) : (
@@ -8880,9 +8979,7 @@ function ReaderView({
             {routeSeriesSlug ? (
               <SeriesRecommendations seriesSlug={routeSeriesSlug} />
             ) : null}
-          </div>
-        </>
-      ) : null}
+      </div>
     </main>
   );
 }
@@ -10078,6 +10175,7 @@ function OperationsView({
           label: "Manager workspace",
           items: [
             ["New Series Queue", FileText],
+            ["Access decisions", LockSimple],
             ["Support tickets", Lifebuoy],
           ] as const,
         },
@@ -10094,6 +10192,7 @@ function OperationsView({
           ["Series", Books],
           ["Series Reports", WarningCircle],
           ["Chapter access", LockSimple],
+          ["Access decisions", WarningCircle],
           ["Teams", ShieldCheck],
         ] as const,
       },
@@ -10123,6 +10222,7 @@ function OperationsView({
           ["Analytics", ChartLineUp],
           ["Editorial", Star],
           ["Sliders", SlidersHorizontal],
+          ["Announcements & ads", Megaphone],
         ] as const,
       },
       {
@@ -10140,6 +10240,9 @@ function OperationsView({
         items: [
           ["Appearance", GearSix],
           ["Security", Key],
+          ...((actor.roles ?? [actor.role]).includes("OWNER")
+            ? ([["API Control", Key]] as const)
+            : []),
           ...((actor.roles ?? [actor.role]).includes("OWNER")
             ? ([["Audit log", FileText]] as const)
             : []),
@@ -11071,6 +11174,66 @@ function SiteFooter({
   );
 }
 
+function useAnchoredMenuDismissal() {
+  useEffect(() => {
+    const menuSelectors = [
+      ".latest-language-filter",
+      ".compact-language-menu",
+      ".compact-option-menu",
+      ".series-language-action",
+      ".ops-account-menu",
+    ];
+    const menuSelector = menuSelectors.join(",");
+    const openMenuSelector = menuSelectors
+      .map((selector) => `${selector}[open]`)
+      .join(",");
+    const closeMenus = (except?: HTMLDetailsElement | null) => {
+      document
+        .querySelectorAll<HTMLDetailsElement>(openMenuSelector)
+        .forEach((menu) => {
+          if (menu !== except) menu.removeAttribute("open");
+        });
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      document
+        .querySelectorAll<HTMLDetailsElement>(openMenuSelector)
+        .forEach((menu) => {
+          if (!menu.contains(target)) menu.removeAttribute("open");
+        });
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const openMenu = document.querySelector<HTMLDetailsElement>(
+        openMenuSelector,
+      );
+      if (!openMenu) return;
+      event.preventDefault();
+      openMenu.removeAttribute("open");
+      openMenu.querySelector<HTMLElement>("summary")?.focus();
+    };
+    const onToggle = (event: Event) => {
+      const menu = event.target;
+      if (
+        menu instanceof HTMLDetailsElement &&
+        menu.open &&
+        menu.matches(menuSelector)
+      ) {
+        closeMenus(menu);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("toggle", onToggle, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("toggle", onToggle, true);
+    };
+  }, []);
+}
+
 export function NyaScansApp({
   view,
   actor,
@@ -11084,11 +11247,15 @@ export function NyaScansApp({
   adminGate,
   operationPath,
 }: AppProps) {
+  useAnchoredMenuDismissal();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const navigationChordAt = useRef(0);
   const { settings: commercialSettings } = useCommercialSettings();
+  const lockAndPayVisible =
+    commercialSettings.economy.premiumEconomyPublic ||
+    Boolean(actor?.roles?.includes("OWNER") || actor?.role === "OWNER");
   const { notifyText } = useSystemNotifications();
   const showToast = useCallback(
     (message: string) => {
@@ -11235,6 +11402,7 @@ export function NyaScansApp({
           theme={theme}
           onTheme={toggleTheme}
           onSearch={() => setSearchOpen(true)}
+          lockAndPayVisible={lockAndPayVisible}
         />
         <OperationsView
           mode="dashboard"
@@ -11244,7 +11412,7 @@ export function NyaScansApp({
           initialUploadMode={uploadMode}
         />
         <SiteFooter onOpenShortcuts={() => setShortcutsOpen(true)} />
-        <MobileNav view={view} actor={actor} />
+        <MobileNav view={view} actor={actor} lockAndPayVisible={lockAndPayVisible} />
         {commonOverlays}
       </div>
     );
@@ -11289,6 +11457,16 @@ export function NyaScansApp({
       <BrowseView showToast={showToast} />
     ) : view === "library" ? (
       <LibraryView actor={actor} />
+    ) : ["store", "wallet", "orders"].includes(view) && !lockAndPayVisible ? (
+      <main className="page-main page-wrap lock-and-pay-private-view">
+        <section>
+          <ShieldCheck size={34} />
+          <p className="eyebrow">Free reading mode</p>
+          <h1>Every public release is free.</h1>
+          <p>Purchases, wallets, paid chapters, and payment history are private while Chapters Lock &amp; Pay is disabled.</p>
+          <a className="button button-primary" href="/browse">Browse free releases</a>
+        </section>
+      </main>
     ) : view === "store" ? (
       <StoreView
         actor={actor}
@@ -11346,10 +11524,11 @@ export function NyaScansApp({
         theme={theme}
         onTheme={toggleTheme}
         onSearch={() => setSearchOpen(true)}
+        lockAndPayVisible={lockAndPayVisible}
       />
       {mainContent}
       <SiteFooter onOpenShortcuts={() => setShortcutsOpen(true)} />
-      <MobileNav view={view} actor={actor} />
+      <MobileNav view={view} actor={actor} lockAndPayVisible={lockAndPayVisible} />
       {commonOverlays}
     </div>
   );

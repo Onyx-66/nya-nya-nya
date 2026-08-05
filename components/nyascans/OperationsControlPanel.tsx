@@ -53,6 +53,10 @@ import {
   type StoreAdminCategory,
 } from "@/components/nyascans/admin/StoreManagementWorkspace";
 import { TeamManagementPanel } from "@/components/nyascans/admin/TeamManagementPanel";
+import { SliderManagementPanel } from "@/components/nyascans/admin/SliderManagementPanel";
+import { HomePromotionsPanel } from "@/components/nyascans/admin/HomePromotionsPanel";
+import { ApiControlPanel } from "@/components/nyascans/admin/ApiControlPanel";
+import { ChapterAccessDecisionPanel } from "@/components/nyascans/admin/ChapterAccessDecisionPanel";
 import { UploadCenterWorkspace } from "@/components/nyascans/upload/UploadCenterWorkspace";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
@@ -1134,10 +1138,9 @@ export function TeamsManager() {
                 }
               }
             >
-              <option value="MANAGER">Manager</option>
+              <option value="OWNER">Owner</option>
+              <option value="LEADER">Leader</option>
               <option value="UPLOADER">Uploader</option>
-              <option value="EDITOR">Editor</option>
-              <option value="MEMBER">Member</option>
             </select>
           </label>
           <label>
@@ -2231,6 +2234,7 @@ function ReviewQueue({ admin }: { admin: boolean }) {
   async function transition(
     chapter: ReviewChapter,
     action: "SUBMIT" | "PUBLISH" | "RETURN",
+    approvalDecision?: "APPROVE" | "UNDER_SCOPE" | "REJECT",
   ) {
     const reason = window.prompt(
       action === "PUBLISH"
@@ -2255,6 +2259,7 @@ function ReviewQueue({ admin }: { admin: boolean }) {
           chapterId: chapter.id,
           expectedRevision: chapter.revision,
           action,
+          approvalDecision,
           reason,
         }),
       });
@@ -2354,6 +2359,12 @@ function ReviewQueue({ admin }: { admin: boolean }) {
                       >
                         Submit for review
                       </button>
+                    ) : admin ? (
+                      <>
+                        <button type="button" disabled={busy === chapter.id} onClick={() => void transition(chapter, "PUBLISH", "APPROVE")}>Approve uploader</button>
+                        <button type="button" disabled={busy === chapter.id} onClick={() => void transition(chapter, "PUBLISH", "UNDER_SCOPE")}>Approve · under scope</button>
+                        <button type="button" disabled={busy === chapter.id} onClick={() => void transition(chapter, "RETURN", "REJECT")}>Reject</button>
+                      </>
                     ) : (
                       <>
                         <button
@@ -4931,6 +4942,7 @@ export function OperationsControlPanel({
   }
   if (section === "New Series Queue") return <NewSeriesQueuePanel />;
   if (section === "Chapter access") return <ChapterAccessPanel />;
+  if (section === "Access decisions") return <ChapterAccessDecisionPanel />;
   if (section === "Teams") {
     return <TeamManagementPanel />;
   }
@@ -4975,7 +4987,9 @@ export function OperationsControlPanel({
     );
   }
   if (section === "Editorial") return <EditorialManagementPanel />;
-  if (section === "Sliders") return <EditorialManagementPanel mode="sliders" />;
+  if (section === "Sliders") return <SliderManagementPanel />;
+  if (section === "Announcements & ads") return <HomePromotionsPanel />;
+  if (section === "API Control") return <ApiControlPanel />;
   if (section === "Security") return <SecurityPanel />;
   if (section === "Audit log") {
     return <OwnerAuditLogPanel actorRole={actorRole} />;

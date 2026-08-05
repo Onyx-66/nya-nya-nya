@@ -220,7 +220,7 @@ test("V39 batch paid access has one global price and one explicit toggle per que
   assert.match(batchQueue, /disabled=\{busy \|\| !batchPaidEnabled\}/u);
   assert.match(batchQueue, /showCommerce=\{false\}/u);
   assert.doesNotMatch(batchQueue, />Availability</u);
-  assert.match(schema, /value\.kind === "BATCH" && !value\.teamId/u);
+  assert.match(schema, /teamId:\s*z\.string\(\)\.trim\(\)\.min\(3\)\.max\(120\)/u);
   assert.match(schema, /paidPrices\.size > 1/u);
   assert.match(schema, /UPDATE_BATCH_COMMERCE/u);
   assert.match(jobsRoute, /requirePaidEconomyPublic/u);

@@ -408,7 +408,7 @@ export function PublicTeamView({
 
       <div
         className="page-wrap public-team-tabs"
-        role="group"
+        role="tablist"
         aria-label={`${team.name} sections`}
       >
         {(
@@ -422,7 +422,11 @@ export function PublicTeamView({
           <button
             type="button"
             key={value}
-            aria-pressed={tab === value}
+            id={`public-team-${value}-tab`}
+            role="tab"
+            aria-selected={tab === value}
+            aria-controls={`public-team-${value}-panel`}
+            tabIndex={tab === value ? 0 : -1}
             onClick={() => setTab(value)}
           >
             <Icon size={17} aria-hidden="true" />
@@ -433,7 +437,7 @@ export function PublicTeamView({
 
       {tab === "info" ? (
         <>
-          <section className="content-section page-wrap public-team-info">
+          <section className="content-section page-wrap public-team-info" id="public-team-info-panel" role="tabpanel" aria-labelledby="public-team-info-tab">
             <article className="public-team-description-card">
               <p className="eyebrow">About the group</p>
               <h2>Group description</h2>
@@ -650,6 +654,8 @@ export function PublicTeamView({
         <section
           className="content-section page-wrap public-team-series"
           aria-labelledby="public-team-series-title"
+          id="public-team-titles-panel"
+          role="tabpanel"
         >
           <div className="section-heading public-team-series-heading">
             <div>
@@ -681,6 +687,8 @@ export function PublicTeamView({
         <section
           className="content-section page-wrap public-team-members"
           aria-labelledby="public-team-members-title"
+          id="public-team-members-panel"
+          role="tabpanel"
         >
           <div className="section-heading">
             <div>
@@ -732,7 +740,7 @@ export function PublicTeamView({
       ) : null}
 
       {tab === "discussion" ? (
-        <div className="content-section page-wrap">
+        <div className="content-section page-wrap" id="public-team-discussion-panel" role="tabpanel" aria-labelledby="public-team-discussion-tab">
           <TeamDiscussionPanel
             teamSlug={team.slug}
             teamName={team.name}

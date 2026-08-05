@@ -56,6 +56,7 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
   )`;
   if (isUploadAdmin(actor)) {
+    const owner = actor.roles.includes("OWNER");
     return {
       sql: `EXISTS (
         SELECT 1
@@ -73,7 +74,7 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
       )
       AND ${seriesIsEligible}
       AND (
-        ${alias}.team_id IS NULL
+        ? = 1
         OR EXISTS (
           SELECT 1
             FROM team_memberships live_membership
@@ -82,12 +83,12 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
              AND live_membership.team_id = ${alias}.team_id
              AND live_membership.status = 'ACTIVE'
              AND UPPER(live_membership.membership_role) IN
-               ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+               ('OWNER', 'LEADER', 'UPLOADER')
              AND live_team.is_archived = 0
              AND live_team.verification_status = 'VERIFIED'
         )
       )`,
-      bindings: [actor.id, actor.id] as unknown[],
+      bindings: [actor.id, owner ? 1 : 0, actor.id] as unknown[],
     };
   }
   return {
@@ -100,17 +101,9 @@ function liveMutationAuthorization(actor: Actor, alias = "upload_jobs") {
         JOIN teams live_team ON live_team.id = live_membership.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
-         AND (
-           live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-           OR EXISTS (
-             SELECT 1 FROM user_roles live_role
-              WHERE live_role.user_id = live_actor.id
-                AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
-           )
-         )
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
-           ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+           ('OWNER', 'LEADER', 'UPLOADER')
          AND live_team.is_archived = 0
          AND live_team.verification_status = 'VERIFIED'
     )

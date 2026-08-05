@@ -7,13 +7,16 @@ import {
   Books,
   UsersThree,
   CaretDown,
+  Check,
   List,
   Medal,
   SquaresFour,
+  Translate,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
+import { languageName } from "@/lib/language-flags";
 
 type NewSeriesRecord = {
   id: string;
@@ -121,10 +124,12 @@ function PublishingTeamCard({
   active,
   index,
   record,
+  variant = "carousel",
 }: {
   active: boolean;
   index: number;
   record: PublicTeamRecord;
+  variant?: "carousel" | "directory";
 }) {
   const [failedBannerUrl, setFailedBannerUrl] = useState<string | null>(null);
   const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
@@ -137,7 +142,7 @@ function PublishingTeamCard({
 
   return (
     <article
-      className="team-carousel-card"
+      className={`team-carousel-card ${variant === "directory" ? "team-directory-card" : ""}`}
       data-active={active ? "true" : "false"}
       data-team-index={index}
     >
@@ -409,6 +414,9 @@ export function PublishingTeamsCarousel() {
     window.requestAnimationFrame(() => {
       railRef.current?.scrollTo({ left: 0, behavior: "smooth" });
     });
+    document
+      .querySelector(".public-teams .compact-language-menu[open]")
+      ?.removeAttribute("open");
   }
 
   if (!loading && !error && records.length === 0) return null;
@@ -424,16 +432,16 @@ export function PublishingTeamsCarousel() {
           <p>Discover our publishing teams</p>
         </div>
         <div className="teams-heading-actions">
-          <details>
-            <summary>
-              {language ? <LanguageFlag language={language} showCode={false} /> : "Language"}
-              <CaretDown size={14} />
+          <details className="compact-language-menu">
+            <summary aria-label={language ? `Language: ${languageName(language)}` : "Choose team language"}>
+              {language ? <LanguageFlag language={language} showCode={false} /> : <Translate size={18} />}
+              <CaretDown size={12} />
             </summary>
             <div>
-              <button type="button" aria-pressed={!language} onClick={() => selectLanguage("")}>All languages</button>
+              <button type="button" aria-pressed={!language} onClick={() => selectLanguage("")}><span>All languages</span>{!language ? <Check size={15} /> : null}</button>
               {[...new Set(records.flatMap((record) => record.releaseLanguages))].sort().map((entry) => (
                 <button type="button" key={entry} aria-pressed={language === entry} onClick={() => selectLanguage(entry)}>
-                  <LanguageFlag language={entry} showCode={false} /> {entry.toUpperCase()}
+                  <LanguageFlag language={entry} showCode={false} /> <span>{languageName(entry)}</span>{language === entry ? <Check size={15} /> : null}
                 </button>
               ))}
             </div>
@@ -540,7 +548,16 @@ export function PublishingTeamsDirectory() {
       </header>
       <section className="teams-directory-controls" aria-label="Team directory controls">
         <label><span className="sr-only">Search teams</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search teams" /></label>
-        <label><span className="sr-only">Release language</span><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="">All languages</option>{languages.map((entry) => <option key={entry} value={entry}>{entry.toUpperCase()}</option>)}</select></label>
+        <details className="compact-language-menu teams-directory-language">
+          <summary aria-label={language ? `Language: ${languageName(language)}` : "Choose release language"}>
+            {language ? <LanguageFlag language={language} showCode={false} /> : <Translate size={19} />}
+            <CaretDown size={12} />
+          </summary>
+          <div>
+            <button type="button" aria-pressed={!language} onClick={(event) => { setLanguage(""); event.currentTarget.closest("details")?.removeAttribute("open"); }}><span>All languages</span>{!language ? <Check size={15} /> : null}</button>
+            {languages.map((entry) => <button type="button" key={entry} aria-pressed={language === entry} onClick={(event) => { setLanguage(entry); event.currentTarget.closest("details")?.removeAttribute("open"); }}><LanguageFlag language={entry} showCode={false} /><span>{languageName(entry)}</span>{language === entry ? <Check size={15} /> : null}</button>)}
+          </div>
+        </details>
         <div className="view-mode-toggle" role="group" aria-label="Team list view">
           <button type="button" aria-label="Grid view" title="Grid view" aria-pressed={view === "GRID"} onClick={() => setView("GRID")}><SquaresFour size={18} /></button>
           <button type="button" aria-label="List view" title="List view" aria-pressed={view === "LIST"} onClick={() => setView("LIST")}><List size={18} /></button>
@@ -548,7 +565,7 @@ export function PublishingTeamsDirectory() {
       </section>
       {loading ? <div className="public-discovery-loading">Loading teams…</div> : error ? <div className="public-discovery-error" role="alert">{error}</div> : (
         <section className={`teams-directory-results is-${view.toLowerCase()}`} aria-label={`${filtered.length} publishing teams`}>
-          {filtered.map((record, index) => <PublishingTeamCard key={record.id} record={record} index={index} active />)}
+          {filtered.map((record, index) => <PublishingTeamCard key={record.id} record={record} index={index} active variant="directory" />)}
         </section>
       )}
     </main>

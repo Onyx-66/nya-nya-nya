@@ -318,7 +318,7 @@ export async function getActor(): Promise<Actor | null> {
   const memberships = membershipRows.results as MembershipRow[];
   const managedTeamIds = memberships
     .filter((membership) =>
-      ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
+      ["OWNER", "LEADER"].includes(
         membership.membership_role.toUpperCase(),
       ),
     )
@@ -327,7 +327,7 @@ export async function getActor(): Promise<Actor | null> {
     .filter(
       (membership) =>
         Boolean(membership.can_request_series) ||
-        ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
+        ["OWNER", "LEADER"].includes(
           membership.membership_role.toUpperCase(),
         ),
     )
@@ -335,20 +335,15 @@ export async function getActor(): Promise<Actor | null> {
   const administrator =
     roles.includes(ROLES.OWNER) ||
     roles.includes(ROLES.ADMINISTRATOR);
-  const uploadTeamIds =
-    administrator ||
-    roles.includes(ROLES.TEAM_LEADER) ||
-    roles.includes(ROLES.UPLOADER)
-      ? memberships
-          .filter(
-            (membership) =>
-              membership.verification_status === "VERIFIED" &&
-              ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER"].includes(
-                membership.membership_role.toUpperCase(),
-              ),
-          )
-          .map((membership) => membership.team_id)
-      : [];
+  const uploadTeamIds = memberships
+    .filter(
+      (membership) =>
+        membership.verification_status === "VERIFIED" &&
+        ["OWNER", "LEADER", "UPLOADER"].includes(
+          membership.membership_role.toUpperCase(),
+        ),
+    )
+    .map((membership) => membership.team_id);
 
   return {
     id: row.id,
@@ -375,6 +370,9 @@ export async function requireActor(capability?: string): Promise<Actor> {
   const actor = await getActor();
   if (!actor) {
     throw new ApiError(401, "AUTHENTICATION_REQUIRED", "Sign in to continue.");
+  }
+  if (capability === "upload.create" && actor.uploadTeamIds.length > 0) {
+    return actor;
   }
   if (capability) assertAnyCapability(actor.roles, capability);
   return actor;

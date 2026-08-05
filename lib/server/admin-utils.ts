@@ -207,6 +207,21 @@ export const safeRasterTypes = new Set([
   "image/gif",
 ]);
 
+export function normalizedDeclaredRasterType(value: string) {
+  const normalized = value.trim().toLowerCase().split(";", 1)[0] ?? "";
+  if (normalized === "image/jpg" || normalized === "image/pjpeg") {
+    return "image/jpeg";
+  }
+  if (normalized === "image/x-png") return "image/png";
+  if (
+    normalized === "application/octet-stream" ||
+    normalized === "binary/octet-stream"
+  ) {
+    return "";
+  }
+  return normalized;
+}
+
 export function detectedRasterType(bytes: Uint8Array) {
   if (
     bytes.length >= 3 &&
@@ -264,6 +279,20 @@ export function rasterDimensions(bytes: Uint8Array, contentType: string) {
         continue;
       }
       const marker = bytes[offset + 1]!;
+      if (marker === 0xff) {
+        offset += 1;
+        continue;
+      }
+      if (
+        marker === 0xd8 ||
+        marker === 0xd9 ||
+        marker === 0x01 ||
+        (marker >= 0xd0 && marker <= 0xd7)
+      ) {
+        offset += 2;
+        continue;
+      }
+      if (marker === 0xda) break;
       const length = (bytes[offset + 2]! << 8) + bytes[offset + 3]!;
       if (
         [
@@ -367,7 +396,11 @@ export async function validateImageFile(file: File, rule: ImageRule) {
       `Use a verified JPEG, PNG, WebP, or GIF ${rule.label}.`,
     );
   }
-  if (file.type && file.type !== contentType) {
+  if (
+    file.type &&
+    normalizedDeclaredRasterType(file.type) &&
+    normalizedDeclaredRasterType(file.type) !== contentType
+  ) {
     throw new ApiError(
       415,
       "IMAGE_SIGNATURE_MISMATCH",
@@ -412,9 +445,14 @@ export async function validateImageFile(file: File, rule: ImageRule) {
 }
 
 export async function sha256Hex(bytes: Uint8Array) {
-  const ownedBytes = Uint8Array.from(bytes);
+  const source =
+    bytes.buffer instanceof ArrayBuffer &&
+    bytes.byteOffset === 0 &&
+    bytes.byteLength === bytes.buffer.byteLength
+      ? bytes.buffer
+      : Uint8Array.from(bytes).buffer;
   const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", ownedBytes.buffer),
+    await crypto.subtle.digest("SHA-256", source),
   );
   return [...digest]
     .map((value) => value.toString(16).padStart(2, "0"))

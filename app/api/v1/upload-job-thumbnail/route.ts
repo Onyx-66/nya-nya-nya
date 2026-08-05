@@ -49,44 +49,13 @@ function liveThumbnailAuthorization(alias: string) {
      WHERE live_actor.id = ?
        AND live_actor.status = 'ACTIVE'
        AND (
-         (
-           (
-             live_actor.primary_role IN ('OWNER', 'ADMINISTRATOR')
-             OR EXISTS (
-               SELECT 1
-                 FROM user_roles live_admin_role
-                WHERE live_admin_role.user_id = live_actor.id
-                  AND live_admin_role.role IN ('OWNER', 'ADMINISTRATOR')
-             )
-           )
-           AND (
-             ${alias}.team_id IS NULL
-             OR EXISTS (
-               SELECT 1
-                 FROM team_memberships live_admin_membership
-                 JOIN teams live_admin_team
-                   ON live_admin_team.id = live_admin_membership.team_id
-                WHERE live_admin_membership.user_id = live_actor.id
-                  AND live_admin_membership.team_id = ${alias}.team_id
-                  AND live_admin_membership.status = 'ACTIVE'
-                  AND UPPER(live_admin_membership.membership_role) IN
-                    ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
-                  AND live_admin_team.is_archived = 0
-                  AND live_admin_team.verification_status = 'VERIFIED'
-             )
-           )
+         live_actor.primary_role = 'OWNER'
+         OR EXISTS (
+           SELECT 1 FROM user_roles live_owner_role
+            WHERE live_owner_role.user_id = live_actor.id
+              AND live_owner_role.role = 'OWNER'
          )
-         OR (
-           (
-             live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-             OR EXISTS (
-               SELECT 1
-                 FROM user_roles live_upload_role
-                WHERE live_upload_role.user_id = live_actor.id
-                  AND live_upload_role.role IN ('TEAM_LEADER', 'UPLOADER')
-             )
-           )
-           AND EXISTS (
+         OR EXISTS (
              SELECT 1
                FROM team_memberships live_membership
                JOIN teams live_team
@@ -95,15 +64,14 @@ function liveThumbnailAuthorization(alias: string) {
               WHERE live_membership.team_id = ${alias}.team_id
                 AND live_membership.status = 'ACTIVE'
                 AND UPPER(live_membership.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+                  ('OWNER', 'LEADER', 'UPLOADER')
                 AND (
                   ${alias}.user_id = live_actor.id
                   OR UPPER(live_membership.membership_role) IN
-                    ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')
+                    ('OWNER', 'LEADER')
                 )
                 AND live_team.is_archived = 0
                 AND live_team.verification_status = 'VERIFIED'
-           )
          )
        )
   )

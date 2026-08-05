@@ -299,13 +299,20 @@ test("V34 role capabilities and server guards honor every assigned role", async 
     /action === "ATTACH_EXISTING" && capabilities\.canAttachExisting/u,
   );
   for (const source of [uploadJobs, uploadFiles, chapterManagement]) {
-    assert.match(source, /FROM user_roles live_role/u);
+    assert.match(source, /team_memberships live_membership/u);
     assert.match(
+      source,
+      /\('OWNER', 'LEADER', 'UPLOADER'\)/u,
+    );
+    assert.doesNotMatch(
       source,
       /live_actor\.primary_role IN \('TEAM_LEADER', 'UPLOADER'\)/u,
     );
   }
-  assert.match(chapterManagement, /chapter\.publish\.assigned/u);
+  assert.match(
+    chapterManagement,
+    /const leader = \["OWNER", "LEADER"\]\.includes\(membership\.membershipRole\)/u,
+  );
 });
 
 test("V34 public chapter thumbnails accept only canonical public rights states", async () => {
@@ -323,8 +330,7 @@ test("V34 public chapter thumbnails accept only canonical public rights states",
   assert.match(route, /datetime\(c\.published_at\) <= datetime\('now'\)/u);
 
   assert.match(uploadRoute, /function liveThumbnailAuthorization/u);
-  assert.match(uploadRoute, /FROM user_roles live_admin_role/u);
-  assert.match(uploadRoute, /FROM user_roles live_upload_role/u);
+  assert.match(uploadRoute, /FROM user_roles live_owner_role/u);
   assert.match(uploadRoute, /FROM team_memberships live_membership/u);
   assert.match(
     uploadRoute,
@@ -334,7 +340,7 @@ test("V34 public chapter thumbnails accept only canonical public rights states",
   assert.doesNotMatch(uploadRoute, /live_assignment/u);
   assert.match(
     uploadRoute,
-    /live_membership\.membership_role\) IN\s+\('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER'\)/u,
+    /live_membership\.membership_role\) IN\s+\('OWNER', 'LEADER', 'UPLOADER'\)/u,
   );
   assert.match(
     uploadRoute,

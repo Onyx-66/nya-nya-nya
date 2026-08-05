@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import { canAny } from "@/lib/permissions.mjs";
 import { ApiError } from "@/lib/server/api";
 import type { Actor } from "@/lib/server/policy";
 
@@ -64,32 +63,16 @@ export function chapterManagementAuthorizationClause(
         JOIN teams live_team ON live_team.id = live_membership.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
-         AND (
-           live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-           OR EXISTS (
-             SELECT 1 FROM user_roles live_role
-              WHERE live_role.user_id = live_actor.id
-                AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
-           )
-         )
          AND live_membership.team_id = ${chapterAlias}.team_id
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
-           ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+           ('OWNER', 'LEADER', 'UPLOADER')
          AND live_team.is_archived = 0
          AND live_team.verification_status = 'VERIFIED'
          ${
            input.requirePublish
-             ? `AND (
-                  live_actor.primary_role = 'TEAM_LEADER'
-                  OR EXISTS (
-                    SELECT 1 FROM user_roles live_publish_role
-                     WHERE live_publish_role.user_id = live_actor.id
-                       AND live_publish_role.role = 'TEAM_LEADER'
-                  )
-                )
-                AND UPPER(live_membership.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')`
+             ? `AND UPPER(live_membership.membership_role) IN
+                  ('OWNER', 'LEADER')`
              : ""
          }
     )`,
@@ -100,8 +83,6 @@ export function chapterManagementAuthorizationClause(
 type ManagementMembershipRole =
   | "OWNER"
   | "LEADER"
-  | "TEAM_LEADER"
-  | "MANAGER"
   | "UPLOADER";
 
 export async function requireChapterManagementScope(
@@ -116,7 +97,6 @@ export async function requireChapterManagementScope(
       "Chapter management is temporarily unavailable.",
     );
   }
-  const roles = actorRoles(actor);
   const administrator = isChapterAdministrator(actor);
   if (administrator) {
     const authorization = chapterManagementAuthorizationClause(actor, {
@@ -154,14 +134,6 @@ export async function requireChapterManagementScope(
     };
   }
 
-  if (!canAny(roles, "upload.create")) {
-    throw new ApiError(
-      403,
-      "CHAPTER_MANAGEMENT_FORBIDDEN",
-      "You are not allowed to manage this release.",
-    );
-  }
-
   const membership = await env.DB.prepare(
     `SELECT c.team_id AS teamId,
             UPPER(tm.membership_role) AS membershipRole
@@ -178,16 +150,8 @@ export async function requireChapterManagementScope(
         AND c.team_id IS NOT NULL
         AND tm.status = 'ACTIVE'
         AND live_actor.status = 'ACTIVE'
-        AND (
-          live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-          OR EXISTS (
-            SELECT 1 FROM user_roles live_role
-             WHERE live_role.user_id = live_actor.id
-               AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
-          )
-        )
         AND UPPER(tm.membership_role) IN
-          ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+          ('OWNER', 'LEADER', 'UPLOADER')
         AND t.is_archived = 0
         AND t.verification_status = 'VERIFIED'
       LIMIT 1`,
@@ -205,11 +169,7 @@ export async function requireChapterManagementScope(
     );
   }
 
-  const leader =
-    canAny(roles, "chapter.publish.assigned") &&
-    ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
-      membership.membershipRole,
-    );
+  const leader = ["OWNER", "LEADER"].includes(membership.membershipRole);
   return {
     actorId: actor.id,
     actorRole: actor.primaryRole,

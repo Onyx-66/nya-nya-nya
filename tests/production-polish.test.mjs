@@ -84,7 +84,7 @@ test("browse is database paginated and owns its URL history state", async () => 
   assert.match(app, /window\.history\[replace \? "replaceState" : "pushState"\]/);
   assert.match(app, /window\.addEventListener\("popstate"/);
   assert.match(app, /catalog-pagination/);
-  assert.match(app, /Per page/);
+  assert.match(app, /label="Show"/);
   assert.doesNotMatch(
     app.slice(app.indexOf("function BrowseView"), app.indexOf("function LibraryView")),
     /demoSeries\.filter/,

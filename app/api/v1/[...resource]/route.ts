@@ -327,21 +327,7 @@ const editorPickWriteSchema = z.object({
 const teamMembershipWriteSchema = z.object({
   teamId: z.string().trim().min(3).max(120),
   userId: z.string().trim().min(3).max(120),
-  membershipRole: z.enum([
-    "OWNER",
-    "LEADER",
-    "TEAM_LEADER",
-    "MANAGER",
-    "UPLOADER",
-    "TRANSLATOR",
-    "EDITOR",
-    "CLEANER",
-    "REDRAWER",
-    "TYPESETTER",
-    "PROOFREADER",
-    "QUALITY_CONTROL",
-    "MEMBER",
-  ]),
+  membershipRole: z.enum(["OWNER", "LEADER", "UPLOADER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   expectedRevision: z.coerce.number().int().min(1).nullable().optional(),
 });
@@ -369,8 +355,66 @@ const workspaceReviewSchema = z.object({
   chapterId: z.string().trim().min(3).max(120),
   expectedRevision: z.coerce.number().int().min(1),
   action: z.enum(["SUBMIT", "PUBLISH", "RETURN"]),
+  approvalDecision: z.enum(["APPROVE", "UNDER_SCOPE", "REJECT"]).optional(),
   reason: z.string().trim().min(8).max(500),
 });
+
+function uploaderReviewDecisionStatements(
+  db: D1Database,
+  input: {
+    decision: "APPROVE" | "UNDER_SCOPE" | "REJECT";
+    jobId: string;
+    uploaderUserId: string;
+    expectedApprovalRevision: number | null;
+    reviewerUserId: string;
+    note: string;
+  },
+) {
+  const approvalStatus =
+    input.decision === "APPROVE"
+      ? "APPROVED"
+      : input.decision === "UNDER_SCOPE"
+        ? "UNDER_SCOPE"
+        : "REJECTED";
+  return [
+    db.prepare(
+      `INSERT INTO uploader_approvals
+       (user_id, status, reviewed_by_user_id, reviewed_at, note)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         status = excluded.status,
+         reviewed_by_user_id = excluded.reviewed_by_user_id,
+         reviewed_at = excluded.reviewed_at,
+         note = excluded.note,
+         revision = uploader_approvals.revision + 1,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE uploader_approvals.revision = ?`,
+    ).bind(
+      input.uploaderUserId,
+      approvalStatus,
+      input.reviewerUserId,
+      input.note,
+      input.expectedApprovalRevision,
+    ),
+    db.prepare(
+      `UPDATE upload_publish_guards
+          SET verified = CASE WHEN changes() = 1 THEN 1 ELSE 0 END
+        WHERE job_id = ?`,
+    ).bind(input.jobId),
+    db.prepare(
+      `INSERT INTO upload_review_events
+       (id, job_id, uploader_user_id, reviewer_user_id, decision, note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      randomId(),
+      input.jobId,
+      input.uploaderUserId,
+      input.reviewerUserId,
+      input.decision,
+      input.note,
+    ),
+  ];
+}
 
 const adminChapterAccessSchema = z
   .object({
@@ -2296,6 +2340,16 @@ export async function GET(request: Request, context: RouteContext) {
         ? `AND LOWER(c.language) IN (${languagePlaceholders})`
         : "";
       const viewer = await getActor().catch(() => null);
+      const commercialDocument = await getCommercialSettingsDocument();
+      const premiumEconomyVisible =
+        commercialDocument.settings.economy.premiumEconomyPublic ||
+        Boolean(viewer?.roles.includes("OWNER"));
+      const newestPaidPredicate = premiumEconomyVisible
+        ? ""
+        : "AND newest.access_type = 'FREE'";
+      const chapterPaidPredicate = premiumEconomyVisible
+        ? ""
+        : "AND c.access_type = 'FREE'";
       const seriesPeriodPredicate = {
         today: "AND date(newest.published_at) = date('now')",
         week:
@@ -2316,7 +2370,7 @@ export async function GET(request: Request, context: RouteContext) {
         month: "datetime(c.published_at) >= datetime('now', '-1 month')",
         all: "0",
       }[period];
-      const [seriesRows, totalRow] = await Promise.all([
+      const [seriesRows, totalRow, availableLanguageRows] = await Promise.all([
         env.DB.prepare(
           `SELECT s.id,
                   s.slug,
@@ -2335,6 +2389,7 @@ export async function GET(request: Request, context: RouteContext) {
                     AND newest.state = 'PUBLISHED'
                     AND newest.visibility = 'PUBLIC'
                     AND datetime(newest.published_at) <= datetime('now')
+                    ${newestPaidPredicate}
                     ${newestLanguagePredicate}
                     ${seriesPeriodPredicate}
                   ORDER BY datetime(newest.published_at) DESC,
@@ -2368,9 +2423,22 @@ export async function GET(request: Request, context: RouteContext) {
               AND c.state = 'PUBLISHED'
               AND c.visibility = 'PUBLIC'
               AND datetime(c.published_at) <= datetime('now')
+              ${chapterPaidPredicate}
               ${chapterLanguagePredicate}
               ${countPeriodPredicate}`,
         ).bind(...languages).first<{ count: number }>(),
+        env.DB.prepare(
+          `SELECT DISTINCT LOWER(c.language) AS language
+             FROM chapters c
+             JOIN series s ON s.id = c.series_id
+            WHERE ${publicSeriesPredicate("s")}
+              AND c.state = 'PUBLISHED'
+              AND c.visibility = 'PUBLIC'
+              AND datetime(c.published_at) <= datetime('now')
+              ${chapterPaidPredicate}
+              ${countPeriodPredicate}
+            ORDER BY language ASC`,
+        ).all<{ language: string }>(),
       ]);
       const chapterResults = seriesRows.results.length
         ? await env.DB.batch(
@@ -2420,6 +2488,7 @@ export async function GET(request: Request, context: RouteContext) {
                       AND c.state = 'PUBLISHED'
                       AND c.visibility = 'PUBLIC'
                       AND datetime(c.published_at) <= datetime('now')
+                      ${chapterPaidPredicate}
                       ${chapterLanguagePredicate}
                  )
                  SELECT slug,
@@ -2484,6 +2553,7 @@ export async function GET(request: Request, context: RouteContext) {
             hasNext: page * pageSize < total,
           },
           period,
+          availableLanguages: availableLanguageRows.results.map((row) => row.language),
         },
         {
           headers: {
@@ -6564,6 +6634,9 @@ export async function PUT(request: Request, context: RouteContext) {
                 s.rights_status AS rightsStatus,
                 uji.id AS uploadItemId,
                 uji.job_id AS uploadJobId,
+                uj.user_id AS uploaderUserId,
+                COALESCE(ua.status, 'UNAPPROVED') AS uploaderApprovalStatus,
+                ua.revision AS uploaderApprovalRevision,
                 uji.replacement_chapter_id AS replacementChapterId,
                 c.thumbnail_key AS proposedThumbnailKey,
                 replacement.thumbnail_key AS replacementThumbnailKey,
@@ -6580,6 +6653,8 @@ export async function PUT(request: Request, context: RouteContext) {
            FROM chapters c
            JOIN series s ON s.id = c.series_id
            LEFT JOIN upload_job_items uji ON uji.chapter_id = c.id
+           LEFT JOIN upload_jobs uj ON uj.id = uji.job_id
+           LEFT JOIN uploader_approvals ua ON ua.user_id = uj.user_id
            LEFT JOIN chapters replacement
              ON replacement.id = uji.replacement_chapter_id
           WHERE c.id = ?
@@ -6598,6 +6673,13 @@ export async function PUT(request: Request, context: RouteContext) {
           canPublish: number;
           uploadItemId: string | null;
           uploadJobId: string | null;
+          uploaderUserId: string | null;
+          uploaderApprovalStatus:
+            | "UNAPPROVED"
+            | "APPROVED"
+            | "UNDER_SCOPE"
+            | "REJECTED";
+          uploaderApprovalRevision: number | null;
           replacementChapterId: string | null;
           proposedThumbnailKey: string | null;
           replacementThumbnailKey: string | null;
@@ -6620,6 +6702,47 @@ export async function PUT(request: Request, context: RouteContext) {
         );
       }
       const isAdmin = isAdminActor(actor);
+      if (payload.approvalDecision && !isAdmin) {
+        throw new ApiError(403, "UPLOADER_APPROVAL_ADMIN_REQUIRED", "Only an administrator can decide uploader approval.");
+      }
+      if (
+        (payload.approvalDecision === "REJECT" && payload.action !== "RETURN") ||
+        (["APPROVE", "UNDER_SCOPE"].includes(payload.approvalDecision ?? "") && payload.action !== "PUBLISH")
+      ) {
+        throw new ApiError(422, "UPLOADER_APPROVAL_INVALID", "The uploader decision does not match the chapter review action.");
+      }
+      if (
+        payload.approvalDecision &&
+        (!chapter.uploadJobId ||
+          !chapter.uploadItemId ||
+          !chapter.uploaderUserId)
+      ) {
+        throw new ApiError(
+          409,
+          "UPLOADER_APPROVAL_CONTEXT_MISSING",
+          "This release is not linked to an uploader review. Reload the review queue.",
+        );
+      }
+      const requiresUploaderDecision = Boolean(
+        chapter.uploadJobId &&
+          chapter.uploaderUserId &&
+          chapter.uploaderApprovalStatus !== "APPROVED" &&
+          payload.action !== "SUBMIT",
+      );
+      if (requiresUploaderDecision && !isAdmin) {
+        throw new ApiError(
+          403,
+          "UPLOADER_APPROVAL_ADMIN_REQUIRED",
+          "An administrator must review this uploader before publication.",
+        );
+      }
+      if (requiresUploaderDecision && !payload.approvalDecision) {
+        throw new ApiError(
+          422,
+          "UPLOADER_APPROVAL_DECISION_REQUIRED",
+          "Choose approve, under scope, or reject for this uploader.",
+        );
+      }
       if (chapter.replacementChapterId && !isAdmin) {
         throw new ApiError(
           403,
@@ -6653,8 +6776,8 @@ export async function PUT(request: Request, context: RouteContext) {
       }
       const allowedMembershipRoles =
         payload.action === "SUBMIT"
-          ? ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER"]
-          : ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"];
+          ? ["OWNER", "LEADER", "UPLOADER"]
+          : ["OWNER", "LEADER"];
       const rolePlaceholders = allowedMembershipRoles.map(() => "?").join(", ");
       const assignmentColumn =
         payload.action === "PUBLISH" ? "can_publish" : "can_upload";
@@ -6750,6 +6873,17 @@ export async function PUT(request: Request, context: RouteContext) {
               `INSERT INTO upload_publish_guards (job_id, verified)
                VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
             ).bind(chapter.uploadJobId),
+            ...(payload.approvalDecision
+              ? uploaderReviewDecisionStatements(env.DB, {
+                  decision: payload.approvalDecision,
+                  jobId: chapter.uploadJobId,
+                  uploaderUserId: chapter.uploaderUserId!,
+                  expectedApprovalRevision:
+                    chapter.uploaderApprovalRevision,
+                  reviewerUserId: actor.id,
+                  note: payload.reason,
+                })
+              : []),
             env.DB.prepare(
               `UPDATE upload_sessions
                   SET chapter_id = NULL,
@@ -6948,6 +7082,17 @@ export async function PUT(request: Request, context: RouteContext) {
               `INSERT INTO upload_publish_guards (job_id, verified)
                VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
             ).bind(chapter.uploadJobId),
+            ...(payload.approvalDecision
+              ? uploaderReviewDecisionStatements(env.DB, {
+                  decision: payload.approvalDecision,
+                  jobId: chapter.uploadJobId,
+                  uploaderUserId: chapter.uploaderUserId!,
+                  expectedApprovalRevision:
+                    chapter.uploaderApprovalRevision,
+                  reviewerUserId: actor.id,
+                  note: payload.reason,
+                })
+              : []),
             env.DB.prepare(
               `DELETE FROM chapter_pages
                 WHERE chapter_id = ?
@@ -7189,11 +7334,23 @@ export async function PUT(request: Request, context: RouteContext) {
            WHERE job_id = '${uploadJobId.replaceAll("'", "''")}'
              AND verified = 1
         )`;
+        const transitionGuardStatement = env.DB.prepare(
+          `INSERT INTO upload_publish_guards (job_id, verified)
+           VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
+        ).bind(uploadJobId);
+        const uploaderDecisionStatements = payload.approvalDecision
+          ? uploaderReviewDecisionStatements(env.DB, {
+              decision: payload.approvalDecision,
+              jobId: uploadJobId,
+              uploaderUserId: chapter.uploaderUserId!,
+              expectedApprovalRevision: chapter.uploaderApprovalRevision,
+              reviewerUserId: actor.id,
+              note: payload.reason,
+            })
+          : [];
         reviewStatements.push(
-          env.DB.prepare(
-            `INSERT INTO upload_publish_guards (job_id, verified)
-             VALUES (?, CASE WHEN changes() = 1 THEN 1 ELSE NULL END)`,
-          ).bind(uploadJobId),
+          transitionGuardStatement,
+          ...uploaderDecisionStatements,
           env.DB.prepare(
             `UPDATE upload_job_items
                 SET status = ?,

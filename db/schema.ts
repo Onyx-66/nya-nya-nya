@@ -1206,6 +1206,113 @@ export const editorPicks = sqliteTable(
   ],
 );
 
+export const homepageSliders = sqliteTable(
+  "homepage_sliders",
+  {
+    id: text("id").primaryKey(),
+    seriesId: text("series_id").references(() => series.id, {
+      onDelete: "cascade",
+    }),
+    title: text("title").notNull(),
+    categoryLabel: text("category_label").notNull().default("Featured"),
+    shortDescription: text("short_description").notNull().default(""),
+    destinationUrl: text("destination_url").notNull().default(""),
+    imageKey: text("image_key"),
+    isActive: integer("is_active", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    revision: integer("revision").notNull().default(1),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("homepage_sliders_active_idx").on(
+      table.isActive,
+      table.sortOrder,
+      table.createdAt,
+    ),
+    index("homepage_sliders_series_idx").on(table.seriesId),
+  ],
+);
+
+export const siteAnnouncements = sqliteTable(
+  "site_announcements",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull().default("NOTICE"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    linkLabel: text("link_label").notNull().default(""),
+    linkUrl: text("link_url").notNull().default(""),
+    isActive: integer("is_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    startsAt: text("starts_at"),
+    endsAt: text("ends_at"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    revision: integer("revision").notNull().default(1),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("site_announcements_public_idx").on(
+      table.isActive,
+      table.startsAt,
+      table.endsAt,
+      table.sortOrder,
+    ),
+    check(
+      "site_announcements_type_check",
+      sql`${table.type} IN ('UPDATE', 'ISSUE', 'SUPPORT', 'NOTICE')`,
+    ),
+    check(
+      "site_announcements_date_check",
+      sql`${table.endsAt} IS NULL OR ${table.startsAt} IS NULL OR datetime(${table.endsAt}) > datetime(${table.startsAt})`,
+    ),
+  ],
+);
+
+export const floatingAds = sqliteTable(
+  "floating_ads",
+  {
+    id: text("id").primaryKey(),
+    eyebrow: text("eyebrow").notNull().default("Support NyaScans"),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    destinationUrl: text("destination_url").notNull().default(""),
+    imageKey: text("image_key"),
+    fallbackImageUrl: text("fallback_image_url").notNull().default(""),
+    effect: text("effect").notNull().default("WAVE"),
+    isActive: integer("is_active", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    resetKey: text("reset_key").notNull(),
+    revision: integer("revision").notNull().default(1),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("floating_ads_active_idx").on(table.isActive, table.updatedAt),
+    uniqueIndex("floating_ads_single_active_uidx")
+      .on(table.isActive)
+      .where(sql`${table.isActive} = 1`),
+    check(
+      "floating_ads_effect_check",
+      sql`${table.effect} IN ('WAVE', 'PULSE', 'GLOW')`,
+    ),
+  ],
+);
+
 export const chapters = sqliteTable(
   "chapters",
   {
@@ -1280,6 +1387,61 @@ export const chapters = sqliteTable(
     check(
       "chapters_visibility_check",
       sql`${table.visibility} IN ('PUBLIC', 'UNLISTED', 'HIDDEN')`,
+    ),
+  ],
+);
+
+export const chapterAccessDecisions = sqliteTable(
+  "chapter_access_decisions",
+  {
+    id: text("id").primaryKey(),
+    uploadJobId: text("upload_job_id"),
+    uploadJobItemId: text("upload_job_item_id"),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapters.id, { onDelete: "cascade" }),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    referenceChapterId: text("reference_chapter_id").references(
+      () => chapters.id,
+      { onDelete: "set null" },
+    ),
+    referenceChapterNumber: text("reference_chapter_number").notNull(),
+    reason: text("reason").notNull(),
+    requestedAccessType: text("requested_access_type").notNull().default("FREE"),
+    forcedPriceOnyx: integer("forced_price_onyx").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    resolvedByUserId: text("resolved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    resolutionNote: text("resolution_note").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    resolvedAt: text("resolved_at"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("chapter_access_decisions_chapter_uidx").on(table.chapterId),
+    index("chapter_access_decisions_status_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("chapter_access_decisions_reference_idx").on(
+      table.referenceChapterId,
+      table.createdAt,
+    ),
+    check(
+      "chapter_access_decisions_reason_check",
+      sql`${table.reason} IN ('SAME_CHAPTER_VERSION', 'PREVIOUS_CHAPTER')`,
+    ),
+    check(
+      "chapter_access_decisions_status_check",
+      sql`${table.status} IN ('PENDING', 'KEPT_PAID', 'MADE_FREE')`,
+    ),
+    check(
+      "chapter_access_decisions_price_check",
+      sql`${table.forcedPriceOnyx} > 0`,
     ),
   ],
 );
@@ -2571,6 +2733,7 @@ export const uploadJobs = sqliteTable(
       .references(() => series.id),
     kind: text("kind").notNull(),
     sourceType: text("source_type").notNull(),
+    sourceUrl: text("source_url"),
     status: text("status").notNull().default("DRAFT"),
     idempotencyKey: text("idempotency_key").notNull(),
     publishIdempotencyKey: text("publish_idempotency_key"),
@@ -2611,7 +2774,7 @@ export const uploadJobs = sqliteTable(
     ),
     check(
       "upload_jobs_source_check",
-      sql`${table.sourceType} IN ('DIRECT_IMAGES', 'DIRECT_FOLDER')`,
+      sql`${table.sourceType} IN ('DIRECT_IMAGES', 'DIRECT_FOLDER', 'GOOGLE_DRIVE')`,
     ),
     check(
       "upload_jobs_status_check",
@@ -2629,6 +2792,112 @@ export const uploadJobs = sqliteTable(
         'CANCELLED'
       )`,
     ),
+  ],
+);
+
+export const uploaderApprovals = sqliteTable(
+  "uploader_approvals",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("UNAPPROVED"),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: text("reviewed_at"),
+    note: text("note").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("uploader_approvals_status_idx").on(table.status, table.updatedAt),
+    check(
+      "uploader_approvals_status_check",
+      sql`${table.status} IN ('UNAPPROVED', 'APPROVED', 'UNDER_SCOPE', 'REJECTED')`,
+    ),
+  ],
+);
+
+export const uploadReviewEvents = sqliteTable(
+  "upload_review_events",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => uploadJobs.id, { onDelete: "cascade" }),
+    uploaderUserId: text("uploader_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reviewerUserId: text("reviewer_user_id")
+      .notNull()
+      .references(() => users.id),
+    decision: text("decision").notNull(),
+    note: text("note").notNull().default(""),
+    createdAt,
+  },
+  (table) => [
+    index("upload_review_events_job_idx").on(table.jobId, table.createdAt),
+    index("upload_review_events_uploader_idx").on(
+      table.uploaderUserId,
+      table.createdAt,
+    ),
+    check(
+      "upload_review_events_decision_check",
+      sql`${table.decision} IN ('APPROVE', 'UNDER_SCOPE', 'REJECT')`,
+    ),
+  ],
+);
+
+export const apiKeys = sqliteTable(
+  "api_keys",
+  {
+    id: text("id").primaryKey(),
+    appName: text("app_name").notNull(),
+    keyPrefix: text("key_prefix").notNull(),
+    secretHash: text("secret_hash").notNull(),
+    scopesJson: text("scopes_json").notNull().default("[]"),
+    allowedTeamId: text("allowed_team_id").references(() => teams.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("ACTIVE"),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    replacedByKeyId: text("replaced_by_key_id"),
+    expiresAt: text("expires_at"),
+    lastUsedAt: text("last_used_at"),
+    lastUsedIpHash: text("last_used_ip_hash"),
+    requestCount: integer("request_count").notNull().default(0),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("api_keys_prefix_uidx").on(table.keyPrefix),
+    index("api_keys_status_idx").on(table.status, table.createdAt),
+    index("api_keys_team_idx").on(table.allowedTeamId),
+    check(
+      "api_keys_status_check",
+      sql`${table.status} IN ('ACTIVE', 'REVOKED', 'ROTATED')`,
+    ),
+  ],
+);
+
+export const apiKeyRateLimits = sqliteTable(
+  "api_key_rate_limits",
+  {
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    windowStart: text("window_start").notNull(),
+    requestCount: integer("request_count").notNull().default(0),
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.apiKeyId, table.windowStart] }),
+    index("api_key_rate_limits_window_idx").on(table.windowStart),
   ],
 );
 

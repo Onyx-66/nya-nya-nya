@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
+import { normalizeChapterNumber as normalizePolicyChapterNumber } from "@/lib/chapter-number";
 import { UPLOAD_LIMITS, UPLOAD_METHODS } from "@/lib/uploads";
 import { canAny } from "@/lib/permissions.mjs";
 import {
@@ -9,7 +10,14 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import { requirePaidEconomyPublicDocument } from "@/lib/server/commercial-settings";
+import {
+  getCommercialSettingsDocument,
+  requirePaidEconomyPublicDocument,
+} from "@/lib/server/commercial-settings";
+import {
+  findPaidChapterReference,
+  type PaidChapterReference,
+} from "@/lib/server/chapter-access-policy";
 import {
   assertUploadRateLimit,
   chapterSlug,
@@ -169,6 +177,7 @@ function liveJobAuthorization(
          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
   )`;
   if (isUploadAdmin(actor)) {
+    const owner = actor.roles.includes("OWNER");
     return {
       sql: `EXISTS (
         SELECT 1
@@ -186,7 +195,7 @@ function liveJobAuthorization(
       )
       AND ${seriesIsEligible}
       AND (
-        ${alias}.team_id IS NULL
+        ? = 1
         OR EXISTS (
           SELECT 1
             FROM team_memberships live_membership
@@ -195,12 +204,12 @@ function liveJobAuthorization(
              AND live_membership.team_id = ${alias}.team_id
              AND live_membership.status = 'ACTIVE'
              AND UPPER(live_membership.membership_role) IN
-               ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+               ('OWNER', 'LEADER', 'UPLOADER')
              AND live_team.is_archived = 0
              AND live_team.verification_status = 'VERIFIED'
         )
       )`,
-      bindings: [actor.id, actor.id] as unknown[],
+      bindings: [actor.id, owner ? 1 : 0, actor.id] as unknown[],
     };
   }
 
@@ -214,31 +223,15 @@ function liveJobAuthorization(
         JOIN teams live_team ON live_team.id = live_membership.team_id
        WHERE live_actor.id = ?
          AND live_actor.status = 'ACTIVE'
-         AND (
-           live_actor.primary_role IN ('TEAM_LEADER', 'UPLOADER')
-           OR EXISTS (
-             SELECT 1 FROM user_roles live_role
-              WHERE live_role.user_id = live_actor.id
-                AND live_role.role IN ('TEAM_LEADER', 'UPLOADER')
-           )
-         )
          AND live_membership.status = 'ACTIVE'
          AND UPPER(live_membership.membership_role) IN
-           ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+           ('OWNER', 'LEADER', 'UPLOADER')
          AND live_team.is_archived = 0
          AND live_team.verification_status = 'VERIFIED'
          ${
            input.requirePublish
-             ? `AND (
-                  live_actor.primary_role = 'TEAM_LEADER'
-                  OR EXISTS (
-                    SELECT 1 FROM user_roles live_publish_role
-                     WHERE live_publish_role.user_id = live_actor.id
-                       AND live_publish_role.role = 'TEAM_LEADER'
-                  )
-                )
-                AND UPPER(live_membership.membership_role) IN
-                  ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER')`
+             ? `AND UPPER(live_membership.membership_role) IN
+                  ('OWNER', 'LEADER')`
              : ""
          }
     )
@@ -396,6 +389,7 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
 
 async function uploadOptions(db: D1Database, actor: Actor) {
   const admin = isUploadAdmin(actor);
+  const owner = actor.roles.includes("OWNER");
   const [seriesResult, teamsResult] = await Promise.all([
     db
       .prepare(
@@ -419,7 +413,9 @@ async function uploadOptions(db: D1Database, actor: Actor) {
       .prepare(
         `SELECT DISTINCT t.id, t.slug, t.name, t.revision,
                 t.can_control_fixed_reader_pages AS canControlFixedReaderPages,
-                UPPER(tm.membership_role) AS membershipRole,
+                CASE WHEN ? = 1 THEN 'OWNER'
+                     ELSE UPPER(tm.membership_role)
+                END AS membershipRole,
                 CASE WHEN t.logo_key IS NULL THEN NULL
                   ELSE '/api/v1/team-media?id=' || t.id ||
                        '&slot=logo&v=' || t.revision
@@ -429,16 +425,17 @@ async function uploadOptions(db: D1Database, actor: Actor) {
                        '&slot=banner&v=' || t.revision
                 END AS bannerUrl
            FROM teams t
-           JOIN team_memberships tm ON tm.team_id = t.id
-          WHERE tm.user_id = ?
-            AND tm.status = 'ACTIVE'
-            AND UPPER(tm.membership_role) IN
-              ('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER')
+           LEFT JOIN team_memberships tm
+             ON tm.team_id = t.id AND tm.user_id = ? AND tm.status = 'ACTIVE'
+          WHERE (? = 1 OR (
+              tm.user_id IS NOT NULL
+              AND UPPER(tm.membership_role) IN ('OWNER', 'LEADER', 'UPLOADER')
+            ))
             AND t.is_archived = 0
             AND t.verification_status = 'VERIFIED'
           ORDER BY t.name COLLATE NOCASE, t.id`,
       )
-      .bind(actor.id)
+      .bind(owner ? 1 : 0, actor.id, owner ? 1 : 0)
       .all<{
         id: string;
         slug: string;
@@ -462,7 +459,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
       const canPublish =
         admin ||
         (canPublishByRole &&
-          ["OWNER", "LEADER", "TEAM_LEADER", "MANAGER"].includes(
+          ["OWNER", "LEADER"].includes(
             team.membershipRole,
           ));
       return {
@@ -472,6 +469,18 @@ async function uploadOptions(db: D1Database, actor: Actor) {
         requiresReview: !canPublish,
       };
     }),
+    uploaderReview: await (async () => {
+      const [approval, history] = await Promise.all([
+        db.prepare("SELECT status FROM uploader_approvals WHERE user_id = ? LIMIT 1").bind(actor.id).first<{ status: string }>(),
+        db.prepare("SELECT COUNT(*) AS count FROM upload_jobs WHERE user_id = ? AND submitted_at IS NOT NULL").bind(actor.id).first<{ count: number }>(),
+      ]);
+      const exempt = actor.roles.some((role) => ["OWNER", "ADMINISTRATOR"].includes(role));
+      return {
+        status: approval?.status ?? "UNAPPROVED",
+        hasSubmittedUpload: Number(history?.count ?? 0) > 0,
+        requiresReview: !exempt && approval?.status !== "APPROVED",
+      };
+    })(),
     methods: UPLOAD_METHODS,
     limits: UPLOAD_LIMITS,
     admin,
@@ -748,15 +757,15 @@ export async function POST(request: Request) {
     const createStatements: D1PreparedStatement[] = [
       env.DB.prepare(
         `INSERT INTO upload_jobs
-         (id, user_id, team_id, series_id, kind, source_type, status,
+         (id, user_id, team_id, series_id, kind, source_type, source_url, status,
           idempotency_key, total_bytes, page_count, revision, expires_at)
          SELECT draft.id, draft.user_id, draft.team_id, draft.series_id,
-                draft.kind, draft.source_type, 'DRAFT',
+                draft.kind, draft.source_type, draft.source_url, 'DRAFT',
                 draft.idempotency_key, 0, 0, 1,
                 datetime('now', draft.expiry)
            FROM (
              SELECT ? AS id, ? AS user_id, ? AS team_id, ? AS series_id,
-                    ? AS kind, ? AS source_type, ? AS idempotency_key,
+                    ? AS kind, ? AS source_type, ? AS source_url, ? AS idempotency_key,
                     ? AS expiry
            ) draft
           WHERE ${createAuthorization.sql}
@@ -772,6 +781,7 @@ export async function POST(request: Request) {
         payload.seriesId,
         payload.kind,
         payload.sourceType,
+        payload.sourceUrl,
         payload.idempotencyKey,
         `+${UPLOAD_LIMITS.draftLifetimeDays} days`,
         ...createAuthorization.bindings,
@@ -1618,6 +1628,32 @@ export async function PATCH(request: Request) {
         "Every chapter needs validated pages before it can be published.",
       );
     }
+    const commercialDocument = await getCommercialSettingsDocument();
+    const paidPolicyPublic =
+      !commercialDocument.recoveredFromInvalid &&
+      commercialDocument.revision > 0 &&
+      commercialDocument.settings.economy.premiumEconomyPublic;
+    const forcedAccess = new Map<
+      string,
+      { reference: PaidChapterReference; decisionId: string }
+    >();
+    if (paidPolicyPublic) {
+      for (const item of items) {
+        if (item.accessType !== "FREE") continue;
+        const reference = await findPaidChapterReference(
+          env.DB,
+          job.seriesId,
+          item.chapterNumber,
+        );
+        if (!reference) continue;
+        item.accessType = "PAID";
+        item.priceOnyx = Number(reference.priceOnyx);
+        forcedAccess.set(item.id, {
+          reference,
+          decisionId: `cad_${randomId()}`,
+        });
+      }
+    }
     const batchPaidPrices = new Set(
       items
         .filter((item) => item.accessType === "PAID")
@@ -1685,7 +1721,13 @@ export async function PATCH(request: Request) {
         );
       }
     }
+    const uploaderApproval = isUploadAdmin(actor)
+      ? { status: "APPROVED" }
+      : await env.DB.prepare(
+          "SELECT status FROM uploader_approvals WHERE user_id = ? LIMIT 1",
+        ).bind(actor.id).first<{ status: string }>();
     const needsReview =
+      uploaderApproval?.status !== "APPROVED" ||
       scope.uploadRequiresReview ||
       !scope.canPublish ||
       items.some((item) => Boolean(item.replacementChapterId));
@@ -1731,8 +1773,39 @@ export async function PATCH(request: Request) {
         ...authorization.bindings,
       ),
     ];
+    for (const [itemId, forced] of forcedAccess) {
+      statements.push(
+        env.DB.prepare(
+          `UPDATE upload_job_items
+              SET access_type = 'PAID',
+                  price_onyx = ?,
+                  revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND job_id = ?
+              AND status = 'READY'
+              AND access_type = 'FREE'
+              AND EXISTS (
+                SELECT 1
+                  FROM chapters policy_reference
+                 WHERE policy_reference.id = ?
+                   AND policy_reference.series_id = upload_job_items.series_id
+                   AND policy_reference.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
+                   AND policy_reference.access_type = 'PAID'
+                   AND policy_reference.price_onyx = ?
+              )`,
+        ).bind(
+          forced.reference.priceOnyx,
+          itemId,
+          payload.jobId,
+          forced.reference.id,
+          forced.reference.priceOnyx,
+        ),
+      );
+    }
     for (const item of items) {
       const newChapterId = `ch_${randomId()}`;
+      const forced = forcedAccess.get(item.id);
       const isReplacement = Boolean(item.replacementChapterId);
       const chapterState = isReplacement
         ? "DRAFT"
@@ -1765,6 +1838,11 @@ export async function PATCH(request: Request) {
               AND uji.page_count > 0
               AND uj.status = 'PUBLISHING'
               AND uj.revision = ?
+              AND ${
+                forced
+                  ? "uji.access_type = 'PAID' AND uji.price_onyx = ?"
+                  : "1 = 1"
+              }
               AND (
                 (
                   uji.replacement_chapter_id IS NOT NULL
@@ -1813,6 +1891,7 @@ export async function PATCH(request: Request) {
           item.id,
           payload.jobId,
           nextRevision,
+          ...(forced ? [forced.reference.priceOnyx] : []),
         ),
         env.DB.prepare(
           `INSERT INTO chapter_pages
@@ -1847,6 +1926,88 @@ export async function PATCH(request: Request) {
           newChapterId,
         ),
       );
+      if (forced) {
+        const referenceNumber = normalizePolicyChapterNumber(
+          forced.reference.chapterNumber,
+        );
+        statements.push(
+          env.DB.prepare(
+            `INSERT INTO chapter_access_decisions
+             (id, upload_job_id, upload_job_item_id, chapter_id, series_id,
+              reference_chapter_id, reference_chapter_number, reason,
+              requested_access_type, forced_price_onyx, status)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'FREE', ?, 'PENDING'
+              WHERE EXISTS (
+                SELECT 1 FROM chapters forced_chapter
+                 WHERE forced_chapter.id = ?
+                   AND forced_chapter.access_type = 'PAID'
+                   AND forced_chapter.price_onyx = ?
+              )
+                AND EXISTS (
+                  SELECT 1 FROM chapters policy_reference
+                   WHERE policy_reference.id = ?
+                     AND policy_reference.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
+                     AND policy_reference.access_type = 'PAID'
+                     AND policy_reference.price_onyx = ?
+                )`,
+          ).bind(
+            forced.decisionId,
+            payload.jobId,
+            item.id,
+            newChapterId,
+            job.seriesId,
+            forced.reference.id,
+            referenceNumber,
+            forced.reference.reason,
+            forced.reference.priceOnyx,
+            newChapterId,
+            forced.reference.priceOnyx,
+            forced.reference.id,
+            forced.reference.priceOnyx,
+          ),
+          env.DB.prepare(
+            `INSERT INTO notifications
+             (id, user_id, kind, title, body, dedupe_key, action_url,
+              metadata_json)
+             SELECT 'ntf_' || lower(hex(randomblob(16))), u.id,
+                    'CHAPTER_ACCESS_DECISION',
+                    'Chapter access decision required', ?, ?, ?, ?
+               FROM users u
+              WHERE u.status = 'ACTIVE'
+                AND (
+                  u.primary_role IN ('OWNER', 'ADMINISTRATOR', 'MANAGER')
+                  OR EXISTS (
+                    SELECT 1 FROM user_roles ur
+                     WHERE ur.user_id = u.id
+                       AND ur.role IN ('OWNER', 'ADMINISTRATOR', 'MANAGER')
+                  )
+                )
+                AND EXISTS (
+                  SELECT 1 FROM chapter_access_decisions pending_decision
+                   WHERE pending_decision.id = ?
+                     AND pending_decision.status = 'PENDING'
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM notifications existing
+                   WHERE existing.user_id = u.id
+                     AND existing.dedupe_key = ?
+                )`,
+          ).bind(
+            `${String(detailSummary.seriesTitle ?? "Series")} chapter ${item.chapterNumber} was requested Free and was forced Paid at ${forced.reference.priceOnyx} paws because ${forced.reference.reason === "SAME_CHAPTER_VERSION" ? `another version of chapter ${referenceNumber}` : `chapter ${referenceNumber}`} is Paid. Decide whether the reference chapter stays Paid or becomes Free.`,
+            `CHAPTER_ACCESS_DECISION:${forced.decisionId}`,
+            `/onyx/admin/access/access-decisions?decision=${encodeURIComponent(forced.decisionId)}`,
+            JSON.stringify({
+              decisionId: forced.decisionId,
+              chapterNumber: item.chapterNumber,
+              referenceChapterNumber: referenceNumber,
+              reason: forced.reference.reason,
+              forcedPriceOnyx: forced.reference.priceOnyx,
+            }),
+            forced.decisionId,
+            `CHAPTER_ACCESS_DECISION:${forced.decisionId}`,
+          ),
+        );
+      }
       if (isReplacement) {
         statements.push(
           env.DB.prepare(
@@ -1948,6 +2109,7 @@ export async function PATCH(request: Request) {
           teamId: job.teamId,
           chapterCount: items.length,
           pageCount: Number(detailSummary.pageCount ?? 0),
+          forcedAccessDecisions: forcedAccess.size,
         },
       }),
       env.DB.prepare(
@@ -1974,6 +2136,19 @@ export async function PATCH(request: Request) {
       {
         data: await jobDetail(env.DB, actor, payload.jobId),
         reused: false,
+        accessAdjustments: [...forcedAccess.entries()].map(
+          ([itemId, forced]) => ({
+            itemId,
+            decisionId: forced.decisionId,
+            requestedAccessType: "FREE",
+            effectiveAccessType: "PAID",
+            priceOnyx: forced.reference.priceOnyx,
+            reason: forced.reference.reason,
+            referenceChapterNumber: normalizePolicyChapterNumber(
+              forced.reference.chapterNumber,
+            ),
+          }),
+        ),
       },
       {
         status: needsReview ? 202 : 201,

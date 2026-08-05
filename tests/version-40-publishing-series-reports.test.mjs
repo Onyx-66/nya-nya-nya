@@ -73,7 +73,7 @@ test("V40 fresh schema enforces cover metadata, report states, and always-on com
       INSERT INTO team_memberships
         (team_id, user_id, membership_role, status)
       VALUES
-        ('team_v40', 'usr_v40', 'TEAM_LEADER', 'ACTIVE');
+        ('team_v40', 'usr_v40', 'LEADER', 'ACTIVE');
 
       INSERT INTO series
         (id, slug, title, synopsis, type, status, origin_country,
@@ -300,7 +300,8 @@ test("V40 publishing-team choices are membership-scoped and render team identity
     "export async function GET",
   );
 
-  assert.match(options, /JOIN team_memberships tm ON tm\.team_id = t\.id/u);
+  assert.match(options, /LEFT JOIN team_memberships tm/u);
+  assert.match(options, /ON tm\.team_id = t\.id/u);
   assert.match(options, /tm\.user_id = \?/u);
   assert.match(options, /tm\.status = 'ACTIVE'/u);
   assert.match(options, /t\.verification_status = 'VERIFIED'/u);
@@ -330,7 +331,7 @@ test("V40 publishing-team choices are membership-scoped and render team identity
   assert.match(uploadScope, /FROM team_memberships tm/u);
   assert.match(uploadScope, /\.bind\(teamId, actor\.id\)/u);
   assert.match(filesRoute, /live_membership\.user_id = \?/u);
-  assert.match(thumbnailRoute, /live_admin_membership\.user_id = live_actor\.id/u);
+  assert.match(thumbnailRoute, /live_membership\.user_id = live_actor\.id/u);
 
   assert.match(workspace, /function PublishingTeamVisual/u);
   assert.match(workspace, /upload-team-option-banner/u);

@@ -9,13 +9,43 @@ import {
   CaretRight,
   ChatCircle,
   Heart,
+  IdentificationCard,
   Trophy,
   UploadSimple,
   UserMinus,
   UserPlus,
   UsersThree,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
+
+type ProfileSection =
+  | "overview"
+  | "activity"
+  | "uploads"
+  | "followed"
+  | "comments";
+
+const profileSections = [
+  ["overview", "Overview", IdentificationCard],
+  ["activity", "Activity", Books],
+  ["uploads", "Uploads", UploadSimple],
+  ["followed", "Followed", Heart],
+  ["comments", "Comments", ChatCircle],
+] as const;
+
+function profileSectionFromLocation(): ProfileSection {
+  if (typeof window === "undefined") return "overview";
+  const candidate = new URL(window.location.href).searchParams.get("section");
+  return profileSections.some(([value]) => value === candidate)
+    ? (candidate as ProfileSection)
+    : "overview";
+}
 
 type ProfileRecord = {
   username: string;
@@ -116,12 +146,27 @@ function timeLabel(value: string) {
 }
 
 export function PublicProfileView({ username }: { username: string }) {
+  const { settings: commercial } = useCommercialSettings();
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [section, setSection] = useState<ProfileSection>("overview");
   const favoritesRailRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Partial<Record<ProfileSection, HTMLButtonElement | null>>>(
+    {},
+  );
+  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
+
+  useEffect(() => {
+    function syncSection() {
+      setSection(profileSectionFromLocation());
+    }
+    syncSection();
+    window.addEventListener("popstate", syncSection);
+    return () => window.removeEventListener("popstate", syncSection);
+  }, [username]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,6 +205,44 @@ export function PublicProfileView({ username }: { username: string }) {
     })();
     return () => controller.abort();
   }, [username]);
+
+  function selectSection(nextSection: ProfileSection) {
+    if (nextSection === section) return;
+    const url = new URL(window.location.href);
+    if (nextSection === "overview") {
+      url.searchParams.delete("section");
+    } else {
+      url.searchParams.set("section", nextSection);
+    }
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setSection(nextSection);
+  }
+
+  function moveSectionFocus(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentSection: ProfileSection,
+  ) {
+    const currentIndex = profileSections.findIndex(
+      ([value]) => value === currentSection,
+    );
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % profileSections.length;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex =
+        (currentIndex - 1 + profileSections.length) % profileSections.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = profileSections.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    const nextSection = profileSections[nextIndex][0];
+    selectSection(nextSection);
+    window.requestAnimationFrame(() => tabRefs.current[nextSection]?.focus());
+  }
 
   async function toggleFollow() {
     if (!profile || profile.isSelf || followBusy) return;
@@ -349,13 +432,57 @@ export function PublicProfileView({ username }: { username: string }) {
           )}
         </div>
       </section>
-      <div className="page-wrap public-profile-content">
+      <div
+        className="page-wrap public-team-tabs public-profile-tabs"
+        role="tablist"
+        aria-label={`${profile.displayName} profile sections`}
+      >
+        {profileSections.map(([value, label, Icon]) => {
+          const count =
+            value === "uploads"
+              ? profile.uploads.length
+              : value === "followed"
+                ? profile.bookmarks.length
+                : value === "comments"
+                  ? profile.comments.length
+                  : null;
+          const selected = section === value;
+          return (
+            <button
+              type="button"
+              role="tab"
+              id={`public-profile-tab-${value}`}
+              aria-controls="public-profile-panel"
+              aria-selected={selected}
+              aria-current={selected ? "page" : undefined}
+              tabIndex={selected ? 0 : -1}
+              key={value}
+              ref={(element) => {
+                tabRefs.current[value] = element;
+              }}
+              onClick={() => selectSection(value)}
+              onKeyDown={(event) => moveSectionFocus(event, value)}
+            >
+              <Icon size={17} aria-hidden="true" />
+              {label}
+              {count === null ? null : ` (${count})`}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className="page-wrap public-profile-content"
+        id="public-profile-panel"
+        role="tabpanel"
+        aria-labelledby={`public-profile-tab-${section}`}
+        tabIndex={0}
+      >
         {error ? (
           <div className="public-profile-alert" role="alert">
             {error}
           </div>
         ) : null}
-        {profile.teams.length ? (
+        {section === "overview" && profile.teams.length ? (
           <section className="public-profile-panel public-profile-teams-panel">
             <h2>Teams</h2>
             <div className="public-profile-teams">
@@ -367,7 +494,7 @@ export function PublicProfileView({ username }: { username: string }) {
             </div>
           </section>
         ) : null}
-        {profile.favorites.length ? (
+        {section === "overview" && profile.favorites.length ? (
           <section className="public-profile-panel">
             <div className="section-heading public-profile-section-heading">
               <div>
@@ -437,73 +564,91 @@ export function PublicProfileView({ username }: { username: string }) {
             </div>
           </section>
         ) : null}
-        <section className="public-profile-panel">
-          <div className="section-heading public-profile-section-heading">
-            <div>
-              <h2>Activity</h2>
-              <p>Shared by this reader according to their privacy settings.</p>
-            </div>
-          </div>
-          {profile.readingActivity.length ? (
-            <div className="public-profile-record-list public-profile-activity">
-              {profile.readingActivity.map((activity) => (
-                <a
-                  href={`/title/${activity.seriesSlug}${
-                    activity.chapterNumber
-                      ? `/chapter/${activity.chapterSlug}`
-                      : ""
-                  }`}
-                  key={`${activity.seriesSlug}:${
-                    activity.chapterSlug ?? activity.readAt
-                  }`}
-                  className="public-profile-record-card"
-                >
-                  <span className="public-profile-record-cover">
-                    {activity.coverUrl ? (
-                      <img
-                        src={activity.coverUrl}
-                        alt=""
-                        loading="lazy"
-                        onError={(event) => {
-                          const fallback = "/art/series-cover-placeholder.svg";
-                          if (!event.currentTarget.src.endsWith(fallback)) {
-                            event.currentTarget.src = fallback;
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span className="public-reading-cover-placeholder">
-                        <Books size={20} />
-                      </span>
-                    )}
-                  </span>
-                  <span className="public-profile-record-copy">
-                    <span className="public-profile-record-label">
-                      <Books size={14} weight="duotone" /> Reading activity
-                    </span>
-                    <strong>{activity.seriesTitle}</strong>
-                    <small>
-                      {activity.chapterNumber
-                        ? `Chapter ${activity.chapterNumber} · `
-                        : ""}
-                      {timeLabel(activity.readAt)}
-                    </small>
-                  </span>
-                  <span className="public-profile-record-action" aria-hidden="true">
-                    <ArrowRight size={17} weight="bold" />
-                  </span>
-                </a>
-              ))}
-            </div>
-          ) : (
+        {section === "overview" &&
+        !profile.teams.length &&
+        !profile.favorites.length &&
+        !profile.achievements.length ? (
+          <section className="public-profile-panel">
             <div className="public-profile-empty">
-              <Books size={25} />
-              <strong>No public activity</strong>
-              <span>Activity is private or has not started yet.</span>
+              <IdentificationCard size={25} />
+              <strong>No public profile highlights</strong>
+              <span>Teams, favorite series, and achievements will appear here.</span>
             </div>
-          )}
-        </section>
-        {profile.achievements.length ? (
+          </section>
+        ) : null}
+        {section === "activity" ? (
+          <section className="public-profile-panel">
+            <div className="section-heading public-profile-section-heading">
+              <div>
+                <h2>Activity</h2>
+                <p>Shared by this reader according to their privacy settings.</p>
+              </div>
+            </div>
+            {profile.readingActivity.length ? (
+              <div className="public-profile-record-list public-profile-activity">
+                {profile.readingActivity.map((activity) => (
+                  <a
+                    href={`/title/${activity.seriesSlug}${
+                      activity.chapterNumber
+                        ? `/chapter/${activity.chapterSlug}`
+                        : ""
+                    }`}
+                    key={`${activity.seriesSlug}:${
+                      activity.chapterSlug ?? activity.readAt
+                    }`}
+                    className="public-profile-record-card"
+                  >
+                    <span className="public-profile-record-cover">
+                      {activity.coverUrl ? (
+                        <img
+                          src={activity.coverUrl}
+                          alt=""
+                          loading="lazy"
+                          onError={(event) => {
+                            const fallback =
+                              "/art/series-cover-placeholder.svg";
+                            if (!event.currentTarget.src.endsWith(fallback)) {
+                              event.currentTarget.src = fallback;
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="public-reading-cover-placeholder">
+                          <Books size={20} />
+                        </span>
+                      )}
+                    </span>
+                    <span className="public-profile-record-copy">
+                      <span className="public-profile-record-label">
+                        <Books size={14} weight="duotone" /> Reading activity
+                      </span>
+                      <strong>{activity.seriesTitle}</strong>
+                      <small>
+                        {activity.chapterNumber
+                          ? `Chapter ${activity.chapterNumber} · `
+                          : ""}
+                        {timeLabel(activity.readAt)}
+                      </small>
+                    </span>
+                    <span
+                      className="public-profile-record-action"
+                      aria-hidden="true"
+                    >
+                      <ArrowRight size={17} weight="bold" />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="public-profile-empty">
+                <Books size={25} />
+                <strong>No public activity</strong>
+                <span>Activity is private or has not started yet.</span>
+              </div>
+            )}
+          </section>
+        ) : null}
+        {section === "overview" && profile.achievements.length ? (
           <section className="public-profile-panel">
             <div className="section-heading">
               <div>
@@ -525,7 +670,7 @@ export function PublicProfileView({ username }: { username: string }) {
             </div>
           </section>
         ) : null}
-        {profile.bookmarks.length ? (
+        {section === "followed" ? (
           <section className="public-profile-panel">
             <div className="section-heading public-profile-section-heading">
               <div>
@@ -533,49 +678,62 @@ export function PublicProfileView({ username }: { username: string }) {
                 <p>Public series this reader follows.</p>
               </div>
             </div>
-            <div className="public-profile-record-list public-profile-bookmarks">
-              {profile.bookmarks.map((bookmark) => (
-                <a
-                  href={`/title/${bookmark.seriesSlug}`}
-                  key={bookmark.seriesId}
-                  className="public-profile-record-card"
-                >
-                  <span className="public-profile-record-cover">
-                    {bookmark.coverUrl ? (
-                      <img
-                        src={bookmark.coverUrl}
-                        alt=""
-                        loading="lazy"
-                        onError={(event) => {
-                          const fallback = "/art/series-cover-placeholder.svg";
-                          if (!event.currentTarget.src.endsWith(fallback)) {
-                            event.currentTarget.src = fallback;
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span className="public-reading-cover-placeholder">
-                        <Heart size={20} />
-                      </span>
-                    )}
-                  </span>
-                  <span className="public-profile-record-copy">
-                    <span className="public-profile-record-label">
-                      <Heart size={14} weight="duotone" />
-                      {bookmark.listType.replaceAll("_", " ").toLowerCase()}
+            {profile.bookmarks.length ? (
+              <div className="public-profile-record-list public-profile-bookmarks">
+                {profile.bookmarks.map((bookmark) => (
+                  <a
+                    href={`/title/${bookmark.seriesSlug}`}
+                    key={bookmark.seriesId}
+                    className="public-profile-record-card"
+                  >
+                    <span className="public-profile-record-cover">
+                      {bookmark.coverUrl ? (
+                        <img
+                          src={bookmark.coverUrl}
+                          alt=""
+                          loading="lazy"
+                          onError={(event) => {
+                            const fallback = "/art/series-cover-placeholder.svg";
+                            if (!event.currentTarget.src.endsWith(fallback)) {
+                              event.currentTarget.src = fallback;
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="public-reading-cover-placeholder">
+                          <Heart size={20} />
+                        </span>
+                      )}
                     </span>
-                    <strong>{bookmark.seriesTitle}</strong>
-                    <small>Followed {timeLabel(bookmark.savedAt).toLowerCase()}</small>
-                  </span>
-                  <span className="public-profile-record-action" aria-hidden="true">
-                    <ArrowRight size={17} weight="bold" />
-                  </span>
-                </a>
-              ))}
-            </div>
+                    <span className="public-profile-record-copy">
+                      <span className="public-profile-record-label">
+                        <Heart size={14} weight="duotone" />
+                        {bookmark.listType.replaceAll("_", " ").toLowerCase()}
+                      </span>
+                      <strong>{bookmark.seriesTitle}</strong>
+                      <small>
+                        Followed {timeLabel(bookmark.savedAt).toLowerCase()}
+                      </small>
+                    </span>
+                    <span
+                      className="public-profile-record-action"
+                      aria-hidden="true"
+                    >
+                      <ArrowRight size={17} weight="bold" />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="public-profile-empty">
+                <Heart size={25} />
+                <strong>No public followed series</strong>
+                <span>This list is private or has not been started yet.</span>
+              </div>
+            )}
           </section>
         ) : null}
-        {profile.uploads.length ? (
+        {section === "uploads" ? (
           <section className="public-profile-panel public-profile-uploads-panel">
             <div className="section-heading public-profile-section-heading">
               <div>
@@ -586,39 +744,53 @@ export function PublicProfileView({ username }: { username: string }) {
                 <UploadSimple size={18} /> {profile.uploads.length}
               </span>
             </div>
-            <div className="public-profile-uploads">
-              {profile.uploads.map((upload) => (
-                <a
-                  key={upload.id}
-                  href={`/title/${upload.seriesSlug}/chapter/${upload.chapterSlug}`}
-                >
-                  <span className="public-profile-upload-cover">
-                    {upload.coverUrl ? (
-                      <img src={upload.coverUrl} alt="" loading="lazy" />
-                    ) : (
-                      <Books size={20} />
-                    )}
-                  </span>
-                  <span>
-                    <strong>{upload.seriesTitle}</strong>
-                    <small>
-                      Chapter {upload.chapterNumber} · {upload.language.toUpperCase()}
-                      {upload.version > 1 ? ` · v${upload.version}` : ""}
-                    </small>
-                    <small>
-                      {upload.teamName ?? "Independent release"} · {timeLabel(upload.publishedAt)}
-                    </small>
-                  </span>
-                  <span className={`public-profile-upload-access is-${upload.accessType.toLowerCase()}`}>
-                    {upload.accessType === "FREE" ? "Free" : "Paid"}
-                  </span>
-                  <ArrowRight size={17} />
-                </a>
-              ))}
-            </div>
+            {profile.uploads.length ? (
+              <div className="public-profile-uploads">
+                {profile.uploads.map((upload) => (
+                  <a
+                    key={upload.id}
+                    href={`/title/${upload.seriesSlug}/chapter/${upload.chapterSlug}`}
+                  >
+                    <span className="public-profile-upload-cover">
+                      {upload.coverUrl ? (
+                        <img src={upload.coverUrl} alt="" loading="lazy" />
+                      ) : (
+                        <Books size={20} />
+                      )}
+                    </span>
+                    <span>
+                      <strong>{upload.seriesTitle}</strong>
+                      <small>
+                        Chapter {upload.chapterNumber} ·{" "}
+                        {upload.language.toUpperCase()}
+                        {upload.version > 1 ? ` · v${upload.version}` : ""}
+                      </small>
+                      <small>
+                        {upload.teamName ?? "Independent release"} ·{" "}
+                        {timeLabel(upload.publishedAt)}
+                      </small>
+                    </span>
+                    {upload.accessType === "FREE" || premiumEconomyPublic ? (
+                      <span
+                        className={`public-profile-upload-access is-${upload.accessType.toLowerCase()}`}
+                      >
+                        {upload.accessType === "FREE" ? "Free" : "Paid"}
+                      </span>
+                    ) : null}
+                    <ArrowRight size={17} />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="public-profile-empty">
+                <UploadSimple size={25} />
+                <strong>No public uploads</strong>
+                <span>Published chapters from this uploader will appear here.</span>
+              </div>
+            )}
           </section>
         ) : null}
-        {profile.comments.length ? (
+        {section === "comments" ? (
           <section className="public-profile-panel">
             <div className="section-heading public-profile-section-heading">
               <div>
@@ -636,64 +808,77 @@ export function PublicProfileView({ username }: { username: string }) {
                 </button>
               ) : null}
             </div>
-            <div className="public-profile-comments">
-              {visibleComments.map((comment) => {
-                const commentHref = `/title/${comment.seriesSlug}${
-                  comment.chapterSlug ? `/chapter/${comment.chapterSlug}` : ""
-                }#comment-${comment.id}`;
-                return (
-                  <article key={comment.id} id={`profile-comment-${comment.id}`}>
-                    <span
-                      className="public-profile-comment-cover"
-                      aria-hidden="true"
+            {profile.comments.length ? (
+              <div className="public-profile-comments">
+                {visibleComments.map((comment) => {
+                  const commentHref = `/title/${comment.seriesSlug}${
+                    comment.chapterSlug
+                      ? `/chapter/${comment.chapterSlug}`
+                      : ""
+                  }#comment-${comment.id}`;
+                  return (
+                    <article
+                      key={comment.id}
+                      id={`profile-comment-${comment.id}`}
                     >
-                      {comment.coverUrl ? (
-                        <img
-                          src={comment.coverUrl}
-                          alt=""
-                          loading="lazy"
-                          onError={(event) => {
-                            const fallback =
-                              "/art/series-cover-placeholder.svg";
-                            if (!event.currentTarget.src.endsWith(fallback)) {
-                              event.currentTarget.src = fallback;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span className="public-reading-cover-placeholder">
-                          <Books size={20} />
-                        </span>
-                      )}
-                    </span>
-                    <div className="public-profile-comment-copy">
-                      <div className="public-profile-comment-title">
-                        <ChatCircle size={19} weight="duotone" />
-                        <a href={commentHref}>
-                          {comment.seriesTitle}
-                          {comment.chapterNumber
-                            ? ` · Chapter ${comment.chapterNumber}`
-                            : ""}
-                        </a>
+                      <span
+                        className="public-profile-comment-cover"
+                        aria-hidden="true"
+                      >
+                        {comment.coverUrl ? (
+                          <img
+                            src={comment.coverUrl}
+                            alt=""
+                            loading="lazy"
+                            onError={(event) => {
+                              const fallback =
+                                "/art/series-cover-placeholder.svg";
+                              if (!event.currentTarget.src.endsWith(fallback)) {
+                                event.currentTarget.src = fallback;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span className="public-reading-cover-placeholder">
+                            <Books size={20} />
+                          </span>
+                        )}
+                      </span>
+                      <div className="public-profile-comment-copy">
+                        <div className="public-profile-comment-title">
+                          <ChatCircle size={19} weight="duotone" />
+                          <a href={commentHref}>
+                            {comment.seriesTitle}
+                            {comment.chapterNumber
+                              ? ` · Chapter ${comment.chapterNumber}`
+                              : ""}
+                          </a>
+                        </div>
+                        {comment.spoiler ? (
+                          <details className="public-profile-comment-spoiler">
+                            <summary>Reveal spoiler comment</summary>
+                            {commentContent(comment)}
+                          </details>
+                        ) : (
+                          commentContent(comment)
+                        )}
+                        <small>
+                          {timeLabel(comment.createdAt)} · {comment.upvotes} up ·{" "}
+                          {comment.downvotes} down · {comment.reactionCount}{" "}
+                          reactions
+                        </small>
                       </div>
-                      {comment.spoiler ? (
-                        <details className="public-profile-comment-spoiler">
-                          <summary>Reveal spoiler comment</summary>
-                          {commentContent(comment)}
-                        </details>
-                      ) : (
-                        commentContent(comment)
-                      )}
-                      <small>
-                        {timeLabel(comment.createdAt)} · {comment.upvotes} up ·{" "}
-                        {comment.downvotes} down · {comment.reactionCount}{" "}
-                        reactions
-                      </small>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="public-profile-empty">
+                <ChatCircle size={25} />
+                <strong>No public comments</strong>
+                <span>Visible comments from this reader will appear here.</span>
+              </div>
+            )}
           </section>
         ) : null}
       </div>

@@ -60,6 +60,8 @@ test("Version 45 connects team activity, fixed pages, sliders, and first-open ad
   assert.match(uploadRoute, /FIXED_READER_PAGE_CONTROL_FORBIDDEN/);
   assert.match(schema, /canControlFixedReaderPages/);
   assert.match(app, /\["Sliders", SlidersHorizontal\]/);
-  assert.match(operations, /EditorialManagementPanel mode="sliders"/);
-  assert.match(app, /nyascans:home-release-ad:2026-08/);
+  assert.match(operations, /<SliderManagementPanel \/>/);
+  assert.match(operations, /<HomePromotionsPanel \/>/);
+  assert.match(app, /nyascans:floating-ad:/);
+  assert.match(app, /campaign\.resetKey/);
 });

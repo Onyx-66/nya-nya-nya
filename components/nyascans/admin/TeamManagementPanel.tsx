@@ -9,10 +9,12 @@ import {
   Eye,
   EyeSlash,
   Images,
+  MagnifyingGlass,
   Plus,
   ShieldCheck,
   Smiley,
   UsersThree,
+  Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
 import {
@@ -168,6 +170,14 @@ export function TeamManagementPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [memberBusy, setMemberBusy] = useState("");
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberResults, setMemberResults] = useState<Array<{
+    id: string;
+    displayName: string;
+    email: string;
+    membershipStatus: string | null;
+  }>>([]);
+  const [newMemberRole, setNewMemberRole] = useState<"OWNER" | "LEADER" | "UPLOADER">("UPLOADER");
   const [chapterBusy, setChapterBusy] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
   const [page, setPage] = useState(1);
@@ -266,7 +276,7 @@ export function TeamManagementPanel() {
 
   async function updateMember(
     member: TeamRecord["members"][number],
-    patch: { role?: string; status?: string },
+    patch: { role?: string; remove?: boolean },
   ) {
     if (!draft.id || memberBusy || dirty) {
       if (dirty) {
@@ -280,21 +290,56 @@ export function TeamManagementPanel() {
     setMemberBusy(member.userId);
     setMessage(null);
     try {
-      await api<{ ok: boolean }>("/api/v1/admin/team-memberships", {
+      await api<{ ok: boolean }>("/api/v1/admin/team-members", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          action: patch.remove ? "REMOVE" : "UPDATE",
           teamId: draft.id,
           userId: member.userId,
-          membershipRole: patch.role ?? member.role,
-          status: patch.status ?? member.status,
-          expectedRevision: member.revision,
+          role: patch.role ?? member.role,
+          revision: member.revision,
         }),
       });
       await load(draft.id, page);
       setMessage({ kind: "success", text: `${member.displayName}'s team access was updated.` });
     } catch (error) {
       setMessage({ kind: "error", text: error instanceof Error ? error.message : "Membership could not be updated." });
+    } finally {
+      setMemberBusy("");
+    }
+  }
+
+  async function searchMembers() {
+    if (!draft.id || memberQuery.trim().length < 2) return;
+    setMemberBusy("search");
+    try {
+      const result = await api<{ data: typeof memberResults }>(
+        `/api/v1/admin/team-members?teamId=${encodeURIComponent(draft.id)}&query=${encodeURIComponent(memberQuery.trim())}`,
+      );
+      setMemberResults(result.data);
+    } catch (error) {
+      setMessage({ kind: "error", text: error instanceof Error ? error.message : "Users could not be searched." });
+    } finally {
+      setMemberBusy("");
+    }
+  }
+
+  async function addMember(userId: string) {
+    if (!draft.id || memberBusy) return;
+    setMemberBusy(userId);
+    try {
+      await api<{ ok: boolean }>("/api/v1/admin/team-members", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "ADD", teamId: draft.id, userId, role: newMemberRole }),
+      });
+      setMemberQuery("");
+      setMemberResults([]);
+      await load(draft.id, page);
+      setMessage({ kind: "success", text: "Team member added with scoped access." });
+    } catch (error) {
+      setMessage({ kind: "error", text: error instanceof Error ? error.message : "Member could not be added." });
     } finally {
       setMemberBusy("");
     }
@@ -637,8 +682,18 @@ export function TeamManagementPanel() {
 
         <div className="admin-team-editor-stack">
           <details className="admin-editor-box" open>
-            <summary>Members &amp; roles</summary>
+            <summary>Control members</summary>
             <div className="admin-detail-form admin-team-members">
+              {draft.id ? (
+                <section className="v46-team-member-control">
+                  <div>
+                    <label><span>Find a user</span><div className="v46-member-search"><MagnifyingGlass size={18} /><input type="search" value={memberQuery} placeholder="Name, email, or user ID" onChange={(event) => setMemberQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void searchMembers(); } }} /></div></label>
+                    <label><span>Team role</span><select value={newMemberRole} onChange={(event) => setNewMemberRole(event.target.value as typeof newMemberRole)}><option value="UPLOADER">Uploader</option><option value="LEADER">Leader</option><option value="OWNER">Owner</option></select></label>
+                    <button className="button button-secondary" type="button" disabled={memberQuery.trim().length < 2 || Boolean(memberBusy)} onClick={() => void searchMembers()}>Search</button>
+                  </div>
+                  {memberResults.length ? <div className="v46-member-results">{memberResults.map((user) => <article key={user.id}><span className="admin-list-avatar">{user.displayName.slice(0, 2).toUpperCase()}</span><div><strong>{user.displayName}</strong><small>{user.email}{user.membershipStatus === "ACTIVE" ? " · Already active" : ""}</small></div><button className="button button-primary" type="button" disabled={user.membershipStatus === "ACTIVE" || Boolean(memberBusy)} onClick={() => void addMember(user.id)}><Plus size={15} /> Add</button></article>)}</div> : null}
+                </section>
+              ) : null}
               {draft.id && draft.members.length ? (
                 draft.members.map((member) => (
                   <article key={member.userId}>
@@ -655,23 +710,12 @@ export function TeamManagementPanel() {
                         title={dirty ? "Save or reset the team before changing member access." : undefined}
                         onChange={(event) => void updateMember(member, { role: event.target.value })}
                       >
-                        {["OWNER", "LEADER", "TEAM_LEADER", "MANAGER", "UPLOADER", "TRANSLATOR", "EDITOR", "CLEANER", "REDRAWER", "TYPESETTER", "PROOFREADER", "QUALITY_CONTROL", "MEMBER"].map((role) => (
-                          <option key={role} value={role}>{role.replaceAll("_", " ").toLowerCase()}</option>
-                        ))}
+                        <option value="OWNER">Owner</option>
+                        <option value="LEADER">Leader</option>
+                        <option value="UPLOADER">Uploader</option>
                       </select>
                     </label>
-                    <label>
-                      <span className="sr-only">Status for {member.displayName}</span>
-                      <select
-                        value={member.status}
-                        disabled={dirty || Boolean(memberBusy) || saving}
-                        title={dirty ? "Save or reset the team before changing member access." : undefined}
-                        onChange={(event) => void updateMember(member, { status: event.target.value })}
-                      >
-                        <option value="ACTIVE">Active</option>
-                        <option value="INACTIVE">Inactive</option>
-                      </select>
-                    </label>
+                    <button type="button" className="v46-icon-danger" disabled={dirty || Boolean(memberBusy) || saving || member.status !== "ACTIVE"} aria-label={`Remove ${member.displayName} from ${draft.name}`} onClick={() => void updateMember(member, { remove: true })}><Trash size={17} /></button>
                     {memberBusy === member.userId ? <ArrowClockwise className="is-spinning" size={18} /> : <ShieldCheck size={18} />}
                   </article>
                 ))
@@ -679,7 +723,7 @@ export function TeamManagementPanel() {
                 <div className="admin-state-card">
                   <UsersThree size={24} />
                   <h3>No team members yet</h3>
-                  <p>Add members through Users &amp; roles, then manage their team role here.</p>
+                  <p>Search an existing user above, then assign Owner, Leader, or Uploader.</p>
                 </div>
               )}
             </div>

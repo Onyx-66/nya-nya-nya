@@ -255,7 +255,7 @@ test("V38 upload authorization is based on exact VERIFIED membership, never a se
   assert.match(uploadScope, /t\.verification_status = 'VERIFIED'/u);
   assert.match(
     uploadScope,
-    /\('OWNER', 'LEADER', 'TEAM_LEADER', 'MANAGER', 'UPLOADER'\)/u,
+    /\('OWNER', 'LEADER', 'UPLOADER'\)/u,
   );
   assert.doesNotMatch(uploadScope, /series_team_assignments/u);
   assert.doesNotMatch(uploadScope, /verification_status <> 'SUSPENDED'/u);

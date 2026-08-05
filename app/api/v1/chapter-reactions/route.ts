@@ -11,6 +11,7 @@ const querySchema = z.object({ chapterId: z.string().uuid() });
 const mutationSchema = querySchema.extend({ reactionId: z.string().uuid() });
 
 async function snapshot(chapterId: string, viewerId: string | null) {
+  const viewer = viewerId ?? "";
   const reactions = await env.DB!.prepare(
     `SELECT cr.id, cr.name, cr.accessible_label AS accessibleLabel,
             cr.emoji_fallback AS emojiFallback, cr.asset_key AS assetKey,
@@ -22,10 +23,24 @@ async function snapshot(chapterId: string, viewerId: string | null) {
       WHERE cr.usage_kind = 'REACTION'
         AND cr.is_active = 1
         AND cr.is_archived = 0
+        AND (
+          COALESCE(json_extract(cr.availability_json, '$.scope'), 'GLOBAL') = 'GLOBAL'
+          OR (? <> '' AND json_extract(cr.availability_json, '$.scope') = 'SIGNED_IN')
+          OR (
+            ? <> ''
+            AND json_extract(cr.availability_json, '$.scope') = 'TEAM'
+            AND EXISTS (
+              SELECT 1
+                FROM json_each(cr.availability_json, '$.teamIds') allowed_team
+                JOIN team_memberships tm ON tm.team_id = allowed_team.value
+               WHERE tm.user_id = ? AND tm.status = 'ACTIVE'
+            )
+          )
+        )
       GROUP BY cr.id
       ORDER BY cr.display_order, cr.name COLLATE NOCASE
-      LIMIT 12`,
-  ).bind(viewerId ?? "", chapterId).all<{
+      LIMIT 6`,
+  ).bind(viewer, chapterId, viewer, viewer, viewer).all<{
     id: string; name: string; accessibleLabel: string; emojiFallback: string;
     assetKey: string | null; count: number; selected: number;
   }>();
@@ -79,10 +94,29 @@ export async function PUT(request: Request) {
     const payload = mutationSchema.parse(await request.json());
     await requireReadableChapter(actor, payload.chapterId);
     const available = await env.DB.prepare(
-      `SELECT id FROM custom_reactions
-        WHERE id = ? AND usage_kind = 'REACTION'
-          AND is_active = 1 AND is_archived = 0 LIMIT 1`,
-    ).bind(payload.reactionId).first();
+      `SELECT id FROM (
+         SELECT cr.id
+           FROM custom_reactions cr
+          WHERE cr.usage_kind = 'REACTION'
+            AND cr.is_active = 1 AND cr.is_archived = 0
+            AND (
+              COALESCE(json_extract(cr.availability_json, '$.scope'), 'GLOBAL') = 'GLOBAL'
+              OR json_extract(cr.availability_json, '$.scope') = 'SIGNED_IN'
+              OR (
+                json_extract(cr.availability_json, '$.scope') = 'TEAM'
+                AND EXISTS (
+                  SELECT 1
+                    FROM json_each(cr.availability_json, '$.teamIds') allowed_team
+                    JOIN team_memberships tm ON tm.team_id = allowed_team.value
+                   WHERE tm.user_id = ? AND tm.status = 'ACTIVE'
+                )
+              )
+            )
+          ORDER BY cr.display_order, cr.name COLLATE NOCASE
+          LIMIT 6
+       ) available_reactions
+       WHERE id = ?`,
+    ).bind(actor.id, payload.reactionId).first();
     if (!available) throw new ApiError(404, "REACTION_NOT_FOUND", "This reaction is no longer available.");
     const current = await env.DB.prepare(
       "SELECT reaction_id AS reactionId FROM chapter_reactions WHERE user_id = ? AND chapter_id = ? LIMIT 1",

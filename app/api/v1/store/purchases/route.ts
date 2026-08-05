@@ -45,6 +45,14 @@ export async function POST(request: Request) {
     const premiumEconomyPublic =
       !commercial.recoveredFromInvalid &&
       commercial.settings.economy.premiumEconomyPublic;
+    const ownerPreview = actor.roles.includes("OWNER");
+    if (!premiumEconomyPublic && !ownerPreview) {
+      throw new ApiError(
+        403,
+        "LOCK_AND_PAY_PRIVATE",
+        "Purchases are currently private.",
+      );
+    }
     if (!env.DB) {
       throw new ApiError(
         503,
@@ -106,7 +114,7 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "private, no-store", vary: "Cookie" } },
       );
     }
-    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic) {
+    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic && !ownerPreview) {
       throw new ApiError(
         403,
         "PAID_ECONOMY_HIDDEN",
@@ -115,7 +123,9 @@ export async function POST(request: Request) {
     }
     const paidCommercial =
       item.priceCurrency === "ONYX"
-        ? await requirePaidEconomyPublicDocument()
+        ? ownerPreview
+          ? commercial
+          : await requirePaidEconomyPublicDocument()
         : null;
     const paidEconomyRevision = paidCommercial?.revision ?? null;
     const amount = Number(item.priceAmount);

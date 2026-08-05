@@ -102,6 +102,11 @@ type UploadOptions = {
   }>;
   limits: typeof UPLOAD_LIMITS;
   admin: boolean;
+  uploaderReview: {
+    status: "UNAPPROVED" | "APPROVED" | "UNDER_SCOPE" | "REJECTED";
+    hasSubmittedUpload: boolean;
+    requiresReview: boolean;
+  };
 };
 
 type UploadFileRecord = {
@@ -202,6 +207,18 @@ type Credits = {
   proofreader: string;
   qualityControl: string;
 };
+
+const uploadLanguages = [
+  ["en", "🇬🇧", "English"],
+  ["ar", "🇸🇦", "Arabic"],
+  ["fr", "🇫🇷", "French"],
+  ["es", "🇪🇸", "Spanish"],
+  ["pt", "🇵🇹", "Portuguese"],
+  ["id", "🇮🇩", "Indonesian"],
+  ["ko", "🇰🇷", "Korean"],
+  ["ja", "🇯🇵", "Japanese"],
+  ["zh", "🇨🇳", "Chinese"],
+] as const;
 
 type ComposerItem = {
   clientKey: string;
@@ -762,6 +779,7 @@ function ChapterMetadataFields({
   coinName = "Paw Coin",
   disabled = false,
   showFixedPageChoices = false,
+  singleMode = false,
 }: {
   item: ComposerItem;
   onChange(next: ComposerItem): void;
@@ -774,6 +792,7 @@ function ChapterMetadataFields({
   coinName?: string;
   disabled?: boolean;
   showFixedPageChoices?: boolean;
+  singleMode?: boolean;
 }) {
   return (
     <div
@@ -781,7 +800,7 @@ function ChapterMetadataFields({
       data-upload-item={item.clientKey}
     >
       <label>
-        <span>Volume</span>
+        <span>Volume <small>Optional</small></span>
         <input
           disabled={disabled}
           value={item.volume}
@@ -813,7 +832,7 @@ function ChapterMetadataFields({
         ) : null}
       </label>
       <label>
-        <span>Chapter title</span>
+        <span>Chapter title <small>Optional</small></span>
         <input
           disabled={disabled}
           value={item.title}
@@ -823,17 +842,18 @@ function ChapterMetadataFields({
       </label>
       <label>
         <span>Language</span>
-        <input
+        <select
           disabled={disabled}
           value={item.language}
-          pattern="[a-z]{2,3}(?:-[a-z0-9]{2,8})?"
           required
           onChange={(event) =>
             onChange({ ...item, language: event.target.value.toLowerCase() })
           }
-        />
+        >
+          {uploadLanguages.map(([code, flag, name]) => <option value={code} key={code}>{flag} {name}</option>)}
+        </select>
       </label>
-      <label>
+      {!singleMode ? <label>
         <span>Version</span>
         <input
           disabled={disabled}
@@ -848,7 +868,7 @@ function ChapterMetadataFields({
             })
           }
         />
-      </label>
+      </label> : null}
       {showCommerce ? (
         <>
           <label>
@@ -872,7 +892,7 @@ function ChapterMetadataFields({
             </select>
           </label>
           <label>
-            <span>{coinName} price</span>
+            <span>Price <small>{coinName} required to unlock</small></span>
             <input
               type="number"
               min="1"
@@ -941,7 +961,7 @@ function ChapterMetadataFields({
           </label>
         </fieldset>
       ) : null}
-      {!compact ? (
+      {!compact && !singleMode ? (
         <>
           <label className="upload-field-wide">
             <span>Release notes</span>
@@ -1058,23 +1078,20 @@ function PublishingTeamVisual({
   selected,
   accessDescriptionId,
 }: {
-  team: UploadTeamOption | null;
+  team: UploadTeamOption;
   selected: boolean;
   accessDescriptionId: string;
 }) {
-  const independent = team === null;
-  const canPublish = independent || team.canPublish;
-  const requiresReview = !independent && team.requiresReview;
-  const name = team?.name ?? "Platform / independent";
+  const name = team.name;
 
   return (
     <>
       <span
-        className={`upload-team-option-banner${team?.bannerUrl ? " has-image" : " is-placeholder"}`}
+        className={`upload-team-option-banner${team.bannerUrl ? " has-image" : " is-placeholder"}`}
         style={teamOptionBannerStyle}
         aria-hidden="true"
       >
-        {team?.bannerUrl ? (
+        {team.bannerUrl ? (
           <img
             src={team.bannerUrl}
             alt=""
@@ -1124,15 +1141,13 @@ function PublishingTeamVisual({
             background: "var(--surface)",
           }}
         >
-          {team?.logoUrl ? (
+          {team.logoUrl ? (
             <img
               src={team.logoUrl}
               alt=""
               loading="lazy"
               style={teamOptionImageStyle}
             />
-          ) : independent ? (
-            <CloudArrowUp size={23} weight="duotone" />
           ) : (
             <span>{publishingTeamInitials(name)}</span>
           )}
@@ -1147,28 +1162,20 @@ function PublishingTeamVisual({
           }}
         >
           <strong>{name}</strong>
-          <small>
-            {team
-              ? `@${team.slug} · ${publishingMembershipLabel(team.membershipRole)}`
-              : "Administrator release without team attribution"}
-          </small>
+          <small>@{team.slug} · {publishingMembershipLabel(team.membershipRole)}</small>
           <span
             id={accessDescriptionId}
-            className={`upload-team-option-access ${canPublish ? "is-direct" : "is-review"}`}
+            className={`upload-team-option-access ${selected ? "is-direct" : "is-review"}`}
             style={{
               width: "fit-content",
               maxWidth: "100%",
               marginTop: 4,
-              color: canPublish ? "var(--accent)" : "var(--warning)",
+              color: selected ? "var(--accent)" : "var(--text-muted)",
               fontSize: 11,
               fontWeight: 750,
             }}
           >
-            {canPublish
-              ? "Direct publishing access"
-              : requiresReview
-                ? "Submission requires review"
-                : "Publishing access unavailable"}
+            {selected ? "Selected team" : "Select team"}
           </span>
         </span>
         <span
@@ -1289,13 +1296,11 @@ function BatchTeamStep({
 function SingleTeamChooser({
   teams,
   selectedTeamId,
-  allowIndependent,
   disabled,
   onSelect,
 }: {
   teams: UploadOptions["teams"];
   selectedTeamId: string;
-  allowIndependent: boolean;
   disabled: boolean;
   onSelect(teamId: string): void;
 }) {
@@ -1306,12 +1311,6 @@ function SingleTeamChooser({
       .toLowerCase()
       .includes(normalizedQuery),
   );
-  const independentVisible =
-    allowIndependent &&
-    (!normalizedQuery ||
-      "platform independent administrator"
-        .toLowerCase()
-        .includes(normalizedQuery));
 
   return (
     <section
@@ -1320,10 +1319,8 @@ function SingleTeamChooser({
     >
       <div className="upload-single-team-heading">
         <div>
-          <strong id="single-publishing-team-title">Publishing team</strong>
-          <small>
-            Choose the verified team that will own this chapter release.
-          </small>
+          <strong id="single-publishing-team-title">Select team</strong>
+          <small>Select your publishing team</small>
         </div>
         <span>{teams.length} eligible</span>
       </div>
@@ -1340,34 +1337,12 @@ function SingleTeamChooser({
           />
         </label>
       ) : null}
-      {independentVisible || visibleTeams.length ? (
+      {visibleTeams.length ? (
         <div
           className="upload-team-options upload-team-options-compact"
           role="radiogroup"
           aria-labelledby="single-publishing-team-title"
         >
-          {independentVisible ? (
-            <label
-              className={`upload-team-option-card upload-team-option-independent${selectedTeamId ? "" : " is-selected"}`}
-              style={teamOptionCardStyle}
-            >
-              <input
-                className="upload-team-native-radio"
-                type="radio"
-                name="single-publishing-team"
-                value=""
-                checked={!selectedTeamId}
-                disabled={disabled}
-                aria-describedby="single-team-access-independent"
-                onChange={() => onSelect("")}
-              />
-              <PublishingTeamVisual
-                team={null}
-                selected={!selectedTeamId}
-                accessDescriptionId="single-team-access-independent"
-              />
-            </label>
-          ) : null}
           {visibleTeams.map((team) => {
             const selected = team.id === selectedTeamId;
             return (
@@ -1446,11 +1421,12 @@ function UploadComposer({
     kind === "BATCH" ? "DIRECT_FOLDER" : "DIRECT_IMAGES",
   );
   const sourceType: SupportedUploadMethod =
-    ingestMethod === "ZIP"
+    ingestMethod === "ZIP" || ingestMethod === "GOOGLE_DRIVE"
       ? kind === "BATCH"
         ? "DIRECT_FOLDER"
         : "DIRECT_IMAGES"
       : ingestMethod;
+  const [googleDriveUrl, setGoogleDriveUrl] = useState("");
   const [items, setItems] = useState<ComposerItem[]>([newComposerItem()]);
   const [localPages, setLocalPages] = useState<LocalPage[]>([]);
   const [batchPaidEnabled, setBatchPaidEnabled] = useState(false);
@@ -1527,6 +1503,9 @@ function UploadComposer({
           );
         }
         setJob(payload.data);
+        if (kind === "SINGLE" && payload.data.items?.[0]?.files.length) {
+          setActivePreviewGroup(`server:${payload.data.items[0].id}`);
+        }
         setSeriesId(payload.data.seriesId);
         setTeamId(payload.data.teamId ?? "");
         setTeamStepComplete(true);
@@ -1972,6 +1951,9 @@ function UploadComposer({
         naturalCompare(left.path, right.path),
       ),
     );
+    if (kind === "SINGLE") {
+      setActivePreviewGroup(`local:${items[0]!.clientKey}`);
+    }
     setComposerDirty(true);
     setConfirmed(false);
     return true;
@@ -2218,6 +2200,9 @@ function UploadComposer({
       }),
     );
     setJob(payload.data);
+    if (kind === "SINGLE" && payload.data.items?.[0]?.files.length) {
+      setActivePreviewGroup(`server:${payload.data.items[0].id}`);
+    }
     return payload.data;
   }
 
@@ -2234,7 +2219,7 @@ function UploadComposer({
         );
       }
       if (!seriesId) throw new Error("Choose a public series.");
-      if ((kind === "BATCH" || !options.admin) && !teamId) {
+      if (!teamId) {
         throw new Error("Choose your active team.");
       }
       let current = job;
@@ -2246,8 +2231,9 @@ function UploadComposer({
             body: JSON.stringify({
               kind,
               sourceType,
+              sourceUrl: ingestMethod === "GOOGLE_DRIVE" ? googleDriveUrl : null,
               seriesId,
-              teamId: teamId || null,
+              teamId,
               idempotencyKey: createIntentKeyRef.current,
               items: selectedItems.map(wireItem),
             }),
@@ -2768,11 +2754,13 @@ function UploadComposer({
     <section className={`upload-workflow upload-workflow-${kind.toLowerCase()}`}>
       <header className="upload-section-heading">
         <div>
-          <span>{kind === "BATCH" ? "Folder batch" : "One release"}</span>
+          {kind === "BATCH" ? <span>Folder batch</span> : null}
           <h2>{kind === "BATCH" ? "Multi-chapter upload" : "Single chapter upload"}</h2>
           {kind === "BATCH" ? (
             <p>Prepare up to {UPLOAD_LIMITS.maxChaptersPerJob} chapter folders, then review every release before submission.</p>
-          ) : null}
+          ) : (
+            <p>Upload the content of your chapter as images, a compressed folder, or through a Google Drive link.<br /><strong>Chapter size limit: 250 MB</strong></p>
+          )}
         </div>
         {job ? <StatusBadge status={job.status} /> : null}
       </header>
@@ -2822,6 +2810,7 @@ function UploadComposer({
           <FileImage size={28} />
           <div>
             <strong>Single-chapter studio</strong>
+            <small>Images, one ZIP/CBZ archive, or a secure Google Drive link.</small>
           </div>
           <span>250 MB chapter limit</span>
         </div>
@@ -2849,8 +2838,8 @@ function UploadComposer({
           <div className="upload-card-heading">
             <span>{kind === "BATCH" ? "2" : "1"}</span>
             <div>
-              <strong>{kind === "BATCH" ? "Quick upload settings" : "Release context"}</strong>
-              <small>Public series and verified publishing team</small>
+              <strong>{kind === "BATCH" ? "Quick upload settings" : "General details"}</strong>
+              <small>{kind === "BATCH" ? "Public series and verified publishing team" : "Select your publishing team"}</small>
             </div>
           </div>
           {kind === "BATCH" ? (
@@ -2988,7 +2977,6 @@ function UploadComposer({
               <SingleTeamChooser
                 teams={options.teams}
                 selectedTeamId={teamId}
-                allowIndependent={options.admin}
                 disabled={busy || Boolean(job)}
                 onSelect={selectPublishingTeam}
               />
@@ -3010,20 +2998,6 @@ function UploadComposer({
                   ))}
                 </select>
               </label>
-              <label>
-                <span>File method</span>
-                <select
-                  value={ingestMethod}
-                  disabled={busy || Boolean(job)}
-                  onChange={(event) =>
-                    setIngestMethod(event.target.value as ClientUploadMethod)
-                  }
-                >
-                  <option value="DIRECT_IMAGES">Direct images</option>
-                  <option value="DIRECT_FOLDER">Folder selection</option>
-                  <option value="ZIP">ZIP / CBZ archive</option>
-                </select>
-              </label>
             </div>
           )}
         </section>
@@ -3032,11 +3006,12 @@ function UploadComposer({
             <div className="upload-card-heading">
               <span>2</span>
               <div>
-                <strong>Chapter metadata</strong>
-                <small>Detection is a suggestion; confirm every chapter</small>
+                <strong>Chapter details</strong>
+                <small>Precise your chapter details.</small>
               </div>
             </div>
             <ChapterMetadataFields
+              singleMode
               disabled={busy}
               coinName={commercial.economy.coinName}
               showCommerce={
@@ -3058,8 +3033,23 @@ function UploadComposer({
         <section className="upload-composer-card">
           <div className="upload-card-heading">
             <span>3</span>
-            <div><strong>Pages and ordering</strong><small>Natural order first, explicit order saved exactly</small></div>
+            <div><strong>{kind === "SINGLE" ? "Chapter content" : "Pages and ordering"}</strong><small>{kind === "SINGLE" ? "Choose a source, preview every page, and save the exact reading order." : "Natural order first, explicit order saved exactly"}</small></div>
           </div>
+          {kind === "SINGLE" ? (
+            <div className="v46-upload-method">
+              <label>
+                <span>Select upload method</span>
+                <select value={ingestMethod} disabled={busy || Boolean(job)} onChange={(event) => setIngestMethod(event.target.value as ClientUploadMethod)}>
+                  <option value="DIRECT_IMAGES">Images</option>
+                  <option value="ZIP">ZIP / CBZ archive</option>
+                  <option value="GOOGLE_DRIVE">Google Drive link</option>
+                </select>
+              </label>
+              {ingestMethod === "GOOGLE_DRIVE" ? (
+                <label><span>Google Drive folder or ZIP link</span><input type="url" required value={googleDriveUrl} placeholder="https://drive.google.com/…" disabled={busy || Boolean(job)} onChange={(event) => setGoogleDriveUrl(event.target.value)} /><small>Only drive.google.com and docs.google.com links are accepted.</small></label>
+              ) : null}
+            </div>
+          ) : null}
           {!job || ["DRAFT", "UPLOADING", "READY", "FAILED"].includes(job.status) ? (
             kind === "BATCH" ? (
               <div
@@ -3192,6 +3182,8 @@ function UploadComposer({
                   </div>
                 </dl>
               </div>
+            ) : ingestMethod === "GOOGLE_DRIVE" ? (
+              <div className="v46-drive-upload-state"><CloudArrowUp size={32} /><strong>Google Drive import</strong><p>Paste a public folder or ZIP link above. NyaScans saves it to this private draft for secure import and review.</p></div>
             ) : (
               <label className="upload-dropzone">
                 {ingestMethod === "ZIP" ? (
@@ -3310,10 +3302,10 @@ function UploadComposer({
                           <button
                             type="button"
                             disabled={busy || offset + index === 0}
-                            aria-label="Move page up"
+                            aria-label={kind === "SINGLE" ? "Move page left" : "Move page up"}
                             onClick={() => moveLocal(page.id, -1)}
                           >
-                            <ArrowUp size={16} />
+                            {kind === "SINGLE" ? <ArrowLeft size={16} /> : <ArrowUp size={16} />}
                           </button>
                           <button
                             type="button"
@@ -3321,10 +3313,10 @@ function UploadComposer({
                               busy ||
                               offset + index === itemPages.length - 1
                             }
-                            aria-label="Move page down"
+                            aria-label={kind === "SINGLE" ? "Move page right" : "Move page down"}
                             onClick={() => moveLocal(page.id, 1)}
                           >
-                            <ArrowDown size={16} />
+                            {kind === "SINGLE" ? <ArrowRight size={16} /> : <ArrowDown size={16} />}
                           </button>
                           <button
                             type="button"
@@ -3332,7 +3324,7 @@ function UploadComposer({
                             aria-label="Remove selected page"
                             onClick={() => removeLocalPage(page.id)}
                           >
-                            <X size={16} />
+                            <Trash size={16} />
                           </button>
                         </li>
                       ))}
@@ -3460,28 +3452,28 @@ function UploadComposer({
                           <button
                             type="button"
                             disabled={busy || offset + index === 0}
-                            aria-label="Move validated page up"
+                            aria-label={kind === "SINGLE" ? "Move validated page left" : "Move validated page up"}
                             onClick={() => {
                               const next = [...ordered];
                               const absoluteIndex = offset + index;
                               [next[absoluteIndex - 1], next[absoluteIndex]] = [next[absoluteIndex]!, next[absoluteIndex - 1]!];
                               void reorderServer(item, next);
                             }}
-                          ><ArrowUp size={16} /></button>
+                          >{kind === "SINGLE" ? <ArrowLeft size={16} /> : <ArrowUp size={16} />}</button>
                           <button
                             type="button"
                             disabled={
                               busy ||
                               offset + index === ordered.length - 1
                             }
-                            aria-label="Move validated page down"
+                            aria-label={kind === "SINGLE" ? "Move validated page right" : "Move validated page down"}
                             onClick={() => {
                               const next = [...ordered];
                               const absoluteIndex = offset + index;
                               [next[absoluteIndex + 1], next[absoluteIndex]] = [next[absoluteIndex]!, next[absoluteIndex + 1]!];
                               void reorderServer(item, next);
                             }}
-                          ><ArrowDown size={16} /></button>
+                          >{kind === "SINGLE" ? <ArrowRight size={16} /> : <ArrowDown size={16} />}</button>
                         </>
                       ) : null}
                       <button
@@ -3656,9 +3648,10 @@ function UploadComposer({
               <div><strong>Final review</strong><small>Nothing becomes public before this confirmation</small></div>
             </div>
             <dl>
-              <div><dt>Series</dt><dd>{job.seriesTitle}</dd></div>
-              <div><dt>Team</dt><dd>{job.teamName ?? "Platform"}</dd></div>
-              <div><dt>Chapters</dt><dd>{job.items?.length ?? 0}</dd></div>
+              <div><dt>Serie</dt><dd>{job.seriesTitle}</dd></div>
+              <div><dt>Publisher</dt><dd>{job.teamName}</dd></div>
+              {kind === "SINGLE" && job.items?.[0]?.title ? <div><dt>Title</dt><dd>{job.items[0].title}</dd></div> : null}
+              <div><dt>{kind === "SINGLE" ? "Chapter" : "Chapters"}</dt><dd>{kind === "SINGLE" ? job.items?.[0]?.chapterNumber : job.items?.length ?? 0}</dd></div>
               <div><dt>Pages</dt><dd>{job.pageCount}</dd></div>
               <div><dt>Size</dt><dd>{formatBytes(job.totalBytes)}</dd></div>
             </dl>
@@ -3671,8 +3664,9 @@ function UploadComposer({
                 }
                 onChange={(event) => setConfirmed(event.target.checked)}
               />
-              I confirmed metadata, team, price, visibility, schedule, and page order.
+              <span>I approve that I have read and agreed to the <a href={routeFor("rights")}>Rights</a> and <a href={routeFor("rules")}>Upload Rules</a>.</span>
             </label>
+            {kind === "SINGLE" && options.uploaderReview.requiresReview && !options.uploaderReview.hasSubmittedUpload ? <p className="v46-first-upload-review"><ShieldCheck size={17} /> Submit for required review</p> : null}
             {composerDirty || localPages.length ? (
               <p className="upload-review-warning">
                 Save and validate the latest queue changes before confirming
@@ -3690,7 +3684,7 @@ function UploadComposer({
               }
               onClick={() => void publish()}
             >
-              <Check size={18} /> Publish or submit for required review
+              <Check size={18} /> Upload chapter content
             </button>
           </section>
         ) : null}
@@ -3712,7 +3706,7 @@ function UploadComposer({
             disabled={busy || !seriesId || Boolean(duplicateRejectedKey)}
           >
             {busy ? <SpinnerGap className="spin" size={18} /> : <CloudArrowUp size={18} />}
-            {job ? (localPages.length ? "Validate selected pages" : "Save metadata") : "Save draft and validate"}
+            Upload chapter content
           </button>
           </div>
         ) : null}

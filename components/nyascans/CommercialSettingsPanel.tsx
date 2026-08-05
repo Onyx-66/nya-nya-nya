@@ -537,10 +537,11 @@ export function CommercialSettingsPanel({
             )}
           </div>
           <div>
-            <strong>Premium economy visibility</strong>
+            <strong>Chapters Lock &amp; Pay</strong>
             <p>
-              Hidden mode removes real-money packages and every {draft.economy.coinName}
-              purchase surface while keeping free Shards and existing balances.
+              Hidden mode removes paid chapters, balances, packages, wallets,
+              purchase actions, and every {draft.economy.coinName} surface from
+              public users. Only the owner can preview and re-enable them.
             </p>
           </div>
           <label className="settings-check">

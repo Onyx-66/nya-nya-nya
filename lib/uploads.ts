@@ -48,7 +48,7 @@ export const UPLOAD_METHODS = Object.freeze([
 ] as const);
 
 export type SupportedUploadMethod = "DIRECT_IMAGES" | "DIRECT_FOLDER";
-export type ClientUploadMethod = SupportedUploadMethod | "ZIP";
+export type ClientUploadMethod = SupportedUploadMethod | "ZIP" | "GOOGLE_DRIVE";
 export type UploadJobKind = "SINGLE" | "BATCH";
 
 const naturalCollator = new Intl.Collator("en", {

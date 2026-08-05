@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import {
   assertSameOrigin,
@@ -29,6 +29,100 @@ const importedCoverSchema = z.object({
   externalId: z.string().trim().min(1).max(160),
   responseHash: z.string().regex(/^[a-f0-9]{64}$/i),
 });
+
+const mediaOperationFailures = {
+  "database.read": {
+    code: "MEDIA_DATABASE_READ_FAILED",
+    message: "Series media records are temporarily unavailable. Try again.",
+  },
+  "database.commit": {
+    code: "MEDIA_DATABASE_COMMIT_FAILED",
+    message: "The media change could not be saved. Try again.",
+  },
+  "storage.write": {
+    code: "MEDIA_STORAGE_WRITE_FAILED",
+    message: "The image could not be stored. Try again.",
+  },
+  "provider.download": {
+    code: "IMPORTED_COVER_DOWNLOAD_FAILED",
+    message: "The provider cover could not be downloaded. Try again.",
+  },
+} as const;
+
+type MediaOperation = keyof typeof mediaOperationFailures;
+type MediaCleanupOperation = "storage.rollback" | "storage.cleanup";
+
+function safeErrorSummary(error: unknown) {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/[\r\n\t]+/g, " ")
+    .slice(0, 300);
+}
+
+function logMediaFailure(
+  requestId: string,
+  operation: MediaOperation | MediaCleanupOperation | "request",
+  error: unknown,
+) {
+  console.error("series_media_operation_failed", {
+    requestId,
+    operation,
+    errorName: error instanceof Error ? error.name : "UnknownError",
+    errorMessage: safeErrorSummary(error),
+  });
+}
+
+async function performMediaOperation<T>(
+  requestId: string,
+  operation: MediaOperation,
+  task: () => Promise<T>,
+) {
+  try {
+    return await task();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    logMediaFailure(requestId, operation, error);
+    const failure = mediaOperationFailures[operation];
+    throw new ApiError(503, failure.code, failure.message, undefined, {
+      retryable: true,
+    });
+  }
+}
+
+function normalizeMediaError(requestId: string, error: unknown) {
+  if (error instanceof ApiError || error instanceof ZodError) return error;
+  logMediaFailure(requestId, "request", error);
+  return new ApiError(
+    500,
+    "MEDIA_REQUEST_FAILED",
+    "The series media request could not be completed. Try again.",
+    undefined,
+    { retryable: true },
+  );
+}
+
+async function settleMediaObject(
+  requestId: string,
+  db: D1Database,
+  bucket: R2Bucket,
+  objectKey: string,
+  context: Parameters<typeof deleteMediaObject>[3],
+  operation: MediaCleanupOperation,
+) {
+  try {
+    const deleted = await deleteMediaObject(db, bucket, objectKey, context);
+    if (!deleted) {
+      logMediaFailure(
+        requestId,
+        operation,
+        new Error("Object cleanup was deferred to the media cleanup queue."),
+      );
+    }
+  } catch (error) {
+    // Cleanup must never replace the primary failure or turn a committed media
+    // change into an error response. The request ID keeps the failure traceable.
+    logMediaFailure(requestId, operation, error);
+  }
+}
 
 function dependencies() {
   if (!env.DB || !env.BUCKET) {
@@ -107,20 +201,25 @@ export async function PUT(request: Request) {
       allowedTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
     });
     validateAspect(payload.slot, image.dimensions);
-    const current = await db
-      .prepare(
-        `SELECT title, revision, cover_key AS coverKey,
-                banner_key AS bannerKey, slider_key AS sliderKey
-         FROM series WHERE id = ? LIMIT 1`,
-      )
-      .bind(payload.seriesId)
-      .first<{
-        title: string;
-        revision: number;
-        coverKey: string | null;
-        bannerKey: string | null;
-        sliderKey: string | null;
-      }>();
+    const current = await performMediaOperation(
+      requestId,
+      "database.read",
+      () =>
+        db
+          .prepare(
+            `SELECT title, revision, cover_key AS coverKey,
+                    banner_key AS bannerKey, slider_key AS sliderKey
+             FROM series WHERE id = ? LIMIT 1`,
+          )
+          .bind(payload.seriesId)
+          .first<{
+            title: string;
+            revision: number;
+            coverKey: string | null;
+            bannerKey: string | null;
+            sliderKey: string | null;
+          }>(),
+    );
     if (!current) {
       throw new ApiError(
         404,
@@ -137,59 +236,73 @@ export async function PUT(request: Request) {
     }
     const digest = await sha256Hex(image.bytes);
     uploadedKey = `series/${payload.seriesId}/${payload.slot}/${randomId()}-${digest.slice(0, 12)}.${extensionFor(image.contentType)}`;
-    await bucket.put(uploadedKey, image.bytes, {
-      httpMetadata: {
-        contentType: image.contentType,
-        cacheControl: "public, max-age=31536000, immutable",
-      },
-      customMetadata: {
-        width: String(image.dimensions.width),
-        height: String(image.dimensions.height),
-        sha256: digest,
-      },
-    });
+    await performMediaOperation(requestId, "storage.write", () =>
+      bucket.put(uploadedKey, image.bytes, {
+        httpMetadata: {
+          contentType: image.contentType,
+          cacheControl: "public, max-age=31536000, immutable",
+        },
+        customMetadata: {
+          width: String(image.dimensions.width),
+          height: String(image.dimensions.height),
+          sha256: digest,
+        },
+      }),
+    );
     const column =
       payload.slot === "cover"
         ? "cover_key"
         : payload.slot === "banner"
           ? "banner_key"
           : "slider_key";
-    const updateResults = await db.batch([
-      db.prepare(
-        `UPDATE series
-         SET ${column} = ?, revision = revision + 1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND revision = ?`,
-      ).bind(uploadedKey, payload.seriesId, payload.revision),
-      auditStatement(
-        db,
-        actor,
+    const updateResults = await performMediaOperation(
+      requestId,
+      "database.commit",
+      () =>
+        db.batch([
+          db.prepare(
+            `UPDATE series
+             SET ${column} = ?, revision = revision + 1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND revision = ?`,
+          ).bind(uploadedKey, payload.seriesId, payload.revision),
+          auditStatement(
+            db,
+            actor,
+            requestId,
+            {
+              action: `series.${payload.slot}.replace`,
+              category: "SERIES_CHAPTERS",
+              sourceArea: "SERIES_MEDIA",
+              targetType: "SERIES",
+              targetId: payload.seriesId,
+              targetLabel: current.title,
+              metadata: {
+                slot: payload.slot,
+                contentType: image.contentType,
+                width: image.dimensions.width,
+                height: image.dimensions.height,
+                byteSize: image.bytes.byteLength,
+              },
+            },
+            "changes() = 1",
+          ),
+        ]),
+    );
+    if (Number(updateResults[0]?.meta.changes ?? 0) === 0) {
+      await settleMediaObject(
         requestId,
+        db,
+        bucket,
+        uploadedKey,
         {
-          action: `series.${payload.slot}.replace`,
-          category: "SERIES_CHAPTERS",
-          sourceArea: "SERIES_MEDIA",
+          mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
           targetType: "SERIES",
           targetId: payload.seriesId,
-          targetLabel: current.title,
-          metadata: {
-            slot: payload.slot,
-            contentType: image.contentType,
-            width: image.dimensions.width,
-            height: image.dimensions.height,
-            byteSize: image.bytes.byteLength,
-          },
+          reason: "Uncommitted series media upload",
         },
-        "changes() = 1",
-      ),
-    ]);
-    if (Number(updateResults[0]?.meta.changes ?? 0) === 0) {
-      await deleteMediaObject(db, bucket, uploadedKey, {
-        mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
-        targetType: "SERIES",
-        targetId: payload.seriesId,
-        reason: "Uncommitted series media upload",
-      });
+        "storage.rollback",
+      );
       uploadedKey = "";
       throw new ApiError(
         409,
@@ -207,12 +320,19 @@ export async function PUT(request: Request) {
           ? current.bannerKey
           : current.sliderKey;
     if (oldKey) {
-      await deleteMediaObject(db, bucket, oldKey, {
-        mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
-        targetType: "SERIES",
-        targetId: payload.seriesId,
-        reason: "Replaced series media",
-      });
+      await settleMediaObject(
+        requestId,
+        db,
+        bucket,
+        oldKey,
+        {
+          mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
+          targetType: "SERIES",
+          targetId: payload.seriesId,
+          reason: "Replaced series media",
+        },
+        "storage.cleanup",
+      );
     }
     return json(requestId, {
       data: {
@@ -222,15 +342,23 @@ export async function PUT(request: Request) {
       },
     });
   } catch (error) {
+    const responseError = normalizeMediaError(requestId, error);
     if (uploadedKey && env.DB && env.BUCKET) {
-      await deleteMediaObject(env.DB, env.BUCKET, uploadedKey, {
-        mediaKind: "SERIES_MEDIA",
-        targetType: "SERIES",
-        targetId: "uncommitted",
-        reason: "Failed series media upload",
-      });
+      await settleMediaObject(
+        requestId,
+        env.DB,
+        env.BUCKET,
+        uploadedKey,
+        {
+          mediaKind: "SERIES_MEDIA",
+          targetType: "SERIES",
+          targetId: "uncommitted",
+          reason: "Failed series media upload",
+        },
+        "storage.rollback",
+      );
     }
-    return errorResponse(requestId, error);
+    return errorResponse(requestId, responseError);
   }
 }
 
@@ -274,23 +402,28 @@ export async function POST(request: Request) {
     const { db, bucket } = dependencies();
     await retryPendingMediaCleanup(db, bucket);
     const payload = importedCoverSchema.parse(await request.json());
-    const cached = await db
-      .prepare(
-        `SELECT response_json AS responseJson
-           FROM metadata_import_cache
-          WHERE cache_key = ?
-            AND source = ?
-            AND external_id = ?
-            AND response_hash = ?
-          LIMIT 1`,
-      )
-      .bind(
-        `${payload.source}:${payload.externalId}`,
-        payload.source,
-        payload.externalId,
-        payload.responseHash,
-      )
-      .first<{ responseJson: string }>();
+    const cached = await performMediaOperation(
+      requestId,
+      "database.read",
+      () =>
+        db
+          .prepare(
+            `SELECT response_json AS responseJson
+               FROM metadata_import_cache
+              WHERE cache_key = ?
+                AND source = ?
+                AND external_id = ?
+                AND response_hash = ?
+              LIMIT 1`,
+          )
+          .bind(
+            `${payload.source}:${payload.externalId}`,
+            payload.source,
+            payload.externalId,
+            payload.responseHash,
+          )
+          .first<{ responseJson: string }>(),
+    );
     if (!cached) {
       throw new ApiError(
         409,
@@ -311,14 +444,19 @@ export async function POST(request: Request) {
       );
     }
     assertImportedCoverHost(payload.source, derived);
-    const response = await fetch(derived, {
-      headers: {
-        accept: "image/jpeg,image/png,image/webp",
-        "user-agent": "NyaScans-Metadata/1.2",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(10_000),
-    });
+    const response = await performMediaOperation(
+      requestId,
+      "provider.download",
+      () =>
+        fetch(derived, {
+          headers: {
+            accept: "image/jpeg,image/png,image/webp",
+            "user-agent": "NyaScans-Metadata/1.2",
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(10_000),
+        }),
+    );
     if (!response.ok || !response.body) {
       throw new ApiError(
         503,
@@ -338,7 +476,13 @@ export async function POST(request: Request) {
         "The imported cover is larger than 8 MB.",
       );
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const bytes = new Uint8Array(
+      await performMediaOperation(
+        requestId,
+        "provider.download",
+        () => response.arrayBuffer(),
+      ),
+    );
     if (bytes.byteLength > 8_000_000) {
       throw new ApiError(
         422,
@@ -362,19 +506,24 @@ export async function POST(request: Request) {
       },
     );
     validateAspect("cover", image.dimensions);
-    const current = await db
-      .prepare(
-        `SELECT title, revision, cover_key AS coverKey
-           FROM series
-          WHERE id = ?
-          LIMIT 1`,
-      )
-      .bind(payload.seriesId)
-      .first<{
-        title: string;
-        revision: number;
-        coverKey: string | null;
-      }>();
+    const current = await performMediaOperation(
+      requestId,
+      "database.read",
+      () =>
+        db
+          .prepare(
+            `SELECT title, revision, cover_key AS coverKey
+               FROM series
+              WHERE id = ?
+              LIMIT 1`,
+          )
+          .bind(payload.seriesId)
+          .first<{
+            title: string;
+            revision: number;
+            coverKey: string | null;
+          }>(),
+    );
     if (!current) {
       throw new ApiError(
         404,
@@ -391,58 +540,72 @@ export async function POST(request: Request) {
     }
     const digest = await sha256Hex(image.bytes);
     uploadedKey = `series/${payload.seriesId}/cover/${randomId()}-${digest.slice(0, 12)}.${extensionFor(image.contentType)}`;
-    await bucket.put(uploadedKey, image.bytes, {
-      httpMetadata: {
-        contentType: image.contentType,
-        cacheControl: "public, max-age=31536000, immutable",
-      },
-      customMetadata: {
-        width: String(image.dimensions.width),
-        height: String(image.dimensions.height),
-        sha256: digest,
-        source: payload.source,
-        externalId: payload.externalId,
-      },
-    });
-    const results = await db.batch([
-      db
-        .prepare(
-          `UPDATE series
-              SET cover_key = ?, revision = revision + 1,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND revision = ?`,
-        )
-        .bind(uploadedKey, payload.seriesId, payload.revision),
-      auditStatement(
-        db,
-        actor,
+    await performMediaOperation(requestId, "storage.write", () =>
+      bucket.put(uploadedKey, image.bytes, {
+        httpMetadata: {
+          contentType: image.contentType,
+          cacheControl: "public, max-age=31536000, immutable",
+        },
+        customMetadata: {
+          width: String(image.dimensions.width),
+          height: String(image.dimensions.height),
+          sha256: digest,
+          source: payload.source,
+          externalId: payload.externalId,
+        },
+      }),
+    );
+    const results = await performMediaOperation(
+      requestId,
+      "database.commit",
+      () =>
+        db.batch([
+          db
+            .prepare(
+              `UPDATE series
+                  SET cover_key = ?, revision = revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND revision = ?`,
+            )
+            .bind(uploadedKey, payload.seriesId, payload.revision),
+          auditStatement(
+            db,
+            actor,
+            requestId,
+            {
+              action: "series.cover.import",
+              category: "SERIES_CHAPTERS",
+              sourceArea: "SERIES_MEDIA",
+              targetType: "SERIES",
+              targetId: payload.seriesId,
+              targetLabel: current.title,
+              metadata: {
+                source: payload.source,
+                externalId: payload.externalId,
+                contentType: image.contentType,
+                width: image.dimensions.width,
+                height: image.dimensions.height,
+                byteSize: image.bytes.byteLength,
+              },
+            },
+            "changes() = 1",
+          ),
+        ]),
+    );
+    if (Number(results[0]?.meta.changes ?? 0) === 0) {
+      await settleMediaObject(
         requestId,
+        db,
+        bucket,
+        uploadedKey,
         {
-          action: "series.cover.import",
-          category: "SERIES_CHAPTERS",
-          sourceArea: "SERIES_MEDIA",
+          mediaKind: "SERIES_COVER",
           targetType: "SERIES",
           targetId: payload.seriesId,
-          targetLabel: current.title,
-          metadata: {
-            source: payload.source,
-            externalId: payload.externalId,
-            contentType: image.contentType,
-            width: image.dimensions.width,
-            height: image.dimensions.height,
-            byteSize: image.bytes.byteLength,
-          },
+          reason: "Uncommitted imported series cover",
         },
-        "changes() = 1",
-      ),
-    ]);
-    if (Number(results[0]?.meta.changes ?? 0) === 0) {
-      await deleteMediaObject(db, bucket, uploadedKey, {
-        mediaKind: "SERIES_COVER",
-        targetType: "SERIES",
-        targetId: payload.seriesId,
-        reason: "Uncommitted imported series cover",
-      });
+        "storage.rollback",
+      );
       uploadedKey = "";
       throw new ApiError(
         409,
@@ -452,12 +615,19 @@ export async function POST(request: Request) {
     }
     uploadedKey = "";
     if (current.coverKey) {
-      await deleteMediaObject(db, bucket, current.coverKey, {
-        mediaKind: "SERIES_COVER",
-        targetType: "SERIES",
-        targetId: payload.seriesId,
-        reason: "Replaced series cover from metadata provider",
-      });
+      await settleMediaObject(
+        requestId,
+        db,
+        bucket,
+        current.coverKey,
+        {
+          mediaKind: "SERIES_COVER",
+          targetType: "SERIES",
+          targetId: payload.seriesId,
+          reason: "Replaced series cover from metadata provider",
+        },
+        "storage.cleanup",
+      );
     }
     return json(requestId, {
       data: {
@@ -467,15 +637,23 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    const responseError = normalizeMediaError(requestId, error);
     if (uploadedKey && env.DB && env.BUCKET) {
-      await deleteMediaObject(env.DB, env.BUCKET, uploadedKey, {
-        mediaKind: "SERIES_COVER",
-        targetType: "SERIES",
-        targetId: "uncommitted",
-        reason: "Failed imported series cover",
-      });
+      await settleMediaObject(
+        requestId,
+        env.DB,
+        env.BUCKET,
+        uploadedKey,
+        {
+          mediaKind: "SERIES_COVER",
+          targetType: "SERIES",
+          targetId: "uncommitted",
+          reason: "Failed imported series cover",
+        },
+        "storage.rollback",
+      );
     }
-    return errorResponse(requestId, error);
+    return errorResponse(requestId, responseError);
   }
 }
 
@@ -493,20 +671,25 @@ export async function DELETE(request: Request) {
       slot: url.searchParams.get("slot"),
       revision: url.searchParams.get("revision"),
     });
-    const current = await db
-      .prepare(
-        `SELECT title, revision, cover_key AS coverKey,
-                banner_key AS bannerKey, slider_key AS sliderKey
-         FROM series WHERE id = ? LIMIT 1`,
-      )
-      .bind(payload.seriesId)
-      .first<{
-        title: string;
-        revision: number;
-        coverKey: string | null;
-        bannerKey: string | null;
-        sliderKey: string | null;
-      }>();
+    const current = await performMediaOperation(
+      requestId,
+      "database.read",
+      () =>
+        db
+          .prepare(
+            `SELECT title, revision, cover_key AS coverKey,
+                    banner_key AS bannerKey, slider_key AS sliderKey
+             FROM series WHERE id = ? LIMIT 1`,
+          )
+          .bind(payload.seriesId)
+          .first<{
+            title: string;
+            revision: number;
+            coverKey: string | null;
+            bannerKey: string | null;
+            sliderKey: string | null;
+          }>(),
+    );
     if (!current) {
       throw new ApiError(
         404,
@@ -526,29 +709,34 @@ export async function DELETE(request: Request) {
         : payload.slot === "banner"
           ? "banner_key"
           : "slider_key";
-    const updateResults = await db.batch([
-      db.prepare(
-        `UPDATE series
-         SET ${column} = NULL, revision = revision + 1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND revision = ?`,
-      ).bind(payload.seriesId, payload.revision),
-      auditStatement(
-        db,
-        actor,
-        requestId,
-        {
-          action: `series.${payload.slot}.remove`,
-          category: "SERIES_CHAPTERS",
-          sourceArea: "SERIES_MEDIA",
-          targetType: "SERIES",
-          targetId: payload.seriesId,
-          targetLabel: current.title,
-          metadata: { slot: payload.slot },
-        },
-        "changes() = 1",
-      ),
-    ]);
+    const updateResults = await performMediaOperation(
+      requestId,
+      "database.commit",
+      () =>
+        db.batch([
+          db.prepare(
+            `UPDATE series
+             SET ${column} = NULL, revision = revision + 1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND revision = ?`,
+          ).bind(payload.seriesId, payload.revision),
+          auditStatement(
+            db,
+            actor,
+            requestId,
+            {
+              action: `series.${payload.slot}.remove`,
+              category: "SERIES_CHAPTERS",
+              sourceArea: "SERIES_MEDIA",
+              targetType: "SERIES",
+              targetId: payload.seriesId,
+              targetLabel: current.title,
+              metadata: { slot: payload.slot },
+            },
+            "changes() = 1",
+          ),
+        ]),
+    );
     if (Number(updateResults[0]?.meta.changes ?? 0) === 0) {
       throw new ApiError(
         409,
@@ -557,17 +745,24 @@ export async function DELETE(request: Request) {
       );
     }
     if (oldKey) {
-      await deleteMediaObject(db, bucket, oldKey, {
-        mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
-        targetType: "SERIES",
-        targetId: payload.seriesId,
-        reason: "Removed series media",
-      });
+      await settleMediaObject(
+        requestId,
+        db,
+        bucket,
+        oldKey,
+        {
+          mediaKind: `SERIES_${payload.slot.toUpperCase()}`,
+          targetType: "SERIES",
+          targetId: payload.seriesId,
+          reason: "Removed series media",
+        },
+        "storage.cleanup",
+      );
     }
     return json(requestId, {
       data: { slot: payload.slot, revision: payload.revision + 1, url: null },
     });
   } catch (error) {
-    return errorResponse(requestId, error);
+    return errorResponse(requestId, normalizeMediaError(requestId, error));
   }
 }

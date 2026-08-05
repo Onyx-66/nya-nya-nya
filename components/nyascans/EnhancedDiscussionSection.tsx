@@ -27,6 +27,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   defaultDiscussionSettings,
@@ -194,11 +195,13 @@ export function EnhancedDiscussionSection({
   actor,
   seriesSlug,
   chapterSlug = null,
+  reactionPrompt = null,
   showToast,
 }: {
   actor: DiscussionActor | null;
   seriesSlug: string;
   chapterSlug?: string | null;
+  reactionPrompt?: ReactNode;
   showToast: (text: string) => void;
 }) {
   const [comments, setComments] = useState<DiscussionComment[]>([]);
@@ -2056,6 +2059,7 @@ export function EnhancedDiscussionSection({
           </span>
         </div>
         <div className="comments-toolbar">
+          {reactionPrompt}
           <div className="comment-sort" role="group" aria-label="Sort comments">
             {(["top", "newest", "oldest"] as const).map((option) => (
               <button

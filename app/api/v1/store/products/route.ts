@@ -61,6 +61,8 @@ export async function storeProductsResponse(request: Request) {
     const premiumEconomyPublic =
       !commercial.recoveredFromInvalid &&
       commercial.settings.economy.premiumEconomyPublic;
+    const ownerPreview = Boolean(actor?.roles.includes("OWNER"));
+    const lockAndPayVisible = premiumEconomyPublic || ownerPreview;
     const nowClause = `
       active = 1
       AND archived_at IS NULL
@@ -69,7 +71,7 @@ export async function storeProductsResponse(request: Request) {
       AND (ends_at IS NULL OR datetime(ends_at) > datetime('now'))
     `;
     const productKind =
-      !premiumEconomyPublic
+      !lockAndPayVisible
         ? null
         : category === "coins"
         ? "CURRENCY_PACKAGE"
@@ -137,9 +139,9 @@ export async function storeProductsResponse(request: Request) {
     const cosmeticCategory = ["banners", "cosmetics", "logo-effects"].includes(
       category,
     );
-    const publicCosmeticCurrencyClause = premiumEconomyPublic
+    const publicCosmeticCurrencyClause = lockAndPayVisible
       ? "1 = 1"
-      : "si.price_currency = 'SHARDS'";
+      : "1 = 0";
     const [collectionRows, itemRows, inventoryRows, loadoutRows, counts] =
       await Promise.all([
         cosmeticCategory
@@ -350,9 +352,9 @@ export async function storeProductsResponse(request: Request) {
       {
         selectedCategory: category,
         categoryCounts: {
-          coins: premiumEconomyPublic ? countValue(0) : 0,
-          memberships: premiumEconomyPublic ? countValue(1) : 0,
-          gifts: premiumEconomyPublic ? 2 : 0,
+          coins: lockAndPayVisible ? countValue(0) : 0,
+          memberships: lockAndPayVisible ? countValue(1) : 0,
+          gifts: lockAndPayVisible ? 2 : 0,
           banners: countValue(2),
           cosmetics: countValue(3),
           "logo-effects": countValue(4),
@@ -363,12 +365,7 @@ export async function storeProductsResponse(request: Request) {
           ...collection,
           isSeasonal: Boolean(collection.isSeasonal),
         })),
-        cosmetics: itemRows.results
-          .filter(
-            (item) =>
-              premiumEconomyPublic || item.priceCurrency === "SHARDS",
-          )
-          .map((item) => ({
+        cosmetics: itemRows.results.map((item) => ({
           ...item,
           priceOnyx: Number(item.priceOnyx),
           priceCurrency: item.priceCurrency,
@@ -380,7 +377,7 @@ export async function storeProductsResponse(request: Request) {
           purchasedAt: owned.get(item.id) ?? null,
           equipped: equipped.get(item.category) === item.id,
           })),
-        coin: premiumEconomyPublic
+        coin: lockAndPayVisible
           ? {
               name: commercial.settings.economy.coinName,
               plural: commercial.settings.economy.coinPlural,
@@ -390,18 +387,18 @@ export async function storeProductsResponse(request: Request) {
                 : null,
             }
           : null,
-        viewer: actor && premiumEconomyPublic
+        viewer: actor && lockAndPayVisible
           ? await walletSnapshot(env.DB, actor.id, "ONYX")
           : null,
         balances: actor
-          ? premiumEconomyPublic
+          ? lockAndPayVisible
             ? await economySnapshot(env.DB, actor.id)
             : { shards: await walletSnapshot(env.DB, actor.id, "SHARDS") }
           : null,
-        premiumEconomyPublic,
+        premiumEconomyPublic: lockAndPayVisible,
         checkoutEnabled: false,
         checkoutStatus:
-          premiumEconomyPublic
+          lockAndPayVisible
             ? `Checkout requires a verified payment provider. Cosmetics can be unlocked with an existing ${commercial.settings.economy.coinName} balance.`
             : "Premium purchases are private. Free Shard rewards remain available.",
       },
