@@ -21,6 +21,7 @@ import {
 } from "@/lib/discussion-settings";
 import {
   canAny,
+  effectiveCapabilities,
   highestRole,
   sumBalancedEntries,
 } from "@/lib/permissions.mjs";
@@ -5820,31 +5821,58 @@ export async function GET(request: Request, context: RouteContext) {
           "User management is unavailable.",
         );
       }
-      const result = await env.DB.prepare(
-        `SELECT u.id,
-                u.email,
-                u.display_name AS displayName,
-                u.primary_role AS primaryRole,
-                u.status,
-                u.access_revision AS accessRevision,
-                COALESCE((
-                  SELECT GROUP_CONCAT(ur.role, ',')
-                    FROM user_roles ur
-                   WHERE ur.user_id = u.id
-                ), u.primary_role) AS rolesCsv,
-                u.email_verified_at AS emailVerifiedAt,
-                u.created_at AS createdAt,
-                u.updated_at AS updatedAt,
-                up.username AS avatarUsername,
-                up.revision AS avatarRevision,
-                CASE WHEN up.avatar_key IS NULL THEN 0 ELSE 1 END AS hasAvatar,
-                (SELECT COUNT(*) FROM team_memberships tm
-                  WHERE tm.user_id = u.id AND tm.status = 'ACTIVE') AS teamCount
-           FROM users u
-           LEFT JOIN user_profiles up ON up.user_id = u.id
-          ORDER BY u.updated_at DESC
-          LIMIT 150`,
-      ).all();
+      const [result, recentActivityResult] = await Promise.all([
+        env.DB.prepare(
+          `SELECT u.id,
+                  u.email,
+                  u.display_name AS displayName,
+                  u.primary_role AS primaryRole,
+                  u.status,
+                  u.access_revision AS accessRevision,
+                  COALESCE((
+                    SELECT GROUP_CONCAT(ur.role, ',')
+                      FROM user_roles ur
+                     WHERE ur.user_id = u.id
+                  ), u.primary_role) AS rolesCsv,
+                  u.email_verified_at AS emailVerifiedAt,
+                  u.created_at AS createdAt,
+                  u.updated_at AS updatedAt,
+                  up.username AS avatarUsername,
+                  up.revision AS avatarRevision,
+                  CASE WHEN up.avatar_key IS NULL THEN 0 ELSE 1 END AS hasAvatar,
+                  (SELECT COUNT(*) FROM team_memberships tm
+                    WHERE tm.user_id = u.id AND tm.status = 'ACTIVE') AS teamCount
+             FROM users u
+             LEFT JOIN user_profiles up ON up.user_id = u.id
+            ORDER BY u.updated_at DESC
+            LIMIT 150`,
+        ).all<Record<string, unknown>>(),
+        env.DB.prepare(
+          `SELECT al.id, al.actor_user_id AS userId, al.action,
+                  al.target_type AS targetType, al.target_id AS targetId,
+                  al.result, al.created_at AS createdAt,
+                  s.title AS seriesTitle, c.chapter_number AS chapterNumber
+             FROM audit_logs al
+             LEFT JOIN chapters c
+               ON al.target_type = 'CHAPTER' AND c.id = al.target_id
+             LEFT JOIN series s ON s.id = c.series_id
+            WHERE al.actor_user_id IS NOT NULL
+            ORDER BY datetime(al.created_at) DESC, al.id DESC
+            LIMIT 450`,
+        ).all<Record<string, unknown>>(),
+      ]);
+      const recentActivityByUser = new Map<
+        string,
+        Array<Record<string, unknown>>
+      >();
+      for (const activity of recentActivityResult.results) {
+        const userId = String(activity.userId ?? "");
+        if (!userId) continue;
+        const current = recentActivityByUser.get(userId) ?? [];
+        if (current.length >= 3) continue;
+        current.push(activity);
+        recentActivityByUser.set(userId, current);
+      }
       return json(id, {
         data: result.results.map((entry) => {
           const row = entry as Record<string, unknown> & {
@@ -5853,11 +5881,14 @@ export async function GET(request: Request, context: RouteContext) {
             hasAvatar?: number;
             rolesCsv?: string;
           };
+          const roles = String(row.rolesCsv ?? row.primaryRole ?? "USER")
+            .split(",")
+            .filter(Boolean);
           return {
             ...row,
-            roles: String(row.rolesCsv ?? row.primaryRole ?? "USER")
-              .split(",")
-              .filter(Boolean),
+            roles,
+            effectivePermissions: effectiveCapabilities(roles),
+            recentActivity: recentActivityByUser.get(String(row.id)) ?? [],
             avatarUrl:
               row.hasAvatar && row.avatarUsername
                 ? `/api/v1/profile-media?username=${encodeURIComponent(row.avatarUsername)}&slot=avatar&v=${Number(row.avatarRevision ?? 1)}&admin=1`
@@ -5866,6 +5897,131 @@ export async function GET(request: Request, context: RouteContext) {
         }),
         currentActorId: actor.id,
       });
+    }
+
+    if (path === "admin/payouts") {
+      const actor = await requireActor();
+      requireAdmin(actor);
+      if (!env.DB) {
+        throw new ApiError(
+          503,
+          "DATABASE_UNAVAILABLE",
+          "Payout reporting is temporarily unavailable.",
+        );
+      }
+      const query = (url.searchParams.get("query") ?? "").trim().slice(0, 160);
+      const search = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+      const [summary, teamsResult, flag] = await Promise.all([
+        env.DB.prepare(
+          `WITH canonical_receipts AS (
+             SELECT team_id AS teamId, amount, created_at AS createdAt
+               FROM chapter_unlock_receipts
+              WHERE team_id IS NOT NULL
+                AND currency = 'ONYX'
+             UNION ALL
+             SELECT team_id, coin_amount, created_at
+               FROM team_support_receipts
+           ),
+           posted_team_balances AS (
+             SELECT la.owner_id AS teamId,
+                    COALESCE(SUM(le.amount), 0) AS postedBalanceOnyx
+               FROM ledger_accounts la
+               LEFT JOIN ledger_entries le ON le.account_id = la.id
+              WHERE la.owner_type = 'TEAM'
+                AND la.currency = 'ONYX'
+                AND la.account_type IN ('EARNED', 'SUPPORT')
+              GROUP BY la.owner_id
+           )
+           SELECT COALESCE((SELECT SUM(amount) FROM canonical_receipts), 0)
+                    AS totalReceivedOnyx,
+                  COALESCE(SUM(posted_team_balances.postedBalanceOnyx), 0)
+                    AS postedBalanceOnyx,
+                  COUNT(DISTINCT CASE
+                    WHEN posted_team_balances.postedBalanceOnyx <> 0
+                    THEN posted_team_balances.teamId END) AS teamsWithBalances
+             FROM posted_team_balances`,
+        ).first<Record<string, unknown>>(),
+        env.DB.prepare(
+          `SELECT t.id, t.slug, t.name,
+                  t.verification_status AS verificationStatus,
+                  COALESCE((
+                    SELECT SUM(cur.amount)
+                      FROM chapter_unlock_receipts cur
+                     WHERE cur.team_id = t.id
+                       AND cur.currency = 'ONYX'
+                  ), 0) + COALESCE((
+                    SELECT SUM(support.coin_amount)
+                      FROM team_support_receipts support
+                     WHERE support.team_id = t.id
+                  ), 0) AS totalReceivedOnyx,
+                  COALESCE((
+                    SELECT SUM(le.amount)
+                      FROM ledger_accounts la
+                      LEFT JOIN ledger_entries le ON le.account_id = la.id
+                     WHERE la.owner_type = 'TEAM'
+                       AND la.owner_id = t.id
+                       AND la.currency = 'ONYX'
+                       AND la.account_type IN ('EARNED', 'SUPPORT')
+                  ), 0) AS postedBalanceOnyx,
+                  (SELECT MAX(receipt.createdAt)
+                     FROM (
+                       SELECT created_at AS createdAt
+                         FROM chapter_unlock_receipts
+                        WHERE team_id = t.id
+                          AND currency = 'ONYX'
+                       UNION ALL
+                       SELECT created_at
+                         FROM team_support_receipts
+                        WHERE team_id = t.id
+                     ) receipt) AS lastEarnedAt
+             FROM teams t
+            WHERE t.is_archived = 0
+              AND (? = '' OR t.name LIKE ? ESCAPE '\\'
+                   OR t.slug LIKE ? ESCAPE '\\')
+              AND (
+                EXISTS (
+                  SELECT 1 FROM chapter_unlock_receipts cur
+                   WHERE cur.team_id = t.id AND cur.currency = 'ONYX'
+                )
+                OR EXISTS (
+                  SELECT 1 FROM team_support_receipts support
+                   WHERE support.team_id = t.id
+                )
+                OR EXISTS (
+                  SELECT 1 FROM ledger_accounts la
+                   WHERE la.owner_type = 'TEAM'
+                     AND la.owner_id = t.id
+                     AND la.currency = 'ONYX'
+                     AND la.account_type IN ('EARNED', 'SUPPORT')
+                )
+              )
+            ORDER BY totalReceivedOnyx DESC, t.name ASC
+            LIMIT 100`,
+        )
+          .bind(query, search, search)
+          .all<Record<string, unknown>>(),
+        env.DB.prepare(
+          "SELECT enabled FROM feature_flags WHERE key = 'team_payouts' LIMIT 1",
+        ).first<{ enabled: number | boolean }>(),
+      ]);
+      return json(
+        id,
+        {
+          summary: {
+            totalReceivedOnyx: Number(summary?.totalReceivedOnyx ?? 0),
+            postedBalanceOnyx: Number(summary?.postedBalanceOnyx ?? 0),
+            pendingOnyx: null,
+            withdrawnOnyx: null,
+            teamsWithBalances: Number(summary?.teamsWithBalances ?? 0),
+            payoutRecordCount: 0,
+          },
+          teams: teamsResult.results,
+          records: [],
+          payoutsEnabled: Boolean(flag?.enabled),
+          payoutLifecycleAvailable: false,
+        },
+        { headers: { "cache-control": "private, no-store" } },
+      );
     }
 
     if (path === "admin/user-control") {
@@ -5919,7 +6075,7 @@ export async function GET(request: Request, context: RouteContext) {
       };
       let rows: unknown[] = [];
       let balanceHistory: unknown[] = [];
-      let balanceSummary: Record<string, number> | null = null;
+      let balanceSummary: Record<string, number | null> | null = null;
       if (view === "balances") {
         const rowsPromise = env.DB.prepare(
           `SELECT u.id, u.display_name AS displayName, u.email, u.status,
@@ -5933,6 +6089,7 @@ export async function GET(request: Request, context: RouteContext) {
                      WHERE la.owner_type = 'USER'
                        AND la.owner_id = u.id
                        AND la.currency = 'ONYX'
+                       AND la.account_type = 'AVAILABLE'
                   ), 0) AS onyxBalance,
                   COALESCE((
                     SELECT SUM(le.amount)
@@ -5941,6 +6098,7 @@ export async function GET(request: Request, context: RouteContext) {
                      WHERE la.owner_type = 'USER'
                        AND la.owner_id = u.id
                        AND la.currency = 'SHARDS'
+                       AND la.account_type = 'AVAILABLE'
                   ), 0) AS shardsBalance
              FROM users u
              LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -5958,6 +6116,7 @@ export async function GET(request: Request, context: RouteContext) {
                FROM ledger_accounts la
                LEFT JOIN ledger_entries le ON le.account_id = la.id
               WHERE la.owner_type = 'USER'
+                AND la.account_type = 'AVAILABLE'
               GROUP BY la.owner_id, la.currency
            )
            SELECT COALESCE(SUM(CASE WHEN currency = 'ONYX' THEN balance ELSE 0 END), 0) AS onyxBalance,
@@ -5998,6 +6157,10 @@ export async function GET(request: Request, context: RouteContext) {
         balanceSummary = {
           onyxBalance: Number(totals?.onyxBalance ?? 0),
           shardsBalance: Number(totals?.shardsBalance ?? 0),
+          pendingOnyx: null,
+          pendingShards: null,
+          withdrawnOnyx: null,
+          withdrawnShards: null,
           fundedAccounts: Number(totals?.fundedAccounts ?? 0),
         };
         balanceHistory = history.results;
@@ -6042,33 +6205,47 @@ export async function GET(request: Request, context: RouteContext) {
                       al.target_type AS targetType,
                       al.target_id AS targetId, al.result,
                       al.created_at AS createdAt,
-                      u.display_name AS displayName, u.email
+                      u.display_name AS displayName, u.email,
+                      s.title AS seriesTitle,
+                      c.chapter_number AS chapterNumber
                  FROM audit_logs al
                  LEFT JOIN users u ON u.id = al.actor_user_id
+                 LEFT JOIN chapters c
+                   ON al.target_type = 'CHAPTER' AND c.id = al.target_id
+                 LEFT JOIN series s ON s.id = c.series_id
                UNION ALL
                SELECT 'read:' || rp.user_id || ':' || rp.chapter_id,
                       'CHAPTER_READ', 'CHAPTER', rp.chapter_id,
                       CASE WHEN rp.completed_at IS NULL
                         THEN 'IN_PROGRESS' ELSE 'COMPLETED' END,
-                      rp.updated_at, u.display_name, u.email
+                      rp.updated_at, u.display_name, u.email,
+                      s.title, c.chapter_number
                  FROM reading_progress rp
                  JOIN users u ON u.id = rp.user_id
+                 JOIN chapters c ON c.id = rp.chapter_id
+                 JOIN series s ON s.id = c.series_id
                UNION ALL
                SELECT dc.id, 'COMMENT_CREATED', 'COMMENT', dc.id,
                       dc.moderation_status, dc.created_at,
-                      u.display_name, u.email
+                      u.display_name, u.email,
+                      s.title, c.chapter_number
                  FROM discussion_comments dc
                  JOIN users u ON u.id = dc.user_id
+                 LEFT JOIN series s ON s.slug = dc.series_slug
+                 LEFT JOIN chapters c
+                   ON c.series_id = s.id AND c.slug = dc.chapter_slug
                UNION ALL
                SELECT rs.id, 'ROULETTE_SPIN', 'ROULETTE_SPIN', rs.id,
                       rs.reward_type, rs.spun_at,
-                      u.display_name, u.email
+                      u.display_name, u.email,
+                      NULL, NULL
                  FROM roulette_spins rs
                  JOIN users u ON u.id = rs.user_id
                UNION ALL
                SELECT lt.id, 'CHAPTER_UNLOCK', 'CHAPTER', lt.reference_id,
                       'COMPLETED', lt.created_at,
-                      u.display_name, u.email
+                      u.display_name, u.email,
+                      s.title, c.chapter_number
                  FROM ledger_transactions lt
                  JOIN ledger_entries buyer_entry
                    ON buyer_entry.transaction_id = lt.id
@@ -6077,15 +6254,19 @@ export async function GET(request: Request, context: RouteContext) {
                    ON buyer_account.id = buyer_entry.account_id
                   AND buyer_account.owner_type = 'USER'
                  JOIN users u ON u.id = buyer_account.owner_id
+                 JOIN chapters c ON c.id = lt.reference_id
+                 JOIN series s ON s.id = c.series_id
                 WHERE lt.kind = 'CHAPTER_UNLOCK'
              ) activity
             WHERE (? = '' OR activity.displayName LIKE ? ESCAPE '\\'
                     OR activity.email LIKE ? ESCAPE '\\'
-                    OR activity.activityType LIKE ? ESCAPE '\\')
+                    OR activity.activityType LIKE ? ESCAPE '\\'
+                    OR activity.seriesTitle LIKE ? ESCAPE '\\'
+                    OR activity.chapterNumber LIKE ? ESCAPE '\\')
             ORDER BY activity.createdAt DESC
             LIMIT 150`,
         )
-          .bind(query, search, search, search)
+          .bind(query, search, search, search, search, search)
           .all();
         rows = result.results;
       } else {
@@ -6642,6 +6823,12 @@ export async function GET(request: Request, context: RouteContext) {
           "/admin/users": {
             get: { summary: "List user access records" },
             put: { summary: "Change an account role or status" },
+          },
+          "/admin/payouts": {
+            get: {
+              summary:
+                "Read canonical team receipts and posted TEAM ledger balances; payout lifecycle values remain unavailable until persisted",
+            },
           },
           "/admin/audit": {
             get: { summary: "Read the administrator audit log" },

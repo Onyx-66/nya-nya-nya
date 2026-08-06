@@ -214,6 +214,7 @@ const uploadLanguages = [
   ["fr", "🇫🇷", "French"],
   ["es", "🇪🇸", "Spanish"],
   ["pt", "🇵🇹", "Portuguese"],
+  ["pt-br", "🇧🇷", "Brazilian Portuguese"],
   ["id", "🇮🇩", "Indonesian"],
   ["ko", "🇰🇷", "Korean"],
   ["ja", "🇯🇵", "Japanese"],

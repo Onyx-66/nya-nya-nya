@@ -10223,6 +10223,7 @@ function OperationsView({
         label: "Finance",
         items: [
           ["Balances", Wallet],
+          ["Payouts", Coins],
           ["Transactions", Storefront],
           ["Commerce", Coins],
           ["Store Management", Storefront],

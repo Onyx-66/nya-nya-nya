@@ -50,6 +50,7 @@ export const languageOptions = [
   ["ms", "Malay"],
   ["pl", "Polish"],
   ["pt", "Portuguese"],
+  ["pt-br", "Brazilian Portuguese"],
   ["ru", "Russian"],
   ["th", "Thai"],
   ["tr", "Turkish"],
@@ -69,7 +70,7 @@ export const countryLanguageDefaults: Partial<
 > = {
   AR: "es",
   AU: "en",
-  BR: "pt",
+  BR: "pt-br",
   CA: "en",
   CL: "es",
   CN: "zh",

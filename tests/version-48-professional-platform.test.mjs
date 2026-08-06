@@ -49,6 +49,9 @@ test("Version 48 anchors opaque menus above content and centers the floating ad 
     read("components/nyascans/NyaScansApp.tsx"),
   ]);
   const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  const dropdownLayer = Number(css.match(/--z-dropdown:\s*(\d+)/u)?.[1]);
+  const modalLayer = Number(css.match(/--z-modal:\s*(\d+)/u)?.[1]);
+  assert.ok(dropdownLayer > modalLayer, "dropdowns must render above the floating-ad modal layer");
   assert.match(authority, /--anchored-menu-top/u);
   assert.match(authority, /position: fixed !important/u);
   assert.match(authority, /z-index: var\(--z-dropdown\)/u);
@@ -57,6 +60,9 @@ test("Version 48 anchors opaque menus above content and centers the floating ad 
   assert.match(app, /document\.addEventListener\("scroll", queueOpenMenuPosition, passiveCapture\)/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad[\s\S]*top: 50%[\s\S]*left: 50%[\s\S]*width: min\(80vw[\s\S]*height: min\(80dvh/u);
   assert.match(authority, /translate: -50% -50%/u);
+  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad > a \{[\s\S]*position: relative;[\s\S]*display: block;/u);
+  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad img,[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*object-fit: cover;/u);
+  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad a > span:last-child \{[\s\S]*position: absolute;[\s\S]*max-height: 48%;/u);
 });
 
 test("Version 48 makes team identity order and Browse controls explicit", async () => {
@@ -65,11 +71,26 @@ test("Version 48 makes team identity order and Browse controls explicit", async 
     read("components/nyascans/PublicDiscoverySections.tsx"),
   ]);
   const authority = css.slice(css.lastIndexOf("/* Version 48"));
-  assert.match(authority, /grid-template-areas: "banner" "logo" "identity"/u);
+  assert.match(authority, /\.teams-directory-results\.is-grid \.team-directory-card \{[\s\S]*grid-template-areas: "banner" "logo" "identity"[\s\S]*grid-template-rows: auto clamp\(3\.2rem, 4\.5vw, 3\.625rem\) auto/u);
+  assert.match(authority, /\.teams-directory-results\.is-grid \.team-directory-card > div \{[\s\S]*grid-area: identity;[\s\S]*padding: 1rem;/u);
+  assert.match(css, /\.teams-directory-results\.is-list \.team-directory-card \{[\s\S]*grid-template-areas: "logo identity"/u);
   assert.match(discovery, /className="team-release-languages"/u);
   assert.match(discovery, /className="team-card-action"/u);
   assert.match(authority, /\.catalog-toolbar \.compact-option-menu > summary[\s\S]*font-weight: 400/u);
   assert.match(authority, /border-radius: var\(--site-button-radius, var\(--radius-small\)\)/u);
+});
+
+test("Version 48 supports Brazilian Portuguese as a distinct admin and upload language", async () => {
+  const [metadata, upload, flags] = await Promise.all([
+    read("lib/admin-metadata.ts"),
+    read("components/nyascans/upload/UploadCenterWorkspace.tsx"),
+    read("lib/language-flags.ts"),
+  ]);
+  assert.match(metadata, /\["pt", "Portuguese"\],[\s\S]*\["pt-br", "Brazilian Portuguese"\]/u);
+  assert.match(metadata, /BR: "pt-br"/u);
+  assert.match(upload, /\["pt", "🇵🇹", "Portuguese"\],[\s\S]*\["pt-br", "🇧🇷", "Brazilian Portuguese"\]/u);
+  assert.match(flags, /"pt-br": "br"/u);
+  assert.match(flags, /"pt-br": "Brazilian Portuguese"/u);
 });
 
 test("Version 48 keeps media-only saves out of metadata mutation and preserves team rights", async () => {

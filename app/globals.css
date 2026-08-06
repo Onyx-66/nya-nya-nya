@@ -25,11 +25,267 @@
   --header: rgba(7, 17, 31, 0.88);
   --radius: var(--site-radius, 14px);
   --radius-small: 9px;
-  --z-dropdown: 600;
+  --z-dropdown: 850;
   --z-modal: 800;
   --z-toast: 900;
   --cover-ratio: 2 / 3;
   --page: min(1440px, calc(100vw - 64px));
+}
+
+/* Version 48 admin finance, permissions, and activity completion */
+.users-control-metrics > article {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.users-control-metrics > article > strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.12;
+}
+
+.user-effective-permissions,
+.user-recent-activity {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+}
+
+.user-effective-permissions > span,
+.user-recent-activity > span {
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.user-effective-permissions > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.user-effective-permissions i {
+  display: inline-flex;
+  min-height: 1.8rem;
+  align-items: center;
+  gap: .35rem;
+  padding: .3rem .5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: .68rem;
+  font-style: normal;
+}
+
+.user-effective-permissions i > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.user-recent-activity {
+  grid-column: 1 / -1;
+  padding-top: .75rem;
+  border-top: 1px solid var(--line);
+}
+
+.user-recent-activity ol {
+  display: grid;
+  gap: .45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.user-recent-activity li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .55rem;
+  padding: .6rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+
+.user-recent-activity li > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.user-recent-activity li > span {
+  display: grid;
+  min-width: 0;
+  gap: .15rem;
+}
+
+.user-recent-activity li :is(strong, time) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-recent-activity li strong {
+  font-size: .76rem;
+}
+
+.user-recent-activity li time,
+.user-recent-activity > small {
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.payout-summary-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.payout-summary-metrics article > small {
+  color: var(--muted);
+  font-size: .68rem;
+}
+
+.payout-report-note {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .65rem;
+  margin-bottom: 1rem;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--site-card-radius, var(--radius));
+  background: var(--bg-soft);
+}
+
+.payout-report-note[data-enabled="true"] {
+  border-color: color-mix(in srgb, #49db9b 42%, var(--line));
+}
+
+.payout-report-note > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.payout-report-note > span {
+  display: grid;
+  min-width: 0;
+  gap: .2rem;
+}
+
+.payout-report-note small {
+  color: var(--muted);
+}
+
+.payout-team-table td:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payout-records-section {
+  display: grid;
+  gap: .75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--site-card-radius, var(--radius));
+  background: var(--bg-soft);
+}
+
+.payout-records-section > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.payout-records-section > header > div {
+  display: grid;
+  gap: .2rem;
+}
+
+.payout-records-section > header span {
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.payout-records-section :is(h3, p) {
+  margin: 0;
+}
+
+.payout-record-list {
+  display: grid;
+  gap: .45rem;
+}
+
+.payout-record-list > article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .75rem;
+  padding: .7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+
+.payout-record-list > article > span {
+  display: grid;
+  min-width: 0;
+  gap: .2rem;
+}
+
+.payout-record-list > article small,
+.payout-records-empty {
+  color: var(--muted);
+}
+
+.payout-record-list > article > b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px) {
+  .payout-summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .user-effective-permissions,
+  .user-recent-activity {
+    grid-column: 1;
+  }
+
+  .payout-summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .users-control-table[data-view="payouts"] td:nth-child(1)::before { content: "Team"; }
+  .users-control-table[data-view="payouts"] td:nth-child(2)::before { content: "Total received"; }
+  .users-control-table[data-view="payouts"] td:nth-child(3)::before { content: "Posted balance"; }
+  .users-control-table[data-view="payouts"] td:nth-child(4)::before { content: "Pending"; }
+  .users-control-table[data-view="payouts"] td:nth-child(5)::before { content: "Withdrawn"; }
+  .users-control-table[data-view="payouts"] td:nth-child(6)::before { content: "Last earning"; }
+
+  .payout-team-table td:not(:first-child) {
+    white-space: normal;
+    text-align: right;
+  }
+
+  .payout-record-list > article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .payout-record-list .technical-reference {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Administrator new-series approval workspace */
@@ -44505,24 +44761,26 @@ a.public-team-member-card:focus-visible {
   font-weight: 400;
 }
 
-.team-directory-card {
+.teams-directory-results.is-grid .team-directory-card {
   grid-template-areas: "banner" "logo" "identity";
-  grid-template-rows: auto 0 auto;
+  grid-template-rows: auto clamp(3.2rem, 4.5vw, 3.625rem) auto;
 }
 
-.team-directory-card .team-carousel-logo {
+.teams-directory-results.is-grid .team-directory-card .team-carousel-logo {
   position: relative;
   z-index: 2;
   grid-area: logo;
   top: auto;
   left: auto;
+  align-self: start;
   justify-self: center;
-  margin: -2.75rem auto 0;
+  margin: clamp(-3.625rem, -4.5vw, -3.2rem) auto 0;
   transform: none;
 }
 
-.team-directory-card > div {
-  padding: 3.5rem 1rem 1rem;
+.teams-directory-results.is-grid .team-directory-card > div {
+  grid-area: identity;
+  padding: 1rem;
 }
 
 .team-release-languages {
@@ -44589,22 +44847,34 @@ a.public-team-member-card:focus-visible {
 }
 
 .floating-home-ad.v46-floating-home-ad > a {
+  position: relative;
+  display: block;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  overflow: hidden;
 }
 
 .floating-home-ad.v46-floating-home-ad img,
 .floating-home-ad.v46-floating-home-ad .floating-home-ad-placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   min-height: 0;
-  object-fit: contain;
+  object-fit: cover;
   background-color: #06111f;
 }
 
 .floating-home-ad.v46-floating-home-ad a > span:last-child {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  max-height: 48%;
   overflow: auto;
+  padding: clamp(4rem, 10vh, 7rem) clamp(1rem, 3vw, 2rem) clamp(1rem, 3vw, 2rem);
+  background: linear-gradient(180deg, transparent, rgb(3 11 24 / 82%) 42%, rgb(3 11 24 / 96%));
 }
 
 @keyframes v48-floating-ad-enter {
@@ -44656,17 +44926,13 @@ a.public-team-member-card:focus-visible {
     transform: none;
   }
 
-  .floating-home-ad.v46-floating-home-ad > a {
-    grid-template-rows: minmax(0, 3fr) minmax(10rem, 2fr);
-    grid-template-columns: 1fr;
-  }
-
   .floating-home-ad.v46-floating-home-ad a > span:last-child {
-    padding: 1.15rem;
+    max-height: 46%;
+    padding: 3.5rem 1.15rem 1.15rem;
   }
 
-  .team-directory-card > div {
-    padding-top: 3.4rem;
+  .teams-directory-results.is-grid .team-directory-card > div {
+    padding-top: 1rem;
   }
 
   .teams-directory-results.is-list .team-release-languages {
@@ -45166,5 +45432,16 @@ a.public-team-member-card:focus-visible {
 
   .balance-adjustment-history summary {
     min-height: 3.5rem;
+  }
+}
+
+/* Final cascade authority for the Version 48 finance summary geometry. */
+.users-control-metrics.payout-summary-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 920px) {
+  .users-control-metrics.payout-summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

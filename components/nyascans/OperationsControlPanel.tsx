@@ -286,6 +286,17 @@ type AdminUser = {
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  effectivePermissions: string[];
+  recentActivity: Array<{
+    id: string;
+    action: string;
+    targetType: string;
+    targetId: string;
+    result: string;
+    createdAt: string;
+    seriesTitle: string | null;
+    chapterNumber: string | null;
+  }>;
 };
 
 type AuditRecord = {
@@ -1361,6 +1372,41 @@ const ownerManagedRoles = new Set<AdminUser["primaryRole"]>([
   "MANAGER",
 ]);
 
+function effectivePermissionLabel(permission: string) {
+  if (permission === "*") return "Full platform and ownership access";
+  if (permission === "admin.*") {
+    return "Administrative platform access (owner-only controls excluded)";
+  }
+  return humanize(permission);
+}
+
+function recentAdminActivityLabel(
+  activity: AdminUser["recentActivity"][number],
+) {
+  const action = activity.action.toLowerCase();
+  const chapter =
+    activity.seriesTitle && activity.chapterNumber
+      ? `Chapter ${activity.chapterNumber} of ${activity.seriesTitle}`
+      : activity.seriesTitle
+        ? activity.seriesTitle
+        : null;
+  if (action === "chapter.unlock") {
+    return chapter ? `Unlocked ${chapter}` : "Unlocked a chapter";
+  }
+  if (action.includes("chapter") && action.includes("publish")) {
+    return chapter ? `Published ${chapter}` : "Published a chapter";
+  }
+  if (action === "comment.create") {
+    return chapter ? `Commented on ${chapter}` : "Posted a comment";
+  }
+  if (action.includes("series") && action.includes("update")) {
+    return activity.seriesTitle
+      ? `Updated ${activity.seriesTitle}`
+      : "Updated a series";
+  }
+  return humanize(activity.action);
+}
+
 function UsersManager({
   actorRole,
   actorRoles,
@@ -1548,7 +1594,7 @@ function UsersManager({
                           : undefined
                     }
                   >
-                    <legend>Roles and permissions</legend>
+                    <legend>Role assignments</legend>
                     <div className="user-role-chips" aria-label={`Roles for ${user.displayName}`}>
                       {assignableRoles.map((role) => {
                         const checked = user.roles.includes(role.value);
@@ -1582,6 +1628,17 @@ function UsersManager({
                       <small>Privileged roles and accounts can only be changed by an Owner.</small>
                     ) : null}
                   </fieldset>
+                  <section className="user-effective-permissions">
+                    <span>Effective permissions</span>
+                    <div>
+                      {(user.effectivePermissions ?? []).map((permission) => (
+                        <i key={permission} title={permission}>
+                          <Check size={13} aria-hidden="true" />
+                          {effectivePermissionLabel(permission)}
+                        </i>
+                      ))}
+                    </div>
+                  </section>
                   <label className="user-admin-status-control">
                     <span>Status</span>
                     <select
@@ -1597,6 +1654,26 @@ function UsersManager({
                       <option value="SUSPENDED">Suspended</option>
                     </select>
                   </label>
+                  <section className="user-recent-activity">
+                    <span>Recent activity</span>
+                    {(user.recentActivity ?? []).length ? (
+                      <ol>
+                        {user.recentActivity.map((activity) => (
+                          <li key={activity.id}>
+                            <Pulse size={15} aria-hidden="true" />
+                            <span>
+                              <strong>{recentAdminActivityLabel(activity)}</strong>
+                              <time dateTime={activity.createdAt}>
+                                {formatDate(activity.createdAt)} · {humanize(activity.result)}
+                              </time>
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <small>No recent audited activity for this account.</small>
+                    )}
+                  </section>
                   <details className="technical-reference">
                     <summary>Technical reference</summary>
                     <div>
@@ -1659,6 +1736,10 @@ type UsersControlPayload = {
   balanceSummary?: {
     onyxBalance: number;
     shardsBalance: number;
+    pendingOnyx: number | null;
+    pendingShards: number | null;
+    withdrawnOnyx: number | null;
+    withdrawnShards: number | null;
     fundedAccounts: number;
   } | null;
   balanceHistory?: Array<Record<string, unknown>>;
@@ -1666,19 +1747,43 @@ type UsersControlPayload = {
 };
 
 function userActivityPresentation(row: Record<string, unknown>) {
-  const type = String(row.activityType ?? "ACTIVITY").toUpperCase();
+  const type = String(row.activityType ?? "ACTIVITY")
+    .replaceAll(".", "_")
+    .toUpperCase();
   const user = String(row.displayName ?? "System");
+  const seriesTitle = String(row.seriesTitle ?? "").trim();
+  const chapterNumber = String(row.chapterNumber ?? "").trim();
+  const chapterReference =
+    seriesTitle && chapterNumber
+      ? `Chapter ${chapterNumber} of ${seriesTitle}`
+      : seriesTitle
+        ? seriesTitle
+        : "a chapter";
   if (type === "CHAPTER_READ") {
-    return { icon: <Books size={18} />, text: `${user} read a chapter` };
+    return { icon: <Books size={18} />, text: `${user} read ${chapterReference}` };
   }
-  if (type === "COMMENT_CREATED") {
-    return { icon: <ChatCircle size={18} />, text: `${user} posted a comment` };
+  if (type === "COMMENT_CREATED" || type === "COMMENT_CREATE") {
+    return {
+      icon: <ChatCircle size={18} />,
+      text: seriesTitle
+        ? `${user} commented on ${chapterReference}`
+        : `${user} posted a comment`,
+    };
   }
   if (type === "ROULETTE_SPIN") {
     return { icon: <Sparkle size={18} />, text: `${user} used the reward roulette` };
   }
   if (type === "CHAPTER_UNLOCK") {
-    return { icon: <LockKey size={18} />, text: `${user} unlocked a chapter` };
+    return {
+      icon: <LockKey size={18} />,
+      text: `${user} unlocked ${chapterReference}`,
+    };
+  }
+  if (type.includes("CHAPTER") && type.includes("PUBLISH")) {
+    return {
+      icon: <CloudArrowUp size={18} />,
+      text: `${user} published ${chapterReference}`,
+    };
   }
   return {
     icon: <Pulse size={18} />,
@@ -1959,14 +2064,26 @@ function UsersControlPanel({
     ],
   };
   const [title, description] = labels[view];
-  const balanceRows = view === "balances" ? (payload?.rows ?? []) : [];
   const balanceSummary = payload?.balanceSummary;
-  const metricCards = view === "balances"
+  const metricCards: Array<[string, number | string]> = view === "balances"
     ? [
-        [coinPlural, balanceSummary?.onyxBalance ?? 0],
-        ["Shards", balanceSummary?.shardsBalance ?? 0],
+        [`Total ${coinPlural}`, balanceSummary?.onyxBalance ?? 0],
+        ["Total Shards", balanceSummary?.shardsBalance ?? 0],
+        [
+          "Pending ledger balances",
+          balanceSummary?.pendingOnyx != null &&
+          balanceSummary?.pendingShards != null
+            ? `${balanceSummary.pendingOnyx.toLocaleString()} ${coinPlural} · ${balanceSummary.pendingShards.toLocaleString()} Shards`
+            : "Not tracked",
+        ],
+        [
+          "Withdrawn ledger balances",
+          balanceSummary?.withdrawnOnyx != null &&
+          balanceSummary?.withdrawnShards != null
+            ? `${balanceSummary.withdrawnOnyx.toLocaleString()} ${coinPlural} · ${balanceSummary.withdrawnShards.toLocaleString()} Shards`
+            : "Not tracked",
+        ],
         ["Funded accounts", balanceSummary?.fundedAccounts ?? 0],
-        ["Accounts shown", balanceRows.length],
       ]
     : payload
       ? [
@@ -2008,7 +2125,9 @@ function UsersControlPanel({
           {metricCards.map(([label, value]) => (
             <article key={String(label)}>
               <span>{label}</span>
-              <strong>{Number(value).toLocaleString()}</strong>
+              <strong>
+                {typeof value === "number" ? value.toLocaleString() : value}
+              </strong>
             </article>
           ))}
         </div>
@@ -2372,6 +2491,249 @@ function UsersControlPanel({
         />
       )}
       {message ? <PanelMessage kind={error ? "error" : "success"}>{message}</PanelMessage> : null}
+    </section>
+  );
+}
+
+type PayoutReportPayload = {
+  summary: {
+    totalReceivedOnyx: number;
+    postedBalanceOnyx: number;
+    pendingOnyx: null;
+    withdrawnOnyx: null;
+    teamsWithBalances: number;
+    payoutRecordCount: number;
+  };
+  teams: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    verificationStatus: string;
+    totalReceivedOnyx: number;
+    postedBalanceOnyx: number;
+    lastEarnedAt: string | null;
+  }>;
+  records: Array<{
+    id: string;
+    kind: string;
+    referenceType: string;
+    referenceId: string;
+    memo: string;
+    createdAt: string;
+    teamId: string;
+    teamName: string;
+    amountOnyx: number;
+  }>;
+  payoutsEnabled: boolean;
+  payoutLifecycleAvailable: false;
+};
+
+function PayoutsPanel() {
+  const { settings: commercial } = useCommercialSettings();
+  const coinPlural = commercial.economy.coinPlural;
+  const [payload, setPayload] = useState<PayoutReportPayload | null>(null);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const loadControllerRef = useRef<AbortController | null>(null);
+
+  async function load(search = query) {
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/v1/admin/payouts?query=${encodeURIComponent(search)}`,
+        { cache: "no-store", signal: controller.signal },
+      );
+      const next = await readJson<PayoutReportPayload>(response);
+      if (!controller.signal.aborted) setPayload(next);
+    } catch (reason) {
+      if (controller.signal.aborted) return;
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Payout reporting could not be loaded.",
+      );
+    } finally {
+      if (loadControllerRef.current === controller) {
+        loadControllerRef.current = null;
+        setLoading(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void load(""), 0);
+    return () => {
+      window.clearTimeout(timeout);
+      loadControllerRef.current?.abort();
+      loadControllerRef.current = null;
+    };
+    // This report reloads explicitly through its search form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const metrics: Array<[string, number | string]> = payload
+    ? [
+        ["Total received", payload.summary.totalReceivedOnyx],
+        ["Posted balance", payload.summary.postedBalanceOnyx],
+        ["Pending", "Not tracked"],
+        ["Withdrawn", "Not tracked"],
+      ]
+    : [];
+
+  return (
+    <section className="control-panel payout-report-panel">
+      <PanelHeader
+        icon={<Wallet size={18} />}
+        kicker="Finance"
+        title="Payouts"
+        description="Canonical team inflows and posted ledger balances. The current data model does not persist a payout lifecycle."
+        actions={
+          <form
+            className="control-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void load(query);
+            }}
+          >
+            <MagnifyingGlass size={17} aria-hidden="true" />
+            <input
+              aria-label="Search payout teams"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search team name or slug"
+            />
+            <button type="submit" disabled={loading}>Search</button>
+          </form>
+        }
+      />
+      {payload ? (
+        <>
+          <div className="users-control-metrics payout-summary-metrics">
+            {metrics.map(([label, value]) => (
+              <article key={label}>
+                <span>{label}</span>
+                <strong>
+                  {typeof value === "number" ? value.toLocaleString() : value}
+                </strong>
+                <small>
+                  {typeof value === "number"
+                    ? coinPlural
+                    : "No persisted payout lifecycle"}
+                </small>
+              </article>
+            ))}
+          </div>
+          <div className="payout-report-note" data-enabled={payload.payoutsEnabled}>
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span>
+              <strong>
+                {payload.payoutsEnabled
+                  ? "Payout flag enabled · lifecycle unavailable"
+                  : "Payout requests disabled"}
+              </strong>
+              <small>
+                Total received comes from Onyx chapter unlock and team-support
+                receipts. Posted team balance uses the existing EARNED and
+                SUPPORT ledger accounts; Pending and Withdrawn are not stored.
+              </small>
+            </span>
+          </div>
+        </>
+      ) : null}
+      {loading ? (
+        <LoadingPanel />
+      ) : payload?.teams.length ? (
+        <div className="users-control-table-wrap">
+          <table className="users-control-table payout-team-table" data-view="payouts">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Total received</th>
+                <th>Posted balance</th>
+                <th>Pending</th>
+                <th>Withdrawn</th>
+                <th>Last earning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payload.teams.map((team) => (
+                <tr key={team.id}>
+                  <td>
+                    <strong>{team.name}</strong>
+                    <small>
+                      {humanize(team.verificationStatus)} · /{team.slug}
+                    </small>
+                  </td>
+                  <td>{Number(team.totalReceivedOnyx).toLocaleString()} {coinPlural}</td>
+                  <td>{Number(team.postedBalanceOnyx).toLocaleString()} {coinPlural}</td>
+                  <td>Not tracked</td>
+                  <td>Not tracked</td>
+                  <td>
+                    {team.lastEarnedAt
+                      ? new Date(team.lastEarnedAt).toLocaleString()
+                      : "No earnings yet"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : payload ? (
+        <EmptyPanel
+          title="No team payout balances"
+          body="No team inflows match this search. A team appears here only from real Onyx unlock/support receipts or posted EARNED/SUPPORT balances."
+        />
+      ) : null}
+      {!loading && payload ? (
+        <section className="payout-records-section">
+          <header>
+            <div>
+              <span>Posted ledger history</span>
+              <h3>Recent posted ledger entries</h3>
+            </div>
+            <strong>{payload.summary.payoutRecordCount.toLocaleString()}</strong>
+          </header>
+          {payload.records.length ? (
+            <div className="payout-record-list">
+              {payload.records.map((record) => (
+                <article key={`${record.id}:${record.teamId}`}>
+                  <span>
+                    <strong>{record.teamName}</strong>
+                    <small>{humanize(record.kind)} · {new Date(record.createdAt).toLocaleString()}</small>
+                  </span>
+                  <b>{Number(record.amountOnyx).toLocaleString()} {coinPlural}</b>
+                  <details className="technical-reference is-inline">
+                    <summary>Details</summary>
+                    <div>
+                      <code>{record.id}</code>
+                      <button
+                        type="button"
+                        aria-label={`Copy payout reference for ${record.teamName}`}
+                        title="Copy payout reference"
+                        onClick={() => void navigator.clipboard.writeText(record.id)}
+                      >
+                        <Copy size={15} />
+                      </button>
+                    </div>
+                  </details>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="payout-records-empty">
+              No payout lifecycle is persisted in the current ledger. The
+              balances above are posted team inflows only; no availability,
+              pending state, or withdrawal is inferred.
+            </p>
+          )}
+        </section>
+      ) : null}
+      {message ? <PanelMessage kind="error">{message}</PanelMessage> : null}
     </section>
   );
 }
@@ -5146,6 +5508,7 @@ export function OperationsControlPanel({
   if (section === "Balances") {
     return <UsersControlPanel view="balances" actorRoles={actorRoles} />;
   }
+  if (section === "Payouts") return <PayoutsPanel />;
   if (section === "Support tickets") return <SupportTicketsAdminPanel />;
   if (section === "Analytics") return <AnalyticsPanel />;
   if (section === "Commerce") {
