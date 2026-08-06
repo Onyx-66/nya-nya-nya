@@ -59,7 +59,9 @@ test("Version 48 anchors opaque menus above content and centers the floating ad 
   assert.match(app, /document\.addEventListener\("pointerdown"/u);
   assert.match(app, /document\.addEventListener\("scroll", queueOpenMenuPosition, passiveCapture\)/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad[\s\S]*top: 50%[\s\S]*left: 50%[\s\S]*width: min\(90vw[\s\S]*height: min\(89dvh/u);
-  assert.match(authority, /translate: -50% -50%/u);
+  assert.match(authority, /transform: translate\(-50%, -50%\)/u);
+  assert.match(authority, /v48-floating-ad-enter[\s\S]*translate\(-50%, -50%\) scale\(\.98\)/u);
+  assert.match(authority, /v48-floating-ad-pulse[\s\S]*translate\(-50%, -50%\) scale\(1\.012\)/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad > a \{[\s\S]*position: relative;[\s\S]*display: block;/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad img,[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*object-fit: cover;/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad a > span:last-child \{[\s\S]*position: absolute;[\s\S]*max-height: 48%;/u);

@@ -44999,8 +44999,7 @@ a.public-team-member-card:focus-visible {
   height: min(89dvh, calc(100dvh - 2rem));
   max-width: calc(100vw - 2rem);
   max-height: calc(100dvh - 2rem);
-  translate: -50% -50%;
-  transform: none;
+  transform: translate(-50%, -50%);
   animation: v48-floating-ad-enter .26s ease-out both;
 }
 
@@ -45040,12 +45039,12 @@ a.public-team-member-card:focus-visible {
 }
 
 @keyframes v48-floating-ad-enter {
-  from { opacity: 0; transform: scale(.98); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 @keyframes v48-floating-ad-pulse {
-  50% { transform: scale(1.012); }
+  50% { transform: translate(-50%, -50%) scale(1.012); }
 }
 
 .admin-media-preview {
@@ -45084,8 +45083,7 @@ a.public-team-member-card:focus-visible {
     width: min(90vw, calc(100vw - 1.5rem));
     height: min(89dvh, calc(100dvh - 1.5rem));
     max-height: calc(100dvh - 1.5rem);
-    translate: -50% -50%;
-    transform: none;
+    transform: translate(-50%, -50%);
   }
 
   .floating-home-ad.v46-floating-home-ad a > span:last-child {
