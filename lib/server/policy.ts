@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getAuthenticatedUser } from "@/app/chatgpt-auth";
 import { ApiError } from "@/lib/server/api";
 import {
   assertAnyCapability,
@@ -21,6 +21,7 @@ export type Actor = {
   requestTeamIds: string[];
   uploadTeamIds: string[];
   canUseUploadCenter: boolean;
+  authMethod: "CHATGPT" | "PASSWORD";
 };
 
 type MembershipRow = {
@@ -67,7 +68,7 @@ function configuredOwners() {
 }
 
 export async function getActor(): Promise<Actor | null> {
-  const identity = await getChatGPTUser();
+  const identity = await getAuthenticatedUser();
   if (!identity) return null;
   if (!env.DB) {
     throw new ApiError(503, "DATABASE_UNAVAILABLE", "Identity storage is unavailable.");
@@ -82,32 +83,44 @@ export async function getActor(): Promise<Actor | null> {
     : trustedAdministrators.has(email)
       ? ROLES.ADMINISTRATOR
       : ROLES.USER;
+  const identityLookup = identity.userId ? "u.id = ?" : "u.email = ?";
+  const identityLookupValue = identity.userId ?? email;
   let row = await env.DB.prepare(
     `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
-            p.avatar_key, p.revision AS profile_revision
+            u.email_verified_at, p.avatar_key,
+            p.revision AS profile_revision
        FROM users u
        LEFT JOIN user_profiles p ON p.user_id = u.id
-      WHERE u.email = ?
+      WHERE ${identityLookup}
       LIMIT 1`,
   )
-    .bind(email)
+    .bind(identityLookupValue)
     .first<{
       id: string;
       email: string;
       display_name: string;
       primary_role: keyof typeof ROLES;
       status: string;
+      email_verified_at: string | null;
       avatar_key: string | null;
       profile_revision: number | null;
     }>();
+
+  if (!row && identity.authMethod === "PASSWORD") {
+    throw new ApiError(
+      401,
+      "ACCOUNT_NOT_FOUND",
+      "This account could not be resolved.",
+    );
+  }
 
   if (!row) {
     const provisionRequestId = `auth-${randomId()}`;
     await env.DB.batch([
       env.DB.prepare(
         `INSERT OR IGNORE INTO users
-         (id, email, display_name, primary_role, status)
-         VALUES (?, ?, ?, ?, 'ACTIVE')`,
+         (id, email, display_name, primary_role, status, email_verified_at)
+         VALUES (?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP)`,
       ).bind(id, email, identity.displayName, provisionedRole),
       env.DB.prepare(
         `INSERT OR IGNORE INTO user_roles
@@ -138,7 +151,8 @@ export async function getActor(): Promise<Actor | null> {
     ]);
     row = await env.DB.prepare(
       `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
-              p.avatar_key, p.revision AS profile_revision
+              u.email_verified_at, p.avatar_key,
+              p.revision AS profile_revision
          FROM users u
          LEFT JOIN user_profiles p ON p.user_id = u.id
         WHERE u.email = ?
@@ -151,9 +165,26 @@ export async function getActor(): Promise<Actor | null> {
         display_name: string;
         primary_role: keyof typeof ROLES;
         status: string;
+        email_verified_at: string | null;
         avatar_key: string | null;
         profile_revision: number | null;
       }>();
+  }
+
+  if (
+    row &&
+    identity.authMethod === "CHATGPT" &&
+    !row.email_verified_at
+  ) {
+    await env.DB.prepare(
+      `UPDATE users
+          SET email_verified_at = CURRENT_TIMESTAMP,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND email_verified_at IS NULL`,
+    )
+      .bind(row.id)
+      .run();
+    row.email_verified_at = new Date().toISOString();
   }
 
   if (!row || row.status !== "ACTIVE") {
@@ -213,7 +244,8 @@ export async function getActor(): Promise<Actor | null> {
     } else {
       const refreshed = await env.DB.prepare(
         `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
-                p.avatar_key, p.revision AS profile_revision
+                u.email_verified_at, p.avatar_key,
+                p.revision AS profile_revision
            FROM users u
            LEFT JOIN user_profiles p ON p.user_id = u.id
           WHERE u.id = ?
@@ -226,6 +258,7 @@ export async function getActor(): Promise<Actor | null> {
           display_name: string;
           primary_role: keyof typeof ROLES;
           status: string;
+          email_verified_at: string | null;
           avatar_key: string | null;
           profile_revision: number | null;
         }>();
@@ -363,6 +396,7 @@ export async function getActor(): Promise<Actor | null> {
       requestTeamIds.length > 0 ||
       uploadTeamIds.length > 0 ||
       managedTeamIds.length > 0,
+    authMethod: identity.authMethod,
   };
 }
 
@@ -379,10 +413,13 @@ export async function requireActor(capability?: string): Promise<Actor> {
 }
 
 export function requireAdminConsole(actor: Actor) {
+  const adminConsoleRoles: Array<keyof typeof ROLES> = [
+    ROLES.OWNER,
+    ROLES.ADMINISTRATOR,
+    ROLES.MANAGER,
+  ];
   if (
-    !actor.roles.some((role) =>
-      [ROLES.OWNER, ROLES.ADMINISTRATOR, ROLES.MANAGER].includes(role),
-    )
+    !actor.roles.some((role) => adminConsoleRoles.includes(role))
   ) {
     throw new ApiError(403, "ADMIN_REQUIRED", "Staff authorization is required.");
   }

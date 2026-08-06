@@ -1,11 +1,11 @@
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getAuthenticatedUser } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
 import { getActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const user = await getChatGPTUser();
+  const user = await getAuthenticatedUser();
   let actor: Awaited<ReturnType<typeof getActor>> = null;
   if (user) {
     try {
@@ -24,6 +24,7 @@ export default async function Home() {
               email: user.email,
               role: actor?.primaryRole ?? "USER",
               roles: actor?.roles ?? ["USER"],
+              authMethod: user.authMethod,
               avatarUrl: actor?.avatarUrl ?? null,
               canUseUploadCenter: actor?.canUseUploadCenter ?? false,
               canUpload: Boolean(

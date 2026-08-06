@@ -267,7 +267,7 @@ export function NewSeriesSection() {
         </div>
         <div className="new-series-heading-actions">
           <a href="/browse?sort=added">
-            View all <ArrowRight size={17} />
+            All <ArrowRight size={17} />
           </a>
         </div>
       </div>

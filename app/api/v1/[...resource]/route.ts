@@ -58,6 +58,11 @@ import {
   resolveChapterAccess,
   type ChapterAccessRecord,
 } from "@/lib/server/chapter-access";
+import {
+  activeChapterDiscountGuardSql,
+  noActiveChapterDiscountGuardSql,
+  resolveSeriesChapterDiscounts,
+} from "@/lib/server/content-discounts";
 import { requireChapterManagementScope } from "@/lib/server/chapter-management";
 import {
   getSiteThemeDocument,
@@ -1234,6 +1239,10 @@ function chapterAccessContract(
     teamName: decision.teamName,
     accessType: decision.accessType,
     priceOnyx: decision.priceOnyx,
+    basePriceOnyx: decision.basePriceOnyx,
+    discountTargetType: decision.discountTargetType,
+    discountPercentage: decision.discountPercentage,
+    discountEndsAt: decision.discountEndsAt,
     publishedAt: decision.publishedAt,
     isFresh: Boolean(decision.isFresh),
     canRead: decision.canRead,
@@ -1725,8 +1734,20 @@ export async function GET(request: Request, context: RouteContext) {
         );
       }
       const actor = await getActor();
+      const commercialDocument = await getCommercialSettingsDocument().catch(
+        () => null,
+      );
+      const premiumEconomyVisible = Boolean(
+        commercialDocument?.settings.economy.premiumEconomyPublic ||
+          actor?.primaryRole === "OWNER" ||
+          actor?.roles.includes("OWNER"),
+      );
+      const paidChapterPredicate = premiumEconomyVisible
+        ? ""
+        : "AND c.access_type = 'FREE'";
       const releaseRows = await env.DB.prepare(
         `SELECT c.id,
+                s.id AS seriesId,
                 c.team_id AS teamId,
                 s.slug AS seriesSlug,
                 c.slug AS chapterSlug,
@@ -1776,6 +1797,7 @@ export async function GET(request: Request, context: RouteContext) {
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
             AND datetime(c.published_at) <= datetime('now')
+            ${paidChapterPredicate}
           ORDER BY CAST(c.chapter_number AS REAL) DESC,
                    c.version DESC,
                    datetime(c.published_at) DESC,
@@ -1840,20 +1862,39 @@ export async function GET(request: Request, context: RouteContext) {
           canUploadChapter = Boolean(verifiedMembership);
         }
       }
-      const decisions = releaseRows.results.map((chapter) => ({
-        ...decideChapterAccess(
-          {
-            ...chapter,
-            priceOnyx: Number(chapter.priceOnyx),
-            seriesPublished: Boolean(chapter.seriesPublished),
-            teamPreviewAllowed: Boolean(chapter.teamPreviewAllowed),
-          },
-          actor,
-          unlockedIds.has(chapter.id),
-        ),
-        isFresh: Boolean(chapter.isFresh),
-        isRead: Boolean(chapter.isRead),
-      }));
+      const chapterDiscounts = await resolveSeriesChapterDiscounts(
+        seriesRecord.id,
+        releaseRows.results.map((chapter) => ({
+          chapterId: chapter.id,
+          basePrice: Number(chapter.priceOnyx),
+        })),
+      );
+      const decisions = releaseRows.results.map((chapter) => {
+        const basePriceOnyx = Number(chapter.priceOnyx);
+        const price = chapterDiscounts.get(chapter.id) ?? {
+          basePriceOnyx,
+          priceOnyx: basePriceOnyx,
+          discountId: null,
+          discountRevision: null,
+          discountTargetType: null,
+          discountPercentage: null,
+          discountEndsAt: null,
+        };
+        return {
+          ...decideChapterAccess(
+            {
+              ...chapter,
+              ...price,
+              seriesPublished: Boolean(chapter.seriesPublished),
+              teamPreviewAllowed: Boolean(chapter.teamPreviewAllowed),
+            },
+            actor,
+            unlockedIds.has(chapter.id),
+          ),
+          isFresh: Boolean(chapter.isFresh),
+          isRead: Boolean(chapter.isRead),
+        };
+      });
       return json(
         id,
         {
@@ -12538,6 +12579,24 @@ export async function POST(request: Request, context: RouteContext) {
       if (sumBalancedEntries(entries) !== 0) {
         throw new ApiError(500, "LEDGER_UNBALANCED", "The ledger transaction is not balanced.");
       }
+      if (access.discountId && !access.discountRevision) {
+        throw new ApiError(
+          409,
+          "DISCOUNT_CHANGED",
+          "The discount changed before the unlock could be completed.",
+        );
+      }
+      const discountGuard = access.discountId
+        ? `AND ${activeChapterDiscountGuardSql()}`
+        : `AND ${noActiveChapterDiscountGuardSql()}`;
+      const discountGuardBindings = access.discountId
+        ? [
+            access.discountId,
+            access.discountRevision,
+            access.priceOnyx,
+            access.priceOnyx,
+          ]
+        : [];
 
       const unlockResults = await env.DB.batch([
         env.DB.prepare(
@@ -12567,6 +12626,7 @@ export async function POST(request: Request, context: RouteContext) {
                          current_chapter.team_id = ?
                          OR (? IS NULL AND current_chapter.team_id IS NULL)
                        )
+                       ${discountGuard}
                        AND current_chapter.state = 'PUBLISHED'
                        AND current_chapter.visibility <> 'HIDDEN'
                        AND current_chapter.published_at IS NOT NULL
@@ -12594,9 +12654,10 @@ export async function POST(request: Request, context: RouteContext) {
           wallet.accountId,
           access.priceOnyx,
           access.chapterId,
-          access.priceOnyx,
+          access.basePriceOnyx,
           access.teamId,
           access.teamId,
+          ...discountGuardBindings,
           actor.id,
           access.chapterId,
         ),
@@ -12676,6 +12737,9 @@ export async function POST(request: Request, context: RouteContext) {
           id,
           JSON.stringify({
             priceOnyx: access.priceOnyx,
+            basePriceOnyx: access.basePriceOnyx,
+            discountId: access.discountId,
+            discountPercentage: access.discountPercentage,
             accessType: access.accessType,
             teamId: access.teamId,
             entitlementExpiresAt,

@@ -2,12 +2,15 @@ import { env } from "cloudflare:workers";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { canAny } from "@/lib/permissions.mjs";
 import { ApiError } from "@/lib/server/api";
+import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { resolveActiveChapterDiscount } from "@/lib/server/content-discounts";
 import type { Actor } from "@/lib/server/policy";
 
 export type ChapterAccessType = "FREE" | "PAID";
 
 export type ChapterAccessDecision = {
   chapterId: string;
+  seriesId: string;
   teamId: string | null;
   seriesSlug: string;
   chapterSlug: string;
@@ -18,6 +21,12 @@ export type ChapterAccessDecision = {
   teamName: string | null;
   accessType: ChapterAccessType;
   priceOnyx: number;
+  basePriceOnyx: number;
+  discountId: string | null;
+  discountRevision: number | null;
+  discountTargetType: "SERIES" | "CHAPTER" | null;
+  discountPercentage: number | null;
+  discountEndsAt: string | null;
   publishedAt: string | null;
   canRead: boolean;
   isUnlocked: boolean;
@@ -35,6 +44,7 @@ function decisionBase(chapter: ChapterAccessRecord) {
   const chapterNumber = normalizeChapterNumber(chapter.chapterNumber);
   return {
     chapterId: chapter.id,
+    seriesId: chapter.seriesId,
     teamId: chapter.teamId,
     seriesSlug: chapter.seriesSlug,
     chapterSlug: chapter.chapterSlug,
@@ -48,12 +58,19 @@ function decisionBase(chapter: ChapterAccessRecord) {
     teamName: chapter.teamName,
     accessType: chapter.accessType,
     priceOnyx: chapter.priceOnyx,
+    basePriceOnyx: chapter.basePriceOnyx ?? chapter.priceOnyx,
+    discountId: chapter.discountId ?? null,
+    discountRevision: chapter.discountRevision ?? null,
+    discountTargetType: chapter.discountTargetType ?? null,
+    discountPercentage: chapter.discountPercentage ?? null,
+    discountEndsAt: chapter.discountEndsAt ?? null,
     publishedAt: chapter.publishedAt,
   };
 }
 
 export type ChapterAccessRecord = {
   id: string;
+  seriesId: string;
   teamId: string | null;
   seriesSlug: string;
   chapterSlug: string;
@@ -64,6 +81,12 @@ export type ChapterAccessRecord = {
   teamName: string | null;
   accessType: ChapterAccessType;
   priceOnyx: number;
+  basePriceOnyx?: number;
+  discountId?: string | null;
+  discountRevision?: number | null;
+  discountTargetType?: "SERIES" | "CHAPTER" | null;
+  discountPercentage?: number | null;
+  discountEndsAt?: string | null;
   publishedAt: string | null;
   state: string;
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
@@ -90,6 +113,7 @@ async function databaseChapterRecord(
   if (!env.DB) return null;
   const row = await env.DB.prepare(
     `SELECT c.id,
+            s.id AS seriesId,
             c.team_id AS teamId,
             s.slug AS seriesSlug,
             c.slug AS chapterSlug,
@@ -125,6 +149,7 @@ async function databaseChapterRecord(
     .bind(seriesSlug, chapterSlug)
     .first<{
       id: string;
+      seriesId: string;
       teamId: string | null;
       seriesSlug: string;
       chapterSlug: string;
@@ -266,7 +291,39 @@ export async function resolveChapterAccess(
     );
   }
 
-  const initial = decideChapterAccess(chapter, actor, false);
+  if (
+    chapter.accessType === "PAID" &&
+    actor?.primaryRole !== "OWNER" &&
+    !actor?.roles.includes("OWNER")
+  ) {
+    const commercial = await getCommercialSettingsDocument().catch(() => null);
+    if (!commercial?.settings.economy.premiumEconomyPublic) {
+      throw new ApiError(
+        404,
+        "CHAPTER_NOT_FOUND",
+        "This chapter is not available.",
+      );
+    }
+  }
+
+  const price =
+    chapter.accessType === "PAID" && chapter.priceOnyx > 0
+      ? await resolveActiveChapterDiscount(
+          chapter.seriesId,
+          chapter.id,
+          chapter.priceOnyx,
+        )
+      : {
+          basePriceOnyx: chapter.priceOnyx,
+          priceOnyx: chapter.priceOnyx,
+          discountId: null,
+          discountRevision: null,
+          discountTargetType: null,
+          discountPercentage: null,
+          discountEndsAt: null,
+        };
+  const pricedChapter = { ...chapter, ...price };
+  const initial = decideChapterAccess(pricedChapter, actor, false);
   if (initial.reason !== "PURCHASE_REQUIRED" || !actor || !env.DB) {
     return initial;
   }
@@ -286,7 +343,7 @@ export async function resolveChapterAccess(
       .first();
     isUnlocked = Boolean(entitlement);
   }
-  return decideChapterAccess(chapter, actor, isUnlocked);
+  return decideChapterAccess(pricedChapter, actor, isUnlocked);
 }
 
 export async function requireReadableChapter(

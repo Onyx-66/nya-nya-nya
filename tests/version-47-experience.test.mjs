@@ -32,7 +32,10 @@ test("Version 47 migration installs the audited chapter access decision queue", 
   assert.match(migration, /CREATE TABLE `chapter_access_decisions`/u);
   assert.doesNotMatch(migration, /DROP TABLE `upload_jobs`/u);
   const journal = JSON.parse(journalText);
-  assert.equal(journal.entries.at(-1)?.tag, "0036_wise_ego");
+  assert.ok(
+    journal.entries.some((entry) => entry.tag === "0036_wise_ego"),
+    "the Version 47 migration remains registered after later migrations",
+  );
 
   const database = await migratedDatabase();
   try {

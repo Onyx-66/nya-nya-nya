@@ -57,6 +57,8 @@ import {
 import { TeamManagementPanel } from "@/components/nyascans/admin/TeamManagementPanel";
 import { TaxonomyManager } from "@/components/nyascans/admin/TaxonomyManager";
 import { SliderManagementPanel } from "@/components/nyascans/admin/SliderManagementPanel";
+import { PinnedSeriesPanel } from "@/components/nyascans/admin/PinnedSeriesPanel";
+import { DiscountsPanel } from "@/components/nyascans/admin/DiscountsPanel";
 import { HomePromotionsPanel } from "@/components/nyascans/admin/HomePromotionsPanel";
 import { ApiControlPanel } from "@/components/nyascans/admin/ApiControlPanel";
 import { ChapterAccessDecisionPanel } from "@/components/nyascans/admin/ChapterAccessDecisionPanel";
@@ -1421,6 +1423,7 @@ function UsersManager({
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [kind, setKind] = useState<"success" | "error">("success");
+  const [loadFailed, setLoadFailed] = useState(false);
   const ownerActor = actorRoles.includes("OWNER") || actorRole === "OWNER";
 
   async function load() {
@@ -1431,7 +1434,9 @@ function UsersManager({
       );
       setUsers(payload.data ?? []);
       setCurrentActorId(payload.currentActorId ?? "");
+      setLoadFailed(false);
     } catch (loadError) {
+      setLoadFailed(true);
       setMessage(
         loadError instanceof Error
           ? loadError.message
@@ -1524,7 +1529,7 @@ function UsersManager({
       />
       {loading ? (
         <LoadingPanel />
-      ) : visible.length ? (
+      ) : loadFailed && users.length === 0 ? null : visible.length ? (
         <div className="user-admin-table">
           <div className="user-admin-columns" aria-hidden="true">
             <span>Name &amp; email</span>
@@ -2351,7 +2356,7 @@ function UsersControlPanel({
       ) : null}
       {loading ? (
         <LoadingPanel />
-      ) : payload?.rows.length ? (
+      ) : payload === null ? null : payload.rows.length ? (
         <div className="users-control-table-wrap">
           <table className="users-control-table" data-view={view}>
             <thead>
@@ -2471,13 +2476,33 @@ function UsersControlPanel({
                       );
                     })()
                   ) : (
-                    <>
-                      <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
-                      <td><strong>{String(row.displayName ?? "System")}</strong><small>{String(row.email ?? "")}</small></td>
-                      <td>{String(row.activityType ?? row.kind ?? "Activity").replaceAll("_", " ")}</td>
-                      <td>{String(row.targetId ?? row.id ?? "—")}</td>
-                      <td>{row.amount !== undefined ? `${Number(row.amount).toLocaleString()} ${String(row.currency ?? "")}` : String(row.result ?? row.status ?? "—")}</td>
-                    </>
+                    (() => {
+                      const reference = String(row.targetId ?? row.id ?? "—");
+                      return (
+                        <>
+                          <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
+                          <td><strong>{String(row.displayName ?? "System")}</strong><small>{String(row.email ?? "")}</small></td>
+                          <td>{String(row.activityType ?? row.kind ?? "Activity").replaceAll("_", " ")}</td>
+                          <td>
+                            <details className="technical-reference is-inline">
+                              <summary>Details</summary>
+                              <div>
+                                <code>{reference}</code>
+                                <button
+                                  type="button"
+                                  aria-label="Copy transaction reference"
+                                  title="Copy transaction reference"
+                                  onClick={() => void navigator.clipboard.writeText(reference)}
+                                >
+                                  <Copy size={15} />
+                                </button>
+                              </div>
+                            </details>
+                          </td>
+                          <td>{row.amount !== undefined ? `${Number(row.amount).toLocaleString()} ${String(row.currency ?? "")}` : String(row.result ?? row.status ?? "—")}</td>
+                        </>
+                      );
+                    })()
                   )}
                 </tr>
               ))}
@@ -5539,6 +5564,8 @@ export function OperationsControlPanel({
   }
   if (section === "Editorial") return <EditorialManagementPanel />;
   if (section === "Sliders") return <SliderManagementPanel />;
+  if (section === "Pinned Series") return <PinnedSeriesPanel />;
+  if (section === "Discounts") return <DiscountsPanel />;
   if (section === "Announcements & ads") return <HomePromotionsPanel />;
   if (section === "API Control") return <ApiControlPanel />;
   if (section === "Security") return <SecurityPanel />;

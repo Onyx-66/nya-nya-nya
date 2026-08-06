@@ -128,7 +128,7 @@ test("exposes login, logout, and role-aware operations shortcuts", async () => {
 
   assert.match(component, />Login</);
   assert.match(component, />Logout</);
-  assert.match(component, /\/signout-with-chatgpt\?return_to=%2F/);
+  assert.match(component, /fetch\("\/api\/v1\/auth\/logout"/);
   assert.match(component, /role === "ADMINISTRATOR"/);
   assert.match(component, /href: "\/onyx\/admin\/access"/);
   assert.match(component, /href: "\/dashboard"/);

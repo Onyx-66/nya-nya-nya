@@ -1,4 +1,4 @@
-import { getChatGPTUser, loginPath } from "@/app/chatgpt-auth";
+import { getAuthenticatedUser, loginPath } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
 import { getActor } from "@/lib/server/policy";
 
@@ -37,7 +37,7 @@ export default async function UploadChapterPage({
       : requestedMode === "multi"
         ? ("BATCH" as const)
         : undefined;
-  const identity = await getChatGPTUser();
+  const identity = await getAuthenticatedUser();
 
   if (!identity) {
     return (
@@ -69,6 +69,7 @@ export default async function UploadChapterPage({
           email: identity.email,
           role: actor?.primaryRole ?? "USER",
           roles: actor?.roles ?? ["USER"],
+          authMethod: identity.authMethod,
           avatarUrl: actor?.avatarUrl ?? null,
         }}
       />
@@ -86,6 +87,7 @@ export default async function UploadChapterPage({
         email: actor.email,
         role: actor.primaryRole,
         roles: actor.roles,
+        authMethod: actor.authMethod,
         avatarUrl: actor.avatarUrl,
         canUseUploadCenter: actor.canUseUploadCenter,
         canUpload:

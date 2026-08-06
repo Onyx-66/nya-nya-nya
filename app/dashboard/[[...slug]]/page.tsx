@@ -1,4 +1,4 @@
-import { getChatGPTUser, loginPath } from "@/app/chatgpt-auth";
+import { getAuthenticatedUser, loginPath } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
 import { getActor } from "@/lib/server/policy";
 
@@ -14,7 +14,7 @@ type DashboardPageProps = {
 
 export default async function DashboardPage({ params }: DashboardPageProps) {
   const { slug } = await params;
-  const user = await getChatGPTUser();
+  const user = await getAuthenticatedUser();
   if (!user) {
     return (
       <NyaScansApp
@@ -44,6 +44,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           email: user.email,
           role: actor?.primaryRole ?? "USER",
           roles: actor?.roles ?? ["USER"],
+          authMethod: user.authMethod,
           avatarUrl: actor?.avatarUrl ?? null,
         }}
       />
@@ -64,6 +65,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
         email: actor.email,
         role: actor.primaryRole,
         roles: actor.roles,
+        authMethod: actor.authMethod,
         avatarUrl: actor.avatarUrl,
         canUseUploadCenter: actor.canUseUploadCenter,
         canUpload:

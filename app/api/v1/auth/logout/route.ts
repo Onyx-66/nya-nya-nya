@@ -1,0 +1,49 @@
+import { z } from "zod";
+import {
+  chatGPTSignOutPath,
+  getChatGPTUser,
+  safeAuthReturnPath,
+} from "@/app/chatgpt-auth";
+import { errorResponse, json } from "@/lib/server/api";
+import { assertSameOrigin, requestIdFor } from "@/lib/server/admin-utils";
+import {
+  clearPasswordSessionCookie,
+  revokePasswordSession,
+} from "@/lib/server/local-auth";
+
+export const dynamic = "force-dynamic";
+
+const logoutSchema = z.object({
+  returnTo: z.string().max(500).optional(),
+});
+
+export async function POST(request: Request) {
+  const requestId = requestIdFor(request);
+  try {
+    assertSameOrigin(request);
+    const input = logoutSchema.parse(await request.json().catch(() => ({})));
+    const returnTo = safeAuthReturnPath(input.returnTo ?? "/");
+    const providerIdentity = await getChatGPTUser();
+    await revokePasswordSession(new Headers(request.headers));
+    return json(
+      requestId,
+      {
+        signedOut: true,
+        returnTo,
+        providerSignOutPath: providerIdentity
+          ? chatGPTSignOutPath(returnTo)
+          : null,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+          "set-cookie": clearPasswordSessionCookie(),
+        },
+      },
+    );
+  } catch (error) {
+    const response = errorResponse(requestId, error);
+    response.headers.set("cache-control", "no-store");
+    return response;
+  }
+}

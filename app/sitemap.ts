@@ -1,11 +1,20 @@
 import type { MetadataRoute } from "next";
 import { demoSeries } from "@/lib/catalog";
+import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
+  const commercial = await getCommercialSettingsDocument().catch(() => null);
+  const discountsPublic = Boolean(
+    commercial &&
+      !commercial.recoveredFromInvalid &&
+      commercial.settings.economy.premiumEconomyPublic,
+  );
   const staticRoutes = [
     "",
     "/browse",
+    "/pinned-series",
+    ...(discountsPublic ? ["/discounts"] : []),
     "/store",
     "/latest",
     "/leaderboard",

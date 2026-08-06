@@ -49,7 +49,8 @@ test("header uses a standalone notification control and keeps upload/account act
   assert.match(header, /className="header-notifications"/);
   assert.match(header, /className="header-profile-trigger"/);
   assert.match(header, /CloudArrowUp size=\{18\} \/> Upload Center/);
-  assert.match(header, /href="\/signout-with-chatgpt\?return_to=%2F"/);
+  assert.match(header, /<LogoutAction[\s\S]*authMethod=\{actor\.authMethod\}/);
+  assert.match(app, /fetch\("\/api\/v1\/auth\/logout"/);
   assert.doesNotMatch(header, /className="header-upload-link"/);
   assert.doesNotMatch(account, /Open Admin Panel|Open Team Workspace/);
 });

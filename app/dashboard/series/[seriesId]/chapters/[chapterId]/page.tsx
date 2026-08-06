@@ -1,4 +1,4 @@
-import { getChatGPTUser, loginPath } from "@/app/chatgpt-auth";
+import { getAuthenticatedUser, loginPath } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
 import { ChapterManagementWorkspace } from "@/components/nyascans/ChapterManagementWorkspace";
 import { requireChapterManagementScope } from "@/lib/server/chapter-management";
@@ -22,7 +22,7 @@ export default async function TeamChapterManagementPage({
   const returnTo =
     `/dashboard/series/${encodeURIComponent(seriesId)}` +
     `/chapters/${encodeURIComponent(chapterId)}`;
-  const identity = await getChatGPTUser();
+  const identity = await getAuthenticatedUser();
   if (!identity) {
     return (
       <NyaScansApp

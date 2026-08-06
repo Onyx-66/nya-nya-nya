@@ -9,7 +9,7 @@ async function read(relativePath) {
   return fs.readFile(path.join(root, relativePath), "utf8");
 }
 
-test("login and signup are distinct safe entry intents backed only by configured ChatGPT identity", async () => {
+test("login and signup keep safe return paths while supporting password and ChatGPT identity", async () => {
   const [router, auth, app] = await Promise.all([
     read("app/[...slug]/page.tsx"),
     read("app/chatgpt-auth.ts"),
@@ -25,7 +25,10 @@ test("login and signup are distinct safe entry intents backed only by configured
   assert.match(auth, /pathname === "\/signup"/);
   assert.match(app, /function AuthEntryView/);
   assert.match(app, /Continue with ChatGPT/);
-  assert.match(app, /First-time authorization creates your NyaScans reader profile/);
+  assert.match(app, /\/api\/v1\/auth\/signup/);
+  assert.match(app, /name="confirmPassword"/);
+  assert.match(app, /\/api\/v1\/auth\/verify-email/);
+  assert.match(app, /one-time verification link/u);
   assert.match(app, /NyaScans never receives or stores your[\s\S]+provider token/);
   assert.doesNotMatch(app, /Continue with (Google|Apple|Facebook)/);
   assert.doesNotMatch(app, /ChatGPT\/OpenAI OAuth/);

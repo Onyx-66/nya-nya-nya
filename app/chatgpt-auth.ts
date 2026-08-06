@@ -1,10 +1,16 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { getPasswordSessionIdentity } from "@/lib/server/local-auth";
 
 export type ChatGPTUser = {
   displayName: string;
   email: string;
   fullName: string | null;
+};
+
+export type AuthenticatedUser = ChatGPTUser & {
+  userId: string | null;
+  authMethod: "CHATGPT" | "PASSWORD";
 };
 
 const USER_EMAIL_HEADER = "oai-authenticated-user-email";
@@ -33,6 +39,18 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     email,
     fullName,
   };
+}
+
+export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> {
+  const providerUser = await getChatGPTUser();
+  if (providerUser) {
+    return {
+      ...providerUser,
+      userId: null,
+      authMethod: "CHATGPT",
+    };
+  }
+  return getPasswordSessionIdentity(new Headers(await headers()));
 }
 
 export async function requireChatGPTUser(

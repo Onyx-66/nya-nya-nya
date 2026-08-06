@@ -1,4 +1,4 @@
-import { getChatGPTUser, loginPath } from "@/app/chatgpt-auth";
+import { getAuthenticatedUser, loginPath } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
 import { writeAudit } from "@/lib/server/admin-utils";
 import { getActor } from "@/lib/server/policy";
@@ -17,7 +17,7 @@ type AdminPageProps = {
 
 export default async function AdminPage({ params }: AdminPageProps) {
   const { slug } = await params;
-  const identity = await getChatGPTUser();
+  const identity = await getAuthenticatedUser();
   if (!identity) {
     return (
       <NyaScansApp
@@ -46,6 +46,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
           email: identity.email,
           role: "USER",
           roles: ["USER"],
+          authMethod: identity.authMethod,
           avatarUrl: null,
         }}
       />
@@ -89,6 +90,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
         email: actor.email,
         role: actor.primaryRole,
         roles: actor.roles,
+        authMethod: actor.authMethod,
         avatarUrl: actor.avatarUrl,
         canUseUploadCenter: true,
         canUpload: fullAdministrator,

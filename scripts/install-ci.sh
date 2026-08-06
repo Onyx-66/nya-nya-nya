@@ -187,3 +187,8 @@ await writeFile(
 );
 NODE
 echo "[sites] npm ci passed and vinext is available"
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git config core.hooksPath .githooks
+  echo "[sites] repository secret guard enabled"
+fi

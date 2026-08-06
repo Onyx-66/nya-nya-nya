@@ -58,7 +58,7 @@ test("Version 48 anchors opaque menus above content and centers the floating ad 
   assert.match(authority, /background: var\(--surface-strong\) !important/u);
   assert.match(app, /document\.addEventListener\("pointerdown"/u);
   assert.match(app, /document\.addEventListener\("scroll", queueOpenMenuPosition, passiveCapture\)/u);
-  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad[\s\S]*top: 50%[\s\S]*left: 50%[\s\S]*width: min\(80vw[\s\S]*height: min\(80dvh/u);
+  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad[\s\S]*top: 50%[\s\S]*left: 50%[\s\S]*width: min\(90vw[\s\S]*height: min\(89dvh/u);
   assert.match(authority, /translate: -50% -50%/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad > a \{[\s\S]*position: relative;[\s\S]*display: block;/u);
   assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad img,[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*object-fit: cover;/u);
@@ -76,6 +76,7 @@ test("Version 48 makes team identity order and Browse controls explicit", async 
   assert.match(css, /\.teams-directory-results\.is-list \.team-directory-card \{[\s\S]*grid-template-areas: "logo identity"/u);
   assert.match(discovery, /className="team-release-languages"/u);
   assert.match(discovery, /className="team-card-action"/u);
+  assert.match(discovery, /href="\/browse\?sort=added">\s*All\s+<ArrowRight/u);
   assert.match(authority, /\.catalog-toolbar \.compact-option-menu > summary[\s\S]*font-weight: 400/u);
   assert.match(authority, /border-radius: var\(--site-button-radius, var\(--radius-small\)\)/u);
 });
@@ -128,6 +129,9 @@ test("Version 48 groups functional admin areas and hides technical references by
   assert.doesNotMatch(dispatcher, /section === "Overview"[\s\S]{0,240}<AnalyticsPanel/u);
   assert.match(operations, /className="user-admin-record"/u);
   assert.match(operations, /className="technical-reference"/u);
+  assert.match(operations, /loadFailed && users\.length === 0 \? null/u);
+  assert.match(operations, /payload === null \? null : payload\.rows\.length/u);
+  assert.match(operations, /aria-label="Copy transaction reference"/u);
   assert.match(operations, /Recent adjustments/u);
   assert.match(operations, /balanceSummary\?\.fundedAccounts/u);
   assert.match(operations, /section === "Transactions"/u);

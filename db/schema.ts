@@ -34,6 +34,95 @@ export const users = sqliteTable(
   ],
 );
 
+export const userPasswordCredentials = sqliteTable(
+  "user_password_credentials",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    algorithm: text("algorithm").notNull().default("PBKDF2-SHA256"),
+    iterations: integer("iterations").notNull(),
+    salt: text("salt").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    lockedUntil: text("locked_until"),
+    passwordUpdatedAt: text("password_updated_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "user_password_credentials_algorithm_check",
+      sql`${table.algorithm} = 'PBKDF2-SHA256'`,
+    ),
+    check(
+      "user_password_credentials_iterations_check",
+      sql`${table.iterations} >= 100000`,
+    ),
+    check(
+      "user_password_credentials_attempts_check",
+      sql`${table.failedAttempts} >= 0`,
+    ),
+  ],
+);
+
+export const emailVerificationTokens = sqliteTable(
+  "email_verification_tokens",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    returnTo: text("return_to").notNull().default("/account"),
+    usedAt: text("used_at"),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("email_verification_tokens_hash_uidx").on(table.tokenHash),
+    index("email_verification_tokens_user_idx").on(
+      table.userId,
+      table.usedAt,
+      table.expiresAt,
+    ),
+  ],
+);
+
+export const userSessions = sqliteTable(
+  "user_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    authMethod: text("auth_method").notNull().default("PASSWORD"),
+    expiresAt: text("expires_at").notNull(),
+    lastSeenAt: text("last_seen_at")
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    revokedAt: text("revoked_at"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("user_sessions_token_hash_uidx").on(table.tokenHash),
+    index("user_sessions_user_idx").on(
+      table.userId,
+      table.revokedAt,
+      table.expiresAt,
+    ),
+    index("user_sessions_expiry_idx").on(table.expiresAt, table.revokedAt),
+    check(
+      "user_sessions_auth_method_check",
+      sql`${table.authMethod} IN ('PASSWORD')`,
+    ),
+  ],
+);
+
 export const userRoles = sqliteTable(
   "user_roles",
   {
@@ -1442,6 +1531,135 @@ export const chapterAccessDecisions = sqliteTable(
     check(
       "chapter_access_decisions_price_check",
       sql`${table.forcedPriceOnyx} > 0`,
+    ),
+  ],
+);
+
+export const homePinnedSeries = sqliteTable(
+  "home_pinned_series",
+  {
+    id: text("id").primaryKey(),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    displayOrder: integer("display_order").notNull().default(0),
+    isFeatured: integer("is_featured", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    startsAt: text("starts_at"),
+    endsAt: text("ends_at"),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("home_pinned_series_series_uidx").on(table.seriesId),
+    index("home_pinned_series_schedule_idx").on(
+      table.displayOrder,
+      table.startsAt,
+      table.endsAt,
+    ),
+    check(
+      "home_pinned_series_order_check",
+      sql`${table.displayOrder} >= 0`,
+    ),
+    check(
+      "home_pinned_series_dates_check",
+      sql`${table.endsAt} IS NULL OR ${table.startsAt} IS NULL OR datetime(${table.endsAt}) > datetime(${table.startsAt})`,
+    ),
+  ],
+);
+
+export const homePinnedSeriesState = sqliteTable(
+  "home_pinned_series_state",
+  {
+    collectionKey: text("collection_key").primaryKey(),
+    revision: integer("revision").notNull().default(1),
+    mutationMarker: text("mutation_marker").notNull().default("initial"),
+    updatedByUserId: text("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "home_pinned_series_state_key_check",
+      sql`${table.collectionKey} = 'pinned-series'`,
+    ),
+    check(
+      "home_pinned_series_state_revision_check",
+      sql`${table.revision} >= 1`,
+    ),
+  ],
+);
+
+export const contentDiscounts = sqliteTable(
+  "content_discounts",
+  {
+    id: text("id").primaryKey(),
+    targetType: text("target_type").notNull(),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    chapterId: text("chapter_id").references(() => chapters.id, {
+      onDelete: "cascade",
+    }),
+    discountType: text("discount_type").notNull(),
+    discountValue: integer("discount_value").notNull(),
+    originalPrice: integer("original_price").notNull(),
+    reducedPrice: integer("reduced_price").notNull(),
+    startsAt: text("starts_at").notNull(),
+    endsAt: text("ends_at").notNull(),
+    isActive: integer("is_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    revision: integer("revision").notNull().default(1),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("content_discounts_public_idx").on(
+      table.isActive,
+      table.startsAt,
+      table.endsAt,
+    ),
+    index("content_discounts_target_idx").on(
+      table.targetType,
+      table.seriesId,
+      table.chapterId,
+    ),
+    check(
+      "content_discounts_target_type_check",
+      sql`${table.targetType} IN ('SERIES', 'CHAPTER')`,
+    ),
+    check(
+      "content_discounts_target_check",
+      sql`(${table.targetType} = 'SERIES' AND ${table.chapterId} IS NULL) OR (${table.targetType} = 'CHAPTER' AND ${table.chapterId} IS NOT NULL)`,
+    ),
+    check(
+      "content_discounts_type_check",
+      sql`${table.discountType} IN ('PERCENT', 'FIXED')`,
+    ),
+    check(
+      "content_discounts_price_check",
+      sql`${table.originalPrice} > 0 AND ${table.reducedPrice} >= 0 AND ${table.reducedPrice} < ${table.originalPrice} AND ${table.discountValue} > 0`,
+    ),
+    check(
+      "content_discounts_percent_check",
+      sql`${table.discountType} <> 'PERCENT' OR ${table.discountValue} BETWEEN 1 AND 99`,
+    ),
+    check(
+      "content_discounts_fixed_check",
+      sql`${table.discountType} <> 'FIXED' OR ${table.discountValue} = ${table.reducedPrice}`,
+    ),
+    check(
+      "content_discounts_dates_check",
+      sql`datetime(${table.endsAt}) > datetime(${table.startsAt})`,
     ),
   ],
 );

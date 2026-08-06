@@ -43,6 +43,7 @@ import {
   Play,
   Plus,
   Pulse,
+  PushPin,
   ShieldCheck,
   SidebarSimple,
   SignIn,
@@ -75,7 +76,9 @@ import {
   useState,
   Suspense,
   type CSSProperties,
+  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
@@ -83,6 +86,12 @@ import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscuss
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
 import { FormattedAnnouncementText } from "@/components/nyascans/FormattedAnnouncementText";
 import { KeyboardShortcutsDialog } from "@/components/nyascans/KeyboardShortcutsDialog";
+import {
+  DiscountsDirectory,
+  DiscountsSection,
+  PinnedSeriesDirectory,
+  PinnedSeriesSection,
+} from "@/components/nyascans/HomeFeatureSections";
 import { SupportTicketPanel } from "@/components/nyascans/SupportTicketPanel";
 import { useSystemNotifications } from "@/components/nyascans/SystemNotifications";
 import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
@@ -116,6 +125,7 @@ import {
   formatMoney,
   type CommercialSettings,
 } from "@/lib/commercial-settings";
+import { APP_VERSION } from "@/lib/app-version";
 import {
   demoSeries,
   type SeriesCard,
@@ -152,6 +162,8 @@ export type AppView =
   | "wallet"
   | "notifications"
   | "latest"
+  | "pinned"
+  | "discounts"
   | "rankings"
   | "roulette"
   | "orders"
@@ -171,6 +183,7 @@ type Actor = {
   email: string;
   role: string;
   roles?: string[];
+  authMethod?: "CHATGPT" | "PASSWORD";
   avatarUrl?: string | null;
   canUseUploadCenter?: boolean;
   canUpload?: boolean;
@@ -190,7 +203,10 @@ type HeaderNotification = {
 type AppProps = {
   view: AppView;
   actor: Actor | null;
-  authenticatedIdentity?: Pick<Actor, "displayName" | "email"> | null;
+  authenticatedIdentity?: Pick<
+    Actor,
+    "displayName" | "email" | "authMethod"
+  > | null;
   accountBlocked?: boolean;
   authReturnTo?: string;
   resourceSlug?: string;
@@ -207,6 +223,54 @@ function authEntryPath(
   returnTo: string,
 ): string {
   return `/${intent}?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+function LogoutAction({
+  returnTo = "/",
+  className,
+  role,
+  onStart,
+  children,
+}: {
+  authMethod?: Actor["authMethod"];
+  returnTo?: string;
+  className?: string;
+  role?: string;
+  onStart?: () => void;
+  children: ReactNode;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className={className}
+      role={role}
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        onStart?.();
+        setBusy(true);
+        try {
+          const response = await fetch("/api/v1/auth/logout", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ returnTo }),
+          });
+          const payload = (await response.json()) as {
+            returnTo?: string;
+            providerSignOutPath?: string | null;
+          };
+          if (!response.ok) throw new Error("Logout failed");
+          window.location.assign(
+            payload.providerSignOutPath || payload.returnTo || returnTo,
+          );
+        } catch {
+          setBusy(false);
+        }
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 type AnalyticsEventType =
@@ -1328,14 +1392,14 @@ function SiteHeader({
                       {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
                       Use {theme === "dark" ? "light" : "dark"} theme
                     </button>
-                    <a
+                    <LogoutAction
                       className="is-danger"
                       role="menuitem"
-                      href="/signout-with-chatgpt?return_to=%2F"
-                      onClick={() => setMenuOpen(false)}
+                      authMethod={actor.authMethod}
+                      onStart={() => setMenuOpen(false)}
                     >
                       <SignOut size={18} /> Logout
-                    </a>
+                    </LogoutAction>
                   </div>
                 ) : null}
               </div>
@@ -3726,6 +3790,9 @@ function HomeView({
   actor: Actor | null;
   showToast: (text: string) => void;
 }) {
+  const { settings: commercialSettings } = useCommercialSettings();
+  const premiumEconomyPublic =
+    commercialSettings.economy.premiumEconomyPublic;
   const [promotions, setPromotions] = useState<{
     announcements: Array<{ id: string; type: "UPDATE" | "ISSUE" | "SUPPORT" | "NOTICE"; title: string; body: string; linkLabel: string; linkUrl: string }>;
     floatingAd: { id: string; eyebrow: string; title: string; body: string; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null;
@@ -3750,6 +3817,10 @@ function HomeView({
         <TrendingShowcase />
 
         <ContinueReadingSection signedIn={Boolean(actor)} />
+
+        <PinnedSeriesSection />
+
+        <DiscountsSection enabled={premiumEconomyPublic} />
 
         <section className="updates-section">
           <div className="page-wrap">
@@ -5989,6 +6060,9 @@ type SeriesChapterAccess = {
   isRead?: boolean;
   accessType: "FREE" | "PAID";
   priceOnyx: number;
+  basePriceOnyx?: number;
+  discountPercentage?: number | null;
+  discountEndsAt?: string | null;
   canRead: boolean;
   reason:
     | "FREE"
@@ -6918,9 +6992,18 @@ function TitleView({
                                 {access}
                                 {premiumEconomyPublic &&
                                 chapter.priceOnyx > 0 &&
-                                access === "Paid"
-                                  ? ` · ${coinLabel(chapter.priceOnyx, commercial)}`
-                                  : ""}
+                                access === "Paid" ? (
+                                  <span className="chapter-discount-price">
+                                    {chapter.basePriceOnyx &&
+                                    chapter.basePriceOnyx > chapter.priceOnyx ? (
+                                      <s>{coinLabel(chapter.basePriceOnyx, commercial)}</s>
+                                    ) : null}
+                                    <span>· {coinLabel(chapter.priceOnyx, commercial)}</span>
+                                    {chapter.discountPercentage ? (
+                                      <b>−{chapter.discountPercentage}%</b>
+                                    ) : null}
+                                  </span>
+                                ) : null}
                               </span>
                               <a className="chapter-read" href={chapterHref}>
                                 {chapter.chapterId === latestChapter?.chapterId
@@ -7036,6 +7119,9 @@ type ChapterAccessData = {
   chapterLabel: string;
   accessType: "FREE" | "PAID";
   priceOnyx: number;
+  basePriceOnyx?: number;
+  discountPercentage?: number | null;
+  discountEndsAt?: string | null;
   canRead: boolean;
   isUnlocked: boolean;
   administratorPreview: boolean;
@@ -8302,7 +8388,18 @@ function ReaderView({
                   <dt>Required</dt>
                   <dd>
                     <ConfiguredCoinMark settings={commercial} size={16} />{" "}
+                    {access.basePriceOnyx &&
+                    access.basePriceOnyx > access.priceOnyx ? (
+                      <s className="reader-lock-original-price">
+                        {coinLabel(access.basePriceOnyx, commercial)}
+                      </s>
+                    ) : null}{" "}
                     {coinLabel(access.priceOnyx, commercial)}
+                    {access.discountPercentage ? (
+                      <span className="reader-lock-discount-badge">
+                        −{access.discountPercentage}%
+                      </span>
+                    ) : null}
                   </dd>
                 </div>
               ) : null}
@@ -9457,7 +9554,10 @@ function AuthEntryView({
 }: {
   intent: "login" | "signup";
   actor: Actor | null;
-  authenticatedIdentity: Pick<Actor, "displayName" | "email"> | null;
+  authenticatedIdentity: Pick<
+    Actor,
+    "displayName" | "email" | "authMethod"
+  > | null;
   accountBlocked: boolean;
   returnTo: string;
 }) {
@@ -9467,6 +9567,159 @@ function AuthEntryView({
   const signInHref =
     `/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`;
   const isSignup = intent === "signup";
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [verifyingLink, setVerifyingLink] = useState(false);
+
+  useEffect(() => {
+    if (!isSignup) return;
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const token = hash.get("verify");
+    if (!token) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) {
+        setAuthError("This verification link is invalid.");
+        return;
+      }
+      setVerifyingLink(true);
+      void fetch("/api/v1/auth/verify-email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const payload = (await response.json()) as {
+            returnTo?: string;
+            error?: { message?: string };
+          };
+          if (!response.ok) {
+            throw new Error(
+              payload.error?.message ??
+                "This verification link could not be used.",
+            );
+          }
+          window.location.replace(payload.returnTo || returnTo);
+        })
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted) {
+            setAuthError(
+              error instanceof Error
+                ? error.message
+                : "This verification link could not be used.",
+            );
+            setVerifyingLink(false);
+          }
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isSignup, returnTo]);
+
+  async function submitCredentials(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSignup && password !== confirmation) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthMessage("");
+    try {
+      const endpoint = isSignup
+        ? "/api/v1/auth/signup"
+        : "/api/v1/auth/login";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          ...(isSignup ? { confirmPassword: confirmation } : {}),
+          returnTo,
+        }),
+      });
+      const payload = (await response.json()) as {
+        returnTo?: string;
+        message?: string;
+        error?: { code?: string; message?: string };
+      };
+      if (!response.ok) {
+        const authFailure = new Error(
+          payload.error?.message ?? "The request could not be completed.",
+        ) as Error & { code?: string };
+        authFailure.code = payload.error?.code;
+        throw authFailure;
+      }
+      if (isSignup) {
+        setPassword("");
+        setConfirmation("");
+        setVerificationRequired(true);
+        setAuthMessage(
+          payload.message ??
+            "Check your inbox and use the one-time verification link.",
+        );
+      } else {
+        window.location.assign(payload.returnTo || returnTo);
+      }
+    } catch (error) {
+      const failure = error as Error & { code?: string };
+      if (failure.code === "EMAIL_VERIFICATION_REQUIRED") {
+        setVerificationRequired(true);
+      }
+      setAuthError(
+        failure.message || "The request could not be completed.",
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    if (!email) return;
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const response = await fetch("/api/v1/auth/resend-verification", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, returnTo }),
+      });
+      const payload = (await response.json()) as {
+        message?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "The verification email could not be sent.",
+        );
+      }
+      setAuthMessage(
+        payload.message ?? "If the account is pending, a new email is on its way.",
+      );
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : "The verification email could not be sent.",
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  }
 
   return (
     <main className="page-main page-wrap auth-entry-page">
@@ -9505,12 +9758,13 @@ function AuthEntryView({
               >
                 Contact Support
               </a>
-              <a
+              <LogoutAction
                 className="button button-quiet"
-                href="/signout-with-chatgpt?return_to=%2Flogin"
+                authMethod={(actor ?? authenticatedIdentity)?.authMethod}
+                returnTo="/login"
               >
                 Use Another Account
-              </a>
+              </LogoutAction>
             </div>
           </div>
         ) : actor || authenticatedIdentity ? (
@@ -9523,8 +9777,8 @@ function AuthEntryView({
                 {(actor ?? authenticatedIdentity)?.displayName ?? "reader"}.
               </h1>
               <p>
-                Continue to the page you requested. Your session is managed by
-                the configured ChatGPT identity provider.
+                Continue to the page you requested. Your verified session is
+                protected by the sign-in method you selected.
               </p>
             </div>
             <a className="button button-primary" href={returnTo}>
@@ -9544,15 +9798,107 @@ function AuthEntryView({
               </h1>
               <p>
                 {isSignup
-                  ? "ChatGPT is the only identity provider configured for this deployment. First-time authorization creates your NyaScans reader profile."
-                  : "Continue with the identity provider configured for NyaScans. You will return to the page you requested."}
+                  ? "Register with email and a password, then verify your address using the one-time link we send."
+                  : "Use your verified email account or continue with ChatGPT. You will return to the page you requested."}
               </p>
+            </div>
+            {verifyingLink ? (
+              <div className="auth-local-status" role="status">
+                <SpinnerGap size={19} className="spin" />
+                Verifying your one-time link…
+              </div>
+            ) : null}
+            <form
+              className="auth-local-form"
+              onSubmit={submitCredentials}
+              aria-busy={authBusy}
+            >
+              <label>
+                <span>Email address</span>
+                <input
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  maxLength={254}
+                  required
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  minLength={isSignup ? 15 : 1}
+                  maxLength={128}
+                  required
+                  aria-describedby={isSignup ? "password-requirement" : undefined}
+                />
+                {isSignup ? (
+                  <small id="password-requirement">
+                    Use at least 15 characters. Passwords are hashed before storage.
+                  </small>
+                ) : null}
+              </label>
+              {isSignup ? (
+                <label>
+                  <span>Confirm password</span>
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    autoComplete="new-password"
+                    value={confirmation}
+                    onChange={(event) => setConfirmation(event.target.value)}
+                    minLength={15}
+                    maxLength={128}
+                    required
+                  />
+                </label>
+              ) : null}
+              {authError ? (
+                <p className="auth-local-feedback is-error" role="alert">
+                  <WarningCircle size={17} /> {authError}
+                </p>
+              ) : null}
+              {authMessage ? (
+                <p className="auth-local-feedback is-success" role="status">
+                  <CheckCircle size={17} /> {authMessage}
+                </p>
+              ) : null}
+              <div className="auth-local-actions">
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={authBusy || verifyingLink}
+                >
+                  {authBusy ? <SpinnerGap size={18} className="spin" /> : null}
+                  {isSignup ? "Create Account" : "Sign In"}
+                </button>
+                {verificationRequired ? (
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={authBusy || !email}
+                    onClick={() => void resendVerification()}
+                  >
+                    Resend verification email
+                  </button>
+                ) : null}
+              </div>
+            </form>
+            <div className="auth-provider-divider" role="separator">
+              <span>or</span>
             </div>
             <a className="auth-provider-button" href={signInHref}>
               <ShieldCheck size={21} weight="fill" />
               <span>
                 {isSignup
-                  ? "Create or Continue with ChatGPT"
+                  ? "Create or continue with ChatGPT"
                   : "Continue with ChatGPT"}
               </span>
               <ArrowRight size={18} />
@@ -9561,7 +9907,8 @@ function AuthEntryView({
               <ShieldCheck size={18} />
               <p>
                 Secure provider session. NyaScans never receives or stores your
-                ChatGPT password or provider token.
+                ChatGPT password or provider token. Email passwords are stored
+                only as salted PBKDF2 hashes.
               </p>
             </div>
             <p className="auth-terms">
@@ -9975,8 +10322,9 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
             <div>
               <h3>Sign-in security</h3>
               <p>
-                Your identity, password, verification, and MFA are managed by
-                ChatGPT. NyaScans never stores provider passwords or tokens.
+                {actor.authMethod === "PASSWORD"
+                  ? "Your email is verified and your password is stored only as a salted PBKDF2 hash. The raw password is never retained."
+                  : "Your identity, password, verification, and MFA are managed by ChatGPT. NyaScans never stores provider passwords or tokens."}
               </p>
             </div>
           </div>
@@ -9985,15 +10333,19 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
             <article>
               <span><ShieldCheck size={22} weight="fill" /></span>
               <div>
-                <strong>ChatGPT identity</strong>
+                <strong>
+                  {actor.authMethod === "PASSWORD"
+                    ? "Verified email account"
+                    : "ChatGPT identity"}
+                </strong>
                 <small>{actor.email} · connected</small>
               </div>
               <em>Primary</em>
             </article>
             <p>
-              Additional Google, Discord, email, or phone providers require a
-              supported external identity service. NyaScans does not simulate
-              provider connections or store provider passwords.
+              {actor.authMethod === "PASSWORD"
+                ? "You can also use ChatGPT sign-in with this verified address. Provider tokens are never stored by NyaScans."
+                : "Email and password registration is also available. Additional external providers require a supported identity service."}
             </p>
           </div>
         ) : section === "Notifications" ? (
@@ -10200,6 +10552,7 @@ function OperationsView({
           ["Chapter access", LockSimple],
           ["Teams", ShieldCheck],
           ["Sliders", SlidersHorizontal],
+          ["Pinned Series", PushPin],
           ["Categories & genres", Tag],
           ["Upload center", CloudArrowUp],
           ["New Series Queue", FileText],
@@ -10226,6 +10579,7 @@ function OperationsView({
           ["Payouts", Coins],
           ["Transactions", Storefront],
           ["Commerce", Coins],
+          ["Discounts", Tag],
           ["Store Management", Storefront],
           ["Roulette", Sparkle],
         ] as const,
@@ -10529,6 +10883,13 @@ function OperationsView({
             </section>
           ))}
         </nav>
+        <div
+          className="ops-release-version"
+          title={`NyaScans Version ${APP_VERSION}`}
+        >
+          <span>Version</span>
+          <strong>{APP_VERSION}</strong>
+        </div>
         <details className="ops-account-menu">
           <summary aria-label={`Open account menu for ${actor.displayName}`}>
             <span className="ops-account-avatar">
@@ -10549,10 +10910,10 @@ function OperationsView({
               <House size={17} />
               <span>Reader site</span>
             </a>
-            <a href="/signout-with-chatgpt?return_to=%2F">
+            <LogoutAction authMethod={actor.authMethod}>
               <SignOut size={17} />
               <span>Logout</span>
-            </a>
+            </LogoutAction>
           </div>
         </details>
       </aside>
@@ -10682,10 +11043,13 @@ function AccessView({
               <span>{actor.displayName.slice(0, 1)}</span>
               <div><strong>{actor.displayName}</strong><small>{actor.email}</small></div>
             </div>
-            <a className="button button-secondary" href="/signout-with-chatgpt?return_to=%2F">
+            <LogoutAction
+              className="button button-secondary"
+              authMethod={actor.authMethod}
+            >
               <SignOut size={18} />
               Logout and use another account
-            </a>
+            </LogoutAction>
           </>
         ) : (
           <a
@@ -10698,7 +11062,9 @@ function AccessView({
         )}
         <small>
           {adminGate
-            ? "An active administrator role and server-side policy checks are required. MFA is configured through the identity provider."
+            ? actor?.authMethod === "PASSWORD"
+              ? "An active administrator role and server-side policy checks are required. This email session has already passed verification."
+              : "An active administrator role and server-side policy checks are required. MFA is configured through the identity provider."
             : "Role and active team membership are checked before protected publishing actions."}
         </small>
         <a href="/">Return to NyaScans</a>
@@ -11174,6 +11540,7 @@ function SiteFooter({
       </div>
       <div className="page-wrap footer-bottom">
         <span>© 2026 NyaScans. Original platform artwork.</span>
+        <span className="footer-release-version">Version {APP_VERSION}</span>
       </div>
     </footer>
   );
@@ -11525,6 +11892,10 @@ export function NyaScansApp({
   const mainContent =
     view === "home" ? (
       <HomeView actor={actor} showToast={showToast} />
+    ) : view === "pinned" ? (
+      <PinnedSeriesDirectory />
+    ) : view === "discounts" ? (
+      <DiscountsDirectory />
     ) : view === "latest" ? (
       <LatestUpdatesView />
     ) : view === "browse" ? (

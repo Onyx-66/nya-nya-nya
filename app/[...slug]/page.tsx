@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import {
-  getChatGPTUser,
+  getAuthenticatedUser,
   safeAuthReturnPath,
 } from "@/app/chatgpt-auth";
 import { NyaScansApp, type AppView } from "@/components/nyascans/NyaScansApp";
 import { findSeries } from "@/lib/catalog";
 import { ApiError } from "@/lib/server/api";
+import { requirePaidEconomyPublicDocument } from "@/lib/server/commercial-settings";
 import { getActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +44,8 @@ function resolveView(slug: string[]): {
   if (root === "roulette") return { view: "roulette" };
   if (root === "notifications") return { view: "notifications" };
   if (root === "latest") return { view: "latest" };
+  if (root === "pinned-series") return { view: "pinned" };
+  if (root === "discounts") return { view: "discounts" };
   if (root === "rankings" || root === "leaderboard") {
     return { view: "rankings" };
   }
@@ -89,6 +93,8 @@ export async function generateMetadata({
     orders: "Orders",
     notifications: "Notifications",
     latest: "Latest Updates",
+    pinned: "Pinned Series",
+    discounts: "Discounts",
     rankings: "Users Ranking",
     teams: "Publishing Teams",
     roulette: "Daily Roulette",
@@ -119,7 +125,15 @@ export default async function CatchAllPage({
 }: PageProps) {
   const { slug } = await params;
   const query = (await searchParams) ?? {};
-  const user = await getChatGPTUser();
+  const resolved = resolveView(slug);
+  if (resolved.view === "discounts") {
+    try {
+      await requirePaidEconomyPublicDocument();
+    } catch {
+      notFound();
+    }
+  }
+  const user = await getAuthenticatedUser();
   let actor: Awaited<ReturnType<typeof getActor>> = null;
   let accountBlocked = false;
   if (user) {
@@ -131,7 +145,6 @@ export default async function CatchAllPage({
       actor = null;
     }
   }
-  const resolved = resolveView(slug);
   const requestedReturnTo = Array.isArray(query.returnTo)
     ? query.returnTo[0]
     : query.returnTo;
@@ -144,7 +157,11 @@ export default async function CatchAllPage({
       accountBlocked={accountBlocked}
       authenticatedIdentity={
         user
-          ? { displayName: user.displayName, email: user.email }
+          ? {
+              displayName: user.displayName,
+              email: user.email,
+              authMethod: user.authMethod,
+            }
           : null
       }
       actor={
@@ -154,6 +171,7 @@ export default async function CatchAllPage({
               email: actor.email,
               role: actor.primaryRole,
               roles: actor.roles,
+              authMethod: actor.authMethod,
               avatarUrl: actor.avatarUrl,
               canUseUploadCenter: actor.canUseUploadCenter,
               canUpload:

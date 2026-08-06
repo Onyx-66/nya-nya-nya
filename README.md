@@ -3,7 +3,8 @@
 NyaScans is an original, mobile-first manga and webtoon platform built for
 readers, publishing teams, uploaders, and administrators. The deployed Sites
 edition runs as one Vinext edge application with D1 for relational state, R2
-for private uploads, and dispatch-owned ChatGPT sign-in.
+for private uploads, dispatch-owned ChatGPT sign-in, and verified local
+email/password accounts.
 
 ## What is included
 
@@ -39,8 +40,10 @@ for private uploads, and dispatch-owned ChatGPT sign-in.
 - **Structure:** feature-first modules inside one edge monolith. This keeps
   public rendering, API policy checks, and data access in one deployable unit.
 - **API:** versioned REST with typed JSON errors and Zod boundary validation.
-- **Identity:** dispatch-owned ChatGPT sign-in. D1 stores the NyaScans role and
-  team scope for the verified email.
+- **Identity:** dispatch-owned ChatGPT sign-in remains available alongside
+  email/password registration. Local passwords use server-side PBKDF2 hashes;
+  verification and session tokens are stored only as hashes. D1 stores the
+  NyaScans role and team scope for the verified email.
 - **Database:** Cloudflare D1 with Drizzle migrations. Money is stored in minor
   units and Onyx in integer units.
 - **Uploads:** R2 stores bytes; D1 stores ownership, MIME, size, validation, and
@@ -64,9 +67,15 @@ More detail is in [docs/architecture.md](docs/architecture.md).
 npm run install:ci
 npm run dev
 npm run lint
+npm run security:secrets
 npm run db:generate
 npm test
 ```
+
+The repository also ships a lightweight pre-commit secret guard. `npm run
+install:ci` activates the versioned hook; existing checkouts can activate it
+with `npm run security:hooks`. Cloudflare `.dev.vars` and `.env` files remain
+untracked, while example templates are allowed.
 
 The Sites lifecycle owns production builds, source versions, migrations, and
 deployments. `.openai/hosting.json` declares the logical `DB` and `BUCKET`
@@ -90,15 +99,15 @@ The following require platform or provider configuration before a commercial
 launch:
 
 - Custom domain and DNS for `nyascans.com`
-- Transactional email provider
+- Transactional email provider (`EMAIL_PROVIDER=resend`, a verified
+  `EMAIL_FROM`, `EMAIL_API_KEY`, and `NEXT_PUBLIC_SITE_URL`)
 - Payment provider and signed webhook secrets
 - Tax, refund, and regional price configuration
 - Malware scanning and image transformation worker
 - Audited archive extraction worker before enabling ZIP/CBZ or RAR uploads
 - Google Drive connector and import worker before enabling Drive intake
-- Official provider configuration before adding Google, Apple, Facebook, or
-  email/password buttons; the Sites build currently exposes only its
-  dispatch-owned ChatGPT identity
+- Official provider configuration before adding Google, Apple, or Facebook;
+  ChatGPT and verified email/password sign-in are already implemented
 - External search engine when the catalog outgrows D1 search
 - Legal review for all editable policy templates
 - Administrator email promotion and MFA enforcement policy
