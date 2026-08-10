@@ -424,7 +424,7 @@ test("Store ownership uses a balanced idempotent ledger and category-safe equip"
   assert.match(api, /store\.item\.update/);
   assert.match(api, /store\.item\.(?:archive|delete)/);
   assert.match(api, /store\.item\.preview\.replace/);
-  assert.match(api, /requireAdmin\(actor\)/);
+  assert.match(api, /requireAdminCapability\(actor, capabilityForAdminPath\(path\)\)/u);
 });
 
 test("Editor's Picks are ordered, publication-safe, and administrator selected", async () => {

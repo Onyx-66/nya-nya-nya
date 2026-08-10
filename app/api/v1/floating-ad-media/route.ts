@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, deleteMediaObject, requestIdFor, sha256Hex, validateImageFile } from "@/lib/server/admin-utils";
-import { getActor, requireActor, requireAdmin } from "@/lib/server/policy";
+import { actorHasCapability, getActor, requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     if (!row?.imageKey) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
     if (!row.isActive) {
       const actor = await getActor().catch(() => null);
-      if (!actor || !actor.roles.some((role) => ["OWNER", "ADMINISTRATOR"].includes(role))) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
+      if (!actor || !actor.adminMfaVerified || !actorHasCapability(actor, "announcements.manage")) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
     }
     const object = await bucket.get(row.imageKey);
     if (!object) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
@@ -43,7 +43,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "announcements.manage");
     const { db, bucket } = dependencies();
     const form = await request.formData();
     const payload = z.object({ id: z.string().trim().min(3).max(160), revision: z.coerce.number().int().min(1) }).parse({ id: form.get("id"), revision: form.get("revision") });

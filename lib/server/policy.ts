@@ -1,13 +1,16 @@
 import { env } from "cloudflare:workers";
+import { headers } from "next/headers";
 import { getAuthenticatedUser } from "@/app/chatgpt-auth";
 import { ApiError } from "@/lib/server/api";
 import {
-  assertAnyCapability,
+  canAny,
   highestRole,
   hasRoleAtLeast,
   ROLES,
 } from "@/lib/permissions.mjs";
 import { randomId } from "@/lib/server/random-id";
+import { getAdminMfaState } from "@/lib/server/admin-mfa";
+import { NON_DELEGABLE_CAPABILITIES } from "@/lib/admin-permissions";
 
 export type Actor = {
   id: string;
@@ -22,6 +25,11 @@ export type Actor = {
   uploadTeamIds: string[];
   canUseUploadCenter: boolean;
   authMethod: "CHATGPT" | "PASSWORD";
+  adminMfaRequired: boolean;
+  adminMfaEnrolled: boolean;
+  adminMfaVerified: boolean;
+  adminMfaExpiresAt: string | null;
+  permissionOverrides: Array<{ role: string; capability: string; allowed: boolean }>;
 };
 
 type MembershipRow = {
@@ -87,7 +95,7 @@ export async function getActor(): Promise<Actor | null> {
   const identityLookupValue = identity.userId ?? email;
   let row = await env.DB.prepare(
     `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
-            u.email_verified_at, p.avatar_key,
+            u.email_verified_at, p.avatar_key, p.username AS profile_username,
             p.revision AS profile_revision
        FROM users u
        LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -103,6 +111,7 @@ export async function getActor(): Promise<Actor | null> {
       status: string;
       email_verified_at: string | null;
       avatar_key: string | null;
+      profile_username: string | null;
       profile_revision: number | null;
     }>();
 
@@ -151,7 +160,7 @@ export async function getActor(): Promise<Actor | null> {
     ]);
     row = await env.DB.prepare(
       `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
-              u.email_verified_at, p.avatar_key,
+              u.email_verified_at, p.avatar_key, p.username AS profile_username,
               p.revision AS profile_revision
          FROM users u
          LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -167,6 +176,7 @@ export async function getActor(): Promise<Actor | null> {
         status: string;
         email_verified_at: string | null;
         avatar_key: string | null;
+        profile_username: string | null;
         profile_revision: number | null;
       }>();
   }
@@ -244,7 +254,7 @@ export async function getActor(): Promise<Actor | null> {
     } else {
       const refreshed = await env.DB.prepare(
         `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
-                u.email_verified_at, p.avatar_key,
+                u.email_verified_at, p.avatar_key, p.username AS profile_username,
                 p.revision AS profile_revision
            FROM users u
            LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -260,6 +270,7 @@ export async function getActor(): Promise<Actor | null> {
           status: string;
           email_verified_at: string | null;
           avatar_key: string | null;
+          profile_username: string | null;
           profile_revision: number | null;
         }>();
       if (!refreshed) {
@@ -318,6 +329,12 @@ export async function getActor(): Promise<Actor | null> {
         .filter((role) => validRoles.has(role)),
     ),
   ] as Array<keyof typeof ROLES>;
+  const permissionRows = await env.DB.prepare(
+    "SELECT role, capability, allowed FROM role_permission_rules",
+  ).all<{ role: string; capability: string; allowed: number }>();
+  const permissionOverrides = (permissionRows.results ?? [])
+    .filter((entry) => roles.includes(entry.role as keyof typeof ROLES))
+    .map((entry) => ({ role: entry.role, capability: entry.capability, allowed: Boolean(entry.allowed) }));
   const resolvedPrimaryRole = highestRole(
     roles.length ? roles : [row.primary_role],
   ) as keyof typeof ROLES;
@@ -377,6 +394,23 @@ export async function getActor(): Promise<Actor | null> {
         ),
     )
     .map((membership) => membership.team_id);
+  const adminRoleSet = new Set<keyof typeof ROLES>([
+    ROLES.OWNER,
+    ROLES.ADMINISTRATOR,
+    ROLES.MANAGER,
+  ]);
+  const consoleOverrides = permissionOverrides.filter(
+    (rule) => rule.capability === "admin.console.access",
+  );
+  const consoleAllowed = consoleOverrides.some((rule) => !rule.allowed)
+    ? false
+    : consoleOverrides.some((rule) => rule.allowed)
+      ? true
+      : canAny(roles, "admin.console.access");
+  const adminMfaRequired = roles.some((role) => adminRoleSet.has(role)) || consoleAllowed;
+  const adminMfa = adminMfaRequired
+    ? await getAdminMfaState(row.id, new Headers(await headers()))
+    : { enrolled: false, verified: false, expiresAt: null };
 
   return {
     id: row.id,
@@ -384,8 +418,8 @@ export async function getActor(): Promise<Actor | null> {
     displayName: row.display_name,
     primaryRole: row.primary_role,
     roles,
-    avatarUrl: row.avatar_key
-      ? `/api/v1/profile-media?slot=avatar&revision=${Number(row.profile_revision ?? 1)}`
+    avatarUrl: row.avatar_key && row.profile_username
+      ? `/api/v1/profile-media?username=${encodeURIComponent(row.profile_username)}&slot=avatar&v=${Number(row.profile_revision ?? 1)}`
       : null,
     teamIds: memberships.map((membership) => membership.team_id),
     managedTeamIds,
@@ -397,7 +431,23 @@ export async function getActor(): Promise<Actor | null> {
       uploadTeamIds.length > 0 ||
       managedTeamIds.length > 0,
     authMethod: identity.authMethod,
+    adminMfaRequired,
+    adminMfaEnrolled: adminMfa.enrolled,
+    adminMfaVerified: adminMfa.verified,
+    adminMfaExpiresAt: adminMfa.expiresAt,
+    permissionOverrides,
   };
+}
+
+export function actorHasCapability(actor: Actor, capability: string) {
+  if (actor.roles.includes(ROLES.OWNER)) return true;
+  if (NON_DELEGABLE_CAPABILITIES.has(capability)) return false;
+  const matching = actor.permissionOverrides.filter(
+    (rule) => rule.capability === capability && actor.roles.includes(rule.role as keyof typeof ROLES),
+  );
+  if (matching.some((rule) => !rule.allowed)) return false;
+  if (matching.some((rule) => rule.allowed)) return true;
+  return canAny(actor.roles, capability);
 }
 
 export async function requireActor(capability?: string): Promise<Actor> {
@@ -408,20 +458,29 @@ export async function requireActor(capability?: string): Promise<Actor> {
   if (capability === "upload.create" && actor.uploadTeamIds.length > 0) {
     return actor;
   }
-  if (capability) assertAnyCapability(actor.roles, capability);
+  if (capability && !actorHasCapability(actor, capability)) {
+    throw new ApiError(403, "FORBIDDEN", "You do not have permission to perform this action.");
+  }
   return actor;
 }
 
 export function requireAdminConsole(actor: Actor) {
-  const adminConsoleRoles: Array<keyof typeof ROLES> = [
-    ROLES.OWNER,
-    ROLES.ADMINISTRATOR,
-    ROLES.MANAGER,
-  ];
-  if (
-    !actor.roles.some((role) => adminConsoleRoles.includes(role))
-  ) {
-    throw new ApiError(403, "ADMIN_REQUIRED", "Staff authorization is required.");
+  if (!actorHasCapability(actor, "admin.console.access")) {
+    throw new ApiError(403, "ADMIN_PERMISSION_REQUIRED", "Administrator console permission is required.");
+  }
+  if (!actor.adminMfaVerified) {
+    throw new ApiError(403, "ADMIN_MFA_REQUIRED", "Complete administrator two-factor authentication to continue.");
+  }
+}
+
+export function requireAdminCapability(actor: Actor, capability: string) {
+  requireAdminConsole(actor);
+  if (!actorHasCapability(actor, capability)) {
+    throw new ApiError(
+      403,
+      "ADMIN_PERMISSION_REQUIRED",
+      "You do not have permission to perform this administrative action.",
+    );
   }
 }
 
@@ -432,6 +491,12 @@ export function requireAdmin(actor: Actor) {
   ) {
     throw new ApiError(403, "ADMIN_REQUIRED", "Administrator authorization is required.");
   }
+  if (!actorHasCapability(actor, "admin.console.access")) {
+    throw new ApiError(403, "ADMIN_PERMISSION_REQUIRED", "Administrator console permission is required.");
+  }
+  if (!actor.adminMfaVerified) {
+    throw new ApiError(403, "ADMIN_MFA_REQUIRED", "Complete administrator two-factor authentication to continue.");
+  }
 }
 
 export function requireOwner(actor: Actor) {
@@ -441,5 +506,8 @@ export function requireOwner(actor: Actor) {
       "OWNER_REQUIRED",
       "Owner authorization is required.",
     );
+  }
+  if (!actor.adminMfaVerified) {
+    throw new ApiError(403, "ADMIN_MFA_REQUIRED", "Complete administrator two-factor authentication to continue.");
   }
 }

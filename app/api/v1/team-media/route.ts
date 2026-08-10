@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
-import { getActor } from "@/lib/server/policy";
+import { actorHasCapability, getActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,8 @@ export async function GET(request: Request) {
     const team = await env.DB.prepare(
       `SELECT ${column} AS objectKey,
               is_archived AS isArchived,
-              verification_status AS verificationStatus
+              verification_status AS verificationStatus,
+              created_by_user_id AS createdByUserId
        FROM teams WHERE id = ? LIMIT 1`,
     )
       .bind(query.id)
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
         objectKey: string | null;
         isArchived: number;
         verificationStatus: string;
+        createdByUserId: string | null;
       }>();
     if (!team?.objectKey) {
       throw new ApiError(
@@ -55,9 +57,14 @@ export async function GET(request: Request) {
       !team.isArchived && team.verificationStatus === "VERIFIED";
     if (!publiclyAvailable) {
       const actor = await getActor().catch(() => null);
+      const pendingCreator = actor && team.verificationStatus === "PENDING" && actor.id === team.createdByUserId
+        ? await env.DB.prepare("SELECT 1 FROM team_memberships WHERE team_id = ? AND user_id = ? AND membership_role = 'OWNER' AND status = 'PENDING' LIMIT 1").bind(query.id, actor.id).first()
+        : null;
       if (
         !actor ||
-        !["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole)
+        (!(actor.adminMfaVerified && actorHasCapability(actor, "content.teams.manage")) &&
+          !pendingCreator &&
+          !actor.teamIds.includes(query.id))
       ) {
         throw new ApiError(
           404,

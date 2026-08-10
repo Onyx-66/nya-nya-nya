@@ -10,7 +10,7 @@ import {
   getRewardSettingsDocument,
   saveRewardSettings,
 } from "@/lib/server/reward-settings";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "roulette.manage");
     return json(requestId, await responseData(), {
       headers: { "cache-control": "private, no-store" },
     });
@@ -55,7 +55,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "roulette.manage");
     const payload = updateSchema.parse(await request.json());
     if (!env.DB) {
       throw new ApiError(

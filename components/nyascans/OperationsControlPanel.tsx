@@ -55,16 +55,20 @@ import {
   type StoreAdminCategory,
 } from "@/components/nyascans/admin/StoreManagementWorkspace";
 import { TeamManagementPanel } from "@/components/nyascans/admin/TeamManagementPanel";
+import { TeamRequestsPanel } from "@/components/nyascans/admin/TeamRequestsPanel";
 import { TaxonomyManager } from "@/components/nyascans/admin/TaxonomyManager";
 import { SliderManagementPanel } from "@/components/nyascans/admin/SliderManagementPanel";
 import { PinnedSeriesPanel } from "@/components/nyascans/admin/PinnedSeriesPanel";
 import { DiscountsPanel } from "@/components/nyascans/admin/DiscountsPanel";
 import { HomePromotionsPanel } from "@/components/nyascans/admin/HomePromotionsPanel";
+import { RolePermissionsPanel } from "@/components/nyascans/admin/RolePermissionsPanel";
+import { SiteCoveragePanel } from "@/components/nyascans/admin/SiteCoveragePanel";
 import { ApiControlPanel } from "@/components/nyascans/admin/ApiControlPanel";
 import { ChapterAccessDecisionPanel } from "@/components/nyascans/admin/ChapterAccessDecisionPanel";
 import { UploadCenterWorkspace } from "@/components/nyascans/upload/UploadCenterWorkspace";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
+import { TeamCommunityPanel } from "@/components/nyascans/TeamCommunityPanel";
 import { coinLabel } from "@/lib/commercial-settings";
 
 type AdminSummary = {
@@ -114,6 +118,7 @@ type AnalyticsData = {
     newUsers: number;
     reactions: number;
     newSeries: number;
+    newTeams: number;
     newChapters: number;
     uploadSessions: number;
     storePurchases: number;
@@ -122,6 +127,14 @@ type AnalyticsData = {
     shardsCollected: number;
     shardsSpent: number;
     shardsOutstanding: number;
+  };
+  previousSummary: {
+    views: number;
+    newUsers: number;
+    newChapters: number;
+    newTeams: number;
+    comments: number;
+    reactions: number;
   };
   timeline: Array<{
     bucket: string;
@@ -3857,6 +3870,11 @@ function AnalyticsPanel() {
       (series) => series.seriesViews + series.chapterStarts,
     ),
   );
+  const comparison = (current: number, previous: number) => {
+    if (!previous) return current ? "New activity vs no activity in the prior period" : "No change from the prior period";
+    const delta = Math.round(((current - previous) / previous) * 100);
+    return `${delta >= 0 ? "+" : ""}${delta}% vs previous period`;
+  };
 
   return (
     <section className="control-panel">
@@ -3958,7 +3976,7 @@ function AnalyticsPanel() {
               [
                 "Page views",
                 activeData.summary.views,
-                "Home, browse, latest, and series views",
+                comparison(activeData.summary.views, activeData.previousSummary.views),
               ],
               [
                 "Chapter starts",
@@ -3978,7 +3996,7 @@ function AnalyticsPanel() {
               [
                 "New users",
                 activeData.summary.newUsers,
-                `${activeData.summary.registeredUsers.toLocaleString("en-US")} registered total`,
+                `${comparison(activeData.summary.newUsers, activeData.previousSummary.newUsers)} · ${activeData.summary.registeredUsers.toLocaleString("en-US")} registered total`,
               ],
               [
                 "New visitors",
@@ -3998,12 +4016,17 @@ function AnalyticsPanel() {
               [
                 "Community activity",
                 activeData.summary.comments + activeData.summary.reactions,
-                `${activeData.summary.comments} comments · ${activeData.summary.reactions} reactions`,
+                `${activeData.summary.comments} comments · ${activeData.summary.reactions} reactions · ${comparison(activeData.summary.comments + activeData.summary.reactions, activeData.previousSummary.comments + activeData.previousSummary.reactions)}`,
               ],
               [
                 "New uploads",
                 activeData.summary.newSeries + activeData.summary.newChapters,
                 `${activeData.summary.newSeries} series · ${activeData.summary.newChapters} chapters · ${activeData.summary.uploadSessions} source files`,
+              ],
+              [
+                "Team growth",
+                activeData.summary.newTeams,
+                comparison(activeData.summary.newTeams, activeData.previousSummary.newTeams),
               ],
             ].map(([label, value, detail]) => (
               <article key={String(label)}>
@@ -4382,6 +4405,7 @@ function AnalyticsPanel() {
 
 function SecurityPanel() {
   const [health, setHealth] = useState<HealthData | null>(null);
+  const [mfa, setMfa] = useState<{ enrolled: boolean; verified: boolean; expiresAt: string | null } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -4395,6 +4419,12 @@ function SecurityPanel() {
             : "Service checks could not be loaded.",
         ),
       );
+  }, []);
+  useEffect(() => {
+    void fetch("/api/v1/admin-mfa", { cache: "no-store" })
+      .then((response) => readJson<{ data: { enrolled: boolean; verified: boolean; expiresAt: string | null } }>(response))
+      .then((payload) => setMfa(payload.data))
+      .catch(() => undefined);
   }, []);
 
   return (
@@ -4416,8 +4446,20 @@ function SecurityPanel() {
           </div>
           {[
             [
+              "Mandatory authenticator 2FA",
+              mfa?.verified
+                ? `This administrator session is TOTP-verified and expires ${mfa.expiresAt ? new Date(mfa.expiresAt).toLocaleString() : "within one hour"}.`
+                : "Administrator routes require a confirmed TOTP authenticator and a short-lived, device-bound session.",
+              Boolean(mfa?.enrolled && mfa?.verified),
+            ],
+            [
+              "Attempt limits and sign-in alerts",
+              "TOTP failures are limited per account and device fingerprint. A successful sign-in from a new device or network creates a security notification.",
+              true,
+            ],
+            [
               "Server-side roles",
-              "Every administrator, team, upload, and moderation API checks the resolved account role.",
+              "Administrator access combines server-side roles, editable capability overrides, non-delegable Owner controls, and MFA assurance.",
               true,
             ],
             [
@@ -4455,7 +4497,6 @@ function SecurityPanel() {
             </div>
           </div>
           {[
-            "Enforce MFA and recent reauthentication in the identity provider.",
             "Connect malware scanning and archive bomb detection.",
             "Verify backups and perform a restore drill for D1 and media.",
             "Configure alerts for failed imports, moderation risk, and rights expiry.",
@@ -5498,6 +5539,7 @@ export function OperationsControlPanel({
     );
   }
   if (section === "Review queue") return <ReviewQueue admin={admin} />;
+  if (!admin && section === "My teams") return <TeamCommunityPanel />;
   if (!admin) {
     return (
       <WorkspacePanel
@@ -5521,9 +5563,11 @@ export function OperationsControlPanel({
   if (section === "Teams") {
     return <TeamManagementPanel />;
   }
+  if (section === "Team requests") return <TeamRequestsPanel />;
   if (section === "Users & roles") {
     return <UsersManager actorRole={actorRole} actorRoles={actorRoles} />;
   }
+  if (section === "Permissions") return <RolePermissionsPanel />;
   if (section === "User activity") {
     return <UsersControlPanel view="activity" actorRoles={actorRoles} />;
   }
@@ -5569,6 +5613,7 @@ export function OperationsControlPanel({
   if (section === "Announcements & ads") return <HomePromotionsPanel />;
   if (section === "API Control") return <ApiControlPanel />;
   if (section === "Security") return <SecurityPanel />;
+  if (section === "Site coverage") return <SiteCoveragePanel />;
   if (section === "Audit log") {
     return <OwnerAuditLogPanel actorRole={actorRole} />;
   }

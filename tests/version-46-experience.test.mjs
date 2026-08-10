@@ -387,8 +387,8 @@ test("announcements accept exactly four typed variants and publish only in their
   );
   assert.match(publicRoute, /starts_at IS NULL OR datetime\(starts_at\) <= CURRENT_TIMESTAMP/u);
   assert.match(publicRoute, /ends_at IS NULL OR datetime\(ends_at\) > CURRENT_TIMESTAMP/u);
-  assert.match(app, /data-type=\{announcement\.type\.toLowerCase\(\)\}/u);
-  const announcementList = app.indexOf('className="v46-announcement-list"');
+  assert.match(app, /data-type=\{active\.type\.toLowerCase\(\)\}/u);
+  const announcementList = app.indexOf('className="home-announcement-slider v46-announcement-list"');
   const latestUpdates = app.indexOf("<LatestUpdatesGrid />", announcementList);
   assert.ok(announcementList >= 0 && latestUpdates > announcementList);
 });
@@ -461,7 +461,8 @@ test("chapter reaction UI and API expose exactly six choices", async () => {
     route.indexOf("async function snapshot"),
     route.indexOf("async function replyBadge"),
   );
-  assert.match(snapshot, /LIMIT 6/u);
+  assert.match(snapshot, /cr\.slug IN \('upvote', 'laugh', 'heart', 'surprised', 'angry', 'sad'\)/u);
+  assert.match(snapshot, /CASE cr\.slug[\s\S]*WHEN 'upvote' THEN 0[\s\S]*WHEN 'sad' THEN 5/u);
   assert.match(app, /What do you think about this chapter\?/u);
   assert.match(app, /Choose one reaction\./u);
 });

@@ -15,7 +15,7 @@ import {
   requestIdFor,
   sha256Hex,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { findNormalizedEquivalent } from "@/lib/server/taxonomy-equivalence";
 
@@ -1143,7 +1143,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     const db = database();
     const url = new URL(request.url);
     const query = listQuerySchema.parse({
@@ -1232,7 +1232,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "series.create");
     const payload = seriesManagementSchema.parse(await request.json());
     if (payload.id) {
       throw new ApiError(
@@ -1259,7 +1259,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     const payload = seriesManagementSchema.parse(await request.json());
     if (!payload.id || !payload.revision) {
       throw new ApiError(

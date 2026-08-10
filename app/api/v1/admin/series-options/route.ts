@@ -8,7 +8,7 @@ import {
 } from "@/lib/admin-metadata";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     if (!env.DB) {
       throw new ApiError(
         503,

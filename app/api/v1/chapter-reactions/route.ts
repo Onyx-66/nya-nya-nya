@@ -7,8 +7,42 @@ import { getActor, requireActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
-const querySchema = z.object({ chapterId: z.string().uuid() });
-const mutationSchema = querySchema.extend({ reactionId: z.string().uuid() });
+const durableId = z
+  .string()
+  .trim()
+  .min(3)
+  .max(160)
+  .regex(/^[a-zA-Z0-9_-]+$/, "Use a valid durable identifier.");
+const querySchema = z.object({ chapterId: durableId });
+const mutationSchema = querySchema.extend({ reactionId: durableId });
+
+async function assertReactionChapterReadable(
+  chapterId: string,
+  viewer: Awaited<ReturnType<typeof getActor>>,
+) {
+  if (viewer) {
+    await requireReadableChapter(viewer, chapterId);
+    return;
+  }
+  const publicChapter = await env.DB!.prepare(
+    `SELECT 1
+       FROM chapters c
+       JOIN series s ON s.id = c.series_id
+      WHERE c.id = ?
+        AND c.state = 'PUBLISHED'
+        AND c.visibility = 'PUBLIC'
+        AND c.access_type = 'FREE'
+        AND c.published_at IS NOT NULL
+        AND datetime(c.published_at) <= CURRENT_TIMESTAMP
+        AND s.is_published = 1
+        AND s.archived_at IS NULL
+        AND s.rights_status IN ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+      LIMIT 1`,
+  ).bind(chapterId).first();
+  if (!publicChapter) {
+    throw new ApiError(404, "CHAPTER_NOT_FOUND", "This chapter is not available for reactions.");
+  }
+}
 
 async function snapshot(chapterId: string, viewerId: string | null) {
   const viewer = viewerId ?? "";
@@ -21,6 +55,7 @@ async function snapshot(chapterId: string, viewerId: string | null) {
        LEFT JOIN chapter_reactions chr
          ON chr.reaction_id = cr.id AND chr.chapter_id = ?
       WHERE cr.usage_kind = 'REACTION'
+        AND cr.slug IN ('upvote', 'laugh', 'heart', 'surprised', 'angry', 'sad')
         AND cr.is_active = 1
         AND cr.is_archived = 0
         AND (
@@ -38,13 +73,15 @@ async function snapshot(chapterId: string, viewerId: string | null) {
           )
         )
       GROUP BY cr.id
-      ORDER BY cr.display_order, cr.name COLLATE NOCASE
-      LIMIT 6`,
+      ORDER BY CASE cr.slug
+        WHEN 'upvote' THEN 0 WHEN 'laugh' THEN 1 WHEN 'heart' THEN 2
+        WHEN 'surprised' THEN 3 WHEN 'angry' THEN 4 WHEN 'sad' THEN 5
+        ELSE 6 END`,
   ).bind(viewer, chapterId, viewer, viewer, viewer).all<{
     id: string; name: string; accessibleLabel: string; emojiFallback: string;
     assetKey: string | null; count: number; selected: number;
   }>();
-  return reactions.results.map((reaction) => ({
+  const data = reactions.results.map((reaction) => ({
     ...reaction,
     count: Number(reaction.count),
     selected: Boolean(reaction.selected),
@@ -52,6 +89,10 @@ async function snapshot(chapterId: string, viewerId: string | null) {
       ? `/api/v1/reaction-asset?id=${encodeURIComponent(reaction.id)}`
       : null,
   }));
+  return {
+    data,
+    total: data.reduce((sum, reaction) => sum + reaction.count, 0),
+  };
 }
 
 async function replyBadge(chapterId: string, viewerId: string | null) {
@@ -79,7 +120,17 @@ export async function GET(request: Request) {
     if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Chapter reactions are unavailable.");
     const { chapterId } = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const viewer = await getActor().catch(() => null);
-    return json(requestId, { data: await snapshot(chapterId, viewer?.id ?? null), meta: await replyBadge(chapterId, viewer?.id ?? null) }, { headers: { "cache-control": "private, no-store", vary: "cookie" } });
+    await assertReactionChapterReadable(chapterId, viewer);
+    const reactionSnapshot = await snapshot(chapterId, viewer?.id ?? null);
+    return json(
+      requestId,
+      {
+        data: reactionSnapshot.data,
+        total: reactionSnapshot.total,
+        meta: await replyBadge(chapterId, viewer?.id ?? null),
+      },
+      { headers: { "cache-control": "private, no-store", vary: "cookie" } },
+    );
   } catch (error) {
     return errorResponse(requestId, error);
   }
@@ -94,29 +145,27 @@ export async function PUT(request: Request) {
     const payload = mutationSchema.parse(await request.json());
     await requireReadableChapter(actor, payload.chapterId);
     const available = await env.DB.prepare(
-      `SELECT id FROM (
-         SELECT cr.id
-           FROM custom_reactions cr
-          WHERE cr.usage_kind = 'REACTION'
-            AND cr.is_active = 1 AND cr.is_archived = 0
-            AND (
-              COALESCE(json_extract(cr.availability_json, '$.scope'), 'GLOBAL') = 'GLOBAL'
-              OR json_extract(cr.availability_json, '$.scope') = 'SIGNED_IN'
-              OR (
-                json_extract(cr.availability_json, '$.scope') = 'TEAM'
-                AND EXISTS (
-                  SELECT 1
-                    FROM json_each(cr.availability_json, '$.teamIds') allowed_team
-                    JOIN team_memberships tm ON tm.team_id = allowed_team.value
-                   WHERE tm.user_id = ? AND tm.status = 'ACTIVE'
-                )
+      `SELECT cr.id
+         FROM custom_reactions cr
+        WHERE cr.usage_kind = 'REACTION'
+          AND cr.slug IN ('upvote', 'laugh', 'heart', 'surprised', 'angry', 'sad')
+          AND cr.is_active = 1 AND cr.is_archived = 0
+          AND cr.id = ?
+          AND (
+            COALESCE(json_extract(cr.availability_json, '$.scope'), 'GLOBAL') = 'GLOBAL'
+            OR json_extract(cr.availability_json, '$.scope') = 'SIGNED_IN'
+            OR (
+              json_extract(cr.availability_json, '$.scope') = 'TEAM'
+              AND EXISTS (
+                SELECT 1
+                  FROM json_each(cr.availability_json, '$.teamIds') allowed_team
+                  JOIN team_memberships tm ON tm.team_id = allowed_team.value
+                 WHERE tm.user_id = ? AND tm.status = 'ACTIVE'
               )
             )
-          ORDER BY cr.display_order, cr.name COLLATE NOCASE
-          LIMIT 6
-       ) available_reactions
-       WHERE id = ?`,
-    ).bind(actor.id, payload.reactionId).first();
+          )
+        LIMIT 1`,
+    ).bind(payload.reactionId, actor.id).first();
     if (!available) throw new ApiError(404, "REACTION_NOT_FOUND", "This reaction is no longer available.");
     const current = await env.DB.prepare(
       "SELECT reaction_id AS reactionId FROM chapter_reactions WHERE user_id = ? AND chapter_id = ? LIMIT 1",
@@ -133,7 +182,11 @@ export async function PUT(request: Request) {
            created_at = CURRENT_TIMESTAMP`,
       ).bind(actor.id, payload.chapterId, payload.reactionId).run();
     }
-    return json(requestId, { data: await snapshot(payload.chapterId, actor.id) });
+    const reactionSnapshot = await snapshot(payload.chapterId, actor.id);
+    return json(requestId, {
+      data: reactionSnapshot.data,
+      total: reactionSnapshot.total,
+    });
   } catch (error) {
     return errorResponse(requestId, error);
   }

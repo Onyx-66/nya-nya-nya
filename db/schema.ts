@@ -318,6 +318,9 @@ export const teams = sqliteTable(
     id: text("id").primaryKey(),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     description: text("description").notNull().default(""),
     logoKey: text("logo_key"),
     bannerKey: text("banner_key"),
@@ -344,6 +347,7 @@ export const teams = sqliteTable(
     })
       .notNull()
       .default(false),
+    mutationMarker: text("mutation_marker").notNull().default("initial"),
     revision: integer("revision").notNull().default(1),
     createdAt,
     updatedAt,
@@ -369,6 +373,11 @@ export const teamMemberships = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     membershipRole: text("membership_role").notNull(),
     status: text("status").notNull().default("ACTIVE"),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    invitedAt: text("invited_at"),
+    respondedAt: text("responded_at"),
     isPrimary: integer("is_primary", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -388,6 +397,130 @@ export const teamMemberships = sqliteTable(
         sql`${table.isPrimary} = 1 AND ${table.status} = 'ACTIVE'`,
       ),
   ],
+);
+
+export const teamLinks = sqliteTable(
+  "team_links",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    url: text("url").notNull(),
+    linkType: text("link_type").notNull().default("WEBSITE"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("team_links_team_url_uidx").on(table.teamId, table.url),
+    index("team_links_team_order_idx").on(table.teamId, table.sortOrder),
+  ],
+);
+
+export const teamOwnershipClaims = sqliteTable(
+  "team_ownership_claims",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    claimantUserId: text("claimant_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    proofType: text("proof_type").notNull(),
+    proofValue: text("proof_value").notNull(),
+    statement: text("statement").notNull().default(""),
+    status: text("status").notNull().default("PENDING"),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reviewReason: text("review_reason"),
+    reviewedAt: text("reviewed_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("team_ownership_claims_queue_idx").on(table.status, table.createdAt),
+    uniqueIndex("team_ownership_claims_open_uidx")
+      .on(table.teamId)
+      .where(sql`${table.status} = 'PENDING'`),
+  ],
+);
+
+export const teamTitleChangeRequests = sqliteTable(
+  "team_title_change_requests",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    requestedTitle: text("requested_title").notNull(),
+    requestedSlug: text("requested_slug").notNull(),
+    reason: text("reason").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reviewReason: text("review_reason"),
+    reviewedAt: text("reviewed_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("team_title_change_requests_queue_idx").on(table.status, table.createdAt),
+    uniqueIndex("team_title_change_requests_open_uidx")
+      .on(table.teamId)
+      .where(sql`${table.status} = 'PENDING'`),
+  ],
+);
+
+export const rolePermissionRules = sqliteTable(
+  "role_permission_rules",
+  {
+    role: text("role").notNull(),
+    capability: text("capability").notNull(),
+    allowed: integer("allowed", { mode: "boolean" }).notNull(),
+    revision: integer("revision").notNull().default(1),
+    updatedByUserId: text("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [primaryKey({ columns: [table.role, table.capability] })],
+);
+
+export const adminMfaFactors = sqliteTable("admin_mfa_factors", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  encryptedSecret: text("encrypted_secret").notNull(),
+  encryptionIv: text("encryption_iv").notNull(),
+  confirmedAt: text("confirmed_at"),
+  lastAcceptedCounter: integer("last_accepted_counter").notNull().default(-1),
+  revision: integer("revision").notNull().default(1),
+  createdAt,
+  updatedAt,
+});
+
+export const adminMfaSessions = sqliteTable(
+  "admin_mfa_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    fingerprintHash: text("fingerprint_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    revokedAt: text("revoked_at"),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("admin_mfa_sessions_token_uidx").on(table.tokenHash),
+    index("admin_mfa_sessions_user_expiry_idx").on(table.userId, table.expiresAt),
+  ],
+);
+
+export const adminLoginEvents = sqliteTable(
+  "admin_login_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    fingerprintHash: text("fingerprint_hash").notNull(),
+    result: text("result").notNull(),
+    reason: text("reason").notNull().default(""),
+    createdAt,
+  },
+  (table) => [index("admin_login_events_limit_idx").on(table.fingerprintHash, table.result, table.createdAt)],
 );
 
 export const teamDiscussionPosts = sqliteTable(
@@ -1375,6 +1508,8 @@ export const floatingAds = sqliteTable(
     eyebrow: text("eyebrow").notNull().default("Support NyaScans"),
     title: text("title").notNull(),
     body: text("body").notNull().default(""),
+    actionLabel: text("action_label").notNull().default("Explore event"),
+    infoBlocksJson: text("info_blocks_json").notNull().default("[]"),
     destinationUrl: text("destination_url").notNull().default(""),
     imageKey: text("image_key"),
     fallbackImageUrl: text("fallback_image_url").notNull().default(""),
@@ -1382,6 +1517,8 @@ export const floatingAds = sqliteTable(
     isActive: integer("is_active", { mode: "boolean" })
       .notNull()
       .default(false),
+    startsAt: text("starts_at"),
+    endsAt: text("ends_at"),
     resetKey: text("reset_key").notNull(),
     revision: integer("revision").notNull().default(1),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
@@ -1725,11 +1862,16 @@ export const readingProgress = sqliteTable(
     scrollOffset: integer("scroll_offset").notNull().default(0),
     progressBasisPoints: integer("progress_basis_points").notNull().default(0),
     completedAt: text("completed_at"),
+    onsiteActivityAt: text("onsite_activity_at"),
     updatedAt,
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.chapterId] }),
     index("reading_progress_recent_idx").on(table.userId, table.updatedAt),
+    index("reading_progress_onsite_activity_idx").on(
+      table.onsiteActivityAt,
+      table.chapterId,
+    ),
   ],
 );
 
@@ -2068,6 +2210,10 @@ export const chapterReactions = sqliteTable(
     index("chapter_reactions_chapter_idx").on(
       table.chapterId,
       table.reactionId,
+    ),
+    index("chapter_reactions_created_idx").on(
+      table.createdAt,
+      table.chapterId,
     ),
   ],
 );

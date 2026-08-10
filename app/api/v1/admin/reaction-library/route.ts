@@ -7,10 +7,12 @@ import {
   auditStatement,
   requestIdFor,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
+
+const chapterReactionSlots = new Set(["upvote", "laugh", "heart", "surprised", "angry", "sad"]);
 
 const reactionSchema = z.object({
   id: z.string().trim().min(3).max(160).optional(),
@@ -79,7 +81,15 @@ function database() {
 
 function parseAvailability(value: string) {
   try {
-    return JSON.parse(value) as unknown;
+    const parsed = JSON.parse(value) as { scope?: unknown; teamIds?: unknown };
+    return {
+      scope: ["GLOBAL", "SIGNED_IN", "TEAM"].includes(String(parsed.scope))
+        ? parsed.scope
+        : "GLOBAL",
+      teamIds: Array.isArray(parsed.teamIds)
+        ? parsed.teamIds.filter((teamId): teamId is string => typeof teamId === "string")
+        : [],
+    };
   } catch {
     return { scope: "GLOBAL", teamIds: [] };
   }
@@ -130,6 +140,9 @@ const reactionSelect = `
            +
            (SELECT COUNT(*) FROM discussion_comment_gifs dcg
              WHERE dcg.gif_id = cr.id)
+           +
+           (SELECT COUNT(*) FROM chapter_reactions chr
+             WHERE chr.reaction_id = cr.id)
          ) AS usageCount
   FROM custom_reactions cr
 `;
@@ -153,7 +166,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "comments.moderate.global");
     const db = database();
     const url = new URL(request.url);
     const query = (url.searchParams.get("query") ?? "").trim().toLowerCase();
@@ -250,10 +263,15 @@ async function saveReaction(
         .prepare(
           `SELECT cr.name, cr.slug, cr.asset_key AS assetKey,
                   cr.is_animated AS isAnimated, cr.usage_kind AS usageKind,
+                  cr.is_active AS isActive, cr.display_order AS displayOrder,
+                  cr.category, cr.availability_json AS availabilityJson,
                   cr.revision,
                   (
-                    SELECT COUNT(*) FROM discussion_reactions dr
-                     WHERE dr.reaction = cr.slug
+                    (SELECT COUNT(*) FROM discussion_reactions dr
+                     WHERE dr.reaction = cr.slug)
+                    +
+                    (SELECT COUNT(*) FROM chapter_reactions chr
+                     WHERE chr.reaction_id = cr.id)
                   ) AS reactionUsageCount,
                   (
                     SELECT COUNT(*) FROM discussion_comment_gifs dcg
@@ -268,6 +286,10 @@ async function saveReaction(
           assetKey: string | null;
           isAnimated: number;
           usageKind: "REACTION" | "COMMENT_GIF";
+          isActive: number;
+          displayOrder: number;
+          category: string;
+          availabilityJson: string;
           reactionUsageCount: number;
           gifUsageCount: number;
           revision: number;
@@ -293,6 +315,27 @@ async function saveReaction(
       "REACTION_SLUG_IMMUTABLE",
       "A reaction identifier cannot change after creation because historical reactions reference it.",
     );
+  }
+  if (current && chapterReactionSlots.has(current.slug)) {
+    let currentAvailability: { scope?: string; teamIds?: unknown } = {};
+    try { currentAvailability = JSON.parse(current.availabilityJson) as { scope?: string; teamIds?: unknown }; } catch { currentAvailability = {}; }
+    const normalizedCurrentAvailability = {
+      scope: ["GLOBAL", "SIGNED_IN", "TEAM"].includes(String(currentAvailability.scope))
+        ? currentAvailability.scope
+        : "GLOBAL",
+      teamIds: Array.isArray(currentAvailability.teamIds)
+        ? currentAvailability.teamIds.filter((teamId): teamId is string => typeof teamId === "string")
+        : [],
+    };
+    if (
+      payload.usageKind !== "REACTION" ||
+      !payload.isActive ||
+      payload.displayOrder !== Number(current.displayOrder) ||
+      payload.category !== current.category ||
+      JSON.stringify(payload.availability) !== JSON.stringify(normalizedCurrentAvailability)
+    ) {
+      throw new ApiError(409, "CHAPTER_REACTION_SLOT_PROTECTED", "The six chapter-reaction slots keep their type, visibility, order, and availability. Edit only the label, accessible label, emoji, or asset.");
+    }
   }
   if (
     current &&
@@ -437,7 +480,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "comments.moderate.global");
     const payload = reactionSchema.parse(await request.json());
     if (payload.id) {
       throw new ApiError(
@@ -461,7 +504,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "comments.moderate.global");
     const payload = reactionSchema.parse(await request.json());
     if (!payload.id || !payload.revision) {
       throw new ApiError(
@@ -483,7 +526,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "comments.moderate.global");
     const db = database();
     const url = new URL(request.url);
     const id = z.string().min(3).max(160).parse(url.searchParams.get("id"));
@@ -494,14 +537,17 @@ export async function DELETE(request: Request) {
       .parse(url.searchParams.get("revision"));
     const current = await db
       .prepare(
-        `SELECT name, asset_key AS assetKey, revision,
-                (SELECT COUNT(*) FROM discussion_reactions
-                  WHERE reaction = custom_reactions.slug) AS usageCount
+        `SELECT name, slug, asset_key AS assetKey, revision,
+                ((SELECT COUNT(*) FROM discussion_reactions
+                  WHERE reaction = custom_reactions.slug)
+                 + (SELECT COUNT(*) FROM chapter_reactions
+                  WHERE reaction_id = custom_reactions.id)) AS usageCount
          FROM custom_reactions WHERE id = ? LIMIT 1`,
       )
       .bind(id)
       .first<{
         name: string;
+        slug: string;
         assetKey: string | null;
         revision: number;
         usageCount: number;
@@ -519,6 +565,9 @@ export async function DELETE(request: Request) {
         "STALE_VERSION",
         "Another administrator changed this reaction. Reload it before archiving.",
       );
+    }
+    if (chapterReactionSlots.has(current.slug)) {
+      throw new ApiError(409, "CHAPTER_REACTION_SLOT_PROTECTED", "The six default chapter-reaction slots cannot be archived.");
     }
     const results = await db.batch([
       db

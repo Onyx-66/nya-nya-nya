@@ -12,7 +12,7 @@ import {
   requestIdFor,
   sha256Hex,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { findNormalizedEquivalent } from "@/lib/server/taxonomy-equivalence";
 
 export const dynamic = "force-dynamic";
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.taxonomy.manage");
     const db = database();
     const url = new URL(request.url);
     const type = entityTypeSchema.parse(url.searchParams.get("type"));
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.taxonomy.manage");
     const db = database();
     const payload = createSchema.parse(await request.json());
     const name = displayName(payload.type, payload.name);
@@ -369,7 +369,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.taxonomy.manage");
     const db = database();
     const payload = updateSchema.parse(await request.json());
     const config = entityConfig(payload.type);

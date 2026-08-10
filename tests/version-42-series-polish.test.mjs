@@ -130,7 +130,8 @@ test("Version 42 Latest Updates carries language and team for at most four chapt
   );
 
   assert.match(latestApi, /t\.slug AS teamSlug/u);
-  assert.match(latestApi, /WHERE releaseRank = 1[\s\S]*LIMIT 4/u);
+  assert.match(latestApi, /presentation === "table" \? 12 : 4/u);
+  assert.match(latestApi, /LIMIT \$\{chapterPresentationLimit\}/u);
   assert.match(latestView, /update\.chapters\.slice\(0, 4\)/u);
   assert.match(latestView, /language=\{chapter\.language\}/u);
   assert.match(latestView, /chapter\.teamSlug/u);

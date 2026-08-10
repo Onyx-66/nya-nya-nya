@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, auditStatement, requestIdFor } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.teams.manage");
     const url = new URL(request.url);
     const teamId = z.string().trim().min(3).max(160).parse(url.searchParams.get("teamId"));
     const query = z.string().trim().min(2).max(120).parse(url.searchParams.get("query"));
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.teams.manage");
     const payload = z.object({
       action: z.enum(["ADD", "UPDATE", "REMOVE"]),
       teamId: z.string().trim().min(3).max(160),

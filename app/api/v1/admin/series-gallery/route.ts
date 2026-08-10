@@ -6,7 +6,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "uploads.review");
     if (!env.DB) {
       throw new ApiError(
         503,
@@ -118,7 +118,7 @@ export async function PATCH(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "uploads.review");
     if (!env.DB) {
       throw new ApiError(
         503,

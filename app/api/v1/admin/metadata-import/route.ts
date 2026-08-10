@@ -10,7 +10,7 @@ import {
   requestIdFor,
   writeAudit,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     const payload = inputSchema.parse(await request.json());
     const preview = await previewExternalMetadata(database(), {
       actorUserId: actor.id,

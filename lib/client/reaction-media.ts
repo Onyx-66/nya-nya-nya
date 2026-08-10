@@ -1,4 +1,4 @@
-import { decompressFrames, parseGIF } from "gifuct-js";
+import { decompressFrames, parseGIF, type ParsedFrame } from "gifuct-js";
 import { applyPalette, GIFEncoder, quantize } from "gifenc";
 
 export const REACTION_ASSET_LIMIT = 1_250_000;
@@ -85,7 +85,13 @@ async function optimizeStatic(file: File): Promise<OptimizedReactionAsset> {
   }
 }
 
-type GifFrame = ReturnType<typeof decompressFrames>[number];
+type GifFrame = ParsedFrame;
+
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
 
 function gifDimensions(frames: GifFrame[]) {
   return frames.reduce(
@@ -203,7 +209,7 @@ async function optimizeGif(file: File): Promise<OptimizedReactionAsset> {
     if (latest.byteLength <= OPTIMIZATION_TARGET) {
       return {
         file: new File(
-          [latest],
+          [ownedArrayBuffer(latest)],
           `${extensionlessName(file.name)}.gif`,
           { type: "image/gif", lastModified: Date.now() },
         ),
@@ -217,7 +223,7 @@ async function optimizeGif(file: File): Promise<OptimizedReactionAsset> {
     throw new Error("This GIF could not be reduced below 1.25 MB.");
   }
   return {
-    file: new File([latest], `${extensionlessName(file.name)}.gif`, {
+    file: new File([ownedArrayBuffer(latest)], `${extensionlessName(file.name)}.gif`, {
       type: "image/gif",
       lastModified: Date.now(),
     }),

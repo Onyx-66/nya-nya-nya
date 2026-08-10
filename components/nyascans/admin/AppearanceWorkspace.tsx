@@ -10,6 +10,8 @@ type AppearanceTab =
   | "branding"
   | "reader"
   | "footer"
+  | "legal"
+  | "shortcuts"
   | "theme"
   | "palettes"
   | "preview";
@@ -40,6 +42,8 @@ export function AppearanceWorkspace({
         { key: "branding", label: "Branding" },
         { key: "reader", label: "Reader assets" },
         { key: "footer", label: "Footer & social" },
+        { key: "legal", label: "Legal & DMCA" },
+        { key: "shortcuts", label: "Keyboard shortcuts" },
         { key: "theme", label: "Colors, typography & layout" },
         { key: "palettes", label: "Ready-to-use palettes" },
         { key: "preview", label: "Advanced preview" },
@@ -48,9 +52,9 @@ export function AppearanceWorkspace({
       onTabChange={changeTab}
     >
       <div className="appearance-workspace-panels">
-        {["branding", "reader", "footer"].includes(tab) ? (
+        {["branding", "reader", "footer", "legal", "shortcuts"].includes(tab) ? (
           <SiteConfigurationPanel
-            section={tab as "branding" | "reader" | "footer"}
+            section={tab as "branding" | "reader" | "footer" | "legal" | "shortcuts"}
           />
         ) : null}
         <div hidden={tab !== "theme"} aria-hidden={tab !== "theme"}>

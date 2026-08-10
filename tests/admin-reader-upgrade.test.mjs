@@ -25,7 +25,8 @@ test("admin control room uses real secured management endpoints", async () => {
     assert.match(api, new RegExp(route.replace("/", "\\/")));
     assert.match(panel, new RegExp(route.replace("/", "\\/")));
   }
-  assert.match(api, /requireAdmin\(actor\)/);
+  assert.match(api, /requireAdminCapability\(actor, capabilityForAdminPath\(path\)\)/u);
+  assert.match(api, /capabilityForAdminPath/u);
   assert.match(api, /audit_logs/);
   assert.match(api, /SELF_ADMIN_CHANGE_BLOCKED/);
   assert.match(panel, /Site overview/);

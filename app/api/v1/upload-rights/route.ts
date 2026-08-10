@@ -8,7 +8,7 @@ import {
   assertSameOrigin,
   requestIdFor,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import {
   grantUploadRight,
   listUploadRights,
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.teams.manage");
     const payload = rightsMutationSchema.parse(await request.json());
     switch (payload.action) {
       case "GRANT":

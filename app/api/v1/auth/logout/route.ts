@@ -10,6 +10,7 @@ import {
   clearPasswordSessionCookie,
   revokePasswordSession,
 } from "@/lib/server/local-auth";
+import { clearAdminMfaCookie, revokeAdminMfaSessionFromHeaders } from "@/lib/server/admin-mfa";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +25,9 @@ export async function POST(request: Request) {
     const input = logoutSchema.parse(await request.json().catch(() => ({})));
     const returnTo = safeAuthReturnPath(input.returnTo ?? "/");
     const providerIdentity = await getChatGPTUser();
+    await revokeAdminMfaSessionFromHeaders(request.headers).catch(() => undefined);
     await revokePasswordSession(new Headers(request.headers));
-    return json(
+    const response = json(
       requestId,
       {
         signedOut: true,
@@ -41,6 +43,8 @@ export async function POST(request: Request) {
         },
       },
     );
+    response.headers.append("set-cookie", clearAdminMfaCookie());
+    return response;
   } catch (error) {
     const response = errorResponse(requestId, error);
     response.headers.set("cache-control", "no-store");

@@ -540,7 +540,7 @@ export function CommercialSettingsPanel({
             <strong>Chapters Lock &amp; Pay</strong>
             <p>
               Hidden mode removes paid chapters, balances, packages, wallets,
-              purchase actions, and every {draft.economy.coinName} surface from
+              purchase actions, and every {economy.coinName} surface from
               public users. Only the owner can preview and re-enable them.
             </p>
           </div>

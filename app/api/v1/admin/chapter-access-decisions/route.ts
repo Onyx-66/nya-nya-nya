@@ -7,7 +7,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import { requireActor, requireAdminConsole } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ function database() {
 
 async function requireManagerPlus() {
   const actor = await requireActor();
-  requireAdminConsole(actor);
+  requireAdminCapability(actor, "content.chapters.manage");
   return actor;
 }
 

@@ -281,6 +281,41 @@
       "when": 1785979494941,
       "tag": "0039_jazzy_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1785985749842,
+      "tag": "0040_sticky_reptil",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1785986029574,
+      "tag": "0041_remarkable_salo",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1785986200000,
+      "tag": "0042_repair_chapter_reaction_slots",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1786322227054,
+      "tag": "0043_pinned-home-discovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1786323717466,
+      "tag": "0044_dapper_misty_knight",
+      "breakpoints": true
     }
   ]
 }

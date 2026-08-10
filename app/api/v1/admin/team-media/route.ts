@@ -10,7 +10,7 @@ import {
   sha256Hex,
   validateImageFile,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +50,6 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
     const { db, bucket } = dependencies();
     await retryPendingMediaCleanup(db, bucket);
     const form = await request.formData();
@@ -89,14 +88,23 @@ export async function PUT(request: Request) {
     const column = columnFor(payload.slot);
     const current = await db
       .prepare(
-        `SELECT name, revision, ${column} AS oldKey
+        `SELECT name, revision, created_by_user_id AS createdByUserId,
+                verification_status AS verificationStatus, is_archived AS isArchived,
+                EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = teams.id AND tm.user_id = ? AND tm.membership_role = 'OWNER' AND tm.status = 'PENDING') AS pendingOwner,
+                ${column} AS oldKey
          FROM teams WHERE id = ? LIMIT 1`,
       )
-      .bind(payload.teamId)
-      .first<{ name: string; revision: number; oldKey: string | null }>();
+      .bind(actor.id, payload.teamId)
+      .first<{ name: string; revision: number; createdByUserId: string | null; verificationStatus: string; isArchived: number; pendingOwner: number; oldKey: string | null }>();
     if (!current) {
       throw new ApiError(404, "TEAM_NOT_FOUND", "This team no longer exists.");
     }
+    const communityEditor = !current.isArchived && (
+      (current.verificationStatus === "VERIFIED" && actor.managedTeamIds.includes(payload.teamId)) ||
+      (current.verificationStatus === "PENDING" && current.createdByUserId === actor.id && Boolean(current.pendingOwner))
+    );
+    if (!communityEditor) requireAdminCapability(actor, "content.teams.manage");
+    const adminOverride = !communityEditor;
     if (Number(current.revision) !== payload.revision) {
       throw new ApiError(
         409,
@@ -121,8 +129,22 @@ export async function PUT(request: Request) {
       db.prepare(
         `UPDATE teams SET ${column} = ?, revision = revision + 1,
                           updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND revision = ?`,
-      ).bind(uploadedKey, payload.teamId, payload.revision),
+         WHERE id = ? AND revision = ?
+           AND (
+             ? = 1
+             OR (is_archived = 0 AND (
+               (verification_status = 'PENDING' AND created_by_user_id = ?
+                 AND EXISTS (SELECT 1 FROM team_memberships caller
+                   WHERE caller.team_id = teams.id AND caller.user_id = ?
+                     AND caller.membership_role = 'OWNER' AND caller.status = 'PENDING'))
+               OR
+               (verification_status = 'VERIFIED'
+                 AND EXISTS (SELECT 1 FROM team_memberships caller
+                   WHERE caller.team_id = teams.id AND caller.user_id = ?
+                     AND caller.membership_role IN ('OWNER', 'LEADER') AND caller.status = 'ACTIVE'))
+             ))
+           )`,
+      ).bind(uploadedKey, payload.teamId, payload.revision, adminOverride ? 1 : 0, actor.id, actor.id, actor.id),
       auditStatement(
         db,
         actor,
@@ -193,7 +215,6 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
     const { db, bucket } = dependencies();
     await retryPendingMediaCleanup(db, bucket);
     const url = new URL(request.url);
@@ -205,20 +226,43 @@ export async function DELETE(request: Request) {
     const column = columnFor(payload.slot);
     const current = await db
       .prepare(
-        `SELECT name, ${column} AS oldKey
+        `SELECT name, created_by_user_id AS createdByUserId,
+                verification_status AS verificationStatus, is_archived AS isArchived,
+                EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = teams.id AND tm.user_id = ? AND tm.membership_role = 'OWNER' AND tm.status = 'PENDING') AS pendingOwner,
+                ${column} AS oldKey
          FROM teams WHERE id = ? LIMIT 1`,
       )
-      .bind(payload.teamId)
-      .first<{ name: string; oldKey: string | null }>();
+      .bind(actor.id, payload.teamId)
+      .first<{ name: string; createdByUserId: string | null; verificationStatus: string; isArchived: number; pendingOwner: number; oldKey: string | null }>();
     if (!current) {
       throw new ApiError(404, "TEAM_NOT_FOUND", "This team no longer exists.");
     }
+    const communityEditor = !current.isArchived && (
+      (current.verificationStatus === "VERIFIED" && actor.managedTeamIds.includes(payload.teamId)) ||
+      (current.verificationStatus === "PENDING" && current.createdByUserId === actor.id && Boolean(current.pendingOwner))
+    );
+    if (!communityEditor) requireAdminCapability(actor, "content.teams.manage");
+    const adminOverride = !communityEditor;
     const updateResults = await db.batch([
       db.prepare(
         `UPDATE teams SET ${column} = NULL, revision = revision + 1,
                           updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND revision = ?`,
-      ).bind(payload.teamId, payload.revision),
+         WHERE id = ? AND revision = ?
+           AND (
+             ? = 1
+             OR (is_archived = 0 AND (
+               (verification_status = 'PENDING' AND created_by_user_id = ?
+                 AND EXISTS (SELECT 1 FROM team_memberships caller
+                   WHERE caller.team_id = teams.id AND caller.user_id = ?
+                     AND caller.membership_role = 'OWNER' AND caller.status = 'PENDING'))
+               OR
+               (verification_status = 'VERIFIED'
+                 AND EXISTS (SELECT 1 FROM team_memberships caller
+                   WHERE caller.team_id = teams.id AND caller.user_id = ?
+                     AND caller.membership_role IN ('OWNER', 'LEADER') AND caller.status = 'ACTIVE'))
+             ))
+           )`,
+      ).bind(payload.teamId, payload.revision, adminOverride ? 1 : 0, actor.id, actor.id, actor.id),
       auditStatement(
         db,
         actor,

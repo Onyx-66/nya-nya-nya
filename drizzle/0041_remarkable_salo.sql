@@ -1,0 +1,1 @@
+ALTER TABLE `teams` ADD `mutation_marker` text DEFAULT 'initial' NOT NULL;

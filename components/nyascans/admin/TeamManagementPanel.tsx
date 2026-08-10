@@ -24,6 +24,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import Link from "next/link";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
 import {
   AdminPageScaffold,
@@ -260,17 +261,6 @@ export function TeamManagementPanel() {
     setBadgeFile(null);
     setRemoveMedia({ logo: false, banner: false, badge: false });
     setMessage(null);
-  }
-
-  function createTeam() {
-    if (dirty && !window.confirm("Discard unsaved team changes?")) return;
-    setSelectedId("");
-    setDraft(emptyDraft);
-    setSaved(emptyDraft);
-    setLogoFile(null);
-    setBannerFile(null);
-    setBadgeFile(null);
-    setRemoveMedia({ logo: false, banner: false, badge: false });
   }
 
   async function updateMember(
@@ -577,9 +567,9 @@ export function TeamManagementPanel() {
       }
       message={message}
       primaryAction={hasLoaded ? (
-        <button className="button button-primary" type="button" onClick={createTeam}>
-          <Plus size={17} /> New team
-        </button>
+        <Link className="button button-primary" href="/dashboard/my-teams">
+          <Plus size={17} /> Community team form
+        </Link>
       ) : null}
     >
       <div className="admin-master-detail">
@@ -746,6 +736,7 @@ export function TeamManagementPanel() {
                     minLength={2}
                     maxLength={120}
                     value={draft.name}
+                    disabled={Boolean(draft.id)}
                     onChange={(event) => {
                       const name = event.target.value;
                       setDraft((current) => ({
@@ -760,6 +751,7 @@ export function TeamManagementPanel() {
                       }));
                     }}
                   />
+                  {draft.id ? <small>Permanent title. Use Team requests to approve a formal rename.</small> : null}
                 </label>
                 <label>
                   URL slug <b>Required</b>
@@ -767,6 +759,7 @@ export function TeamManagementPanel() {
                     required
                     pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                     value={draft.slug}
+                    disabled={Boolean(draft.id)}
                     onChange={(event) =>
                       setDraft((current) => ({
                         ...current,
@@ -1001,7 +994,7 @@ export function TeamManagementPanel() {
                   }
                 >
                   <option value="PENDING">Pending review</option>
-                  <option value="VERIFIED">Verified</option>
+                  <option value="VERIFIED" disabled={saved.verificationStatus === "PENDING"}>Verified{saved.verificationStatus === "PENDING" ? " · approve ownership request first" : ""}</option>
                   <option value="SUSPENDED">Suspended</option>
                 </select>
               </label>

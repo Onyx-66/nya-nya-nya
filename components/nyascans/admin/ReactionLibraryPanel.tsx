@@ -96,6 +96,8 @@ const emptyDraft: Draft = {
   usageCount: 0,
 };
 
+const chapterReactionSlots = new Set(["upvote", "laugh", "heart", "surprised", "angry", "sad"]);
+
 function formatBytes(value: number) {
   return `${(value / 1_000_000).toFixed(2)} MB`;
 }
@@ -123,6 +125,7 @@ export function ReactionLibraryPanel({
   const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saved, setSaved] = useState<Draft>(emptyDraft);
+  const protectedChapterSlot = Boolean(draft.id && chapterReactionSlots.has(draft.slug));
   const [assetFile, setAssetFile] = useState<File | null>(null);
   const [removeAsset, setRemoveAsset] = useState(false);
   const [query, setQuery] = useState("");
@@ -669,6 +672,7 @@ export function ReactionLibraryPanel({
                   <label>
                     Category
                     <input
+                      disabled={protectedChapterSlot}
                       maxLength={80}
                       value={draft.category ?? ""}
                       onChange={(event) =>
@@ -683,7 +687,7 @@ export function ReactionLibraryPanel({
                     Library use
                     <select
                       value={draft.usageKind}
-                      disabled={saving || optimizing}
+                      disabled={saving || optimizing || protectedChapterSlot}
                       onChange={(event) =>
                         setDraft((current) => ({
                           ...current,
@@ -707,6 +711,7 @@ export function ReactionLibraryPanel({
                     Display order
                     <input
                       type="number"
+                      disabled={protectedChapterSlot}
                       min={0}
                       max={10000}
                       value={draft.displayOrder}
@@ -722,6 +727,7 @@ export function ReactionLibraryPanel({
                     Availability
                     <select
                       value={draft.availability.scope}
+                      disabled={protectedChapterSlot}
                       onChange={(event) =>
                         setDraft((current) => ({
                           ...current,
@@ -747,6 +753,7 @@ export function ReactionLibraryPanel({
                         <label key={team.id}>
                           <input
                             type="checkbox"
+                            disabled={protectedChapterSlot}
                             checked={draft.availability.teamIds.includes(
                               team.id,
                             )}
@@ -780,6 +787,7 @@ export function ReactionLibraryPanel({
                     type="checkbox"
                     checked={draft.isActive}
                     disabled={
+                      protectedChapterSlot ||
                       draft.isArchived ||
                       (!draft.isActive && !hasSavedVisual)
                     }
@@ -918,6 +926,7 @@ export function ReactionLibraryPanel({
                     className="button button-danger"
                     type="button"
                     disabled={saving || optimizing}
+                    hidden={protectedChapterSlot}
                     onClick={() =>
                       setRemoveTarget(
                         reactions.find((reaction) => reaction.id === draft.id) ?? null,

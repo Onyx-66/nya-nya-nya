@@ -21,11 +21,15 @@ export async function GET(request: Request) {
           LIMIT 12`,
       ).all(),
       env.DB.prepare(
-        `SELECT id, eyebrow, title, body, destination_url AS destinationUrl,
+        `SELECT id, eyebrow, title, body, action_label AS actionLabel,
+                info_blocks_json AS infoBlocksJson,
+                destination_url AS destinationUrl,
                 image_key AS imageKey, fallback_image_url AS fallbackImageUrl,
                 effect, reset_key AS resetKey, revision
            FROM floating_ads
           WHERE is_active = 1
+            AND (starts_at IS NULL OR datetime(starts_at) <= CURRENT_TIMESTAMP)
+            AND (ends_at IS NULL OR datetime(ends_at) > CURRENT_TIMESTAMP)
           ORDER BY datetime(updated_at) DESC
           LIMIT 1`,
       ).first<Record<string, unknown>>(),
@@ -35,6 +39,10 @@ export async function GET(request: Request) {
       floatingAd: ad
         ? {
             ...ad,
+            infoBlocks: (() => {
+              try { return JSON.parse(String(ad.infoBlocksJson ?? "[]")); }
+              catch { return []; }
+            })(),
             imageUrl: ad.imageKey
               ? `/api/v1/floating-ad-media?id=${encodeURIComponent(String(ad.id))}&v=${Number(ad.revision)}`
               : ad.fallbackImageUrl || null,

@@ -327,7 +327,7 @@ test("V38 series galleries are moderated, ratio-bound, and fail private before a
   assert.match(mediaRoute, /"private, no-store"/u);
   assert.match(mediaRoute, /"public, max-age=3600/u);
 
-  assert.match(adminRoute, /requireAdmin\(actor\)/u);
+  assert.match(adminRoute, /requireAdminCapability\(actor, "uploads\.review"\)/u);
   assert.match(adminRoute, /current\.status !== "PENDING"/u);
   assert.match(adminRoute, /moderation_status = 'PENDING'/u);
   assert.match(adminRoute, /REJECTION_REASON_REQUIRED/u);

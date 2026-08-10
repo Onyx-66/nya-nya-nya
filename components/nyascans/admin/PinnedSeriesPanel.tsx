@@ -154,6 +154,28 @@ function datesAreValid(item: PinnedDraft) {
   );
 }
 
+function maximumConcurrentPins(items: PinnedDraft[]) {
+  const now = Date.now();
+  const checkpoints = [
+    now,
+    ...items
+      .map((item) => (item.startsAt ? Date.parse(item.startsAt) : now))
+      .filter((value) => Number.isFinite(value) && value >= now),
+  ];
+  return [...new Set(checkpoints)].reduce((maximum, checkpoint) => {
+    const active = items.filter((item) => {
+      const startsAt = item.startsAt
+        ? Date.parse(item.startsAt)
+        : Number.NEGATIVE_INFINITY;
+      const endsAt = item.endsAt
+        ? Date.parse(item.endsAt)
+        : Number.POSITIVE_INFINITY;
+      return startsAt <= checkpoint && checkpoint < endsAt;
+    }).length;
+    return Math.max(maximum, active);
+  }, 0);
+}
+
 export function PinnedSeriesPanel({
   endpoint = "/api/v1/admin/pinned-series",
   onSaved,
@@ -173,8 +195,9 @@ export function PinnedSeriesPanel({
 
   const currentSignature = useMemo(() => serializedItems(items), [items]);
   const dirty = !loading && currentSignature !== savedSignature;
-  const featuredCount = items.filter((item) => item.featured).length;
+  const activeCount = items.filter((item) => scheduleStatus(item) === "Active").length;
   const invalidDates = items.some((item) => !datesAreValid(item));
+  const overlapLimitExceeded = maximumConcurrentPins(items) > 9;
   useUnsavedChanges(dirty, "Pinned Series changes");
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -260,7 +283,7 @@ export function PinnedSeriesPanel({
       ...current,
       {
         seriesId: series.id,
-        featured: false,
+        featured: true,
         startsAt: null,
         endsAt: null,
         title: series.title,
@@ -271,6 +294,12 @@ export function PinnedSeriesPanel({
         coverUrl: series.coverUrl,
       },
     ]);
+    if (activeCount >= 9) {
+      setMessage({
+        kind: "neutral",
+        text: "Pin added as a draft. Schedule it for after an active pin ends before saving.",
+      });
+    }
     setQuery("");
   }
 
@@ -283,19 +312,6 @@ export function PinnedSeriesPanel({
         item.seriesId === seriesId ? updater(item) : item,
       ),
     );
-  }
-
-  function toggleFeatured(seriesId: string) {
-    const selected = items.find((item) => item.seriesId === seriesId);
-    if (!selected) return;
-    if (!selected.featured && featuredCount >= 3) {
-      setMessage({
-        kind: "error",
-        text: "Choose no more than three Featured pins.",
-      });
-      return;
-    }
-    updateItem(seriesId, (item) => ({ ...item, featured: !item.featured }));
   }
 
   function moveItem(index: number, nextIndex: number) {
@@ -325,7 +341,7 @@ export function PinnedSeriesPanel({
   }
 
   async function save() {
-    if (!dirty || invalidDates) return;
+    if (!dirty || invalidDates || overlapLimitExceeded) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -369,13 +385,13 @@ export function PinnedSeriesPanel({
       breadcrumbs={["Admin", "Content"]}
       kicker="Homepage curation"
       title="Pinned Series"
-      description="Build the fixed homepage bento, rotate up to three Featured titles, and schedule every pin."
+      description="Curate up to nine simultaneously active Featured titles and schedule future homepage rotations. Every pin is Featured automatically."
       message={message}
       primaryAction={
         <button
           className="button button-primary"
           type="button"
-          disabled={!dirty || busy || invalidDates}
+          disabled={!dirty || busy || invalidDates || overlapLimitExceeded}
           onClick={() => void save()}
         >
           {busy ? <SpinnerGap className="spin" /> : <PushPin />}
@@ -390,9 +406,14 @@ export function PinnedSeriesPanel({
     >
       <PinnedSeriesAdminStyles />
       <div className="v481-pin-admin-summary">
-        <div><strong>{items.length} / 12</strong><span>active records</span></div>
-        <div><strong>{featuredCount} / 3</strong><span>Featured rotation</span></div>
-        <p>Order is shared by the homepage bento and the complete Pinned Series directory.</p>
+        <div><strong>{items.length} / 12</strong><span>saved records</span></div>
+        <div><strong>{activeCount} / 9</strong><span>Active Featured pins</span></div>
+        <p>Every pin is Featured. Order is shared by the homepage bento and the complete Pinned Series directory.</p>
+        {overlapLimitExceeded ? (
+          <p className="v481-pin-limit-warning" role="alert">
+            More than nine pins overlap. Adjust start or end dates before saving.
+          </p>
+        ) : null}
       </div>
 
       <section className="admin-form-section v481-pin-picker">
@@ -509,15 +530,9 @@ export function PinnedSeriesPanel({
                     </label>
                   </div>
                   <div className="v481-pin-row-actions">
-                    <button
-                      type="button"
-                      className={`v481-feature-toggle ${item.featured ? "is-active" : ""}`}
-                      aria-pressed={item.featured}
-                      onClick={() => toggleFeatured(item.seriesId)}
-                    >
-                      <Star weight={item.featured ? "fill" : "regular"} />
-                      Featured
-                    </button>
+                    <span className="v481-feature-toggle is-active" aria-label={`${item.title} is Featured`}>
+                      <Star weight="fill" /> Featured
+                    </span>
                     <span className="v481-order-buttons">
                       <button type="button" disabled={index === 0} aria-label={`Move ${item.title} up`} onClick={() => moveItem(index, index - 1)}><ArrowUp /></button>
                       <button type="button" disabled={index === items.length - 1} aria-label={`Move ${item.title} down`} onClick={() => moveItem(index, index + 1)}><ArrowDown /></button>

@@ -78,12 +78,14 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
+import { HotThisWeek } from "@/components/nyascans/HotThisWeek";
 import { FormattedAnnouncementText } from "@/components/nyascans/FormattedAnnouncementText";
 import { KeyboardShortcutsDialog } from "@/components/nyascans/KeyboardShortcutsDialog";
 import {
@@ -96,6 +98,10 @@ import { SupportTicketPanel } from "@/components/nyascans/SupportTicketPanel";
 import { useSystemNotifications } from "@/components/nyascans/SystemNotifications";
 import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
 import { NotificationsView } from "@/components/nyascans/NotificationsView";
+import {
+  NotificationArtwork,
+  type NotificationSeries,
+} from "@/components/nyascans/NotificationArtwork";
 import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
 import {
   NewSeriesSection,
@@ -126,6 +132,7 @@ import {
   type CommercialSettings,
 } from "@/lib/commercial-settings";
 import { APP_VERSION } from "@/lib/app-version";
+import { ADMIN_SECTION_CAPABILITIES } from "@/lib/admin-permissions";
 import {
   demoSeries,
   type SeriesCard,
@@ -140,7 +147,6 @@ import {
   LEGAL_DOCUMENTS_BY_SLUG,
 } from "@/lib/legal-documents";
 import { readingProgressTone } from "@/lib/reading-progress";
-import { SITE_NAVIGATION_CHORDS } from "@/lib/site-shortcuts";
 
 const OperationsControlPanel = lazy(() =>
   import("@/components/nyascans/OperationsControlPanel").then((module) => ({
@@ -189,15 +195,19 @@ type Actor = {
   canUpload?: boolean;
   canRequestSeries?: boolean;
   canManageTeam?: boolean;
+  capabilities?: string[];
 };
 
 type HeaderNotification = {
   id: string;
+  kind: string;
   title: string;
   body: string;
   readAt: string | null;
   actionUrl: string | null;
   createdAt: string;
+  category: "UPDATES" | "ANNOUNCEMENTS" | "SOCIAL";
+  series: NotificationSeries | null;
 };
 
 type AppProps = {
@@ -491,6 +501,14 @@ function safeHeaderActionUrl(value: string | null) {
   } catch {
     return "/notifications";
   }
+}
+
+function headerNotificationLabel(notification: HeaderNotification) {
+  if (/CHAPTER|RELEASE|UPDATE/u.test(notification.kind)) return "New update";
+  if (/SERIES/u.test(notification.kind)) return "New series";
+  if (notification.category === "SOCIAL") return "Community";
+  if (notification.category === "ANNOUNCEMENTS") return "Announcement";
+  return "Update";
 }
 
 function activeNav(view: AppView, label: string) {
@@ -863,6 +881,8 @@ function SiteHeader({
     Boolean(actor),
   );
   const [notificationsError, setNotificationsError] = useState("");
+  const [notificationsActionError, setNotificationsActionError] = useState("");
+  const [notificationBusy, setNotificationBusy] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1040,37 +1060,74 @@ function SiteHeader({
     }
   }
 
-  function markNotificationRead(
-    notificationId: string,
-    destination: string,
+  async function updateHeaderNotifications(
+    action: "READ" | "READ_ALL",
+    notificationId?: string,
+    destination?: string,
   ) {
-    setNotificationsOpen(false);
+    if (notificationBusy) return;
+    const previousRecords = notificationRecords;
+    const previousUnreadCount = unreadCount;
+    const timestamp = new Date().toISOString();
+    const targetWasUnread = notificationId
+      ? previousRecords.some(
+          (record) => record.id === notificationId && !record.readAt,
+        )
+      : false;
+    setNotificationBusy(action === "READ_ALL" ? "all" : (notificationId ?? ""));
+    setNotificationsActionError("");
     setNotificationRecords((current) =>
       current.map((record) =>
-        record.id === notificationId
-          ? { ...record, readAt: new Date().toISOString() }
+        action === "READ_ALL" || record.id === notificationId
+          ? { ...record, readAt: record.readAt ?? timestamp }
           : record,
       ),
     );
-    setUnreadCount((current) => Math.max(0, current - 1));
-    void fetch("/api/v1/notifications", {
+    setUnreadCount((current) =>
+      action === "READ_ALL"
+        ? 0
+        : targetWasUnread
+          ? Math.max(0, current - 1)
+          : current,
+    );
+    try {
+      const response = await fetch("/api/v1/notifications", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "READ", id: notificationId }),
-        keepalive: true,
-      })
-      .then((response) => {
-        if (!response.ok) return;
-        window.dispatchEvent(
-          new CustomEvent("nyascans:notifications-changed", {
-            detail: { action: "READ", id: notificationId },
-          }),
-        );
-      })
-      .catch(() => {
-        // The destination remains available if the read mutation cannot finish.
+        body: JSON.stringify({
+          action,
+          ...(notificationId ? { id: notificationId } : {}),
+        }),
       });
-    window.location.assign(destination);
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.ok) {
+        throw new Error(
+          payload.error?.message ?? "The notification could not be updated.",
+        );
+      }
+      window.dispatchEvent(
+        new CustomEvent("nyascans:notifications-changed", {
+          detail: { action, id: notificationId ?? null },
+        }),
+      );
+      if (destination) {
+        setNotificationsOpen(false);
+        window.location.assign(destination);
+      }
+    } catch (error) {
+      setNotificationRecords(previousRecords);
+      setUnreadCount(previousUnreadCount);
+      setNotificationsActionError(
+        error instanceof Error
+          ? error.message
+          : "The notification could not be updated.",
+      );
+    } finally {
+      setNotificationBusy("");
+    }
   }
 
   return (
@@ -1163,8 +1220,28 @@ function SiteHeader({
                             : "You’re all caught up"}
                         </small>
                       </div>
-                      <Bell size={18} weight="fill" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="header-notification-mark-all"
+                        disabled={!unreadCount || Boolean(notificationBusy)}
+                        onClick={() => void updateHeaderNotifications("READ_ALL")}
+                      >
+                        <CheckCircle size={16} aria-hidden="true" />
+                        {notificationBusy === "all" ? "Marking…" : "Mark all as read"}
+                      </button>
                     </header>
+                    {notificationsActionError ? (
+                      <div className="header-notification-action-error" role="alert">
+                        <WarningCircle size={16} aria-hidden="true" />
+                        <span>{notificationsActionError}</span>
+                        <button
+                          type="button"
+                          onClick={() => setNotificationsActionError("")}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    ) : null}
                     <ul className="header-notification-list">
                       {notificationsLoading ? (
                         <li>
@@ -1188,13 +1265,12 @@ function SiteHeader({
                         </li>
                       ) : notificationRecords.length ? (
                         notificationRecords.map((notification) => (
-                          <li key={notification.id}>
+                          <li
+                            className={notification.readAt ? "is-read" : "is-unread"}
+                            key={notification.id}
+                          >
                             <a
-                              className={
-                                notification.readAt
-                                  ? "header-notification-item"
-                                  : "header-notification-item is-unread"
-                              }
+                              className="header-notification-item"
                               href={safeHeaderActionUrl(notification.actionUrl)}
                               onClick={(event) => {
                                 if (notification.readAt) {
@@ -1210,21 +1286,20 @@ function SiteHeader({
                                   return;
                                 }
                                 event.preventDefault();
-                                markNotificationRead(
+                                void updateHeaderNotifications(
+                                  "READ",
                                   notification.id,
                                   safeHeaderActionUrl(notification.actionUrl),
                                 );
                               }}
                             >
-                              <span aria-hidden="true">
-                                <Bell
-                                  size={15}
-                                  weight={
-                                    notification.readAt ? "regular" : "fill"
-                                  }
-                                />
-                              </span>
+                              <NotificationArtwork
+                                series={notification.series}
+                                category={notification.category}
+                                className="header-notification-artwork"
+                              />
                               <span>
+                                <em>{headerNotificationLabel(notification)}</em>
                                 <strong>
                                   {!notification.readAt ? (
                                     <span className="sr-only">Unread: </span>
@@ -1237,6 +1312,27 @@ function SiteHeader({
                                 </time>
                               </span>
                             </a>
+                            {!notification.readAt ? (
+                              <button
+                                type="button"
+                                className="header-notification-mark-one"
+                                disabled={Boolean(notificationBusy)}
+                                onClick={() =>
+                                  void updateHeaderNotifications(
+                                    "READ",
+                                    notification.id,
+                                  )
+                                }
+                              >
+                                {notificationBusy === notification.id
+                                  ? "Saving…"
+                                  : "Mark as read"}
+                              </button>
+                            ) : (
+                              <span className="header-notification-read-state">
+                                <Check size={14} aria-hidden="true" /> Read
+                              </span>
+                            )}
                           </li>
                         ))
                       ) : (
@@ -2141,6 +2237,15 @@ function releaseTime(value: string) {
   return `${Math.round(hours / 24)}d`;
 }
 
+function releaseAbsoluteTime(value: string) {
+  const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
+  if (Number.isNaN(date.getTime())) return "Publication time unavailable";
+  return date.toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 function FreshChapterMark({ fresh }: { fresh?: boolean }) {
   if (!fresh) return null;
   return (
@@ -2195,7 +2300,7 @@ function LatestUpdatesGrid({
       setRefreshWarning("");
       try {
         const response = await fetch(
-          `/api/v1/latest-releases?page=${page}&pageSize=${pageSize}&period=${effectivePeriod}${releaseLanguages.length ? `&languages=${encodeURIComponent(releaseLanguages.join(","))}` : ""}`,
+          `/api/v1/latest-releases?page=${page}&pageSize=${heading && !pagination ? 20 : pageSize}&period=${effectivePeriod}&mode=${heading && !pagination ? "table" : "cards"}${releaseLanguages.length ? `&languages=${encodeURIComponent(releaseLanguages.join(","))}` : ""}`,
           { signal: controller.signal, cache: "no-store" },
         );
         const payload = (await response.json()) as {
@@ -2253,7 +2358,7 @@ function LatestUpdatesGrid({
       window.removeEventListener("focus", refreshVisible);
       controller.abort();
     };
-  }, [effectivePeriod, page, pageSize, releaseLanguages, revision]);
+  }, [effectivePeriod, heading, page, pageSize, pagination, releaseLanguages, revision]);
 
   const pageNumbers = useMemo(() => {
     const start = Math.max(1, Math.min(page - 2, pageCount - 4));
@@ -2262,6 +2367,24 @@ function LatestUpdatesGrid({
       (_, index) => start + index,
     );
   }, [page, pageCount]);
+  const feedRows = useMemo(
+    () =>
+      records
+        .flatMap((update) =>
+          update.chapters
+            .filter(
+              (chapter) => effectivePeriod === "all" || chapter.isNewInPeriod,
+            )
+            .map((chapter) => ({ update, chapter })),
+        )
+        .sort(
+          (left, right) =>
+            Date.parse(right.chapter.publishedAt) -
+            Date.parse(left.chapter.publishedAt),
+        )
+        .slice(0, 12),
+    [effectivePeriod, records],
+  );
 
   return (
     <section className="latest-updates-block">
@@ -2367,7 +2490,103 @@ function LatestUpdatesGrid({
             Try again
           </button>
         </div>
-      ) : records.length ? (
+      ) : records.length && (pagination || feedRows.length) ? (
+        heading && !pagination ? (
+          <div className="latest-release-table-shell">
+            <table className="latest-release-table">
+              <caption className="sr-only">
+                Latest series releases, newest first
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Series</th>
+                  <th scope="col">Chapter</th>
+                  <th scope="col">Releaser</th>
+                  <th scope="col">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feedRows.map(({ update, chapter }) => {
+                  const paid =
+                    (chapter.effectiveAccessType ?? chapter.accessType) !==
+                    "FREE";
+                  return (
+                    <tr
+                      className={paid ? "is-paid" : undefined}
+                      key={`${update.slug}:${chapter.slug}`}
+                    >
+                      <th scope="row" data-label="Series">
+                        <a className="latest-feed-series" href={`/title/${update.slug}`}>
+                          <span className="latest-feed-cover">
+                            {update.cover ? (
+                              <ResilientCoverImage
+                                src={update.cover}
+                                alt=""
+                                width={72}
+                                height={100}
+                                decorative
+                              />
+                            ) : (
+                              <Books size={19} aria-hidden="true" />
+                            )}
+                          </span>
+                          <span>
+                            <strong>{update.title}</strong>
+                            <small><SeriesTypeBadge type={update.type} flagOnly /> {update.status.toLowerCase()}</small>
+                          </span>
+                        </a>
+                      </th>
+                      <td data-label="Chapter">
+                        <a
+                          className="latest-feed-chapter"
+                          href={`/title/${update.slug}/chapter/${chapter.slug}`}
+                        >
+                          <span
+                            className={`latest-age-dot${chapter.isFresh ? " is-new" : " is-old"}`}
+                            aria-label={chapter.isFresh ? "Released within 24 hours" : "Released more than 24 hours ago"}
+                          />
+                          <span>
+                            <strong>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</strong>
+                            {chapter.title ? <small>{chapter.title}</small> : null}
+                          </span>
+                          <span
+                            className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
+                            aria-label={chapter.isRead ? "Chapter already read" : "Chapter not read yet"}
+                          >
+                            <Eye size={15} weight={chapter.isRead ? "fill" : "regular"} aria-hidden="true" />
+                          </span>
+                          <ChapterAccessBadge
+                            accessType={chapter.effectiveAccessType ?? chapter.accessType}
+                          />
+                        </a>
+                      </td>
+                      <td data-label="Releaser">
+                        <span className="latest-feed-team">
+                          <LanguageFlag language={chapter.language} showCode={false} />
+                          {chapter.teamSlug ? (
+                            <a href={`/team/${encodeURIComponent(chapter.teamSlug)}`}>
+                              {chapter.teamName ?? "Publishing team"}
+                            </a>
+                          ) : (
+                            <span>{chapter.teamName ?? "Independent release"}</span>
+                          )}
+                        </span>
+                      </td>
+                      <td data-label="Date">
+                        <time
+                          dateTime={chapter.publishedAt}
+                          title={releaseAbsoluteTime(chapter.publishedAt)}
+                        >
+                          {releaseTime(chapter.publishedAt)} ago
+                        </time>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
         <div className="latest-grid">
           {records.map((update) => (
               <article className="latest-card" key={update.slug}>
@@ -2406,7 +2625,10 @@ function LatestUpdatesGrid({
                   </div>
                   <ul className="latest-chapters">
                     {update.chapters.slice(0, 4).map((chapter) => (
-                      <li key={chapter.slug}>
+                      <li
+                        className={(chapter.effectiveAccessType ?? chapter.accessType) !== "FREE" ? "is-paid" : undefined}
+                        key={chapter.slug}
+                      >
                         <span className="latest-chapter-copy">
                           <span className="latest-chapter-title-line">
                             <a
@@ -2458,10 +2680,11 @@ function LatestUpdatesGrid({
               </article>
             ))}
         </div>
+        )
       ) : (
         <EmptyState
-          title="No published releases yet"
-          body="Verified chapter releases will appear here after publication."
+          title="No releases in this period"
+          body="Try another period or language. New verified chapter releases will appear automatically."
           compact
         />
       )}
@@ -3783,6 +4006,131 @@ function EditorsPickSection({
   );
 }
 
+type HomeAnnouncement = {
+  id: string;
+  type: "UPDATE" | "ISSUE" | "SUPPORT" | "NOTICE";
+  title: string;
+  body: string;
+  linkLabel: string;
+  linkUrl: string;
+};
+
+function HomeAnnouncements({ announcements }: { announcements: HomeAnnouncement[] }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const pointerStart = useRef<number | null>(null);
+  const safeIndex = announcements.length
+    ? activeIndex % announcements.length
+    : 0;
+  const active = announcements[safeIndex];
+
+  useEffect(() => {
+    if (
+      paused ||
+      announcements.length < 2 ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setActiveIndex((current) => (current + 1) % announcements.length);
+      }
+    }, 8_000);
+    return () => window.clearInterval(interval);
+  }, [announcements.length, paused]);
+
+  if (!active) return null;
+  const Icon =
+    active.type === "UPDATE"
+      ? Star
+      : active.type === "ISSUE"
+        ? WarningCircle
+        : active.type === "SUPPORT"
+          ? Lifebuoy
+          : Bell;
+  const move = (direction: -1 | 1) => {
+    setActiveIndex(
+      (current) =>
+        (current + direction + announcements.length) % announcements.length,
+    );
+  };
+
+  return (
+    <section
+      className="home-announcement-slider v46-announcement-list"
+      aria-label="Site announcements"
+      aria-roledescription="carousel"
+      tabIndex={0}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setPaused(false);
+      }}
+      onKeyDown={(event) => {
+        if (announcements.length < 2) return;
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          move(-1);
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          move(1);
+        }
+      }}
+      onPointerDown={(event) => {
+        pointerStart.current = event.clientX;
+      }}
+      onPointerUp={(event) => {
+        if (pointerStart.current === null || announcements.length < 2) return;
+        const distance = event.clientX - pointerStart.current;
+        pointerStart.current = null;
+        if (Math.abs(distance) >= 42) move(distance > 0 ? -1 : 1);
+      }}
+      onPointerCancel={() => {
+        pointerStart.current = null;
+      }}
+    >
+      <article
+        key={active.id}
+        data-type={active.type.toLowerCase()}
+        aria-label={`${safeIndex + 1} of ${announcements.length}: ${active.title}`}
+      >
+        <span><Icon size={20} weight="duotone" /></span>
+        <div>
+          <small>{active.type}</small>
+          <strong>{active.title}</strong>
+          <FormattedAnnouncementText body={active.body} />
+        </div>
+        {active.linkUrl ? (
+          <a href={active.linkUrl}>
+            {active.linkLabel || "Learn more"}<ArrowRight size={15} />
+          </a>
+        ) : null}
+        {announcements.length > 1 ? (
+          <div className="announcement-slider-arrows" aria-label="Announcement controls">
+            <button type="button" aria-label="Previous announcement" onClick={() => move(-1)}><CaretLeft size={17} /></button>
+            <button type="button" aria-label="Next announcement" onClick={() => move(1)}><CaretRight size={17} /></button>
+          </div>
+        ) : null}
+      </article>
+      {announcements.length > 1 ? (
+        <div className="featured-slider-dots announcement-slider-dots" aria-label="Choose announcement">
+          {announcements.map((announcement, index) => (
+            <button
+              type="button"
+              key={announcement.id}
+              aria-label={`Show ${announcement.title}`}
+              aria-pressed={index === safeIndex}
+              onClick={() => setActiveIndex(index)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function HomeView({
   actor,
   showToast,
@@ -3794,8 +4142,8 @@ function HomeView({
   const premiumEconomyPublic =
     commercialSettings.economy.premiumEconomyPublic;
   const [promotions, setPromotions] = useState<{
-    announcements: Array<{ id: string; type: "UPDATE" | "ISSUE" | "SUPPORT" | "NOTICE"; title: string; body: string; linkLabel: string; linkUrl: string }>;
-    floatingAd: { id: string; eyebrow: string; title: string; body: string; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null;
+    announcements: HomeAnnouncement[];
+    floatingAd: { id: string; eyebrow: string; title: string; body: string; actionLabel: string; infoBlocks: Array<{ icon: string; title: string; body: string }>; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null;
   }>({ announcements: [], floatingAd: null });
 
   useEffect(() => {
@@ -3824,14 +4172,7 @@ function HomeView({
 
         <section className="updates-section">
           <div className="page-wrap">
-            {promotions.announcements.length ? (
-              <div className="v46-announcement-list" aria-label="Site announcements">
-                {promotions.announcements.map((announcement) => {
-                  const Icon = announcement.type === "UPDATE" ? Star : announcement.type === "ISSUE" ? WarningCircle : announcement.type === "SUPPORT" ? Lifebuoy : Bell;
-                  return <article key={announcement.id} data-type={announcement.type.toLowerCase()}><span><Icon size={20} weight="duotone" /></span><div><small>{announcement.type}</small><strong>{announcement.title}</strong><FormattedAnnouncementText body={announcement.body} /></div>{announcement.linkUrl ? <a href={announcement.linkUrl}>{announcement.linkLabel || "Learn more"}<ArrowRight size={15} /></a> : null}</article>;
-                })}
-              </div>
-            ) : null}
+            <HomeAnnouncements announcements={promotions.announcements} />
             <LatestUpdatesGrid />
           </div>
         </section>
@@ -3843,54 +4184,163 @@ function HomeView({
         <PublishingTeamsCarousel />
 
         <CommunityHighlights />
+
+        <HotThisWeek />
       </main>
     </>
   );
 }
 
-function FloatingHomeAd({ campaign }: { campaign: { id: string; eyebrow: string; title: string; body: string; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null }) {
+type FloatingCampaign = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  actionLabel: string;
+  infoBlocks: Array<{ icon: string; title: string; body: string }>;
+  destinationUrl: string;
+  imageUrl: string | null;
+  effect: "WAVE" | "PULSE" | "GLOW";
+  resetKey: string;
+};
+
+function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [doNotShowToday, setDoNotShowToday] = useState(false);
+  const doNotShowTodayRef = useRef(false);
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const storageKey = campaign
-    ? `nyascans:floating-ad:${campaign.id}:${campaign.resetKey}`
+    ? `nyascans:floating-ad:${campaign.id}:${campaign.resetKey}:${today}`
     : "";
-  const dismiss = useCallback(() => {
-    if (storageKey) window.localStorage.setItem(storageKey, "seen");
-    setOpen(false);
+  const persistDismissal = useCallback(() => {
+    if (storageKey && doNotShowTodayRef.current) {
+      try {
+        window.localStorage.setItem(storageKey, "dismissed");
+      } catch {
+        // Privacy modes may disable storage; the campaign action still works.
+      }
+    }
   }, [storageKey]);
+  const dismiss = useCallback(() => {
+    persistDismissal();
+    setOpen(false);
+  }, [persistDismissal]);
   useEffect(() => {
     if (!campaign) return;
-    if (window.localStorage.getItem(storageKey)) return;
+    try {
+      if (window.localStorage.getItem(storageKey)) return;
+    } catch {
+      // A blocked storage API must not block the campaign itself.
+    }
     const timer = window.setTimeout(() => {
       setImageFailed(false);
+      doNotShowTodayRef.current = false;
+      setDoNotShowToday(false);
       setOpen(true);
     }, 450);
     return () => window.clearTimeout(timer);
   }, [campaign, storageKey]);
   useEffect(() => {
     if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("button, a[href], input")?.focus());
     const close = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") dismiss();
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), input:not(:disabled)',
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const focusInside = dialogRef.current?.contains(document.activeElement);
+      if (event.shiftKey && (!focusInside || document.activeElement === first)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!focusInside || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", close);
+      const previousFocus = previousFocusRef.current;
+      previousFocusRef.current = null;
+      if (previousFocus?.isConnected) {
+        window.requestAnimationFrame(() => previousFocus.focus());
+      }
+    };
   }, [dismiss, open]);
   if (!open || !campaign) return null;
   return (
-    <aside className="floating-home-ad v46-floating-home-ad" data-effect={campaign.effect.toLowerCase()} role="dialog" aria-modal="false" aria-label={campaign.title}>
-      <button type="button" onClick={dismiss} aria-label="Close featured release">
-        <X size={18} />
-      </button>
-      <a href={campaign.destinationUrl || "/browse?sort=latest"}>
-        {campaign.imageUrl && !imageFailed ? <img src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} /> : <span className="floating-home-ad-placeholder"><ImageIcon size={32} weight="duotone" /></span>}
-        <span>
+    <div className="event-campaign-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) dismiss();
+    }}>
+      <aside
+        ref={dialogRef}
+        tabIndex={-1}
+        className="floating-home-ad event-campaign-modal"
+        data-effect={campaign.effect.toLowerCase()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="event-campaign-title"
+      >
+        {campaign.imageUrl && !imageFailed ? (
+          <img className="event-campaign-art" src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} />
+        ) : (
+          <span className="event-campaign-art event-campaign-placeholder"><ImageIcon size={44} weight="duotone" /></span>
+        )}
+        <div className="event-campaign-shade" />
+        <button className="event-campaign-close" type="button" onClick={dismiss} aria-label="Close event">
+          <X size={19} />
+        </button>
+        <div className="event-campaign-content">
           <small>{campaign.eyebrow}</small>
-          <strong>{campaign.title}</strong>
+          <h2 id="event-campaign-title">{campaign.title}</h2>
           {campaign.body ? <p>{campaign.body}</p> : null}
-          <em>Open <ArrowRight size={16} /></em>
-        </span>
-      </a>
-    </aside>
+          {campaign.infoBlocks?.length ? (
+            <div className="event-campaign-info">
+              {campaign.infoBlocks.slice(0, 4).map((block, index) => (
+                <article key={`${index}:${block.title}`}>
+                  <span aria-hidden="true">{block.icon}</span>
+                  <div><strong>{block.title}</strong>{block.body ? <small>{block.body}</small> : null}</div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          <a
+            className="event-campaign-action"
+            href={campaign.destinationUrl || "/browse?sort=latest"}
+            onClick={persistDismissal}
+          >
+            {campaign.actionLabel || "Explore event"} <ArrowRight size={17} />
+          </a>
+          <label className="event-campaign-dismiss">
+            <input
+              type="checkbox"
+              checked={doNotShowToday}
+              onChange={(event) => {
+                doNotShowTodayRef.current = event.target.checked;
+                setDoNotShowToday(event.target.checked);
+              }}
+            />
+            <span>Do not show again today</span>
+          </label>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -7436,6 +7886,9 @@ function ReaderView({
   const [walletError, setWalletError] = useState("");
   const [chapterReactions, setChapterReactions] = useState<ChapterReaction[]>([]);
   const [reactionBusy, setReactionBusy] = useState("");
+  const [chapterReactionsLoading, setChapterReactionsLoading] = useState(true);
+  const [chapterReactionsError, setChapterReactionsError] = useState("");
+  const [chapterReactionsReload, setChapterReactionsReload] = useState(0);
   const [commentReplyBadge, setCommentReplyBadge] = useState({ count: 0, enabled: true });
   const completedAnalyticsKey = useRef("");
   const rewardedChapterKey = useRef("");
@@ -7448,6 +7901,7 @@ function ReaderView({
   const chapterListRequest = useRef<AbortController | null>(null);
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const unlockIdempotencyKey = useRef("");
+  const readerSeeking = useRef(false);
   useEffect(() => {
     currentReaderPage.current = page;
   }, [page]);
@@ -7644,7 +8098,8 @@ function ReaderView({
               signal: controller.signal,
             })
               .then(async (response) => (response.ok ? response.json() : null))
-              .then((payload: { data?: { readerTypeDefaults?: { manga?: string; vertical?: string }; readerSettings?: Partial<ReaderSettings> } } | null) => {
+              .then((payloadValue) => {
+                const payload = payloadValue as { data?: { readerTypeDefaults?: { manga?: string; vertical?: string }; readerSettings?: Partial<ReaderSettings> } } | null;
                 const accountDefaults = payload?.data?.readerSettings ?? {};
                 const selected = manga
                   ? payload?.data?.readerTypeDefaults?.manga
@@ -7687,17 +8142,25 @@ function ReaderView({
   useEffect(() => {
     if (!readerContext?.chapter.id) return;
     const controller = new AbortController();
-    void fetch(`/api/v1/chapter-reactions?chapterId=${encodeURIComponent(readerContext.chapter.id)}`, { signal: controller.signal, cache: "no-store" })
+    const timer = window.setTimeout(() => {
+      setChapterReactionsLoading(true);
+      setChapterReactionsError("");
+      void fetch(`/api/v1/chapter-reactions?chapterId=${encodeURIComponent(readerContext.chapter.id)}`, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
-        const payload = (await response.json()) as { data?: ChapterReaction[]; meta?: { replyCount?: number; showReplyBadge?: boolean } };
-        if (response.ok) {
-          setChapterReactions(payload.data ?? []);
-          setCommentReplyBadge({ count: Number(payload.meta?.replyCount ?? 0), enabled: payload.meta?.showReplyBadge !== false });
-        }
+        const payload = (await response.json()) as { data?: ChapterReaction[]; meta?: { replyCount?: number; showReplyBadge?: boolean }; error?: { message?: string } };
+        if (!response.ok) throw new Error(payload.error?.message ?? "Chapter reactions could not be loaded.");
+        setChapterReactions(payload.data ?? []);
+        setCommentReplyBadge({ count: Number(payload.meta?.replyCount ?? 0), enabled: payload.meta?.showReplyBadge !== false });
       })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [readerContext?.chapter.id]);
+      .catch((error: unknown) => {
+        if ((error as Error).name === "AbortError") return;
+        setChapterReactions([]);
+        setChapterReactionsError(error instanceof Error ? error.message : "Chapter reactions could not be loaded.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setChapterReactionsLoading(false); });
+    }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [chapterReactionsReload, readerContext?.chapter.id]);
 
   async function toggleChapterReaction(reactionId: string) {
     if (!actor) {
@@ -7835,7 +8298,7 @@ function ReaderView({
           .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
         if (!mostVisible) return;
         const index = pages.indexOf(mostVisible.target as HTMLElement);
-        if (index >= 0) setPage(index + 1);
+        if (index >= 0 && !readerSeeking.current) setPage(index + 1);
       },
       {
         rootMargin: "-28% 0px -52% 0px",
@@ -8170,6 +8633,28 @@ function ReaderView({
     );
   }
 
+  function seekReader(targetPage: number, smooth = false) {
+    if (!panelCount) return;
+    const nextPage = Math.min(panelCount, Math.max(1, Math.round(targetPage)));
+    setPage(nextPage);
+    if (mode === "vertical") {
+      document
+        .querySelector<HTMLElement>(
+          `.reader-stage [aria-label="Page ${nextPage}"]`,
+        )
+        ?.scrollIntoView({
+          block: "start",
+          behavior: smooth ? "smooth" : "auto",
+        });
+    }
+  }
+
+  function seekReaderFromPointer(event: ReactPointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    seekReader(1 + ratio * Math.max(0, panelCount - 1));
+  }
+
   useEffect(() => {
     if (mode === "vertical") return;
     function onKeyDown(event: KeyboardEvent) {
@@ -8477,15 +8962,17 @@ function ReaderView({
     );
   }
 
-  const chapterReactionPrompt =
-    panelCount > 0 && chapterReactions.length ? (
+  const chapterReactionPrompt = chapterReactions.length ? (
       <section className="chapter-reactions-box" aria-labelledby="chapter-reactions-title">
         <div>
-          <p className="eyebrow">Reaction</p>
+          <p className="eyebrow">Chapter reactions</p>
           <h2 id="chapter-reactions-title">What do you think about this chapter?</h2>
-          <span>{actor ? "Choose one reaction." : "Sign in to react."}</span>
+          <span>
+            {chapterReactions.reduce((sum, reaction) => sum + reaction.count, 0).toLocaleString()} reactions
+            {actor ? " · Choose one reaction." : " · Sign in to react."}
+          </span>
         </div>
-        <div>
+        <div className="chapter-reaction-options">
           {chapterReactions.map((reaction) => (
             <button
               type="button"
@@ -8499,13 +8986,22 @@ function ReaderView({
               ) : (
                 <span aria-hidden="true">{reaction.emojiFallback || "♡"}</span>
               )}
-              <strong>{reaction.name}</strong>
               <small>{reaction.count}</small>
+              <strong>{reaction.name}</strong>
             </button>
           ))}
         </div>
       </section>
-    ) : null;
+    ) : (
+      <section className="chapter-reactions-box is-status" aria-labelledby="chapter-reactions-title">
+        <div>
+          <p className="eyebrow">Chapter reactions</p>
+          <h2 id="chapter-reactions-title">What do you think about this chapter?</h2>
+          <span>{chapterReactionsLoading ? "Loading the six reaction slots…" : chapterReactionsError || "Reaction slots are temporarily unavailable."}</span>
+        </div>
+        {!chapterReactionsLoading ? <button className="button button-secondary" type="button" onClick={() => { setChapterReactionsLoading(true); setChapterReactionsError(""); setChapterReactionsReload((value) => value + 1); }}>Retry reactions</button> : null}
+      </section>
+    );
 
   return (
     <main
@@ -9004,16 +9500,52 @@ function ReaderView({
       ) : null}
 
       <footer className={`reader-footer ${ui ? "" : "reader-footer-hidden"}`}>
-        <span>
-          {panelCount === 0
-            ? "No processed pages"
-            : mode === "vertical"
-              ? `${panelCount} pages · Continuous`
-              : `Page ${page} of ${panelCount}`}
-        </span>
         <div className="reader-progress-shell">
           {previousChapter ? <a href={`/title/${routeSeriesSlug}/chapter/${previousChapter.slug}`} aria-label={`Previous chapter ${previousChapter.number}`}><CaretLeft size={18} /></a> : <span aria-hidden="true" />}
-          <div className="reader-progress" role="progressbar" aria-valuemin={0} aria-valuemax={panelCount} aria-valuenow={page}>
+          <div
+            className="reader-progress"
+            role="slider"
+            tabIndex={panelCount ? 0 : -1}
+            aria-label="Reading position"
+            aria-valuemin={panelCount ? 1 : 0}
+            aria-valuemax={panelCount}
+            aria-valuenow={panelCount ? page : 0}
+            aria-valuetext={panelCount ? `Page ${page} of ${panelCount}` : "No pages"}
+            onPointerDown={(event) => {
+              if (!panelCount) return;
+              readerSeeking.current = true;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              seekReaderFromPointer(event);
+            }}
+            onPointerMove={(event) => {
+              if (readerSeeking.current && event.currentTarget.hasPointerCapture(event.pointerId)) {
+                seekReaderFromPointer(event);
+              }
+            }}
+            onPointerUp={(event) => {
+              seekReaderFromPointer(event);
+              readerSeeking.current = false;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onPointerCancel={() => {
+              readerSeeking.current = false;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+                event.preventDefault();
+                seekReader(page - 1, true);
+              } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+                event.preventDefault();
+                seekReader(page + 1, true);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                seekReader(1, true);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                seekReader(panelCount, true);
+              }
+            }}
+          >
           <i
             style={{
               width: `${panelCount ? (page / panelCount) * 100 : 0}%`,
@@ -9022,9 +9554,6 @@ function ReaderView({
           </div>
           {nextChapter ? <a href={`/title/${routeSeriesSlug}/chapter/${nextChapter.slug}`} aria-label={`Next chapter ${nextChapter.number}`}><CaretRight size={18} /></a> : <span aria-hidden="true" />}
         </div>
-        <a href={`/title/${routeSeriesSlug}`}>
-          Series details <ArrowRight size={17} />
-        </a>
       </footer>
 
       <nav className="reader-quick-nav" aria-label="Chapter quick navigation">
@@ -10475,17 +11004,12 @@ function OperationsView({
 }) {
   const admin = mode === "admin";
   const groups = useMemo<OperationsNavigationGroup[]>(() => {
-    const actorRoles = actor.roles?.length ? actor.roles : [actor.role];
-    const manager = actorRoles.includes("MANAGER");
-    const fullAdministrator = actorRoles.some((role) =>
-      ["OWNER", "ADMINISTRATOR"].includes(role),
-    );
     if (!admin && actor.role === "MODERATOR") {
       return [
         {
           id: "community",
           label: "Community",
-          items: [["Comments", ChatCircle] as const],
+          items: [["Comments", ChatCircle], ["My teams", UsersThree]] as const,
         },
       ];
     }
@@ -10500,6 +11024,7 @@ function OperationsView({
           label: "Publishing",
           items: [
             ["Workspace", SquaresFour],
+            ["My teams", UsersThree],
             ["Upload center", CloudArrowUp],
             ...(canUpload
               ? ([
@@ -10525,32 +11050,20 @@ function OperationsView({
         },
       ];
     }
-    if (manager && !fullAdministrator) {
-      return [
-        {
-          id: "staff-work",
-          label: "Manager workspace",
-          items: [
-            ["New Series Queue", FileText],
-            ["Access decisions", LockSimple],
-            ["Support tickets", Lifebuoy],
-          ] as const,
-        },
-      ];
-    }
-    return [
+    const allGroups: OperationsNavigationGroup[] = [
       {
-        id: "overview",
-        label: "Overview",
-        items: [["Overview", SquaresFour]] as const,
+        id: "command",
+        label: "Command center",
+        items: [["Analytics", ChartLineUp], ["Overview", SquaresFour]] as const,
       },
       {
         id: "content",
-        label: "Content",
+        label: "Publishing & content",
         items: [
           ["Series", Books],
           ["Chapter access", LockSimple],
           ["Teams", ShieldCheck],
+          ["Team requests", UsersThree],
           ["Sliders", SlidersHorizontal],
           ["Pinned Series", PushPin],
           ["Categories & genres", Tag],
@@ -10563,9 +11076,10 @@ function OperationsView({
       },
       {
         id: "community",
-        label: "Community",
+        label: "People & trust",
         items: [
           ["Users & roles", UsersThree],
+          ["Permissions", Key],
           ["Series Reports", WarningCircle],
           ["Discussions", ChatCircle],
           ["Support tickets", Lifebuoy],
@@ -10573,7 +11087,7 @@ function OperationsView({
       },
       {
         id: "finance",
-        label: "Finance",
+        label: "Revenue & balances",
         items: [
           ["Balances", Wallet],
           ["Payouts", Coins],
@@ -10586,40 +11100,42 @@ function OperationsView({
       },
       {
         id: "insights",
-        label: "Insights",
+        label: "Operations record",
         items: [
           ["User activity", Pulse],
-          ["Analytics", ChartLineUp],
-          ...((actor.roles ?? [actor.role]).includes("OWNER")
-            ? ([["Audit log", FileText]] as const)
-            : []),
+          ["Audit log", FileText],
         ] as const,
       },
       {
         id: "system",
-        label: "System",
+        label: "Platform controls",
         items: [
           ["Appearance", GearSix],
           ["Announcements & ads", Megaphone],
           ["Security", Key],
-          ...((actor.roles ?? [actor.role]).includes("OWNER")
-            ? ([["API Control", Key]] as const)
-            : []),
+          ["Site coverage", SquaresFour],
+          ["API Control", Key],
         ] as const,
       },
     ];
-  }, [actor.canUpload, actor.role, actor.roles, admin]);
+    const granted = new Set(actor.capabilities ?? []);
+    return allGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(([label]) => {
+          const slug = String(label).toLowerCase().replaceAll(" ", "-");
+          const capability = ADMIN_SECTION_CAPABILITIES[slug];
+          return Boolean(capability && granted.has(capability));
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [actor.canUpload, actor.capabilities, actor.role, admin]);
   const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   const defaultSection =
     !admin && actor.role === "MODERATOR"
       ? "Comments"
       : admin
-        ? actor.roles?.includes("MANAGER") &&
-          !actor.roles.some((role) =>
-            ["OWNER", "ADMINISTRATOR"].includes(role),
-          )
-          ? "New Series Queue"
-          : "Overview"
+        ? String(items[0]?.[0] ?? "Analytics")
         : "Workspace";
   const sectionFromSlug =
     items.find(
@@ -10951,6 +11467,8 @@ function OperationsView({
                 "branding",
                 "reader",
                 "footer",
+                "legal",
+                "shortcuts",
                 "theme",
                 "palettes",
                 "preview",
@@ -10959,6 +11477,8 @@ function OperationsView({
                     | "branding"
                     | "reader"
                     | "footer"
+                    | "legal"
+                    | "shortcuts"
                     | "theme"
                     | "palettes"
                     | "preview")
@@ -11131,6 +11651,7 @@ function GenericView({
   showToast: (text: string) => void;
 }) {
   const { settings: commercial } = useCommercialSettings();
+  const { settings: siteConfiguration } = useSiteConfiguration();
   const premiumEconomyPublic =
     commercial.economy.premiumEconomyPublic;
   const [supportTopic, setSupportTopic] = useState<
@@ -11192,8 +11713,12 @@ function GenericView({
       ? "ACCOUNT"
       : supportTopic;
   const activeSupportTopic = supportTopics[activeSupportTopicKey];
+  const legalDocuments = siteConfiguration.legalDocuments.length
+    ? siteConfiguration.legalDocuments
+    : LEGAL_DOCUMENTS;
   const legalDocument =
-    LEGAL_DOCUMENTS_BY_SLUG[resourceSlug ?? "terms"] ??
+    legalDocuments.find((document) => document.slug === (resourceSlug ?? "terms")) ??
+    legalDocuments.find((document) => document.slug === "terms") ??
     LEGAL_DOCUMENTS_BY_SLUG.terms;
   const [title, intro] =
     view === "legal"
@@ -11293,7 +11818,7 @@ function GenericView({
       ) : view === "legal" ? (
         <article className="legal-article">
           <aside aria-label="Legal documents">
-            {LEGAL_DOCUMENTS.map((document) => (
+            {legalDocuments.map((document) => (
               <a
                 href={`/legal/${document.slug}`}
                 key={document.slug}
@@ -11386,7 +11911,7 @@ function FooterGroup({
   onOpenShortcuts,
 }: {
   title: string;
-  links: string[][];
+  links: Array<{ label: string; url: string; openInNewTab: boolean }>;
   onOpenShortcuts: () => void;
 }) {
   const key = `nyascans:footer:${title.toLowerCase()}`;
@@ -11442,19 +11967,24 @@ function FooterGroup({
         <span aria-hidden="true">{expanded ? "−" : "+"}</span>
       </button>
       <div id={panelId} hidden={!expanded}>
-        {links.map(([label, href]) =>
-          href === "#keyboard-shortcuts" ? (
+        {links.map((link) =>
+          link.url === "#keyboard-shortcuts" ? (
             <button
               className="footer-inline-action"
               type="button"
-              key={label}
+              key={link.label}
               onClick={onOpenShortcuts}
             >
-              {label}
+              {link.label}
             </button>
           ) : (
-            <a href={href} key={label}>
-              {label}
+            <a
+              href={link.url}
+              key={link.label}
+              target={link.openInNewTab ? "_blank" : undefined}
+              rel={link.openInNewTab ? "noreferrer noopener" : undefined}
+            >
+              {link.label}
             </a>
           ),
         )}
@@ -11469,43 +11999,21 @@ function SiteFooter({
   onOpenShortcuts: () => void;
 }) {
   const { settings } = useSiteConfiguration();
-  const groups = [
-    {
-      title: "Browse",
-      links: [
-        ["Latest Updates", "/latest"],
-        ["Users Ranking", "/rankings"],
-        ["Completed", "/browse?status=completed"],
-        ["Genres", "/browse#genres"],
-      ],
-    },
-    {
-      title: "Community",
-      links: [
-        ["Teams", "/browse?view=teams"],
-        ["Latest Top Comments", "/#community"],
-        ["Support", "/support"],
-        ["Keyboard shortcuts", "#keyboard-shortcuts"],
-        ["Contact", "mailto:support@nyascans.com"],
-      ],
-    },
-    {
-      title: "Legal",
-      links: [
-        ["Privacy Policy", "/legal/privacy"],
-        ["Terms of Service", "/legal/terms"],
-        ["Content Removal / DMCA", "/legal/copyright"],
-        ["Content Policy", "/legal/content-policy"],
-      ],
-    },
-  ];
+  const groups = settings.footer.groups
+    .filter((group) => group.enabled)
+    .map((group) => ({
+      title: group.title,
+      links: group.links
+        .filter((link) => link.enabled && link.url)
+        .map((link) => ({ label: link.label, url: link.url, openInNewTab: link.openInNewTab })),
+    }));
   return (
     <footer className="site-footer">
       <div className="page-wrap footer-main">
         <div className="footer-brand">
           <Logo />
           <p>
-            {settings.brand.shortDescription ||
+            {settings.footer.description || settings.brand.shortDescription ||
               "A focused home for manga, manhwa, manhua, webtoons, readers, and the teams that make every release possible."}
           </p>
           <div className="footer-socials" aria-label="Social links">
@@ -11539,7 +12047,8 @@ function SiteFooter({
         </div>
       </div>
       <div className="page-wrap footer-bottom">
-        <span>© 2026 NyaScans. Original platform artwork.</span>
+        <span>{settings.footer.copyright}</span>
+        {settings.footer.legalNotice ? <small>{settings.footer.legalNotice}</small> : null}
         <span className="footer-release-version">Version {APP_VERSION}</span>
       </div>
     </footer>
@@ -11692,7 +12201,12 @@ export function NyaScansApp({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const navigationChordAt = useRef(0);
+  const shortcutPrefixRef = useRef<{ prefix: string; at: number } | null>(null);
+  const { settings: siteConfiguration } = useSiteConfiguration();
+  const enabledShortcuts = useMemo(
+    () => siteConfiguration.keyboardShortcuts.filter((shortcut) => shortcut.enabled),
+    [siteConfiguration.keyboardShortcuts],
+  );
   const { settings: commercialSettings } = useCommercialSettings();
   const lockAndPayVisible =
     commercialSettings.economy.premiumEconomyPublic ||
@@ -11731,7 +12245,7 @@ export function NyaScansApp({
       if (event.key === "Escape") {
         setSearchOpen(false);
         setShortcutsOpen(false);
-        navigationChordAt.current = 0;
+        shortcutPrefixRef.current = null;
         return;
       }
       if (
@@ -11741,45 +12255,59 @@ export function NyaScansApp({
       ) {
         return;
       }
-      if (
-        event.key.toLowerCase() === "k" &&
-        (event.ctrlKey || event.metaKey)
-      ) {
+      const key = event.key.toLowerCase();
+      const run = (shortcut: (typeof enabledShortcuts)[number]) => {
         event.preventDefault();
-        setShortcutsOpen(false);
-        setSearchOpen(true);
+        shortcutPrefixRef.current = null;
+        if (shortcut.id === "search") {
+          setShortcutsOpen(false);
+          setSearchOpen(true);
+        } else if (shortcut.id === "guide") {
+          setSearchOpen(false);
+          setShortcutsOpen(true);
+        } else if (shortcut.href) {
+          window.location.assign(shortcut.href);
+        }
+      };
+      const modifierShortcut = enabledShortcuts.find((shortcut) => {
+        const prefix = shortcut.prefix.toLowerCase();
+        const usesModifier = /ctrl|control|cmd|meta|⌘|alt|shift/u.test(prefix);
+        if (!usesModifier || shortcut.key.toLowerCase() !== key) return false;
+        const primaryMatches = !/ctrl|control|cmd|meta|⌘/u.test(prefix) || event.ctrlKey || event.metaKey;
+        const altMatches = !prefix.includes("alt") || event.altKey;
+        const shiftMatches = !prefix.includes("shift") || event.shiftKey;
+        return primaryMatches && altMatches && shiftMatches;
+      });
+      if (modifierShortcut) {
+        run(modifierShortcut);
         return;
       }
       if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key === "?") {
-        event.preventDefault();
-        setSearchOpen(false);
-        setShortcutsOpen(true);
+      const directShortcut = enabledShortcuts.find((shortcut) => !shortcut.prefix.trim() && shortcut.key.toLowerCase() === key);
+      if (directShortcut) {
+        run(directShortcut);
         return;
       }
-      const key = event.key.toLowerCase();
-      if (key === "g") {
-        navigationChordAt.current = Date.now();
-        return;
-      }
-      if (
-        navigationChordAt.current &&
-        Date.now() - navigationChordAt.current <= 1_500
-      ) {
-        navigationChordAt.current = 0;
-        const destination =
-          SITE_NAVIGATION_CHORDS[
-            key as keyof typeof SITE_NAVIGATION_CHORDS
-          ];
+      const pending = shortcutPrefixRef.current;
+      if (pending && Date.now() - pending.at <= 1_500) {
+        const destination = enabledShortcuts.find((shortcut) => shortcut.prefix.trim().toLowerCase() === pending.prefix && shortcut.key.toLowerCase() === key);
+        shortcutPrefixRef.current = null;
         if (destination) {
-          event.preventDefault();
-          window.location.assign(destination);
+          run(destination);
+          return;
         }
+      }
+      const beginsChord = enabledShortcuts.some((shortcut) => {
+        const prefix = shortcut.prefix.trim().toLowerCase();
+        return prefix && !/ctrl|control|cmd|meta|⌘|alt|shift/u.test(prefix) && prefix === key;
+      });
+      if (beginsChord) {
+        shortcutPrefixRef.current = { prefix: key, at: Date.now() };
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [enabledShortcuts]);
 
   useEffect(() => {
     const eventType: AnalyticsEventType | null =

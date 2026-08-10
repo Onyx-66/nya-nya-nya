@@ -13,6 +13,8 @@ export type PinnedSeriesInput = {
   endsAt: string | null;
 };
 
+const MAX_ACTIVE_PINNED_SERIES = 9;
+
 type PinnedSeriesRow = {
   id: string;
   seriesId: string;
@@ -113,12 +115,14 @@ export async function listPublicPinnedSeries() {
       `${pinnedSelect}
        WHERE s.is_published = 1
          AND s.archived_at IS NULL
+         AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
          AND s.rights_status IN ('LICENSED','AUTHORIZED','DEMO_ORIGINAL','TEST_ORIGINAL')
+         AND pin.is_featured = 1
          AND (pin.starts_at IS NULL OR datetime(pin.starts_at) <= datetime('now'))
          AND (pin.ends_at IS NULL OR datetime(pin.ends_at) > datetime('now'))
        GROUP BY pin.id, s.id
        ORDER BY pin.display_order, datetime(pin.created_at), pin.id
-       LIMIT 12`,
+       LIMIT ${MAX_ACTIVE_PINNED_SERIES}`,
     )
     .all<PinnedSeriesRow>();
   return rows.results.map(serializePinnedSeries);
@@ -143,6 +147,9 @@ export async function listAdminPinnedSeries(query = "") {
            FROM series s
           WHERE s.archived_at IS NULL
             AND s.is_published = 1
+            AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+            AND s.rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
             AND (? = '' OR LOWER(s.title) LIKE ? ESCAPE '\\'
                  OR LOWER(COALESCE(s.native_title, '')) LIKE ? ESCAPE '\\')
           ORDER BY s.title COLLATE NOCASE
@@ -209,11 +216,31 @@ export async function replacePinnedSeries(
       "Each series can appear only once in Pinned Series.",
     );
   }
-  if (items.filter((item) => item.featured).length > 3) {
+  const now = Date.now();
+  const futureStartTimes = items
+    .map((item) => (item.startsAt ? Date.parse(item.startsAt) : now))
+    .filter((value) => Number.isFinite(value) && value >= now);
+  const concurrencyCheckpoints = [...new Set([now, ...futureStartTimes])];
+  const maximumConcurrentPins = concurrencyCheckpoints.reduce(
+    (maximum, checkpoint) => {
+      const concurrent = items.filter((item) => {
+        const startsAt = item.startsAt
+          ? Date.parse(item.startsAt)
+          : Number.NEGATIVE_INFINITY;
+        const endsAt = item.endsAt
+          ? Date.parse(item.endsAt)
+          : Number.POSITIVE_INFINITY;
+        return startsAt <= checkpoint && checkpoint < endsAt;
+      }).length;
+      return Math.max(maximum, concurrent);
+    },
+    0,
+  );
+  if (maximumConcurrentPins > MAX_ACTIVE_PINNED_SERIES) {
     throw new ApiError(
       422,
-      "FEATURED_PIN_LIMIT",
-      "Choose no more than three Featured pins.",
+      "ACTIVE_PIN_LIMIT_REACHED",
+      `No more than ${MAX_ACTIVE_PINNED_SERIES} Pinned Series can be active at the same time. Adjust the schedule or remove a pin.`,
     );
   }
   if (seriesIds.length) {
@@ -222,7 +249,11 @@ export async function replacePinnedSeries(
       .prepare(
         `SELECT COUNT(*) AS count FROM series
           WHERE id IN (${placeholders})
-            AND archived_at IS NULL AND is_published = 1`,
+            AND archived_at IS NULL
+            AND is_published = 1
+            AND status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+            AND rights_status IN
+              ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')`,
       )
       .bind(...seriesIds)
       .first<{ count: number }>();
@@ -270,7 +301,8 @@ export async function replacePinnedSeries(
         targetLabel: "Pinned Series",
         metadata: {
           count: items.length,
-          featuredCount: items.filter((item) => item.featured).length,
+          featuredCount: items.length,
+          maximumConcurrentPins,
           previousRevision: expectedRevision,
           revision: nextRevision,
         },
@@ -298,7 +330,7 @@ export async function replacePinnedSeries(
           item.id?.startsWith("pin_") ? item.id : `pin_${randomId()}`,
           item.seriesId,
           index,
-          item.featured ? 1 : 0,
+          1,
           item.startsAt,
           item.endsAt,
           actor.id,

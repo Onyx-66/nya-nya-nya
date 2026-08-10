@@ -316,18 +316,17 @@ export function PinnedSeriesSection({
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const featuredRecords = useMemo(() => {
-    const marked = records.filter((record) => record.featured).slice(0, 3);
-    return marked.length ? marked : records.slice(0, 1);
+    return records.filter((record) => record.featured).slice(0, 9);
   }, [records]);
   const activeFeatured = featuredRecords.length
     ? featuredRecords[featuredIndex % featuredRecords.length]
     : null;
   const surroundingRecords = useMemo(() => {
     if (!activeFeatured) return [];
-    return records
+    return featuredRecords
       .filter((record) => record.id !== activeFeatured.id)
       .slice(0, 4);
-  }, [activeFeatured, records]);
+  }, [activeFeatured, featuredRecords]);
 
   useEffect(() => {
     if (paused || featuredRecords.length < 2) return;
@@ -389,6 +388,10 @@ export function PinnedSeriesDirectory({
   initialRecords,
 }: PinnedSeriesDirectoryProps = {}) {
   const { records, loading, error } = usePinnedSeries(initialRecords);
+  const featuredRecords = useMemo(
+    () => records.filter((record) => record.featured).slice(0, 9),
+    [records],
+  );
   return (
     <main className="content-section page-wrap v481-directory">
       <HomeFeatureStyles />
@@ -406,9 +409,9 @@ export function PinnedSeriesDirectory({
         </div>
       ) : error ? (
         <div className="public-discovery-error" role="alert">{error}</div>
-      ) : records.length ? (
+      ) : featuredRecords.length ? (
         <div className="v481-directory-grid">
-          {records.map((record) => (
+          {featuredRecords.map((record) => (
             <PinnedSeriesCard key={record.id} record={record} />
           ))}
         </div>

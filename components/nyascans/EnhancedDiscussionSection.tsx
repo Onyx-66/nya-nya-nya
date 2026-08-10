@@ -142,6 +142,55 @@ type PendingMedia = DiscussionMedia & {
 
 const COMMENTS_PAGE_SIZE = 10;
 
+function InlineCommentMarkup({ value }: { value: string }) {
+  const tokens = value.split(/(\*\*[^*\n]+\*\*|~~[^~\n]+~~|_[^_\n]+_)/g);
+  return tokens.map((token, index) => {
+    if (token.startsWith("**") && token.endsWith("**")) {
+      return <strong key={`${index}:${token}`}>{token.slice(2, -2)}</strong>;
+    }
+    if (token.startsWith("~~") && token.endsWith("~~")) {
+      return <del key={`${index}:${token}`}>{token.slice(2, -2)}</del>;
+    }
+    if (token.startsWith("_") && token.endsWith("_")) {
+      return <em key={`${index}:${token}`}>{token.slice(1, -1)}</em>;
+    }
+    return <span key={`${index}:${token}`}>{token}</span>;
+  });
+}
+
+export function FormattedCommentText({ value }: { value: string }) {
+  const lines = value.replace(/\r\n?/g, "\n").split("\n");
+  const blocks: ReactNode[] = [];
+  let bullets: string[] = [];
+  const flushBullets = () => {
+    if (!bullets.length) return;
+    blocks.push(
+      <ul key={`list:${blocks.length}`}>
+        {bullets.map((line, index) => (
+          <li key={`${index}:${line}`}>
+            <InlineCommentMarkup value={line} />
+          </li>
+        ))}
+      </ul>,
+    );
+    bullets = [];
+  };
+  lines.forEach((line) => {
+    if (/^\s*[-*]\s+/.test(line)) {
+      bullets.push(line.replace(/^\s*[-*]\s+/, ""));
+      return;
+    }
+    flushBullets();
+    blocks.push(
+      <p key={`line:${blocks.length}`}>
+        {line ? <InlineCommentMarkup value={line} /> : <br />}
+      </p>,
+    );
+  });
+  flushBullets();
+  return <div className="comment-formatted-text">{blocks}</div>;
+}
+
 function roleLabel(role: string) {
   return {
     OWNER: "Owner",
@@ -231,13 +280,13 @@ export function EnhancedDiscussionSection({
   const [mediaError, setMediaError] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiCatalog, setEmojiCatalog] = useState<EmojiCatalogEntry[]>([]);
-  const [emojiGroupOptions, setEmojiGroupOptions] = useState<
-    Array<{ slug: string; name: string }>
-  >([{ slug: "all", name: "All" }]);
+  const [emojiGroups, setEmojiGroups] = useState<Array<{ slug: string; name: string }>>([{ slug: "all", name: "All" }]);
+  const [emojiLoading, setEmojiLoading] = useState(false);
+  const [emojiError, setEmojiError] = useState("");
+  const [emojiReload, setEmojiReload] = useState(0);
   const [emojiQuery, setEmojiQuery] = useState("");
   const [emojiGroup, setEmojiGroup] = useState("all");
   const [emojiLimit, setEmojiLimit] = useState(240);
-  const [emojiLoading, setEmojiLoading] = useState(false);
   const [reactionPickerId, setReactionPickerId] = useState<string | null>(null);
   const [eligibleAffiliations, setEligibleAffiliations] = useState<
     AffiliationOption[]
@@ -264,6 +313,7 @@ export function EnhancedDiscussionSection({
   );
   const [refreshKey, setRefreshKey] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const gifButtonRef = useRef<HTMLButtonElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -374,30 +424,26 @@ export function EnhancedDiscussionSection({
   }, [loadComments, refreshKey]);
 
   useEffect(() => {
-    if (!emojiOpen || emojiCatalog.length > 0 || emojiLoading) return;
-    let cancelled = false;
-    const timeout = window.setTimeout(() => {
+    if (!emojiOpen || emojiCatalog.length) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
       setEmojiLoading(true);
+      setEmojiError("");
       void import("@/lib/emoji-catalog")
-        .then((catalog) => {
-          if (cancelled) return;
-          setEmojiCatalog(catalog.emojiCatalog);
-          setEmojiGroupOptions(catalog.emojiGroups);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            showToast("The emoji catalog could not be loaded.");
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setEmojiLoading(false);
-        });
+      .then((catalog) => {
+        if (!active) return;
+        setEmojiCatalog(catalog.emojiCatalog);
+        setEmojiGroups(catalog.emojiGroups);
+      })
+      .catch(() => {
+        if (active) setEmojiError("The emoji catalog could not be loaded.");
+      })
+      .finally(() => {
+        if (active) setEmojiLoading(false);
+      });
     }, 0);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-    };
-  }, [emojiCatalog.length, emojiLoading, emojiOpen, showToast]);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [emojiCatalog.length, emojiOpen, emojiReload]);
 
   useEffect(() => {
     if (!gifPickerOpen && !emojiOpen) return;
@@ -550,6 +596,7 @@ export function EnhancedDiscussionSection({
     setSpoiler(false);
     setGifPickerOpen(false);
     setEmojiOpen(false);
+    setReactionPickerId(null);
     window.requestAnimationFrame(() => composerRef.current?.focus());
   }
 
@@ -559,6 +606,7 @@ export function EnhancedDiscussionSection({
     setSpoiler(false);
     setGifPickerOpen(false);
     setEmojiOpen(false);
+    setReactionPickerId(null);
   }
 
   function insertEmoji(emoji: string) {
@@ -579,6 +627,48 @@ export function EnhancedDiscussionSection({
       textarea.focus();
       const cursor = Math.min(start + emoji.length, next.length);
       textarea.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  function formatSelection(prefix: string, suffix = prefix, list = false) {
+    const textarea = composerRef.current;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? start;
+    const selected = body.slice(start, end);
+    const replacement = list
+      ? (selected || "List item")
+          .split("\n")
+          .map((line) => `- ${line.replace(/^\s*[-*]\s+/, "")}`)
+          .join("\n")
+      : `${prefix}${selected || "text"}${suffix}`;
+    const next = `${body.slice(0, start)}${replacement}${body.slice(end)}`.slice(
+      0,
+      2500,
+    );
+    setBody(next);
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      const selectionStart = list ? start : start + prefix.length;
+      const selectionEnd = list
+        ? start + replacement.length
+        : start + replacement.length - suffix.length;
+      textarea?.setSelectionRange(selectionStart, selectionEnd);
+    });
+  }
+
+  function formatEditSelection(prefix: string, suffix = prefix, list = false) {
+    const textarea = editRef.current;
+    const start = textarea?.selectionStart ?? editBody.length;
+    const end = textarea?.selectionEnd ?? start;
+    const selected = editBody.slice(start, end);
+    const replacement = list
+      ? (selected || "List item").split("\n").map((line) => `- ${line.replace(/^\s*[-*]\s+/, "")}`).join("\n")
+      : `${prefix}${selected || "text"}${suffix}`;
+    const next = `${editBody.slice(0, start)}${replacement}${editBody.slice(end)}`.slice(0, 2500);
+    setEditBody(next);
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(list ? start : start + prefix.length, list ? start + replacement.length : start + replacement.length - suffix.length);
     });
   }
 
@@ -1105,6 +1195,7 @@ export function EnhancedDiscussionSection({
               aria-controls="comment-gif-picker"
               onClick={() => {
                 setEmojiOpen(false);
+                setReactionPickerId(null);
                 setGifPickerOpen((current) => !current);
               }}
               disabled={
@@ -1147,7 +1238,7 @@ export function EnhancedDiscussionSection({
                       onChange={(event) => setGifQuery(event.target.value)}
                     />
                   </label>
-                  <label>
+                  {gifCategories.length > 1 ? <label>
                     <span className="sr-only">GIF category</span>
                     <select
                       value={gifCategory}
@@ -1159,9 +1250,19 @@ export function EnhancedDiscussionSection({
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </label> : null}
                 </div>
-                {curatedGifs.length === 0 ? (
+                {loading ? (
+                  <p className="comment-gif-empty" role="status">
+                    <SpinnerGap size={20} className="spin" /> Loading GIFs…
+                  </p>
+                ) : loadError ? (
+                  <div className="comment-gif-empty" role="alert">
+                    <WarningCircle size={20} />
+                    <span>{loadError}</span>
+                    <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>Retry GIF catalog</button>
+                  </div>
+                ) : curatedGifs.length === 0 ? (
                   <p className="comment-gif-empty" role="status">
                     The community team has not published any GIFs yet.
                   </p>
@@ -1210,7 +1311,13 @@ export function EnhancedDiscussionSection({
             aria-controls="discussion-emoji-picker"
             onClick={() => {
               setGifPickerOpen(false);
-              setEmojiOpen((current) => !current);
+              setReactionPickerId(null);
+              const next = !emojiOpen;
+              if (next && !emojiCatalog.length) {
+                setEmojiLoading(true);
+                setEmojiError("");
+              }
+              setEmojiOpen(next);
             }}
           >
             <Smiley size={18} /> Emoji
@@ -1227,7 +1334,7 @@ export function EnhancedDiscussionSection({
                 <header>
                   <div>
                     <strong>Emoji</strong>
-                    <span>{emojiCatalog.length || "Full Unicode"} emoji catalog</span>
+                    <span>{emojiCatalog.length ? `${emojiCatalog.length} Unicode emoji` : "Unicode emoji catalog"}</span>
                   </div>
                   <button
                     type="button"
@@ -1259,7 +1366,7 @@ export function EnhancedDiscussionSection({
                         setEmojiLimit(240);
                       }}
                     >
-                      {emojiGroupOptions.map((group) => (
+                      {emojiGroups.map((group) => (
                         <option value={group.slug} key={group.slug}>
                           {group.name}
                         </option>
@@ -1268,9 +1375,9 @@ export function EnhancedDiscussionSection({
                   </label>
                 </div>
                 {emojiLoading ? (
-                  <p className="emoji-picker-status" role="status">
-                    <SpinnerGap size={17} className="spin" /> Loading emoji…
-                  </p>
+                  <p className="emoji-picker-status" role="status"><SpinnerGap size={20} className="spin" /> Loading emoji…</p>
+                ) : emojiError ? (
+                  <div className="emoji-picker-status" role="alert"><WarningCircle size={20} /><span>{emojiError}</span><button type="button" onClick={() => { setEmojiLoading(true); setEmojiError(""); setEmojiReload((value) => value + 1); }}>Retry</button></div>
                 ) : visibleEmojis.length === 0 ? (
                   <p className="emoji-picker-status" role="status">
                     No emoji matches this search.
@@ -1441,6 +1548,16 @@ export function EnhancedDiscussionSection({
             }
           />
         </label>
+        <div
+          className="comment-format-toolbar"
+          role="toolbar"
+          aria-label="Comment formatting"
+        >
+          <button type="button" aria-label="Bold" title="Bold" onClick={() => formatSelection("**")}><strong>B</strong></button>
+          <button type="button" aria-label="Italic" title="Italic" onClick={() => formatSelection("_")}><em>I</em></button>
+          <button type="button" aria-label="Strikethrough" title="Strikethrough" onClick={() => formatSelection("~~")}><s>S</s></button>
+          <button type="button" aria-label="Bulleted list" title="Bulleted list" onClick={() => formatSelection("", "", true)}>• List</button>
+        </div>
         {renderPendingMedia()}
         <div className="comment-composer-tools">
           {renderMediaToolbar()}
@@ -1671,11 +1788,18 @@ export function EnhancedDiscussionSection({
           ) : editingId === comment.id ? (
             <div className="comment-edit-form">
               <textarea
+                ref={editRef}
                 value={editBody}
                 maxLength={2500}
                 onChange={(event) => setEditBody(event.target.value)}
                 aria-label="Edit comment"
               />
+              <div className="comment-format-toolbar" role="toolbar" aria-label="Edit comment formatting">
+                <button type="button" aria-label="Bold" onClick={() => formatEditSelection("**")}><strong>B</strong></button>
+                <button type="button" aria-label="Italic" onClick={() => formatEditSelection("_")}><em>I</em></button>
+                <button type="button" aria-label="Strikethrough" onClick={() => formatEditSelection("~~")}><s>S</s></button>
+                <button type="button" aria-label="Bulleted list" onClick={() => formatEditSelection("", "", true)}>• List</button>
+              </div>
               <div>
                 <label>
                   <input
@@ -1717,7 +1841,9 @@ export function EnhancedDiscussionSection({
           ) : (
             <>
               {comment.body ? (
-                <p className="comment-body">{comment.body}</p>
+                <div className="comment-body">
+                  <FormattedCommentText value={comment.body} />
+                </div>
               ) : null}
               {comment.media.length > 0 || comment.gifs.length > 0 ? (
                 <div
@@ -2050,6 +2176,9 @@ export function EnhancedDiscussionSection({
       id="comments"
       aria-labelledby="comments-title"
     >
+      {reactionPrompt ? (
+        <div className="chapter-reaction-placement">{reactionPrompt}</div>
+      ) : null}
       <header className="comments-header">
         <div>
           <p className="eyebrow">{count} comments</p>
@@ -2059,7 +2188,6 @@ export function EnhancedDiscussionSection({
           </span>
         </div>
         <div className="comments-toolbar">
-          {reactionPrompt}
           <div className="comment-sort" role="group" aria-label="Sort comments">
             {(["top", "newest", "oldest"] as const).map((option) => (
               <button

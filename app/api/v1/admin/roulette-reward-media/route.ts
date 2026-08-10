@@ -7,7 +7,7 @@ import {
   sha256Hex,
   validateImageFile,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "roulette.manage");
     if (!env.BUCKET) {
       throw new ApiError(
         503,
@@ -95,7 +95,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "roulette.manage");
     if (!env.BUCKET) {
       throw new ApiError(
         503,

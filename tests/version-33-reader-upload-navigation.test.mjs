@@ -180,27 +180,30 @@ test("comment GIF picker and administrator GIF editing are complete and race-saf
 });
 
 test("Ctrl K, site navigation chords, and the footer guide are globally wired", async () => {
-  const [app, dialog, shortcuts, css] = await Promise.all([
+  const [app, dialog, configuration, css] = await Promise.all([
     read("components/nyascans/NyaScansApp.tsx"),
     read("components/nyascans/KeyboardShortcutsDialog.tsx"),
-    read("lib/site-shortcuts.ts"),
+    read("lib/site-configuration.ts"),
     read("app/globals.css"),
   ]);
 
   assert.match(app, /<kbd>Ctrl K<\/kbd>/u);
   assert.match(app, /event\.ctrlKey \|\| event\.metaKey/u);
-  assert.match(app, /SITE_NAVIGATION_CHORDS/u);
+  assert.match(app, /enabledShortcuts = useMemo/u);
+  assert.match(app, /modifierShortcut = enabledShortcuts\.find/u);
+  assert.match(app, /directShortcut = enabledShortcuts\.find/u);
+  assert.match(app, /window\.location\.assign\(shortcut\.href\)/u);
   assert.match(
     app,
     /\[role="dialog"\]\[aria-modal="true"\],[\s\S]+\[role="alertdialog"\]\[aria-modal="true"\]/u,
   );
-  assert.match(app, /Keyboard shortcuts/u);
+  assert.match(dialog, /Keyboard shortcuts/u);
   assert.match(app, /disabled=\{desktop\}/u);
   assert.match(dialog, /Ctrl\/Command \+ K/u);
   assert.match(dialog, /restoreFocus\.current\?\.focus/u);
-  assert.match(shortcuts, /"Ctrl \/ ⌘", "K"/u);
+  assert.match(configuration, /prefix: "Ctrl \/ ⌘", key: "K"/u);
   for (const destination of ["/", "/latest", "/browse", "/library", "/store", "/roulette"]) {
-    assert.ok(shortcuts.includes(`"${destination}"`));
+    assert.ok(configuration.includes(`href: "${destination}"`));
   }
   assert.doesNotMatch(css, /\.footer-group > div\[hidden\][\s\S]+!important/u);
 });

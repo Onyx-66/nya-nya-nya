@@ -32,7 +32,7 @@ test("Payouts is a read-only report over canonical receipts and TEAM ledger acco
     route.indexOf('if (path === "admin/payouts")'),
     route.indexOf('if (path === "admin/user-control")'),
   );
-  assert.match(payoutRoute, /requireAdmin\(actor\)/u);
+  assert.match(payoutRoute, /requireAdminCapability\(actor, capabilityForAdminPath\(path\)\)/u);
   assert.match(payoutRoute, /chapter_unlock_receipts/u);
   assert.match(payoutRoute, /team_support_receipts/u);
   assert.match(payoutRoute, /currency = 'ONYX'/u);
@@ -76,7 +76,10 @@ test("Users and Roles returns effective permissions and contextual recent activi
     route.indexOf('if (path === "admin/users")'),
     route.indexOf('if (path === "admin/payouts")'),
   );
-  assert.match(usersRoute, /effectiveCapabilities\(roles\)/u);
+  assert.match(usersRoute, /permissionRulesResult/u);
+  assert.match(usersRoute, /ADMIN_PERMISSION_REGISTRY\.map/u);
+  assert.match(usersRoute, /const denied = matching\.some/u);
+  assert.match(usersRoute, /effectivePermissionDetails[\s\S]*\.filter\(\(permission\) => permission\.allowed\)/u);
   assert.match(usersRoute, /recentActivityByUser/u);
   assert.match(usersRoute, /s\.title AS seriesTitle/u);
   assert.match(usersRoute, /c\.chapter_number AS chapterNumber/u);

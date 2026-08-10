@@ -2,7 +2,7 @@
 
 import { Keyboard, X } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
-import { SITE_SHORTCUTS } from "@/lib/site-shortcuts";
+import { useSiteConfiguration } from "@/components/nyascans/useSiteConfiguration";
 
 export function KeyboardShortcutsDialog({
   open,
@@ -11,6 +11,7 @@ export function KeyboardShortcutsDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const { settings } = useSiteConfiguration();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
@@ -92,10 +93,10 @@ export function KeyboardShortcutsDialog({
           while you type in a field.
         </p>
         <dl>
-          {SITE_SHORTCUTS.map((shortcut) => (
-            <div key={shortcut.label}>
+          {settings.keyboardShortcuts.filter((shortcut) => shortcut.enabled).map((shortcut) => (
+            <div key={shortcut.id}>
               <dt>
-                {shortcut.keys.map((key: string) => (
+                {[shortcut.prefix, shortcut.key].filter(Boolean).map((key) => (
                   <kbd key={key}>{key}</kbd>
                 ))}
               </dt>

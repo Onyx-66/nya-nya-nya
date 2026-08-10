@@ -533,9 +533,7 @@ export function AddSeriesRequestPanel() {
           : current.seriesType,
       publicationStatus:
         acceptedImportFields.has("publicationStatus") && fields.status
-          ? fields.status === "PAUSED"
-            ? "HIATUS"
-            : fields.status
+          ? fields.status
           : current.publicationStatus,
       genres:
         acceptedImportFields.has("genres") && fields.genres

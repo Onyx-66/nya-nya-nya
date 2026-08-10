@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
-import { getActor } from "@/lib/server/policy";
+import { actorHasCapability, getActor } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +61,8 @@ export async function GET(request: Request) {
       const actor = await getActor().catch(() => null);
       if (
         !actor ||
-        !["OWNER", "ADMINISTRATOR"].includes(actor.primaryRole)
+        !actor.adminMfaVerified ||
+        !actorHasCapability(actor, "content.series.manage")
       ) {
         throw new ApiError(
           404,

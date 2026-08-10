@@ -286,7 +286,7 @@ test("Version 28 UI keeps mobile editorial intact while adding the requested des
   assert.match(app, /<GiftStorePanel/u);
   assert.match(app, /> Gift Cards/u);
   assert.doesNotMatch(app, /Support the team behind a story\./u);
-  assert.doesNotMatch(discovery, /className="teams-carousel-controls"/u);
+  assert.match(discovery, /className="teams-carousel-controls"/u);
   assert.match(
     discovery,
     /<span className="new-series-cover">[\s\S]+<span className="new-series-badges">/u,

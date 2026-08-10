@@ -161,11 +161,19 @@ export const siteThemeSchema = z.object({
       headingScale: z.number().min(0.85).max(1.3),
       bodyScale: z.number().min(0.85).max(1.2),
       family: z.enum(["SYSTEM", "EDITORIAL", "GEOMETRIC"]),
+      headingWeight: z.number().int().min(400).max(900).default(760),
+      bodyWeight: z.number().int().min(300).max(700).default(400),
+      controlWeight: z.number().int().min(400).max(800).default(600),
+      browseFilterWeight: z.number().int().min(300).max(700).default(400),
     })
     .default({
       headingScale: 1,
       bodyScale: 1,
       family: "SYSTEM",
+      headingWeight: 760,
+      bodyWeight: 400,
+      controlWeight: 600,
+      browseFilterWeight: 400,
     }),
   layout: z
     .object({
@@ -257,6 +265,10 @@ export const defaultSiteTheme: SiteTheme = {
     headingScale: 1,
     bodyScale: 1,
     family: "SYSTEM",
+    headingWeight: 760,
+    bodyWeight: 400,
+    controlWeight: 600,
+    browseFilterWeight: 400,
   },
   layout: {
     spacingDensity: "COMFORTABLE",
@@ -593,6 +605,10 @@ export function siteThemeVariables(theme: SiteTheme) {
     "--site-radius": `${theme.radius}px`,
     "--site-heading-scale": String(theme.typography.headingScale),
     "--site-body-scale": String(theme.typography.bodyScale),
+    "--site-heading-weight": String(theme.typography.headingWeight),
+    "--site-body-weight": String(theme.typography.bodyWeight),
+    "--site-control-weight": String(theme.typography.controlWeight),
+    "--site-browse-filter-weight": String(theme.typography.browseFilterWeight),
     "--site-container-width": `${theme.layout.containerWidth}px`,
     "--site-button-radius": `${theme.layout.buttonRadius}px`,
     "--site-card-radius": `${theme.layout.cardRadius}px`,

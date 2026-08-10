@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import {
   defaultSiteConfiguration,
+  parseSiteConfiguration,
   siteConfigurationSchema,
   type SiteConfiguration,
 } from "@/lib/site-configuration";
@@ -13,6 +14,25 @@ export type SiteConfigurationDocument = {
   updatedAt: string | null;
   recoveredFromInvalid?: boolean;
 };
+
+const MAX_CONFIGURATION_BYTES = 500_000;
+
+function auditSnapshot(settings: SiteConfiguration) {
+  return {
+    siteName: settings.brand.siteName,
+    footerGroups: settings.footer.groups.map((group) => group.id),
+    socialLinks: settings.footer.socialLinks.map((link) => link.id),
+    shortcuts: settings.keyboardShortcuts.map((shortcut) => shortcut.id),
+    legalDocuments: settings.legalDocuments.map((document) => document.slug),
+    media: {
+      logo: settings.brand.logo.enabled,
+      compactLogo: settings.brand.compactLogo.enabled,
+      appIcon: settings.brand.appIcon.enabled,
+      firstPage: settings.reader.firstPage.enabled,
+      lastPage: settings.reader.lastPage.enabled,
+    },
+  };
+}
 
 export async function getSiteConfigurationDocument(): Promise<SiteConfigurationDocument> {
   if (!env.DB) {
@@ -55,21 +75,14 @@ export async function getSiteConfigurationDocument(): Promise<SiteConfigurationD
     };
   }
   try {
-    const parsed = siteConfigurationSchema.safeParse(
-      JSON.parse(row.settings_json),
-    );
-    if (!parsed.success) {
-      return {
-        settings: defaultSiteConfiguration,
-        revision: Number(row.revision),
-        updatedAt: row.updated_at,
-        recoveredFromInvalid: true,
-      };
-    }
+    const raw = JSON.parse(row.settings_json) as unknown;
+    const normalized = parseSiteConfiguration(raw);
     return {
-      settings: parsed.data,
+      settings: normalized,
       revision: Number(row.revision),
       updatedAt: row.updated_at,
+      recoveredFromInvalid:
+        normalized === defaultSiteConfiguration ? true : undefined,
     };
   } catch {
     return {
@@ -139,6 +152,14 @@ export async function saveSiteConfiguration(
         },
       };
   const nextRevision = expectedRevision + 1;
+  const serialized = JSON.stringify(normalized);
+  if (new TextEncoder().encode(serialized).byteLength > MAX_CONFIGURATION_BYTES) {
+    throw new ApiError(
+      413,
+      "SITE_CONFIGURATION_TOO_LARGE",
+      "The complete site configuration must remain under 500 KB.",
+    );
+  }
   const mutation =
     expectedRevision === 0
       ? env.DB.prepare(
@@ -147,7 +168,7 @@ export async function saveSiteConfiguration(
            VALUES ('active', 1, ?, 1, ?)
            ON CONFLICT(id) DO NOTHING`,
         )
-          .bind(JSON.stringify(normalized), actorUserId)
+          .bind(serialized, actorUserId)
       : env.DB.prepare(
           `UPDATE site_configuration_settings
               SET settings_json = ?,
@@ -156,7 +177,7 @@ export async function saveSiteConfiguration(
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = 'active' AND revision = ?`,
         )
-          .bind(JSON.stringify(normalized), actorUserId, expectedRevision);
+          .bind(serialized, actorUserId, expectedRevision);
   const results = await env.DB.batch([
     mutation,
     env.DB.prepare(
@@ -174,8 +195,8 @@ export async function saveSiteConfiguration(
       actorUserId,
       actorUserId,
       requestId,
-      JSON.stringify(current.settings),
-      JSON.stringify(normalized),
+      JSON.stringify({ revision: current.revision, ...auditSnapshot(current.settings) }),
+      JSON.stringify({ revision: nextRevision, ...auditSnapshot(normalized) }),
     ),
   ]);
   if (!results[0]?.meta.changes) {

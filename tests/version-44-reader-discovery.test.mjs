@@ -36,7 +36,7 @@ test("Version 44 exposes compact Home, team directory, language, reader, and tra
   assert.match(api, /languages\.map\(\(\) => "\?"\)/u);
   assert.match(app, /Released within 24 hours/u);
   assert.match(css, /grid-auto-columns: minmax\(19rem, calc\(\(100% - 2rem\) \/ 3\)\)/u);
-  assert.match(discovery, /Discover our publishing teams/u);
+  assert.match(discovery, /Verified teams ranked by real releases and reader activity/u);
   assert.match(discovery, /Browse Teams/u);
   assert.match(discovery, /PublishingTeamsDirectory/u);
   assert.match(route, /root === "teams"/u);

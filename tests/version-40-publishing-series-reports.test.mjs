@@ -418,7 +418,7 @@ test("V40 series reports have a red reader dialog and an administrative moderati
   assert.match(publicRoute, /Series report rate limit exceeded\./u);
   assert.match(publicRoute, /Active series report already exists\./u);
   assert.match(aggregateRoute, /targetType: z\.literal\("COMMENT"\)/u);
-  assert.match(adminRoute, /requireAdmin\(actor\)/u);
+  assert.match(adminRoute, /requireAdminCapability\(actor, "reports\.manage"\)/u);
   assert.match(adminRoute, /expectedRevision/u);
   assert.match(adminRoute, /series\.report\.status\.updated/u);
   assert.match(adminRoute, /ACTIVE_REPORT_CONFLICT/u);

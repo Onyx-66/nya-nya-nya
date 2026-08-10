@@ -7,7 +7,7 @@ import {
   auditStatement,
   requestIdFor,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -276,7 +276,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.teams.manage");
     const db = database();
     const url = new URL(request.url);
     const id = url.searchParams.get("id")?.trim();
@@ -342,14 +342,21 @@ async function saveTeam(
   payload: z.infer<typeof teamSchema>,
 ) {
   const db = database();
+  if (!payload.id) {
+    throw new ApiError(
+      409,
+      "TEAM_COMMUNITY_CREATION_REQUIRED",
+      "Create teams through the community form so a public link and ownership proof are reviewed first.",
+    );
+  }
   const id = payload.id ?? `team_${randomId()}`;
   const current = payload.id
     ? await db
         .prepare(
-          "SELECT name, revision FROM teams WHERE id = ? LIMIT 1",
+          "SELECT name, slug, verification_status AS verificationStatus, revision FROM teams WHERE id = ? LIMIT 1",
         )
         .bind(payload.id)
-        .first<{ name: string; revision: number }>()
+        .first<{ name: string; slug: string; verificationStatus: string; revision: number }>()
     : null;
   if (payload.id && !current) {
     throw new ApiError(
@@ -365,6 +372,26 @@ async function saveTeam(
       "Another administrator changed this team. Reload it before saving.",
     );
   }
+  if (current && (current.name !== payload.name || current.slug !== payload.slug)) {
+    throw new ApiError(409, "TEAM_TITLE_REQUEST_REQUIRED", "Team titles and slugs can change only through an approved formal title request.");
+  }
+  if (current?.verificationStatus === "PENDING" && payload.verificationStatus === "VERIFIED") {
+    throw new ApiError(409, "TEAM_OWNERSHIP_REVIEW_REQUIRED", "Approve the pending ownership claim from Team requests; that review activates the team atomically.");
+  }
+  if (current?.verificationStatus === "SUSPENDED" && payload.verificationStatus === "VERIFIED") {
+    const verifiedClaim = await db.prepare(
+      `SELECT 1
+         FROM team_ownership_claims claim
+         JOIN team_links link ON link.team_id = claim.team_id AND link.url = claim.proof_value
+         JOIN team_memberships membership ON membership.team_id = claim.team_id
+          AND membership.user_id = claim.claimant_user_id
+          AND membership.membership_role = 'OWNER'
+          AND membership.status = 'ACTIVE'
+        WHERE claim.team_id = ? AND claim.status = 'APPROVED'
+        LIMIT 1`,
+    ).bind(id).first();
+    if (!verifiedClaim) throw new ApiError(409, "TEAM_OWNERSHIP_REVIEW_REQUIRED", "Approve a valid ownership claim before verifying this team.");
+  }
   const effectConfig = JSON.stringify({
     accentColor: payload.effect.accentColor,
     intensity: payload.effect.intensity,
@@ -374,17 +401,26 @@ async function saveTeam(
     ? db
         .prepare(
           `UPDATE teams
-           SET slug = ?, name = ?, description = ?,
+           SET description = ?,
                verification_status = ?, is_archived = ?,
                can_control_fixed_reader_pages = ?,
                comment_effect_type = ?, comment_effect_enabled = ?,
                comment_effect_config_json = ?, revision = revision + 1,
                updated_at = CURRENT_TIMESTAMP
-           WHERE id = ? AND revision = ?`,
+           WHERE id = ? AND revision = ?
+             AND (
+               ? <> 'VERIFIED' OR verification_status = 'VERIFIED'
+               OR (verification_status = 'SUSPENDED' AND EXISTS (
+                 SELECT 1 FROM team_ownership_claims claim
+                 JOIN team_links link ON link.team_id = claim.team_id AND link.url = claim.proof_value
+                 JOIN team_memberships owner ON owner.team_id = claim.team_id
+                  AND owner.user_id = claim.claimant_user_id
+                  AND owner.membership_role = 'OWNER' AND owner.status = 'ACTIVE'
+                WHERE claim.team_id = teams.id AND claim.status = 'APPROVED'
+               ))
+             )`,
         )
         .bind(
-          payload.slug,
-          payload.name,
           payload.description,
           payload.verificationStatus,
           payload.isArchived ? 1 : 0,
@@ -394,6 +430,7 @@ async function saveTeam(
           effectConfig,
           id,
           payload.revision,
+          payload.verificationStatus,
         )
     : db
         .prepare(
@@ -456,7 +493,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.teams.manage");
     const payload = teamSchema.parse(await request.json());
     if (payload.id) {
       throw new ApiError(
@@ -480,7 +517,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.teams.manage");
     const payload = teamSchema.parse(await request.json());
     if (!payload.id || !payload.revision) {
       throw new ApiError(
@@ -502,7 +539,7 @@ export async function PATCH(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.chapters.manage");
     const payload = quickActionSchema.parse(await request.json());
     const db = database();
     const chapter = await db
@@ -545,7 +582,7 @@ export async function PATCH(request: Request) {
         requestId,
         {
           action: "chapter.hide-to-draft",
-          category: "CATALOG_PUBLISHING",
+          category: "SERIES_CHAPTERS",
           sourceArea: "TEAM_MANAGEMENT",
           targetType: "CHAPTER",
           targetId: payload.chapterId,

@@ -21,10 +21,13 @@ import {
 } from "@/lib/discussion-settings";
 import {
   canAny,
-  effectiveCapabilities,
   highestRole,
   sumBalancedEntries,
 } from "@/lib/permissions.mjs";
+import {
+  ADMIN_PERMISSION_REGISTRY,
+  capabilityForAdminPath,
+} from "@/lib/admin-permissions";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import {
   getDiscussionSettingsDocument,
@@ -46,9 +49,10 @@ import {
 } from "@/lib/server/economy";
 import { getRewardSettingsDocument } from "@/lib/server/reward-settings";
 import {
+  actorHasCapability,
   getActor,
   requireActor,
-  requireAdmin,
+  requireAdminCapability,
   requireOwner,
 } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
@@ -848,17 +852,16 @@ function analyticsWindow(url: URL) {
 function isAdminActor(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
-  return actor.roles.some((role) =>
+  return actor.adminMfaVerified && actor.roles.some((role) =>
     ["OWNER", "ADMINISTRATOR"].includes(role),
-  );
+  ) && actorHasCapability(actor, "admin.console.access");
 }
 
 function isGlobalModerator(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
-  return actor.roles.some((role) =>
-    ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(role),
-  );
+  const elevatedAdmin = actor.roles.some((role) => ["OWNER", "ADMINISTRATOR"].includes(role));
+  return actorHasCapability(actor, "comments.moderate.global") && (!elevatedAdmin || actor.adminMfaVerified);
 }
 
 function publicSeriesPredicate(alias = "s") {
@@ -1841,10 +1844,9 @@ export async function GET(request: Request, context: RouteContext) {
         for (const entitlement of entitlements.results) {
           unlockedIds.add(entitlement.chapterId);
         }
-        const roles = [actor.primaryRole, ...(actor.roles ?? [])];
         if (isAdminActor(actor)) {
-          canUploadChapter = canAny(roles, "upload.create");
-        } else if (canAny(roles, "upload.create")) {
+          canUploadChapter = actorHasCapability(actor, "upload.create");
+        } else if (actorHasCapability(actor, "upload.create")) {
           const verifiedMembership = await env.DB.prepare(
             `SELECT 1
                FROM team_memberships tm
@@ -2362,6 +2364,11 @@ export async function GET(request: Request, context: RouteContext) {
         .max(24)
         .catch(6)
         .parse(url.searchParams.get("pageSize"));
+      const presentation = z
+        .enum(["cards", "table"])
+        .catch("cards")
+        .parse(url.searchParams.get("mode"));
+      const resultPageSize = presentation === "table" ? 20 : pageSize;
       const period = z
         .enum(["today", "week", "month", "all"])
         .catch("all")
@@ -2414,6 +2421,18 @@ export async function GET(request: Request, context: RouteContext) {
         month: "datetime(c.published_at) >= datetime('now', '-1 month')",
         all: "0",
       }[period];
+      const chapterPresentationPredicate =
+        presentation === "table" ? countPeriodPredicate : "";
+      const chapterPresentationOrder =
+        presentation === "table"
+          ? `datetime(publishedAt) DESC,
+             datetime(createdAt) DESC,
+             id DESC`
+          : `CAST(chapterNumber AS REAL) DESC,
+             datetime(publishedAt) DESC,
+             datetime(createdAt) DESC,
+             id DESC`;
+      const chapterPresentationLimit = presentation === "table" ? 12 : 4;
       const [seriesRows, totalRow, availableLanguageRows] = await Promise.all([
         env.DB.prepare(
           `SELECT s.id,
@@ -2448,7 +2467,11 @@ export async function GET(request: Request, context: RouteContext) {
                      s.id ASC
             LIMIT ? OFFSET ?`,
         )
-          .bind(...languages, pageSize, (page - 1) * pageSize)
+          .bind(
+            ...languages,
+            resultPageSize,
+            (page - 1) * resultPageSize,
+          )
           .all<{
             id: string;
             slug: string;
@@ -2534,6 +2557,7 @@ export async function GET(request: Request, context: RouteContext) {
                       AND datetime(c.published_at) <= datetime('now')
                       ${chapterPaidPredicate}
                       ${chapterLanguagePredicate}
+                      ${chapterPresentationPredicate}
                  )
                  SELECT slug,
                         chapterNumber,
@@ -2549,13 +2573,10 @@ export async function GET(request: Request, context: RouteContext) {
                         isNewInPeriod,
                         teamName,
                         teamSlug
-                   FROM ranked
+                  FROM ranked
                   WHERE releaseRank = 1
-                  ORDER BY CAST(chapterNumber AS REAL) DESC,
-                           datetime(publishedAt) DESC,
-                           datetime(createdAt) DESC,
-                           id DESC
-                  LIMIT 4`,
+                  ORDER BY ${chapterPresentationOrder}
+                  LIMIT ${chapterPresentationLimit}`,
               ).bind(viewer?.id ?? "", seriesRecord.id, ...languages),
             ),
           )
@@ -2576,7 +2597,9 @@ export async function GET(request: Request, context: RouteContext) {
                     ? `/api/v1/series-cover?slug=${encodeURIComponent(seriesRecord.slug)}`
                     : null,
               chapters: (chapterResults[index]?.results ?? []).map(
-                (chapter) => ({
+                (chapterValue) => {
+                  const chapter = chapterValue as Record<string, unknown>;
+                  return {
                   ...chapter,
                   chapterNumber: normalizeChapterNumber(
                     String(chapter.chapterNumber),
@@ -2584,17 +2607,18 @@ export async function GET(request: Request, context: RouteContext) {
                   isFresh: Boolean(chapter.isFresh),
                   isNewInPeriod: Boolean(chapter.isNewInPeriod),
                   isRead: Boolean(chapter.isRead),
-                }),
+                  };
+                },
               ),
             };
           }),
           pagination: {
             page,
-            pageSize,
+            pageSize: resultPageSize,
             total,
-            pageCount: Math.max(1, Math.ceil(total / pageSize)),
+            pageCount: Math.max(1, Math.ceil(total / resultPageSize)),
             hasPrevious: page > 1,
-            hasNext: page * pageSize < total,
+            hasNext: page * resultPageSize < total,
           },
           period,
           availableLanguages: availableLanguageRows.results.map((row) => row.language),
@@ -4928,7 +4952,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/summary") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Operations storage is unavailable.");
       const counts = await env.DB.batch([
         env.DB.prepare("SELECT COUNT(*) AS count FROM users"),
@@ -4986,7 +5010,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/analytics") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -5017,6 +5041,9 @@ export async function GET(request: Request, context: RouteContext) {
         ? "AND COALESCE(NULLIF(ae.region_code, ''), 'Unknown') = ?"
         : "";
       const regionBindings = selectedRegion ? [selectedRegion] : [];
+      const previousStartAt = new Date(
+        Date.parse(startAt) - Math.max(1, Date.parse(endAt) - Date.parse(startAt)),
+      ).toISOString();
       const results = (await env.DB.batch([
         env.DB.prepare(
           `SELECT COUNT(DISTINCT CASE
@@ -5167,6 +5194,10 @@ export async function GET(request: Request, context: RouteContext) {
                WHERE created_at >= datetime(?)
                  AND created_at < datetime(?)) AS newSeries,
              (SELECT COUNT(*)
+                FROM teams
+               WHERE created_at >= datetime(?)
+                 AND created_at < datetime(?)) AS newTeams,
+             (SELECT COUNT(*)
                 FROM chapters
                WHERE created_at >= datetime(?)
                  AND created_at < datetime(?)) AS newChapters,
@@ -5179,6 +5210,8 @@ export async function GET(request: Request, context: RouteContext) {
                WHERE created_at >= datetime(?)
                  AND created_at < datetime(?)) AS storePurchases`,
         ).bind(
+          startAt,
+          endAt,
           startAt,
           endAt,
           startAt,
@@ -5327,6 +5360,22 @@ export async function GET(request: Request, context: RouteContext) {
           startAt,
           endAt,
         ),
+        env.DB.prepare(
+          `SELECT
+             (SELECT COALESCE(SUM(CASE WHEN event_type IN ('HOME_VIEW','LATEST_VIEW','BROWSE_VIEW','SERIES_VIEW') THEN 1 ELSE 0 END), 0) FROM analytics_events WHERE created_at >= datetime(?) AND created_at < datetime(?) ${regionClause}) AS views,
+             (SELECT COUNT(*) FROM users WHERE created_at >= datetime(?) AND created_at < datetime(?)) AS newUsers,
+             (SELECT COUNT(*) FROM chapters WHERE created_at >= datetime(?) AND created_at < datetime(?)) AS newChapters,
+             (SELECT COUNT(*) FROM teams WHERE created_at >= datetime(?) AND created_at < datetime(?)) AS newTeams,
+             (SELECT COUNT(*) FROM discussion_comments WHERE moderation_status = 'VISIBLE' AND created_at >= datetime(?) AND created_at < datetime(?)) AS comments,
+             (SELECT COUNT(*) FROM discussion_reactions WHERE created_at >= datetime(?) AND created_at < datetime(?)) AS reactions`,
+        ).bind(
+          previousStartAt, startAt, ...regionBindings,
+          previousStartAt, startAt,
+          previousStartAt, startAt,
+          previousStartAt, startAt,
+          previousStartAt, startAt,
+          previousStartAt, startAt,
+        ),
       ])) as Array<D1Result<Record<string, unknown>>>;
       const eventSummary = (results[0].results?.[0] ?? {}) as Record<
         string,
@@ -5349,6 +5398,10 @@ export async function GET(request: Request, context: RouteContext) {
         unknown
       >;
       const economySummary = (results[13].results?.[0] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const previousSummary = (results[15].results?.[0] ?? {}) as Record<
         string,
         unknown
       >;
@@ -5413,9 +5466,18 @@ export async function GET(request: Request, context: RouteContext) {
             ),
             reactions: Number(platformSummary.reactions ?? 0),
             newSeries: Number(platformSummary.newSeries ?? 0),
+            newTeams: Number(platformSummary.newTeams ?? 0),
             newChapters: Number(platformSummary.newChapters ?? 0),
             uploadSessions: Number(platformSummary.uploadSessions ?? 0),
             storePurchases: Number(platformSummary.storePurchases ?? 0),
+          },
+          previousSummary: {
+            views: Number(previousSummary.views ?? 0),
+            newUsers: Number(previousSummary.newUsers ?? 0),
+            newChapters: Number(previousSummary.newChapters ?? 0),
+            newTeams: Number(previousSummary.newTeams ?? 0),
+            comments: Number(previousSummary.comments ?? 0),
+            reactions: Number(previousSummary.reactions ?? 0),
           },
           timeline: buckets,
           regionScope: selectedRegion
@@ -5483,7 +5545,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/series-cover") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB || !env.BUCKET) {
         throw new ApiError(
           503,
@@ -5591,7 +5653,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/series") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -5649,7 +5711,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/chapter-detail") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -5735,7 +5797,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/chapters") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -5826,7 +5888,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/teams") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -5854,7 +5916,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/users") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -5862,7 +5924,7 @@ export async function GET(request: Request, context: RouteContext) {
           "User management is unavailable.",
         );
       }
-      const [result, recentActivityResult] = await Promise.all([
+      const [result, recentActivityResult, permissionRulesResult] = await Promise.all([
         env.DB.prepare(
           `SELECT u.id,
                   u.email,
@@ -5901,6 +5963,9 @@ export async function GET(request: Request, context: RouteContext) {
             ORDER BY datetime(al.created_at) DESC, al.id DESC
             LIMIT 450`,
         ).all<Record<string, unknown>>(),
+        env.DB.prepare(
+          "SELECT role, capability, allowed FROM role_permission_rules",
+        ).all<{ role: string; capability: string; allowed: number }>(),
       ]);
       const recentActivityByUser = new Map<
         string,
@@ -5925,10 +5990,37 @@ export async function GET(request: Request, context: RouteContext) {
           const roles = String(row.rolesCsv ?? row.primaryRole ?? "USER")
             .split(",")
             .filter(Boolean);
+          const roleRules = permissionRulesResult.results.filter((rule) =>
+            roles.includes(rule.role),
+          );
+          const effectivePermissionDetails = ADMIN_PERMISSION_REGISTRY.map(
+            ([capability]) => {
+              const matching = roleRules.filter(
+                (rule) => rule.capability === capability,
+              );
+              const denied = matching.some((rule) => !rule.allowed);
+              const allowed = roles.includes("OWNER") || (!denied && (
+                matching.some((rule) => Boolean(rule.allowed)) ||
+                canAny(roles, capability)
+              ));
+              return {
+                capability,
+                allowed,
+                source: roles.includes("OWNER")
+                  ? "OWNER"
+                  : matching.length
+                    ? denied ? "DENY_OVERRIDE" : "ALLOW_OVERRIDE"
+                    : "ROLE_DEFAULT",
+              };
+            },
+          );
           return {
             ...row,
             roles,
-            effectivePermissions: effectiveCapabilities(roles),
+            effectivePermissions: effectivePermissionDetails
+              .filter((permission) => permission.allowed)
+              .map((permission) => permission.capability),
+            effectivePermissionDetails,
             recentActivity: recentActivityByUser.get(String(row.id)) ?? [],
             avatarUrl:
               row.hasAvatar && row.avatarUsername
@@ -5942,7 +6034,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/payouts") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -6067,7 +6159,17 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/user-control") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      const view = z
+        .enum(["overview", "activity", "purchases", "balances"])
+        .default("overview")
+        .parse(url.searchParams.get("view") ?? "overview");
+      const viewCapability = {
+        overview: "users.manage",
+        activity: "admin.activity.read",
+        purchases: "finance.transactions.read",
+        balances: "finance.balances.manage",
+      }[view];
+      requireAdminCapability(actor, viewCapability);
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -6075,10 +6177,6 @@ export async function GET(request: Request, context: RouteContext) {
           "Users Control is temporarily unavailable.",
         );
       }
-      const view = z
-        .enum(["overview", "activity", "purchases", "balances"])
-        .default("overview")
-        .parse(url.searchParams.get("view") ?? "overview");
       const query = (url.searchParams.get("query") ?? "").trim().slice(0, 160);
       const historyUserId = z
         .string()
@@ -6401,7 +6499,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/reports") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -6429,7 +6527,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/store") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -6600,7 +6698,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/editor-picks") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -6648,7 +6746,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/team-access") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -6746,13 +6844,13 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/appearance") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       return json(id, await getSiteThemeDocument());
     }
 
     if (path === "admin/site-configuration") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       return json(id, await getSiteConfigurationDocument(), {
         headers: { "cache-control": "private, no-store" },
       });
@@ -6760,7 +6858,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/commercial-settings") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       return json(id, await getCommercialSettingsDocument(), {
         headers: { "cache-control": "private, no-store" },
       });
@@ -6768,7 +6866,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (path === "admin/discussion-settings") {
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, capabilityForAdminPath(path));
       return json(id, await getDiscussionSettingsDocument());
     }
 
@@ -7046,7 +7144,7 @@ export async function PUT(request: Request, context: RouteContext) {
           : payload.action === "PUBLISH"
             ? "chapter.publish.assigned"
             : "chapter.review.own";
-      if (!canAny(actor.roles, requiredCapability)) {
+      if (!actorHasCapability(actor, requiredCapability)) {
         throw new ApiError(
           403,
           "REVIEW_ACTION_FORBIDDEN",
@@ -7803,7 +7901,7 @@ export async function PUT(request: Request, context: RouteContext) {
     }
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, capabilityForAdminPath(path));
     if (path === "admin/store-items") {
       const payload = storeItemInputSchema.parse(await request.json());
       if (!payload.id || payload.expectedRevision === undefined || !env.DB) {
@@ -8532,17 +8630,63 @@ export async function PUT(request: Request, context: RouteContext) {
           "Another administrator changed this team. Reload it before saving.",
         );
       }
+      if (
+        payload.verificationStatus === "VERIFIED" &&
+        current.verificationStatus !== "VERIFIED"
+      ) {
+        if (current.verificationStatus === "PENDING") {
+          throw new ApiError(
+            409,
+            "TEAM_OWNERSHIP_REVIEW_REQUIRED",
+            "Approve the pending ownership claim from Team requests; that review activates the team atomically.",
+          );
+        }
+        const validatedOwnership = await env.DB.prepare(
+          `SELECT 1
+             FROM team_ownership_claims claim
+             JOIN team_links link
+               ON link.team_id = claim.team_id
+              AND link.url = claim.proof_value
+             JOIN team_memberships owner
+               ON owner.team_id = claim.team_id
+              AND owner.user_id = claim.claimant_user_id
+              AND owner.membership_role = 'OWNER'
+              AND owner.status = 'ACTIVE'
+            WHERE claim.team_id = ?
+              AND claim.status = 'APPROVED'
+            LIMIT 1`,
+        ).bind(payload.id).first();
+        if (!validatedOwnership) {
+          throw new ApiError(
+            409,
+            "TEAM_OWNERSHIP_REVIEW_REQUIRED",
+            "Verify a link-control ownership claim before activating this team.",
+          );
+        }
+      }
       const teamResults = await env.DB.batch([
         env.DB.prepare(
           `UPDATE teams
               SET verification_status = ?,
                   revision = revision + 1,
                   updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND revision = ?`,
+            WHERE id = ? AND revision = ?
+              AND (
+                ? <> 'VERIFIED' OR verification_status = 'VERIFIED'
+                OR (verification_status = 'SUSPENDED' AND EXISTS (
+                  SELECT 1 FROM team_ownership_claims claim
+                  JOIN team_links link ON link.team_id = claim.team_id AND link.url = claim.proof_value
+                  JOIN team_memberships owner ON owner.team_id = claim.team_id
+                   AND owner.user_id = claim.claimant_user_id
+                   AND owner.membership_role = 'OWNER' AND owner.status = 'ACTIVE'
+                 WHERE claim.team_id = teams.id AND claim.status = 'APPROVED'
+                ))
+              )`,
         ).bind(
           payload.verificationStatus,
           payload.id,
           payload.expectedRevision,
+          payload.verificationStatus,
         ),
         auditStatement(
           env.DB,
@@ -8746,6 +8890,16 @@ export async function PUT(request: Request, context: RouteContext) {
               )`,
           ).bind(payload.id, role, actor.id, payload.id, updateToken),
         ),
+        env.DB.prepare(
+          `UPDATE admin_mfa_sessions SET revoked_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND revoked_at IS NULL
+              AND EXISTS (SELECT 1 FROM users WHERE id = ? AND access_update_token = ?)`,
+        ).bind(payload.id, payload.id, updateToken),
+        env.DB.prepare(
+          `UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND revoked_at IS NULL
+              AND EXISTS (SELECT 1 FROM users WHERE id = ? AND access_update_token = ?)`,
+        ).bind(payload.id, payload.id, updateToken),
         env.DB.prepare(
           `UPDATE users
               SET access_update_token = NULL
@@ -9455,7 +9609,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (path === "discussion-pin") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "comments.moderate.global");
       const payload = discussionPinSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -9976,7 +10130,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/site-media") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "appearance.manage");
       if (!env.DB || !env.BUCKET) {
         throw new ApiError(
           503,
@@ -10439,7 +10593,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/store-items") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "store.manage");
       const payload = storeItemInputSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -10504,7 +10658,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/store-collections") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "store.manage");
       const payload = storeCollectionInputSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -10555,7 +10709,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/store-media") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "store.manage");
       if (!env.DB || !env.BUCKET) {
         throw new ApiError(
           503,
@@ -11019,7 +11173,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/team-memberships") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "content.teams.manage");
       const payload = teamMembershipWriteSchema.parse(await request.json());
       if (!env.DB) {
         throw new ApiError(
@@ -11047,6 +11201,23 @@ export async function POST(request: Request, context: RouteContext) {
           "MEMBERSHIP_VERSION_REQUIRED",
           "Reload this membership before changing it.",
         );
+      }
+      const removesActiveOwner = currentMembership?.membershipRole === "OWNER" && currentMembership.status === "ACTIVE" && (payload.membershipRole !== "OWNER" || payload.status !== "ACTIVE");
+      if (removesActiveOwner) {
+        const otherOwners = await env.DB.prepare("SELECT COUNT(*) AS count FROM team_memberships WHERE team_id = ? AND user_id <> ? AND membership_role = 'OWNER' AND status = 'ACTIVE'").bind(payload.teamId, payload.userId).first<{ count: number }>();
+        if (Number(otherOwners?.count ?? 0) < 1) throw new ApiError(409, "FINAL_TEAM_OWNER_PROTECTED", "Assign another validated active owner before changing the final owner.");
+      }
+      const grantsNewOwnership = payload.membershipRole === "OWNER" && payload.status === "ACTIVE" && !(currentMembership?.membershipRole === "OWNER" && currentMembership.status === "ACTIVE");
+      if (grantsNewOwnership) {
+        const approvedOwnership = await env.DB.prepare(
+          `SELECT 1
+             FROM team_ownership_claims claim
+             JOIN teams team ON team.id = claim.team_id AND team.verification_status = 'VERIFIED' AND team.is_archived = 0
+             JOIN team_links link ON link.team_id = claim.team_id AND link.url = claim.proof_value
+            WHERE claim.team_id = ? AND claim.claimant_user_id = ? AND claim.status = 'APPROVED'
+            LIMIT 1`,
+        ).bind(payload.teamId, payload.userId).first();
+        if (!approvedOwnership) throw new ApiError(409, "TEAM_OWNERSHIP_REVIEW_REQUIRED", "Ownership can be granted only after an approved link-control claim.");
       }
       const membershipMutation = currentMembership
         ? env.DB.prepare(
@@ -11125,7 +11296,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/series-team-assignments") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "content.teams.manage");
       const payload = seriesTeamAssignmentWriteSchema.parse(
         await request.json(),
       );
@@ -11254,7 +11425,7 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
       const reviewId = randomId();
-      await env.DB.batch([
+      const reviewResults = await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO reviews
            (id, user_id, series_id, rating, body, spoiler, moderation_status)
@@ -11263,8 +11434,12 @@ export async function POST(request: Request, context: RouteContext) {
              rating = excluded.rating,
              body = excluded.body,
              spoiler = excluded.spoiler,
-             moderation_status = 'VISIBLE',
-             updated_at = CURRENT_TIMESTAMP`,
+             moderation_status = CASE
+               WHEN reviews.moderation_status = 'HIDDEN' THEN 'HIDDEN'
+               ELSE 'VISIBLE'
+             END,
+             updated_at = CURRENT_TIMESTAMP
+           WHERE reviews.moderation_status <> 'HIDDEN'`,
         ).bind(
           reviewId,
           actor.id,
@@ -11272,6 +11447,20 @@ export async function POST(request: Request, context: RouteContext) {
           payload.rating,
           payload.body,
           payload.spoiler ? 1 : 0,
+        ),
+        auditStatement(
+          env.DB,
+          actor,
+          id,
+          {
+            action: "review.upsert",
+            category: "DISCUSSIONS_MODERATION",
+            sourceArea: "SERIES_REVIEW",
+            targetType: "SERIES",
+            targetId: seriesRecord.id,
+            newValue: { rating: payload.rating, spoiler: payload.spoiler },
+          },
+          "changes() = 1",
         ),
         env.DB.prepare(
           `UPDATE series
@@ -11282,21 +11471,22 @@ export async function POST(request: Request, context: RouteContext) {
                        AND moderation_status = 'VISIBLE'
                   ), 0),
                   updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?`,
+            WHERE id = ? AND changes() = 1`,
         ).bind(seriesRecord.id, seriesRecord.id),
-        env.DB.prepare(
-          `INSERT INTO audit_logs
-           (id, actor_user_id, action, target_type, target_id, request_id, new_value_json)
-           VALUES (?, ?, 'review.upsert', 'SERIES', ?, ?, ?)`,
-        ).bind(
-          randomId(),
-          actor.id,
-          seriesRecord.id,
-          id,
-          JSON.stringify({ rating: payload.rating, spoiler: payload.spoiler }),
-        ),
       ]);
-      return json(id, { id: reviewId, saved: true }, { status: 201 });
+      if (!reviewResults[0]?.meta.changes) {
+        throw new ApiError(409, "REVIEW_MODERATION_LOCKED", "This review is hidden by moderation and cannot be republished until it is restored.");
+      }
+      const storedReview = await env.DB.prepare(
+        `SELECT id FROM reviews WHERE user_id = ? AND series_id = ? LIMIT 1`,
+      )
+        .bind(actor.id, seriesRecord.id)
+        .first<{ id: string }>();
+      return json(
+        id,
+        { id: storedReview?.id ?? reviewId, saved: true },
+        { status: 201 },
+      );
     }
 
     if (path === "analytics-events") {
@@ -11400,7 +11590,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/series") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "series.create");
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -11579,7 +11769,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (path === "admin/teams") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "content.teams.manage");
       if (!env.DB) {
         throw new ApiError(
           503,
@@ -11587,51 +11777,11 @@ export async function POST(request: Request, context: RouteContext) {
           "Team management is unavailable.",
         );
       }
-      const payload = adminTeamSchema.parse(await request.json());
-      const duplicate = await env.DB.prepare(
-        "SELECT id FROM teams WHERE slug = ? LIMIT 1",
-      )
-        .bind(payload.slug)
-        .first();
-      if (duplicate) {
-        throw new ApiError(
-          409,
-          "TEAM_SLUG_EXISTS",
-          "A team already uses this URL slug.",
-        );
-      }
-      const teamId = `team_${randomId()}`;
-      await env.DB.batch([
-        env.DB.prepare(
-          `INSERT INTO teams
-           (id, slug, name, description, verification_status)
-           VALUES (?, ?, ?, ?, 'PENDING')`,
-        ).bind(teamId, payload.slug, payload.name, payload.description),
-        env.DB.prepare(
-          `INSERT INTO audit_logs
-           (id, actor_user_id, action, target_type, target_id, request_id, new_value_json)
-           VALUES (?, ?, 'team.create', 'TEAM', ?, ?, ?)`,
-        ).bind(
-          randomId(),
-          actor.id,
-          teamId,
-          id,
-          JSON.stringify({
-            slug: payload.slug,
-            name: payload.name,
-            verificationStatus: "PENDING",
-          }),
-        ),
-      ]);
-      return json(
-        id,
-        {
-          id: teamId,
-          ...payload,
-          verificationStatus: "PENDING",
-          memberCount: 0,
-        },
-        { status: 201 },
+      adminTeamSchema.parse(await request.json());
+      throw new ApiError(
+        409,
+        "TEAM_COMMUNITY_WORKFLOW_REQUIRED",
+        "Create teams through the community form so links and ownership proof can be reviewed.",
       );
     }
 
@@ -12408,8 +12558,11 @@ export async function POST(request: Request, context: RouteContext) {
       await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO reading_progress
-           (user_id, chapter_id, page_index, scroll_offset, progress_basis_points, completed_at)
-           VALUES (?, ?, ?, ?, ?, CASE WHEN ? >= 9200 THEN CURRENT_TIMESTAMP ELSE NULL END)
+           (user_id, chapter_id, page_index, scroll_offset, progress_basis_points,
+            completed_at, onsite_activity_at)
+           VALUES (?, ?, ?, ?, ?,
+             CASE WHEN ? >= 9200 THEN CURRENT_TIMESTAMP ELSE NULL END,
+             CURRENT_TIMESTAMP)
            ON CONFLICT(user_id, chapter_id) DO UPDATE SET
              page_index = excluded.page_index,
              scroll_offset = excluded.scroll_offset,
@@ -12418,6 +12571,7 @@ export async function POST(request: Request, context: RouteContext) {
                WHEN excluded.completed_at IS NOT NULL THEN excluded.completed_at
                ELSE reading_progress.completed_at
              END,
+             onsite_activity_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP`,
         ).bind(
           actor.id,
@@ -12930,7 +13084,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     if (path === "admin/site-media") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "appearance.manage");
       if (!env.DB || !env.BUCKET) {
         throw new ApiError(
           503,
@@ -13013,7 +13167,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     if (path === "admin/store-media") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "store.manage");
       if (!env.DB || !env.BUCKET) {
         throw new ApiError(
           503,
@@ -13115,7 +13269,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     if (path === "admin/store-items") {
       assertSameOrigin(request);
       const actor = await requireActor();
-      requireAdmin(actor);
+      requireAdminCapability(actor, "store.manage");
       const itemId = z
         .string()
         .trim()
@@ -13245,10 +13399,10 @@ export async function DELETE(request: Request, context: RouteContext) {
         );
       }
       const review = await env.DB.prepare(
-        "SELECT series_id AS seriesId FROM reviews WHERE id = ? AND user_id = ? LIMIT 1",
+        "SELECT series_id AS seriesId, moderation_status AS moderationStatus FROM reviews WHERE id = ? AND user_id = ? LIMIT 1",
       )
         .bind(reviewId, actor.id)
-        .first<{ seriesId: string }>();
+        .first<{ seriesId: string; moderationStatus: string }>();
       if (!review) {
         throw new ApiError(
           404,
@@ -13257,9 +13411,13 @@ export async function DELETE(request: Request, context: RouteContext) {
         );
       }
       await env.DB.batch([
-        env.DB.prepare(
-          "DELETE FROM reviews WHERE id = ? AND user_id = ?",
-        ).bind(reviewId, actor.id),
+        review.moderationStatus === "HIDDEN"
+          ? env.DB.prepare(
+              "UPDATE reviews SET body = '', spoiler = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND moderation_status = 'HIDDEN'",
+            ).bind(reviewId, actor.id)
+          : env.DB.prepare(
+              "DELETE FROM reviews WHERE id = ? AND user_id = ?",
+            ).bind(reviewId, actor.id),
         env.DB.prepare(
           `UPDATE series
               SET rating_tenths = COALESCE((

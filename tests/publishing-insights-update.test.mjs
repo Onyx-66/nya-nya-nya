@@ -43,7 +43,8 @@ test("Latest Updates exposes at most four unique chapter numbers with language, 
     api.indexOf('if (path === "latest-releases")'),
     api.indexOf('if (path === "search")'),
   );
-  assert.match(latestApi, /WHERE releaseRank = 1[\s\S]*LIMIT 4/);
+  assert.match(latestApi, /presentation === "table" \? 12 : 4/u);
+  assert.match(latestApi, /LIMIT \$\{chapterPresentationLimit\}/u);
   assert.match(latestApi, /t\.slug AS teamSlug/);
   assert.match(latestApi, /isNewInPeriod/);
   assert.match(api, /datetime\(newest\.created_at\) DESC/);
@@ -56,7 +57,7 @@ test("Latest Updates exposes at most four unique chapter numbers with language, 
   assert.match(latestMarkup, /language=\{chapter\.language\}/);
   assert.match(latestMarkup, /chapter\.teamSlug/);
   assert.match(latestMarkup, /ChapterAccessBadge/);
-  assert.doesNotMatch(latestMarkup, /chapter\.title/);
+  assert.match(latestMarkup, /chapter\.title \? <small>\{chapter\.title\}<\/small>/u);
 });
 
 test("Store renders all five sections and preserves data-backed Logo Effects", async () => {

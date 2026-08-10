@@ -48,7 +48,11 @@ test("Version 48 anchors opaque menus above content and centers the floating ad 
     read("app/globals.css"),
     read("components/nyascans/NyaScansApp.tsx"),
   ]);
-  const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  const authority = css.slice(css.indexOf("/* Version 48 — authoritative public controls"));
+  const campaignAuthority = css.slice(
+    css.indexOf("/* Version 48.2.0 final cascade authority."),
+    css.indexOf("/* Version 48.2.0 — configurable typography"),
+  );
   const dropdownLayer = Number(css.match(/--z-dropdown:\s*(\d+)/u)?.[1]);
   const modalLayer = Number(css.match(/--z-modal:\s*(\d+)/u)?.[1]);
   assert.ok(dropdownLayer > modalLayer, "dropdowns must render above the floating-ad modal layer");
@@ -58,13 +62,13 @@ test("Version 48 anchors opaque menus above content and centers the floating ad 
   assert.match(authority, /background: var\(--surface-strong\) !important/u);
   assert.match(app, /document\.addEventListener\("pointerdown"/u);
   assert.match(app, /document\.addEventListener\("scroll", queueOpenMenuPosition, passiveCapture\)/u);
-  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad[\s\S]*top: 50%[\s\S]*left: 50%[\s\S]*width: min\(90vw[\s\S]*height: min\(89dvh/u);
-  assert.match(authority, /transform: translate\(-50%, -50%\)/u);
-  assert.match(authority, /v48-floating-ad-enter[\s\S]*translate\(-50%, -50%\) scale\(\.98\)/u);
-  assert.match(authority, /v48-floating-ad-pulse[\s\S]*translate\(-50%, -50%\) scale\(1\.012\)/u);
-  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad > a \{[\s\S]*position: relative;[\s\S]*display: block;/u);
-  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad img,[\s\S]*position: absolute;[\s\S]*inset: 0;[\s\S]*object-fit: cover;/u);
-  assert.match(authority, /\.floating-home-ad\.v46-floating-home-ad a > span:last-child \{[\s\S]*position: absolute;[\s\S]*max-height: 48%;/u);
+  assert.match(campaignAuthority, /\.event-campaign-backdrop \{[\s\S]*position: fixed !important;[\s\S]*inset: 0 !important;[\s\S]*display: grid !important;[\s\S]*place-items: center !important;/u);
+  assert.match(campaignAuthority, /\.event-campaign-modal\.floating-home-ad \{[\s\S]*width: min\(960px, 94vw\) !important;[\s\S]*min-height: min\(580px, 82dvh\) !important;[\s\S]*max-height: 92dvh !important;[\s\S]*transform: none !important;/u);
+  assert.match(campaignAuthority, /@media \(max-width: 760px\)[\s\S]*place-items: end center !important;[\s\S]*width: 100% !important;[\s\S]*overflow-y: auto !important;/u);
+  assert.match(app, /role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="event-campaign-title"/u);
+  assert.match(app, /event-campaign-info/u);
+  assert.match(app, /event-campaign-action/u);
+  assert.match(app, /doNotShowToday/u);
 });
 
 test("Version 48 makes team identity order and Browse controls explicit", async () => {
@@ -72,7 +76,7 @@ test("Version 48 makes team identity order and Browse controls explicit", async 
     read("app/globals.css"),
     read("components/nyascans/PublicDiscoverySections.tsx"),
   ]);
-  const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  const authority = css.slice(css.indexOf("/* Version 48 — authoritative public controls"));
   assert.match(authority, /\.teams-directory-results\.is-grid \.team-directory-card \{[\s\S]*grid-template-areas: "banner" "logo" "identity"[\s\S]*grid-template-rows: auto clamp\(3\.2rem, 4\.5vw, 3\.625rem\) auto/u);
   assert.match(authority, /\.teams-directory-results\.is-grid \.team-directory-card > div \{[\s\S]*grid-area: identity;[\s\S]*padding: 1rem;/u);
   assert.match(css, /\.teams-directory-results\.is-list \.team-directory-card \{[\s\S]*grid-template-areas: "logo identity"/u);
@@ -122,13 +126,14 @@ test("Version 48 groups functional admin areas and hides technical references by
     read("app/globals.css"),
     read("app/api/v1/[...resource]/route.ts"),
   ]);
-  for (const label of ["Overview", "Content", "Community", "Finance", "Insights", "System"]) {
+  for (const label of ["Command center", "Publishing & content", "People & trust", "Revenue & balances", "Operations record", "Platform controls"]) {
     assert.match(app, new RegExp(`label: "${label}"`, "u"));
   }
   assert.match(app, /\["Categories & genres", Tag\]/u);
   assert.match(operations, /section === "Categories & genres"[\s\S]*<TaxonomyManager/u);
   const dispatcher = operations.slice(operations.indexOf("export function OperationsControlPanel"));
   assert.doesNotMatch(dispatcher, /section === "Overview"[\s\S]{0,240}<AnalyticsPanel/u);
+  assert.match(app, /items: \[\["Analytics", ChartLineUp\], \["Overview", SquaresFour\]\]/u);
   assert.match(operations, /className="user-admin-record"/u);
   assert.match(operations, /className="technical-reference"/u);
   assert.match(operations, /loadFailed && users\.length === 0 \? null/u);

@@ -15,6 +15,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { FormattedCommentText } from "@/components/nyascans/EnhancedDiscussionSection";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { TeamDiscussionPanel } from "@/components/nyascans/TeamDiscussionPanel";
 import { languageName } from "@/lib/language-flags";
@@ -54,6 +55,11 @@ type PublicTeam = {
     avatarUrl: string | null;
     membershipRole: string;
     joinedAt: string;
+  }>;
+  links: Array<{
+    label: string;
+    url: string;
+    linkType: string;
   }>;
   support: PublicTeamSupport | null;
 };
@@ -449,6 +455,19 @@ export function PublicTeamView({
             <aside className="public-team-facts" aria-label="Group information">
               <div>
                 <span>
+                  <ArrowRight size={18} aria-hidden="true" />
+                  Official links
+                </span>
+                <p className="public-team-link-list">
+                  {team.links.map((link) => (
+                    <a key={link.url} href={link.url} target="_blank" rel="noreferrer noopener">
+                      {link.label}
+                    </a>
+                  ))}
+                </p>
+              </div>
+              <div>
+                <span>
                   <Translate size={18} aria-hidden="true" />
                   Focused languages
                 </span>
@@ -590,10 +609,10 @@ export function PublicTeamView({
                         {comment.spoiler ? (
                           <details>
                             <summary>Spoiler-tagged team note</summary>
-                            <p>{comment.body}</p>
+                            <FormattedCommentText value={comment.body} />
                           </details>
                         ) : (
-                          <p>{comment.body}</p>
+                          <FormattedCommentText value={comment.body} />
                         )}
                       </article>
                     );

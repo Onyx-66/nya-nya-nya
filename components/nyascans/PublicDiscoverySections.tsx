@@ -7,9 +7,12 @@ import {
   Books,
   UsersThree,
   CaretDown,
+  CaretLeft,
+  CaretRight,
   Check,
   List,
   Medal,
+  Plus,
   SquaresFour,
   Translate,
 } from "@phosphor-icons/react";
@@ -373,8 +376,11 @@ export function PublishingTeamsCarousel() {
 
   function goTo(index: number) {
     const rail = railRef.current;
-    if (!rail || records.length === 0) return;
-    const nextIndex = (index + records.length) % records.length;
+    const recordCount = language
+      ? records.filter((record) => record.releaseLanguages.includes(language)).length
+      : records.length;
+    if (!rail || recordCount === 0) return;
+    const nextIndex = (index + recordCount) % recordCount;
     const card = rail.querySelector<HTMLElement>(
       `[data-team-index="${nextIndex}"]`,
     );
@@ -438,10 +444,14 @@ export function PublishingTeamsCarousel() {
     >
       <div className="section-heading teams-heading">
         <div>
-          <h2 id="publishing-teams-title">Publishing Teams</h2>
-          <p>Discover our publishing teams</p>
+          <h2 id="publishing-teams-title">Top Publishing Teams</h2>
+          <p>Verified teams ranked by real releases and reader activity.</p>
         </div>
         <div className="teams-heading-actions">
+          <div className="teams-carousel-controls" aria-label="Publishing team controls">
+            <button type="button" aria-label="Previous publishing team" disabled={visibleRecords.length < 2} onClick={() => move(-1)}><CaretLeft size={17} /></button>
+            <button type="button" aria-label="Next publishing team" disabled={visibleRecords.length < 2} onClick={() => move(1)}><CaretRight size={17} /></button>
+          </div>
           <details className="compact-language-menu">
             <summary aria-label={language ? `Language: ${languageName(language)}` : "Choose team language"}>
               {language ? <LanguageFlag language={language} showCode={false} /> : <Translate size={18} />}
@@ -468,13 +478,13 @@ export function PublishingTeamsCarousel() {
           <strong>Publishing teams could not be loaded</strong>
           <span>{error}</span>
         </div>
-      ) : (
+      ) : visibleRecords.length ? (
         <div className="teams-carousel-shell">
           <div
             className={`teams-carousel ${visibleRecords.length === 1 ? "is-single" : ""}`}
             ref={railRef}
             tabIndex={0}
-            aria-label="Publishing teams carousel"
+            aria-label="Top Publishing Teams carousel"
             onScroll={syncActiveCard}
             onKeyDown={(event) => {
               if (event.key === "ArrowLeft") {
@@ -495,6 +505,15 @@ export function PublishingTeamsCarousel() {
               />
             ))}
           </div>
+        </div>
+      ) : (
+        <div className="public-discovery-empty">
+          <UsersThree size={28} />
+          <strong>No teams publish in this language yet</strong>
+          <span>Choose another language or view all verified publishing teams.</span>
+          <button type="button" onClick={() => selectLanguage("")}>
+            Show all teams
+          </button>
         </div>
       )}
       {!loading && !error && visibleRecords.length > 1 ? (
@@ -552,9 +571,8 @@ export function PublishingTeamsDirectory() {
   return (
     <main className="page-main page-wrap teams-directory">
       <header>
-        <p className="eyebrow">Verified publishers</p>
-        <h1>Publishing teams</h1>
-        <p>Search teams, filter by their actual release languages, and compare their public activity.</p>
+        <div><p className="eyebrow">Verified publishers</p><h1>Publishing teams</h1><p>Search teams, filter by their actual release languages, and compare their public activity.</p></div>
+        <a className="button button-primary" href="/dashboard/my-teams"><Plus size={17} /> Create or manage a team</a>
       </header>
       <section className="teams-directory-controls" aria-label="Team directory controls">
         <label><span className="sr-only">Search teams</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search teams" /></label>

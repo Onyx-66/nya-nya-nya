@@ -11,7 +11,7 @@ import {
   auditStatement,
   requestIdFor,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -278,7 +278,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "commerce.manage");
     const db = database();
     const url = new URL(request.url);
     const query = (url.searchParams.get("query") ?? "").trim().toLowerCase();
@@ -495,7 +495,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "commerce.manage");
     const payload = offerSchema.parse(await request.json());
     if (payload.id) {
       throw new ApiError(
@@ -519,7 +519,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "commerce.manage");
     const payload = offerSchema.parse(await request.json());
     if (!payload.id || !payload.revision) {
       throw new ApiError(
@@ -541,7 +541,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "commerce.manage");
     const db = database();
     const url = new URL(request.url);
     const id = z.string().min(3).max(160).parse(url.searchParams.get("id"));

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEGAL_DOCUMENTS } from "@/lib/legal-documents";
 
 const destinationSchema = z
   .string()
@@ -62,6 +63,46 @@ export const siteSocialLinkSchema = z.object({
   openInNewTab: z.boolean().default(true),
 });
 
+export const siteFooterLinkSchema = z.object({
+  id: z.string().trim().min(1).max(60).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  label: z.string().trim().min(1).max(80),
+  url: destinationSchema.or(z.literal("#keyboard-shortcuts")),
+  enabled: z.boolean().default(true),
+  openInNewTab: z.boolean().default(false),
+});
+
+export const siteFooterGroupSchema = z.object({
+  id: z.string().trim().min(1).max(60).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  title: z.string().trim().min(1).max(60),
+  enabled: z.boolean().default(true),
+  links: z.array(siteFooterLinkSchema).max(20),
+});
+
+export const siteShortcutSchema = z.object({
+  id: z.string().trim().min(1).max(60).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  prefix: z.string().trim().max(12),
+  key: z.string().trim().min(1).max(12),
+  label: z.string().trim().min(1).max(100),
+  href: destinationSchema.nullable(),
+  enabled: z.boolean().default(true),
+});
+
+export const siteLegalSectionSchema = z.object({
+  id: z.string().trim().min(1).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  title: z.string().trim().min(1).max(160),
+  paragraphs: z.array(z.string().trim().min(1).max(4_000)).max(30).optional(),
+  bullets: z.array(z.string().trim().min(1).max(2_000)).max(40).optional(),
+});
+
+export const siteLegalDocumentSchema = z.object({
+  slug: z.string().trim().min(1).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  title: z.string().trim().min(1).max(160),
+  summary: z.string().trim().min(1).max(500),
+  effectiveDate: z.string().trim().min(1).max(80),
+  updatedDate: z.string().trim().min(1).max(80),
+  sections: z.array(siteLegalSectionSchema).min(1).max(30),
+});
+
 export const siteConfigurationSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -74,8 +115,14 @@ export const siteConfigurationSchema = z
       appIcon: optionalBrandMediaSchema,
     }),
     footer: z.object({
+      description: z.string().trim().max(400).default(""),
+      copyright: z.string().trim().max(240).default(""),
+      legalNotice: z.string().trim().max(400).default(""),
+      groups: z.array(siteFooterGroupSchema).max(8).default([]),
       socialLinks: z.array(siteSocialLinkSchema).min(1).max(20),
     }),
+    keyboardShortcuts: z.array(siteShortcutSchema).max(40).default([]),
+    legalDocuments: z.array(siteLegalDocumentSchema).min(1).max(20),
     reader: z.object({
       firstPage: mediaSlotSchema,
       lastPage: mediaSlotSchema,
@@ -110,6 +157,47 @@ export const siteConfigurationSchema = z
         });
       }
     });
+    const footerGroupIds = new Set<string>();
+    const footerLinkIds = new Set<string>();
+    value.footer.groups.forEach((group, groupIndex) => {
+      if (footerGroupIds.has(group.id)) {
+        context.addIssue({ code: "custom", path: ["footer", "groups", groupIndex, "id"], message: "Footer group IDs must be unique." });
+      }
+      footerGroupIds.add(group.id);
+      group.links.forEach((link, linkIndex) => {
+        if (footerLinkIds.has(link.id)) {
+          context.addIssue({ code: "custom", path: ["footer", "groups", groupIndex, "links", linkIndex, "id"], message: "Footer link IDs must be unique." });
+        }
+        footerLinkIds.add(link.id);
+      });
+    });
+    const shortcutCombos = new Set<string>();
+    const shortcutIds = new Set<string>();
+    value.keyboardShortcuts.forEach((shortcut, index) => {
+      if (shortcutIds.has(shortcut.id)) {
+        context.addIssue({ code: "custom", path: ["keyboardShortcuts", index, "id"], message: "Shortcut IDs must be unique." });
+      }
+      shortcutIds.add(shortcut.id);
+      const combo = `${shortcut.prefix.toLowerCase()}:${shortcut.key.toLowerCase()}`;
+      if (shortcut.enabled && shortcutCombos.has(combo)) {
+        context.addIssue({ code: "custom", path: ["keyboardShortcuts", index, "key"], message: "Shortcut combinations must be unique." });
+      }
+      if (shortcut.enabled) shortcutCombos.add(combo);
+    });
+    const legalSlugs = new Set<string>();
+    value.legalDocuments.forEach((document, documentIndex) => {
+      if (legalSlugs.has(document.slug)) {
+        context.addIssue({ code: "custom", path: ["legalDocuments", documentIndex, "slug"], message: "Legal document slugs must be unique." });
+      }
+      legalSlugs.add(document.slug);
+      const sectionIds = new Set<string>();
+      document.sections.forEach((section, sectionIndex) => {
+        if (sectionIds.has(section.id)) {
+          context.addIssue({ code: "custom", path: ["legalDocuments", documentIndex, "sections", sectionIndex, "id"], message: "Section IDs must be unique within a legal document." });
+        }
+        sectionIds.add(section.id);
+      });
+    });
     (
       [
         ["brand", "logo", value.brand.logo],
@@ -132,6 +220,9 @@ export const siteConfigurationSchema = z
 export type SiteConfiguration = z.infer<typeof siteConfigurationSchema>;
 export type SiteMediaSlot = z.infer<typeof mediaSlotSchema>;
 export type SiteSocialLink = z.infer<typeof siteSocialLinkSchema>;
+export type SiteFooterGroup = z.infer<typeof siteFooterGroupSchema>;
+export type SiteShortcut = z.infer<typeof siteShortcutSchema>;
+export type SiteLegalDocument = z.infer<typeof siteLegalDocumentSchema>;
 
 const emptyMediaSlot: SiteMediaSlot = {
   enabled: false,
@@ -164,6 +255,29 @@ export const defaultSiteConfiguration: SiteConfiguration = {
     },
   },
   footer: {
+    description: "A focused home for manga, manhwa, manhua, webtoons, readers, and the teams that make every release possible.",
+    copyright: "© 2026 NyaScans. Original platform artwork.",
+    legalNotice: "Read responsibly. Rights holders can submit a tracked content-removal request through Support.",
+    groups: [
+      { id: "browse", title: "Browse", enabled: true, links: [
+        { id: "latest", label: "Latest Updates", url: "/latest", enabled: true, openInNewTab: false },
+        { id: "rankings", label: "Users Ranking", url: "/rankings", enabled: true, openInNewTab: false },
+        { id: "completed", label: "Completed", url: "/browse?status=completed", enabled: true, openInNewTab: false },
+        { id: "genres", label: "Genres", url: "/browse#genres", enabled: true, openInNewTab: false },
+      ] },
+      { id: "community", title: "Community", enabled: true, links: [
+        { id: "teams", label: "Teams", url: "/teams", enabled: true, openInNewTab: false },
+        { id: "support-link", label: "Support", url: "/support", enabled: true, openInNewTab: false },
+        { id: "shortcuts", label: "Keyboard shortcuts", url: "#keyboard-shortcuts", enabled: true, openInNewTab: false },
+        { id: "contact", label: "Contact", url: "mailto:support@nyascans.com", enabled: true, openInNewTab: false },
+      ] },
+      { id: "legal", title: "Legal", enabled: true, links: [
+        { id: "privacy", label: "Privacy Policy", url: "/legal/privacy", enabled: true, openInNewTab: false },
+        { id: "terms", label: "Terms of Service", url: "/legal/terms", enabled: true, openInNewTab: false },
+        { id: "dmca", label: "Content Removal / DMCA", url: "/legal/copyright", enabled: true, openInNewTab: false },
+        { id: "content-policy", label: "Content Policy", url: "/legal/content-policy", enabled: true, openInNewTab: false },
+      ] },
+    ],
     socialLinks: [
       {
         id: "support",
@@ -203,6 +317,21 @@ export const defaultSiteConfiguration: SiteConfiguration = {
       },
     ],
   },
+  keyboardShortcuts: [
+    { id: "search", prefix: "Ctrl / ⌘", key: "K", label: "Search the catalog", href: null, enabled: true },
+    { id: "home", prefix: "G", key: "H", label: "Go to Home", href: "/", enabled: true },
+    { id: "latest-shortcut", prefix: "G", key: "U", label: "Go to Latest Updates", href: "/latest", enabled: true },
+    { id: "browse-shortcut", prefix: "G", key: "B", label: "Go to Browse", href: "/browse", enabled: true },
+    { id: "library-shortcut", prefix: "G", key: "L", label: "Go to Library", href: "/library", enabled: true },
+    { id: "store-shortcut", prefix: "G", key: "S", label: "Go to Store", href: "/store", enabled: true },
+    { id: "roulette-shortcut", prefix: "G", key: "R", label: "Go to Roulette", href: "/roulette", enabled: true },
+    { id: "notifications-shortcut", prefix: "G", key: "N", label: "Go to Notifications", href: "/notifications", enabled: true },
+    { id: "account-shortcut", prefix: "G", key: "A", label: "Go to Account", href: "/account", enabled: true },
+    { id: "admin-shortcut", prefix: "G", key: "M", label: "Go to Admin Panel", href: "/onyx/admin/access", enabled: true },
+    { id: "upload-shortcut", prefix: "G", key: "P", label: "Go to Upload Center", href: "/upload-chapter", enabled: true },
+    { id: "guide", prefix: "", key: "?", label: "Open this shortcut guide", href: null, enabled: true },
+  ],
+  legalDocuments: LEGAL_DOCUMENTS,
   reader: {
     firstPage: { ...emptyMediaSlot },
     lastPage: { ...emptyMediaSlot },
@@ -212,7 +341,24 @@ export const defaultSiteConfiguration: SiteConfiguration = {
 export function parseSiteConfiguration(
   value: unknown,
 ): SiteConfiguration {
-  const parsed = siteConfigurationSchema.safeParse(value);
+  const input = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Partial<SiteConfiguration>
+    : {};
+  const parsed = siteConfigurationSchema.safeParse({
+    ...defaultSiteConfiguration,
+    ...input,
+    brand: { ...defaultSiteConfiguration.brand, ...input.brand },
+    footer: { ...defaultSiteConfiguration.footer, ...input.footer },
+    reader: { ...defaultSiteConfiguration.reader, ...input.reader },
+    keyboardShortcuts:
+      input.keyboardShortcuts?.length
+        ? input.keyboardShortcuts
+        : defaultSiteConfiguration.keyboardShortcuts,
+    legalDocuments:
+      input.legalDocuments?.length
+        ? input.legalDocuments
+        : defaultSiteConfiguration.legalDocuments,
+  });
   return parsed.success ? parsed.data : defaultSiteConfiguration;
 }
 

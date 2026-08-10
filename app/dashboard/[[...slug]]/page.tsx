@@ -32,20 +32,17 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     actor = null;
   }
 
-  if (
-    !actor ||
-    (actor.primaryRole !== "MODERATOR" && !actor.canUseUploadCenter)
-  ) {
+  if (!actor) {
     return (
       <NyaScansApp
         view="access"
         actor={{
           displayName: user.displayName,
           email: user.email,
-          role: actor?.primaryRole ?? "USER",
-          roles: actor?.roles ?? ["USER"],
+          role: "USER",
+          roles: ["USER"],
           authMethod: user.authMethod,
-          avatarUrl: actor?.avatarUrl ?? null,
+          avatarUrl: null,
         }}
       />
     );
@@ -54,12 +51,8 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   return (
     <NyaScansApp
       view="dashboard"
-      resourceSlug={
-        actor.primaryRole === "MODERATOR" ? "comments" : slug?.[0]
-      }
-      operationPath={
-        actor.primaryRole === "MODERATOR" ? ["comments"] : slug ?? []
-      }
+      resourceSlug={slug?.[0]}
+      operationPath={slug ?? []}
       actor={{
         displayName: actor.displayName,
         email: actor.email,

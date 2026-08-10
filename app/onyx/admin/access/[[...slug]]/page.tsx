@@ -1,8 +1,13 @@
 import { getAuthenticatedUser, loginPath } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
+import { AdminMfaGate } from "@/components/nyascans/admin/AdminMfaGate";
 import { writeAudit } from "@/lib/server/admin-utils";
-import { getActor } from "@/lib/server/policy";
+import { actorHasCapability, getActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import {
+  ADMIN_PERMISSION_REGISTRY,
+  ADMIN_SECTION_CAPABILITIES,
+} from "@/lib/admin-permissions";
 import { forbidden } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -52,33 +57,37 @@ export default async function AdminPage({ params }: AdminPageProps) {
       />
     );
   }
-  if (slug?.[0] === "audit-log" && !actor.roles.includes("OWNER")) {
+  if (!actorHasCapability(actor, "admin.console.access")) {
+    forbidden();
+  }
+
+  if (actor.adminMfaRequired && !actor.adminMfaVerified) {
+    return (
+      <AdminMfaGate
+        displayName={actor.displayName}
+        email={actor.email}
+        enrolled={actor.adminMfaEnrolled}
+      />
+    );
+  }
+
+  const requestedSection = slug?.[0] ?? "analytics";
+  const requestedCapability = ADMIN_SECTION_CAPABILITIES[requestedSection];
+  if (!requestedCapability || !actorHasCapability(actor, requestedCapability)) {
     await writeAudit(actor, randomId(), {
-      action: "audit.access.denied",
+      action: "admin.section.access.denied",
       category: "AUTHENTICATION_SECURITY",
       sourceArea: "ADMIN_PAGE",
-      targetType: "AUDIT_LOG",
-      targetId: "audit-log",
+      targetType: "ADMIN_SECTION",
+      targetId: requestedSection,
       result: "DENIED",
-      reason: "Highest administrative role required.",
+      reason: "The active role does not grant this administrative capability.",
     }).catch(() => undefined);
     forbidden();
   }
-  const fullAdministrator = actor.roles.some((role) =>
-    ["OWNER", "ADMINISTRATOR"].includes(role),
-  );
-  const manager = actor.roles.includes("MANAGER");
-  const managerSections = new Set([
-    "new-series-queue",
-    "support-tickets",
-    "access-decisions",
-  ]);
-  if (
-    !fullAdministrator &&
-    (!manager || (slug?.[0] && !managerSections.has(slug[0])))
-  ) {
-    forbidden();
-  }
+  const capabilities = ADMIN_PERMISSION_REGISTRY
+    .map(([capability]) => capability)
+    .filter((capability) => actorHasCapability(actor, capability));
 
   return (
     <NyaScansApp
@@ -92,10 +101,11 @@ export default async function AdminPage({ params }: AdminPageProps) {
         roles: actor.roles,
         authMethod: actor.authMethod,
         avatarUrl: actor.avatarUrl,
+        capabilities,
         canUseUploadCenter: true,
-        canUpload: fullAdministrator,
-        canRequestSeries: fullAdministrator,
-        canManageTeam: fullAdministrator,
+        canUpload: actorHasCapability(actor, "upload.create"),
+        canRequestSeries: actorHasCapability(actor, "series.create"),
+        canManageTeam: actorHasCapability(actor, "content.teams.manage"),
       }}
     />
   );

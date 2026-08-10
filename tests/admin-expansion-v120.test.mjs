@@ -1105,10 +1105,10 @@ test("owner-only audit capability and protected routes agree", async () => {
   assert.match(auditRoute, /requireOwner/);
   assert.match(auditRoute, /audit\.access\.denied/);
   assert.match(page, /forbidden\(\)/);
-  assert.match(
-    navigation,
-    /\(actor\.roles \?\? \[actor\.role\]\)\.includes\("OWNER"\)/,
-  );
+  assert.match(navigation, /const granted = new Set\(actor\.capabilities \?\? \[\]\)/u);
+  assert.match(navigation, /ADMIN_SECTION_CAPABILITIES\[slug\]/u);
+  assert.match(navigation, /granted\.has\(capability\)/u);
+  assert.match(page, /actorHasCapability\(actor, requestedCapability\)/u);
 });
 
 test("series, reaction, commerce, and media operations are server protected", async () => {

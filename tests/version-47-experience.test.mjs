@@ -88,13 +88,13 @@ test("only Manager+ can resolve a reference chapter and every decision is audite
     read("components/nyascans/admin/ChapterAccessDecisionPanel.tsx"),
     read("components/nyascans/OperationsControlPanel.tsx"),
   ]);
-  assert.match(route, /requireAdminConsole\(actor\)/u);
+  assert.match(route, /requireAdminCapability\(actor, "content\.chapters\.manage"\)/u);
   assert.match(route, /KEEP_PAID/u);
   assert.match(route, /MAKE_REFERENCE_FREE/u);
   assert.match(route, /status = 'PENDING'/u);
   assert.match(route, /auditStatement/u);
   assert.match(route, /id <> \?/u);
-  assert.match(page, /"access-decisions"/u);
+  assert.match(page, /requestedCapability = ADMIN_SECTION_CAPABILITIES\[requestedSection\]/u);
   assert.match(app, /\["Access decisions",/u);
   assert.match(operations, /<ChapterAccessDecisionPanel \/>/u);
   assert.match(panel, /The newly uploaded chapter remains Paid/u);
@@ -106,7 +106,7 @@ test("anchored menus are opaque, positioned below their triggers, and dismiss ou
     read("components/nyascans/NyaScansApp.tsx"),
     read("components/nyascans/PublicDiscoverySections.tsx"),
   ]);
-  const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  const authority = css.slice(css.indexOf("/* Version 48 — authoritative public controls"));
   assert.match(authority, /top: var\(--anchored-menu-top, 0\) !important/u);
   assert.match(authority, /background: var\(--surface-strong\) !important/u);
   assert.match(authority, /opacity: 1 !important/u);
@@ -121,7 +121,7 @@ test("anchored menus are opaque, positioned below their triggers, and dismiss ou
 
 test("team list and grid have distinct responsive geometry", async () => {
   const css = await read("app/globals.css");
-  const authority = css.slice(css.lastIndexOf("/* Version 48"));
+  const authority = css.slice(css.indexOf("/* Version 48 — authoritative public controls"));
   assert.match(authority, /\.team-directory-card \{[\s\S]*grid-template-areas: "banner" "logo" "identity"/u);
   assert.match(authority, /\.team-carousel-card a\.team-card-action/u);
   assert.match(authority, /\.teams-directory-results\.is-list \.team-release-languages/u);
@@ -141,7 +141,7 @@ test("announcement formatting and floating ad previews are safe and immediate", 
   assert.match(panel, /URL\.createObjectURL\(adImage\)/u);
   assert.match(panel, /Floating campaign preview/u);
   assert.match(app, /FormattedAnnouncementText/u);
-  assert.match(app, /announcement\.type === "UPDATE" \? Star/u);
+  assert.match(app, /active\.type === "UPDATE"[\s\S]*\? Star/u);
 });
 
 test("image validation accepts safe mobile MIME aliases and avoids an unnecessary hash copy", async () => {

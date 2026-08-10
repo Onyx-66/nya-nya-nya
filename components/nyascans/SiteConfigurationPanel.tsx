@@ -60,7 +60,7 @@ function linkId(label: string, taken: Set<string>) {
   return candidate;
 }
 
-type ConfigurationSection = "branding" | "reader" | "footer";
+type ConfigurationSection = "branding" | "reader" | "footer" | "legal" | "shortcuts";
 type MediaSlot = "logo" | "compact" | "app" | "first" | "last";
 type PendingMedia = { file: File; url: string } | null;
 
@@ -559,14 +559,22 @@ export function SiteConfigurationPanel({
               ? "Branding"
               : section === "reader"
                 ? "Reader assets"
-                : "Footer and social links"}
+                : section === "legal"
+                  ? "Legal documents"
+                : section === "shortcuts"
+                  ? "Keyboard shortcuts"
+                  : "Footer and social links"}
           </h2>
           <p>
             {section === "branding"
               ? "Manage the public name, description, and responsive brand marks."
               : section === "reader"
                 ? "Manage reusable fixed chapter pages without changing release files."
-                : "Validate, preview, order, and publish public destinations."}
+                : section === "legal"
+                  ? "Edit the titles, dates, summaries, paragraphs, and bullet points published on every legal and DMCA page."
+                : section === "shortcuts"
+                  ? "Edit navigation chords and their real destinations without changing application code."
+                  : "Edit every public footer text, group, legal destination, and social link."}
           </p>
         </div>
         <div className="admin-header-actions">
@@ -673,7 +681,7 @@ export function SiteConfigurationPanel({
           </section>
           ) : null}
 
-          {section !== "footer" ? (
+          {section === "branding" || section === "reader" ? (
           <section className="site-media-grid">
             {media.map((item) => (
               <article key={item.slot}>
@@ -734,6 +742,38 @@ export function SiteConfigurationPanel({
 
           {section === "footer" ? (
           <section className="site-social-settings">
+            <div className="footer-content-editor">
+              <label><span>Footer description</span><textarea maxLength={400} value={settings.footer.description} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, description: event.target.value } }))} /></label>
+              <label><span>Copyright line</span><input maxLength={240} value={settings.footer.copyright} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, copyright: event.target.value } }))} /></label>
+              <label><span>Legal notice</span><textarea maxLength={400} value={settings.footer.legalNotice} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, legalNotice: event.target.value } }))} /></label>
+            </div>
+            <div className="control-section-heading">
+              <div><span>Footer navigation</span><h3>Groups, legal notices, DMCA, and links</h3></div>
+              <button type="button" disabled={settings.footer.groups.length >= 8} onClick={() => setSettings((current) => {
+                const taken = new Set(current.footer.groups.map((group) => group.id));
+                return { ...current, footer: { ...current.footer, groups: [...current.footer.groups, { id: linkId("New group", taken), title: "New group", enabled: true, links: [] }] } };
+              })}><Plus size={16} /> Add group</button>
+            </div>
+            <div className="footer-group-admin-list">
+              {settings.footer.groups.map((group, groupIndex) => (
+                <article key={group.id}>
+                  <header>
+                    <input aria-label={`Group ${groupIndex + 1} title`} value={group.title} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, title: event.target.value } : entry) } }))} />
+                    <label><input type="checkbox" checked={group.enabled} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, enabled: event.target.checked } : entry) } }))} /> Visible</label>
+                    <button type="button" aria-label={`Remove ${group.title}`} onClick={() => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.filter((_, index) => index !== groupIndex) } }))}><Trash size={16} /></button>
+                  </header>
+                  {group.links.map((link, linkIndex) => (
+                    <div className="footer-link-admin-row" key={link.id}>
+                      <input aria-label="Link label" value={link.label} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, links: entry.links.map((item, itemIndex) => itemIndex === linkIndex ? { ...item, label: event.target.value } : item) } : entry) } }))} />
+                      <input aria-label="Link destination" value={link.url} placeholder="/legal/copyright" onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, links: entry.links.map((item, itemIndex) => itemIndex === linkIndex ? { ...item, url: event.target.value } : item) } : entry) } }))} />
+                      <label><input type="checkbox" checked={link.enabled} onChange={(event) => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, links: entry.links.map((item, itemIndex) => itemIndex === linkIndex ? { ...item, enabled: event.target.checked } : item) } : entry) } }))} /> Visible</label>
+                      <button type="button" aria-label={`Remove ${link.label}`} onClick={() => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, links: entry.links.filter((_, itemIndex) => itemIndex !== linkIndex) } : entry) } }))}><Trash size={15} /></button>
+                    </div>
+                  ))}
+                  <button className="button button-secondary" type="button" disabled={group.links.length >= 20} onClick={() => setSettings((current) => ({ ...current, footer: { ...current.footer, groups: current.footer.groups.map((entry, index) => index === groupIndex ? { ...entry, links: [...entry.links, { id: linkId("New link", new Set(entry.links.map((link) => link.id))), label: "New link", url: "", enabled: false, openInNewTab: false }] } : entry) } }))}><Plus size={14} /> Add link</button>
+                </article>
+              ))}
+            </div>
             <div className="control-section-heading">
               <div>
                 <span>Footer destinations</span>
@@ -911,6 +951,50 @@ export function SiteConfigurationPanel({
               ) : null}
             </nav>
           </section>
+          ) : null}
+          {section === "shortcuts" ? (
+            <section className="shortcut-admin-editor">
+              <div className="control-section-heading">
+                <div><span>Navigation controls</span><h3>Keyboard shortcut registry</h3></div>
+                <button type="button" disabled={settings.keyboardShortcuts.length >= 40} onClick={() => setSettings((current) => ({ ...current, keyboardShortcuts: [...current.keyboardShortcuts, { id: linkId("New shortcut", new Set(current.keyboardShortcuts.map((shortcut) => shortcut.id))), prefix: "G", key: "", label: "New shortcut", href: "/", enabled: false }] }))}><Plus size={16} /> Add shortcut</button>
+              </div>
+              <div className="shortcut-admin-list">
+                {settings.keyboardShortcuts.map((shortcut, index) => (
+                  <article key={shortcut.id}>
+                    <input aria-label="Shortcut prefix" value={shortcut.prefix} placeholder="G" onChange={(event) => setSettings((current) => ({ ...current, keyboardShortcuts: current.keyboardShortcuts.map((entry, entryIndex) => entryIndex === index ? { ...entry, prefix: event.target.value } : entry) }))} />
+                    <input aria-label="Shortcut key" value={shortcut.key} placeholder="H" onChange={(event) => setSettings((current) => ({ ...current, keyboardShortcuts: current.keyboardShortcuts.map((entry, entryIndex) => entryIndex === index ? { ...entry, key: event.target.value.slice(0, 12) } : entry) }))} />
+                    <input aria-label="Shortcut label" value={shortcut.label} onChange={(event) => setSettings((current) => ({ ...current, keyboardShortcuts: current.keyboardShortcuts.map((entry, entryIndex) => entryIndex === index ? { ...entry, label: event.target.value } : entry) }))} />
+                    <input aria-label="Shortcut destination" value={shortcut.href ?? ""} placeholder="No destination for system action" onChange={(event) => setSettings((current) => ({ ...current, keyboardShortcuts: current.keyboardShortcuts.map((entry, entryIndex) => entryIndex === index ? { ...entry, href: event.target.value || null } : entry) }))} />
+                    <label><input type="checkbox" checked={shortcut.enabled} onChange={(event) => setSettings((current) => ({ ...current, keyboardShortcuts: current.keyboardShortcuts.map((entry, entryIndex) => entryIndex === index ? { ...entry, enabled: event.target.checked } : entry) }))} /> Enabled</label>
+                    <button type="button" aria-label={`Remove ${shortcut.label}`} disabled={["search", "guide"].includes(shortcut.id)} onClick={() => setSettings((current) => ({ ...current, keyboardShortcuts: current.keyboardShortcuts.filter((_, entryIndex) => entryIndex !== index) }))}><Trash size={16} /></button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          {section === "legal" ? (
+            <section className="legal-document-admin-list">
+              {settings.legalDocuments.map((document, documentIndex) => (
+                <details key={document.slug} open={documentIndex === 0}>
+                  <summary><span>{document.title}</span><small>/legal/{document.slug}</small></summary>
+                  <div className="legal-document-admin-fields">
+                    <label><span>Page title</span><input value={document.title} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, title: event.target.value } : entry) }))} /></label>
+                    <label><span>Summary</span><textarea rows={3} value={document.summary} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, summary: event.target.value } : entry) }))} /></label>
+                    <label><span>Effective date</span><input value={document.effectiveDate} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, effectiveDate: event.target.value } : entry) }))} /></label>
+                    <label><span>Last updated</span><input value={document.updatedDate} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, updatedDate: event.target.value } : entry) }))} /></label>
+                  </div>
+                  <div className="legal-section-admin-list">
+                    {document.sections.map((legalSection, sectionIndex) => (
+                      <article key={legalSection.id}>
+                        <label><span>Section title</span><input value={legalSection.title} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, sections: entry.sections.map((sectionEntry, innerIndex) => innerIndex === sectionIndex ? { ...sectionEntry, title: event.target.value } : sectionEntry) } : entry) }))} /></label>
+                        <label><span>Paragraphs — one per line</span><textarea rows={Math.max(4, legalSection.paragraphs?.length ?? 0)} value={(legalSection.paragraphs ?? []).join("\n")} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, sections: entry.sections.map((sectionEntry, innerIndex) => innerIndex === sectionIndex ? { ...sectionEntry, paragraphs: event.target.value.split("\n").map((value) => value.trim()).filter(Boolean) } : sectionEntry) } : entry) }))} /></label>
+                        <label><span>Bullet points — one per line</span><textarea rows={Math.max(4, legalSection.bullets?.length ?? 0)} value={(legalSection.bullets ?? []).join("\n")} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, sections: entry.sections.map((sectionEntry, innerIndex) => innerIndex === sectionIndex ? { ...sectionEntry, bullets: event.target.value.split("\n").map((value) => value.trim()).filter(Boolean) } : sectionEntry) } : entry) }))} /></label>
+                      </article>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </section>
           ) : null}
         </>
       )}

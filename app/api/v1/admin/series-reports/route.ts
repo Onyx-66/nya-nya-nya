@@ -6,7 +6,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import {
   SERIES_REPORT_CATEGORIES,
   SERIES_REPORT_STATUSES,
@@ -35,7 +35,7 @@ const moderationSchema = z.object({
 
 async function requireSeriesReportStaff() {
   const actor = await requireActor("admin.console.access");
-  requireAdmin(actor);
+  requireAdminCapability(actor, "reports.manage");
   return actor;
 }
 

@@ -12,9 +12,13 @@ type Announcement = {
 };
 type FloatingAd = {
   id: string; eyebrow: string; title: string; body: string; destinationUrl: string; fallbackImageUrl: string;
-  imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; isActive: boolean; revision: number;
+  actionLabel: string; infoBlocks: Array<{ icon: string; title: string; body: string }>;
+  startsAt: string | null; endsAt: string | null; imageUrl: string | null;
+  effect: "WAVE" | "PULSE" | "GLOW"; isActive: boolean; revision: number;
 };
 type Payload = { announcements: Announcement[]; ads: FloatingAd[] };
+type AnnouncementDraft = Omit<Announcement, "id" | "revision">;
+type FloatingAdDraft = Omit<FloatingAd, "id" | "revision" | "imageUrl"> & { resetAudience: boolean };
 
 async function readJson(response: Response): Promise<Payload> {
   const payload = await response.json() as Payload & { error?: { message?: string } };
@@ -22,13 +26,33 @@ async function readJson(response: Response): Promise<Payload> {
   return payload;
 }
 
-const emptyAnnouncement = { type: "UPDATE" as const, title: "", body: "", linkLabel: "", linkUrl: "", isActive: true, startsAt: null, endsAt: null };
-const emptyAd = { eyebrow: "Support NyaScans", title: "", body: "", destinationUrl: "", fallbackImageUrl: "", effect: "WAVE" as const, isActive: false, resetAudience: false };
+const emptyAnnouncement: AnnouncementDraft = { type: "UPDATE", title: "", body: "", linkLabel: "", linkUrl: "", isActive: true, startsAt: null, endsAt: null };
+const emptyAd: FloatingAdDraft = {
+  eyebrow: "New event", title: "", body: "", actionLabel: "Explore event",
+  infoBlocks: [] as Array<{ icon: string; title: string; body: string }>,
+  startsAt: null as string | null, endsAt: null as string | null,
+  destinationUrl: "", fallbackImageUrl: "", effect: "WAVE",
+  isActive: false, resetAudience: false,
+};
+
+function localDateTimeValue(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function utcDateTimeValue(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
 
 export function HomePromotionsPanel() {
   const [data, setData] = useState<Payload>({ announcements: [], ads: [] });
-  const [announcement, setAnnouncement] = useState(emptyAnnouncement);
-  const [ad, setAd] = useState(emptyAd);
+  const [announcement, setAnnouncement] = useState<AnnouncementDraft>(emptyAnnouncement);
+  const [ad, setAd] = useState<FloatingAdDraft>(emptyAd);
   const [adImage, setAdImage] = useState<File | null>(null);
   const adPreviewUrl = useMemo(
     () => (adImage ? URL.createObjectURL(adImage) : ""),
@@ -51,7 +75,14 @@ export function HomePromotionsPanel() {
       const next = await readJson(await fetch("/api/v1/admin/home-promotions", { cache: "no-store" }));
       setData(next);
       const current = next.ads[0];
-      if (current) setAd({ eyebrow: current.eyebrow, title: current.title, body: current.body, destinationUrl: current.destinationUrl, fallbackImageUrl: current.fallbackImageUrl, effect: current.effect, isActive: current.isActive, resetAudience: false });
+      if (current) setAd({
+        eyebrow: current.eyebrow, title: current.title, body: current.body,
+        actionLabel: current.actionLabel, infoBlocks: current.infoBlocks ?? [],
+        startsAt: current.startsAt, endsAt: current.endsAt,
+        destinationUrl: current.destinationUrl,
+        fallbackImageUrl: current.fallbackImageUrl, effect: current.effect,
+        isActive: current.isActive, resetAudience: false,
+      });
     } catch (error) {
       setMessage({ kind: "error", text: error instanceof Error ? error.message : "Home promotions could not be loaded." });
     } finally { setLoading(false); }
@@ -142,15 +173,30 @@ export function HomePromotionsPanel() {
         </section>
         <section className="v46-promo-editor">
           <header><ImageSquare /><div><span>First open</span><h3>Floating image campaign</h3></div></header>
-          <div className="v46-floating-ad-preview" data-effect={ad.effect.toLowerCase()}>{adPreviewUrl || data.ads[0]?.imageUrl || ad.fallbackImageUrl ? <img src={adPreviewUrl || data.ads[0]?.imageUrl || ad.fallbackImageUrl} alt="Floating campaign preview" /> : <ImageSquare />}<div><small>{ad.eyebrow}</small><strong>{ad.title || "Campaign title"}</strong><p>{ad.body || "Your campaign message appears here."}</p></div></div>
+          <div className="v46-floating-ad-preview" data-effect={ad.effect.toLowerCase()}>{adPreviewUrl || data.ads[0]?.imageUrl || ad.fallbackImageUrl ? <img src={adPreviewUrl || data.ads[0]?.imageUrl || ad.fallbackImageUrl} alt="Floating campaign preview" /> : <ImageSquare />}<div><small>{ad.eyebrow}</small><strong>{ad.title || "Campaign title"}</strong><p>{ad.body || "Your campaign message appears here."}</p>{ad.infoBlocks.length ? <div className="ad-admin-block-preview">{ad.infoBlocks.map((block, index) => <span key={`${index}:${block.title}`}><b>{block.icon}</b><em>{block.title || "Information"}</em></span>)}</div> : null}<button type="button">{ad.actionLabel || "Explore event"}</button></div></div>
           <div className="v46-promo-form">
             <label><span>Eyebrow</span><input value={ad.eyebrow} onChange={(event) => setAd((current) => ({ ...current, eyebrow: event.target.value }))} /></label>
             <label><span>Title</span><input value={ad.title} onChange={(event) => setAd((current) => ({ ...current, title: event.target.value }))} /></label>
             <label className="v46-span-two"><span>Message</span><textarea rows={3} value={ad.body} onChange={(event) => setAd((current) => ({ ...current, body: event.target.value }))} /></label>
+            <label><span>Primary action label</span><input value={ad.actionLabel} onChange={(event) => setAd((current) => ({ ...current, actionLabel: event.target.value }))} /></label>
             <label><span>Destination</span><input value={ad.destinationUrl} placeholder="https://patreon.com/…" onChange={(event) => setAd((current) => ({ ...current, destinationUrl: event.target.value }))} /></label>
+            <label><span>Starts at (optional)</span><input type="datetime-local" value={localDateTimeValue(ad.startsAt)} onChange={(event) => setAd((current) => ({ ...current, startsAt: utcDateTimeValue(event.target.value) }))} /></label>
+            <label><span>Ends at (optional)</span><input type="datetime-local" value={localDateTimeValue(ad.endsAt)} onChange={(event) => setAd((current) => ({ ...current, endsAt: utcDateTimeValue(event.target.value) }))} /></label>
             <label><span>Fallback image URL</span><input value={ad.fallbackImageUrl} placeholder="https://…" onChange={(event) => setAd((current) => ({ ...current, fallbackImageUrl: event.target.value }))} /></label>
             <label><span>Visual effect</span><select value={ad.effect} onChange={(event) => setAd((current) => ({ ...current, effect: event.target.value as FloatingAd["effect"] }))}><option value="WAVE">Wave</option><option value="PULSE">Pulse</option><option value="GLOW">Glow</option></select></label>
             <label><span>Upload image</span><input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => setAdImage(event.target.files?.[0] ?? null)} /><small>{adImage?.name ?? "Static PNG, JPEG or WebP · 500×400px minimum · 8 MB maximum"}</small></label>
+            <div className="v46-span-two ad-admin-info-editor">
+              <div><span>Information blocks</span><small>Up to four concise event details.</small></div>
+              {ad.infoBlocks.map((block, index) => (
+                <div className="ad-admin-info-row" key={`info:${index}`}>
+                  <input aria-label={`Block ${index + 1} icon`} maxLength={16} value={block.icon} placeholder="✦" onChange={(event) => setAd((current) => ({ ...current, infoBlocks: current.infoBlocks.map((entry, entryIndex) => entryIndex === index ? { ...entry, icon: event.target.value } : entry) }))} />
+                  <input aria-label={`Block ${index + 1} title`} maxLength={60} value={block.title} placeholder="Event feature" onChange={(event) => setAd((current) => ({ ...current, infoBlocks: current.infoBlocks.map((entry, entryIndex) => entryIndex === index ? { ...entry, title: event.target.value } : entry) }))} />
+                  <input aria-label={`Block ${index + 1} description`} maxLength={140} value={block.body} placeholder="Short detail" onChange={(event) => setAd((current) => ({ ...current, infoBlocks: current.infoBlocks.map((entry, entryIndex) => entryIndex === index ? { ...entry, body: event.target.value } : entry) }))} />
+                  <button type="button" aria-label={`Remove block ${index + 1}`} onClick={() => setAd((current) => ({ ...current, infoBlocks: current.infoBlocks.filter((_, entryIndex) => entryIndex !== index) }))}><Trash /></button>
+                </div>
+              ))}
+              {ad.infoBlocks.length < 4 ? <button className="button button-secondary" type="button" onClick={() => setAd((current) => ({ ...current, infoBlocks: [...current.infoBlocks, { icon: "✦", title: "", body: "" }] }))}><Plus /> Add information block</button> : null}
+            </div>
             <label className="v46-admin-switch"><input type="checkbox" checked={ad.isActive} onChange={(event) => setAd((current) => ({ ...current, isActive: event.target.checked }))} /><span>Show on first visit</span></label>
             <label className="v46-admin-switch"><input type="checkbox" checked={ad.resetAudience} onChange={(event) => setAd((current) => ({ ...current, resetAudience: event.target.checked }))} /><span>Show again to dismissed viewers</span></label>
             <button className="button button-primary" type="button" disabled={busy || !ad.title.trim()} onClick={() => void saveAd()}>{busy ? <SpinnerGap className="spin" /> : null} Save floating ad</button>

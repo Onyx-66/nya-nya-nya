@@ -133,8 +133,9 @@ test("multi-role authorization grants the union while managers stay least-privil
   assert.match(queueRoute, /canReply:\s*reviewer/u);
   assert.match(queueRoute, /canStartReview:\s*fullAdministrator/u);
   assert.match(supportRoute, /requireActor\("admin\.support\.manage"\)/u);
-  assert.match(adminPage, /managerSections = new Set\(\[[\s\S]*new-series-queue/u);
-  assert.match(adminPage, /support-tickets/u);
+  assert.match(adminPage, /requestedCapability = ADMIN_SECTION_CAPABILITIES\[requestedSection\]/u);
+  assert.match(adminPage, /actorHasCapability\(actor, requestedCapability\)/u);
+  assert.match(adminPage, /ADMIN_PERMISSION_REGISTRY[\s\S]*\.filter\(\(capability\) => actorHasCapability/u);
 
   assert.match(usersPanel, /className="user-role-chips"/u);
   assert.match(usersPanel, /expectedAccessRevision:\s*user\.accessRevision/u);

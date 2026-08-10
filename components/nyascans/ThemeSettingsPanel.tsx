@@ -622,6 +622,30 @@ export function ThemeSettingsPanel() {
                   }
                 />
               </label>
+              <label>
+                <span>Heading weight</span>
+                <select value={settings.typography.headingWeight} onChange={(event) => update("typography", { ...settings.typography, headingWeight: Number(event.target.value) })}>
+                  <option value="500">Medium · 500</option><option value="600">Semibold · 600</option><option value="700">Bold · 700</option><option value="760">Brand heavy · 760</option><option value="800">Extra bold · 800</option><option value="900">Black · 900</option>
+                </select>
+              </label>
+              <label>
+                <span>Body weight</span>
+                <select value={settings.typography.bodyWeight} onChange={(event) => update("typography", { ...settings.typography, bodyWeight: Number(event.target.value) })}>
+                  <option value="300">Light · 300</option><option value="400">Normal · 400</option><option value="500">Medium · 500</option><option value="600">Semibold · 600</option>
+                </select>
+              </label>
+              <label>
+                <span>Button and control weight</span>
+                <select value={settings.typography.controlWeight} onChange={(event) => update("typography", { ...settings.typography, controlWeight: Number(event.target.value) })}>
+                  <option value="400">Normal · 400</option><option value="500">Medium · 500</option><option value="600">Semibold · 600</option><option value="700">Bold · 700</option><option value="800">Extra bold · 800</option>
+                </select>
+              </label>
+              <label>
+                <span>Browse Format / Sort / Show weight</span>
+                <select value={settings.typography.browseFilterWeight} onChange={(event) => update("typography", { ...settings.typography, browseFilterWeight: Number(event.target.value) })}>
+                  <option value="300">Light · 300</option><option value="400">Normal · 400</option><option value="500">Medium · 500</option><option value="600">Semibold · 600</option><option value="700">Bold · 700</option>
+                </select>
+              </label>
             </fieldset>
             <fieldset>
               <legend>Layout and shape</legend>

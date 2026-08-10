@@ -10,7 +10,7 @@ import {
   sha256Hex,
   validateImageFile,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { deriveCachedCoverUrl } from "@/lib/server/metadata-import";
 
@@ -171,7 +171,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     const { db, bucket } = dependencies();
     await retryPendingMediaCleanup(db, bucket);
     const form = await request.formData();
@@ -398,7 +398,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     const { db, bucket } = dependencies();
     await retryPendingMediaCleanup(db, bucket);
     const payload = importedCoverSchema.parse(await request.json());
@@ -662,7 +662,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.series.manage");
     const { db, bucket } = dependencies();
     await retryPendingMediaCleanup(db, bucket);
     const url = new URL(request.url);

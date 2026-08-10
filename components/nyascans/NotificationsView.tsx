@@ -16,6 +16,10 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  NotificationArtwork,
+  type NotificationSeries,
+} from "@/components/nyascans/NotificationArtwork";
 
 type NotificationActor = {
   displayName: string;
@@ -36,6 +40,7 @@ type NotificationRecord = {
   metadataJson: string | null;
   createdAt: string;
   category: Exclude<NotificationCategory, "ALL">;
+  series: NotificationSeries | null;
 };
 
 type NotificationPagination = {
@@ -113,12 +118,6 @@ function absoluteTime(value: string) {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return "Recently";
   return new Date(timestamp).toISOString();
-}
-
-function categoryIcon(category: NotificationRecord["category"]) {
-  if (category === "SOCIAL") return UsersThree;
-  if (category === "ANNOUNCEMENTS") return MegaphoneSimple;
-  return Pulse;
 }
 
 function emptyCopy(
@@ -302,8 +301,9 @@ export function NotificationsView({
   ) {
     if (record.readAt) return;
     event.preventDefault();
-    await updateNotification("READ", record.id);
-    window.location.assign(href);
+    if (await updateNotification("READ", record.id)) {
+      window.location.assign(href);
+    }
   }
 
   function selectCategory(nextCategory: NotificationCategory) {
@@ -503,7 +503,6 @@ export function NotificationsView({
                 >
                   {records.map((record) => {
                     const href = safeRelativeActionUrl(record.actionUrl);
-                    const Icon = categoryIcon(record.category);
                     return (
                       <article
                         className={`notification-card ${
@@ -511,12 +510,11 @@ export function NotificationsView({
                         }`}
                         key={record.id}
                       >
-                        <span
-                          className={`notification-card-icon is-${record.category.toLowerCase()}`}
-                          aria-hidden="true"
-                        >
-                          <Icon size={20} />
-                        </span>
+                        <NotificationArtwork
+                          series={record.series}
+                          category={record.category}
+                          className={`notification-card-artwork is-${record.category.toLowerCase()}`}
+                        />
                         <div className="notification-card-copy">
                           <span className="notification-card-meta">
                             <small>{record.category.toLowerCase()}</small>

@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { FormattedCommentText } from "@/components/nyascans/EnhancedDiscussionSection";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type ProfileSection =
@@ -327,7 +328,7 @@ export function PublicProfileView({ username }: { username: string }) {
     ];
     return (
       <div className="public-profile-comment-content">
-        {comment.body ? <p>{comment.body}</p> : null}
+        {comment.body ? <FormattedCommentText value={comment.body} /> : null}
         {assets.length ? (
           <div className="public-profile-comment-media">
             {assets.map((asset) => (

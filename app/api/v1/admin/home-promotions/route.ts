@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, auditStatement, requestIdFor } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,10 @@ const linkSchema = z.string().trim().max(600).refine(
   "Use a secure link or a site-relative path.",
 );
 
+const timestampSchema = z.string().trim().max(40).nullable().default(null)
+  .refine((value) => !value || !Number.isNaN(Date.parse(value)), "Use a valid date and time.")
+  .transform((value) => value ? new Date(value).toISOString() : null);
+
 const announcementSchema = z.object({
   type: z.enum(["UPDATE", "ISSUE", "SUPPORT", "NOTICE"]),
   title: z.string().trim().min(2).max(120),
@@ -19,8 +23,8 @@ const announcementSchema = z.object({
   linkLabel: z.string().trim().max(60).default(""),
   linkUrl: linkSchema.default(""),
   isActive: z.boolean().default(true),
-  startsAt: z.string().trim().max(40).nullable().default(null),
-  endsAt: z.string().trim().max(40).nullable().default(null),
+  startsAt: timestampSchema,
+  endsAt: timestampSchema,
 }).superRefine((value, context) => {
   if (value.startsAt && value.endsAt && Date.parse(value.endsAt) <= Date.parse(value.startsAt)) {
     context.addIssue({ code: "custom", path: ["endsAt"], message: "End time must be later than start time." });
@@ -33,11 +37,29 @@ const adSchema = z.object({
   eyebrow: z.string().trim().max(80).default("Support NyaScans"),
   title: z.string().trim().min(2).max(140),
   body: z.string().trim().max(500).default(""),
+  actionLabel: z.string().trim().min(1).max(60).default("Explore event"),
+  infoBlocks: z.array(z.object({
+    icon: z.string().trim().min(1).max(16),
+    title: z.string().trim().min(1).max(60),
+    body: z.string().trim().max(140).default(""),
+  })).max(4).default([]),
   destinationUrl: linkSchema.default(""),
   fallbackImageUrl: linkSchema.default(""),
   effect: z.enum(["WAVE", "PULSE", "GLOW"]).default("WAVE"),
   isActive: z.boolean().default(false),
+  startsAt: timestampSchema,
+  endsAt: timestampSchema,
   resetAudience: z.boolean().default(false),
+}).superRefine((value, context) => {
+  if (value.startsAt && Number.isNaN(Date.parse(value.startsAt))) {
+    context.addIssue({ code: "custom", path: ["startsAt"], message: "Use a valid start date." });
+  }
+  if (value.endsAt && Number.isNaN(Date.parse(value.endsAt))) {
+    context.addIssue({ code: "custom", path: ["endsAt"], message: "Use a valid end date." });
+  }
+  if (value.startsAt && value.endsAt && Date.parse(value.endsAt) <= Date.parse(value.startsAt)) {
+    context.addIssue({ code: "custom", path: ["endsAt"], message: "End time must be later than start time." });
+  }
 });
 
 function database() {
@@ -58,9 +80,11 @@ async function readAll() {
         ORDER BY datetime(created_at) DESC`,
     ).all<Record<string, unknown>>(),
     db.prepare(
-      `SELECT id, eyebrow, title, body, destination_url AS destinationUrl,
+      `SELECT id, eyebrow, title, body, action_label AS actionLabel,
+              info_blocks_json AS infoBlocksJson, destination_url AS destinationUrl,
               image_key AS imageKey, fallback_image_url AS fallbackImageUrl,
               effect, is_active AS isActive, reset_key AS resetKey,
+              starts_at AS startsAt, ends_at AS endsAt,
               revision, created_at AS createdAt, updated_at AS updatedAt
          FROM floating_ads
         ORDER BY datetime(updated_at) DESC`,
@@ -71,6 +95,10 @@ async function readAll() {
     ads: ads.results.map((row) => ({
       ...row,
       isActive: Boolean(row.isActive),
+      infoBlocks: (() => {
+        try { return JSON.parse(String(row.infoBlocksJson ?? "[]")); }
+        catch { return []; }
+      })(),
       imageUrl: row.imageKey ? `/api/v1/floating-ad-media?id=${encodeURIComponent(String(row.id))}&v=${Number(row.revision)}` : row.fallbackImageUrl || null,
     })),
   };
@@ -80,7 +108,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "announcements.manage");
     return json(requestId, await readAll(), { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     return errorResponse(requestId, error);
@@ -92,7 +120,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "announcements.manage");
     const db = database();
     const raw = await request.json() as Record<string, unknown>;
     const action = z.enum(["CREATE_ANNOUNCEMENT", "SAVE_ANNOUNCEMENT", "DELETE_ANNOUNCEMENT", "SAVE_AD", "DELETE_AD"]).parse(raw.action);
@@ -129,26 +157,52 @@ export async function POST(request: Request) {
     } else if (action === "SAVE_AD") {
       const data = adSchema.parse(raw.data);
       const id = data.id ?? `floating_ad_${randomId()}`;
-      const activationStatements = data.isActive
-        ? [db.prepare("UPDATE floating_ads SET is_active = 0, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id <> ? AND is_active = 1").bind(id)]
-        : [];
       if (data.id) {
-        const results = await db.batch([...activationStatements, db.prepare(
+        const results = await db.batch([db.prepare(
           `UPDATE floating_ads SET eyebrow = ?, title = ?, body = ?,
+                  action_label = ?, info_blocks_json = ?,
                   destination_url = ?, fallback_image_url = ?, effect = ?,
                   is_active = ?, reset_key = CASE WHEN ? THEN ? ELSE reset_key END,
+                  starts_at = ?, ends_at = ?,
                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND revision = ?`,
-        ).bind(data.eyebrow, data.title, data.body, data.destinationUrl, data.fallbackImageUrl, data.effect, data.isActive ? 1 : 0, data.resetAudience ? 1 : 0, randomId(), id, data.revision)]);
-        const result = results.at(-1);
-        if (!result?.meta.changes) throw new ApiError(409, "STALE_VERSION", "This floating ad changed. Reload and try again.");
+        ).bind(data.eyebrow, data.title, data.body, data.actionLabel,
+          JSON.stringify(data.infoBlocks), data.destinationUrl,
+          data.fallbackImageUrl, data.effect, data.isActive ? 1 : 0,
+          data.resetAudience ? 1 : 0, randomId(), data.startsAt || null,
+          data.endsAt || null, id, data.revision),
+          auditStatement(db, actor, requestId, {
+            action: "campaign.update",
+            category: "APPEARANCE_SETTINGS",
+            sourceArea: "HOME_PROMOTIONS",
+            targetType: "FLOATING_AD",
+            targetId: id,
+            targetLabel: data.title,
+          }, "changes() = 1"),
+          ...(data.isActive ? [db.prepare("UPDATE floating_ads SET is_active = 0, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id <> ? AND is_active = 1 AND changes() = 1").bind(id)] : []),
+        ]);
+        if (!results[0]?.meta.changes) throw new ApiError(409, "STALE_VERSION", "This floating ad changed. Reload and try again.");
       } else {
-        await db.batch([...activationStatements, db.prepare(
+        await db.batch([db.prepare(
           `INSERT INTO floating_ads
-           (id, eyebrow, title, body, destination_url, fallback_image_url,
-            effect, is_active, reset_key, created_by_user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).bind(id, data.eyebrow, data.title, data.body, data.destinationUrl, data.fallbackImageUrl, data.effect, data.isActive ? 1 : 0, randomId(), actor.id)]);
+           (id, eyebrow, title, body, action_label, info_blocks_json,
+            destination_url, fallback_image_url, effect, is_active, reset_key,
+            starts_at, ends_at, created_by_user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(id, data.eyebrow, data.title, data.body, data.actionLabel,
+          JSON.stringify(data.infoBlocks), data.destinationUrl,
+          data.fallbackImageUrl, data.effect, data.isActive ? 1 : 0,
+          randomId(), data.startsAt || null, data.endsAt || null, actor.id),
+          auditStatement(db, actor, requestId, {
+            action: "campaign.create",
+            category: "APPEARANCE_SETTINGS",
+            sourceArea: "HOME_PROMOTIONS",
+            targetType: "FLOATING_AD",
+            targetId: id,
+            targetLabel: data.title,
+          }, "changes() = 1"),
+          ...(data.isActive ? [db.prepare("UPDATE floating_ads SET is_active = 0, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id <> ? AND is_active = 1 AND changes() = 1").bind(id)] : []),
+        ]);
       }
     } else {
       const id = z.string().trim().min(3).max(160).parse(raw.id);

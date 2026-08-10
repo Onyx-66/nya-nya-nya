@@ -8,7 +8,7 @@ import {
   sha256Hex,
   validateImageFile,
 } from "@/lib/server/admin-utils";
-import { getActor, requireActor, requireAdmin } from "@/lib/server/policy";
+import { actorHasCapability, getActor, requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     if (!row?.imageKey) throw new ApiError(404, "MEDIA_NOT_FOUND", "This slider image is not available.");
     if (!row.isActive) {
       const actor = await getActor().catch(() => null);
-      if (!actor || !actor.roles.some((role) => ["OWNER", "ADMINISTRATOR"].includes(role))) {
+      if (!actor || !actor.adminMfaVerified || !actorHasCapability(actor, "content.sliders.manage")) {
         throw new ApiError(404, "MEDIA_NOT_FOUND", "This slider image is not available.");
       }
     }
@@ -59,7 +59,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.sliders.manage");
     const { db, bucket } = dependencies();
     const form = await request.formData();
     const payload = z.object({
@@ -121,7 +121,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.sliders.manage");
     const { db, bucket } = dependencies();
     const payload = z.object({ id: z.string().trim().min(3).max(160), revision: z.coerce.number().int().min(1) }).parse(await request.json());
     const current = await db.prepare(

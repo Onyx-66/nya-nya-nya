@@ -6,7 +6,7 @@ import {
   auditStatement,
   requestIdFor,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { preferredSeriesArtworkUrl } from "@/lib/server/series-media-url";
 
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.sliders.manage");
     return json(requestId, await listSliders(), {
       headers: { "cache-control": "private, no-store" },
     });
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.sliders.manage");
     const db = database();
     const payload = createSchema.parse(await request.json());
     if (payload.seriesId) {
@@ -188,7 +188,7 @@ export async function PATCH(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.sliders.manage");
     const db = database();
     const payload = updateSchema.parse(await request.json());
     const current = await db.prepare(
@@ -259,7 +259,7 @@ export async function DELETE(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.sliders.manage");
     const db = database();
     const payload = z.object({
       id: z.string().trim().min(3).max(160),

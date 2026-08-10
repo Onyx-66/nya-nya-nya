@@ -17,8 +17,8 @@ test("homepage discovery uses public database-backed series and teams", async ()
   assert.match(seriesApi, /ORDER BY datetime\(publicAt\) DESC, s\.id DESC/);
   assert.match(teamsApi, /verification_status = 'VERIFIED'/);
   assert.match(components, />New Series</);
-  assert.match(components, />Publishing Teams</);
-  assert.match(components, /aria-label="Publishing teams carousel"/);
+  assert.match(components, />Top Publishing Teams</);
+  assert.match(components, /aria-label="Top Publishing Teams carousel"/);
 });
 
 test("Library provides three persistent views and versioned private transfer", async () => {

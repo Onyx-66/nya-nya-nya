@@ -5,7 +5,7 @@ import {
   listAdminPinnedSeries,
   replacePinnedSeries,
 } from "@/lib/server/pinned-series";
-import { requireActor, requireAdmin } from "@/lib/server/policy";
+import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ const replaceSchema = z.object({
         .object({
           id: z.string().trim().max(160).optional(),
           seriesId: z.string().trim().min(3).max(160),
-          featured: z.boolean(),
+          featured: z.boolean().default(true),
           startsAt: optionalDate,
           endsAt: optionalDate,
         })
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.pinned.manage");
     const query = new URL(request.url).searchParams.get("q") ?? "";
     return json(requestId, await listAdminPinnedSeries(query), {
       headers: { "cache-control": "private, no-store" },
@@ -58,7 +58,7 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdmin(actor);
+    requireAdminCapability(actor, "content.pinned.manage");
     const payload = replaceSchema.parse(await request.json());
     return json(
       requestId,

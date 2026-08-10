@@ -81,6 +81,12 @@ type TeamMemberRow = {
   joinedAt: string;
 };
 
+type TeamLinkRow = {
+  label: string;
+  url: string;
+  linkType: string;
+};
+
 function directMediaUrl(key: string | null) {
   const normalized = key?.trim() ?? "";
   if (!normalized) return null;
@@ -175,6 +181,7 @@ export async function GET(request: Request) {
       pinnedCommentRows,
       focusedLanguageRows,
       memberRows,
+      linkRows,
       supportSummaryRow,
     ] = await Promise.all([
       env.DB.prepare(
@@ -398,6 +405,14 @@ export async function GET(request: Request) {
       )
         .bind(team.id)
         .all<TeamMemberRow>(),
+      env.DB.prepare(
+        `SELECT label, url, link_type AS linkType
+           FROM team_links
+          WHERE team_id = ?
+          ORDER BY sort_order, created_at, id`,
+      )
+        .bind(team.id)
+        .all<TeamLinkRow>(),
       premiumEconomyPublic
         ? env.DB.prepare(
             `SELECT COALESCE(SUM(coin_amount), 0) AS totalAmount,
@@ -471,6 +486,7 @@ export async function GET(request: Request) {
             membershipRole: member.membershipRole,
             joinedAt: member.joinedAt,
           })),
+          links: linkRows.results,
           support:
             premiumEconomyPublic && supportSummaryRow
               ? {

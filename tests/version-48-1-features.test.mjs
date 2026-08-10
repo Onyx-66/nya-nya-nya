@@ -110,19 +110,22 @@ test("Pinned Series public and admin APIs enforce schedules, RBAC, ordering, and
   assert.match(adminRoute, /export async function GET/u);
   assert.match(adminRoute, /export async function PUT/u);
   assert.ok(
-    (adminRoute.match(/requireAdmin\(actor\)/gu) ?? []).length >= 2,
+    (adminRoute.match(/requireAdminCapability\(actor, "content\.pinned\.manage"\)/gu) ?? []).length >= 2,
     "both admin methods must be protected by RBAC",
   );
   assert.match(adminRoute, /assertSameOrigin\(request\)/u);
   assert.match(adminRoute, /\.array\([\s\S]*?\)\s*\.max\(12\)/u);
   assert.match(adminRoute, /The end date must be after the start date/u);
 
-  assert.match(service, /LIMIT 12/u);
+  assert.match(service, /const MAX_ACTIVE_PINNED_SERIES = 9/u);
+  assert.match(service, /LIMIT \$\{MAX_ACTIVE_PINNED_SERIES\}/u);
   assert.match(service, /ORDER BY pin\.display_order/u);
+  assert.match(service, /pin\.is_featured = 1/u);
   assert.match(service, /pin\.starts_at IS NULL OR datetime\(pin\.starts_at\) <= datetime\('now'\)/u);
   assert.match(service, /pin\.ends_at IS NULL OR datetime\(pin\.ends_at\) > datetime\('now'\)/u);
   assert.match(service, /DUPLICATE_PIN/u);
-  assert.match(service, /FEATURED_PIN_LIMIT/u);
+  assert.match(service, /ACTIVE_PIN_LIMIT_REACHED/u);
+  assert.match(service, /maximumConcurrentPins/u);
   assert.match(service, /PINNED_SERIES_CHANGED/u);
   assert.match(service, /DELETE FROM home_pinned_series/u);
   assert.match(service, /await db\.batch\(statements\)/u);
@@ -234,7 +237,7 @@ test("Discount APIs are paid-system gated and expose only authenticated admin mu
     assert.match(adminRoute, new RegExp(`export async function ${method}`, "u"));
   }
   assert.ok(
-    (adminRoute.match(/requireAdmin\(actor\)/gu) ?? []).length >= 4,
+    (adminRoute.match(/requireAdminCapability\(actor, "discounts\.manage"\)/gu) ?? []).length >= 4,
     "every discounts admin endpoint must enforce admin RBAC",
   );
   assert.ok(
@@ -450,7 +453,7 @@ test("home and directory contracts place Pinned Series then Discounts before Lat
     "homepage order must be Continue Reading → Pinned Series → Discounts → Latest Updates",
   );
   assert.match(home, /<DiscountsSection[\s\S]*enabled=\{[\s\S]*premiumEconomyPublic/u);
-  assert.match(featureSections, /filter\(\(record\) => record\.featured\)\.slice\(0, 3\)/u);
+  assert.match(featureSections, /filter\(\(record\) => record\.featured\)\.slice\(0, 9\)/u);
   assert.match(featureSections, /\}, 6_000\)/u);
   assert.match(featureSections, /className="v481-pinned-bento"/u);
   assert.match(featureSections, /className="v481-discount-rail"/u);

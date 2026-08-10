@@ -72,7 +72,8 @@ test("branding and fixed reader media save without hidden validation failures", 
   const validation = spawnSync(
     process.execPath,
     [
-      "--experimental-strip-types",
+      "--import",
+      "tsx",
       "--input-type=module",
       "-e",
       "import('./lib/site-configuration.ts').then(({siteConfigurationSchema,defaultSiteConfiguration})=>siteConfigurationSchema.parse(defaultSiteConfiguration))",
@@ -81,7 +82,7 @@ test("branding and fixed reader media save without hidden validation failures", 
   );
   assert.equal(validation.status, 0, validation.stderr);
   assert.match(schema, /id:\s*"x"[\s\S]+label:\s*"X"/u);
-  assert.match(server, /siteConfigurationSchema\.safeParse/u);
+  assert.match(server, /parseSiteConfiguration\(raw\)/u);
   assert.match(server, /recoveredFromInvalid:\s*true/u);
 
   const saveStart = panel.indexOf("async function save");
@@ -142,13 +143,13 @@ test("balance adjustment has independent Paw Coins and Shards disclosure panels 
 });
 
 test("roles, discussion settings, Series Management, and footer shortcuts use the final polished UI", async () => {
-  const [operations, discussion, series, app, shortcuts, css] =
+  const [operations, discussion, series, app, configuration, css] =
     await Promise.all([
       read("components/nyascans/OperationsControlPanel.tsx"),
       read("components/nyascans/DiscussionSettingsPanel.tsx"),
       read("components/nyascans/admin/SeriesManagementPanel.tsx"),
       read("components/nyascans/NyaScansApp.tsx"),
-      read("lib/site-shortcuts.ts"),
+      read("lib/site-configuration.ts"),
       read("app/globals.css"),
     ]);
 
@@ -185,17 +186,12 @@ test("roles, discussion settings, Series Management, and footer shortcuts use th
   assert.match(css, /\.admin-review-grid > :is\(article, div\)/u);
   assert.match(css, /\.admin-record-browser > form > \.admin-icon-action/u);
 
-  const support = app.indexOf('["Support", "/support"]');
-  const footerShortcut = app.indexOf(
-    '["Keyboard shortcuts", "#keyboard-shortcuts"]',
-  );
+  assert.match(app, /const groups = settings\.footer\.groups/u);
+  assert.match(app, /link\.url === "#keyboard-shortcuts"/u);
+  assert.match(app, /onClick=\{onOpenShortcuts\}/u);
+  const support = configuration.indexOf('label: "Support"');
+  const footerShortcut = configuration.indexOf('label: "Keyboard shortcuts"');
   assert.ok(support >= 0 && footerShortcut > support);
-  assert.doesNotMatch(
-    app.slice(app.indexOf('className="page-wrap footer-bottom"'), app.indexOf("export function NyaScansApp")),
-    /onOpenShortcuts/u,
-  );
-  assert.match(shortcuts, /\["G", "M"\][\s\S]+\/onyx\/admin\/access/u);
-  assert.match(shortcuts, /\["G", "P"\][\s\S]+\/upload-chapter/u);
-  assert.match(shortcuts, /m:\s*"\/onyx\/admin\/access"/u);
-  assert.match(shortcuts, /p:\s*"\/upload-chapter"/u);
+  assert.match(configuration, /prefix: "G", key: "M"[\s\S]+href: "\/onyx\/admin\/access"/u);
+  assert.match(configuration, /prefix: "G", key: "P"[\s\S]+href: "\/upload-chapter"/u);
 });
