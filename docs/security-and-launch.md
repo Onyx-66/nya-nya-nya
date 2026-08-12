@@ -10,6 +10,10 @@
   server-issued administrator assurance cookie expires after one hour.
 - Configure an administrator IP or trusted-device policy when appropriate.
 - Set payment, webhook, email, and search secrets in hosted environment values.
+- Register `/api/v1/payments/stripe/webhook` for signed Stripe events and
+  `/api/v1/ad-unlocks/provider-callback` with the rewarded-ad provider.
+- Configure Stripe Connect payouts only after fixing the reviewed
+  `TEAM_PAYOUT_CURRENCY` and `TEAM_PAYOUT_MINOR_PER_ONYX` conversion values.
 - Keep payments, memberships, payouts, and mature content disabled until their
   provider, legal, and regional checks pass.
 - Replace test prices and reconcile every seeded ledger fixture.

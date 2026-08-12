@@ -9,7 +9,10 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
-import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  AdminCombobox,
+  AdminPageScaffold,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 
 type AuditEvent = {
   id: string;
@@ -58,6 +61,22 @@ const emptyFilters: Filters = {
   result: "ALL",
   query: "",
 };
+
+const auditCategoryOptions = [
+  { value: "ALL", label: "All categories" },
+  { value: "AUTHENTICATION_SECURITY", label: "Authentication & security" },
+  { value: "USERS_ROLES", label: "Users & roles" },
+  { value: "SERIES_CHAPTERS", label: "Series & chapters" },
+  { value: "TEAMS_PERMISSIONS", label: "Teams & permissions" },
+  {
+    value: "DISCUSSIONS_MODERATION",
+    label: "Discussions & moderation",
+  },
+  { value: "COMMERCE_STORE", label: "Commerce & Store" },
+  { value: "APPEARANCE_SETTINGS", label: "Appearance & settings" },
+  { value: "UPLOADS_IMPORTS", label: "Uploads & imports" },
+  { value: "SYSTEM_MAINTENANCE", label: "System & maintenance" },
+] as const;
 
 async function api<T>(input: string) {
   const response = await fetch(input, { cache: "no-store" });
@@ -135,7 +154,15 @@ function StructuredValues({ value }: { value: unknown }) {
   );
 }
 
-export function AuditLogPanel({ actorRole }: { actorRole: string }) {
+export function AuditLogPanel({
+  actorRole,
+  embedded = false,
+  displayTitle = "Audit Log",
+}: {
+  actorRole: string;
+  embedded?: boolean;
+  displayTitle?: string;
+}) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [applied, setApplied] = useState<Filters>(emptyFilters);
@@ -288,8 +315,9 @@ export function AuditLogPanel({ actorRole }: { actorRole: string }) {
     <AdminPageScaffold
       breadcrumbs={["Administration", "Audit Log"]}
       kicker="Owner-only security record"
-      title="Audit Log"
+      title={displayTitle}
       description="Review immutable administrative and security events with server-side filters. Sensitive values are redacted before storage."
+      embedded={embedded}
       state={
         denied
           ? {
@@ -346,23 +374,15 @@ export function AuditLogPanel({ actorRole }: { actorRole: string }) {
         </label>
         <label>
           Category
-          <select
+          <AdminCombobox
+            ariaLabel="Filter technical activity by category"
             value={filters.category}
-            onChange={(event) =>
-              setFilters((current) => ({ ...current, category: event.target.value }))
+            options={auditCategoryOptions}
+            placeholder="Search activity categories…"
+            onChange={(category) =>
+              setFilters((current) => ({ ...current, category }))
             }
-          >
-            <option value="ALL">All categories</option>
-            <option value="AUTHENTICATION_SECURITY">Authentication & security</option>
-            <option value="USERS_ROLES">Users & roles</option>
-            <option value="SERIES_CHAPTERS">Series & chapters</option>
-            <option value="TEAMS_PERMISSIONS">Teams & permissions</option>
-            <option value="DISCUSSIONS_MODERATION">Discussions & moderation</option>
-            <option value="COMMERCE_STORE">Commerce & Store</option>
-            <option value="APPEARANCE_SETTINGS">Appearance & settings</option>
-            <option value="UPLOADS_IMPORTS">Uploads & imports</option>
-            <option value="SYSTEM_MAINTENANCE">System & maintenance</option>
-          </select>
+          />
         </label>
         <label>
           Result

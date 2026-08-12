@@ -2,6 +2,10 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +46,14 @@ export async function GET(request: Request) {
                 (
                   SELECT MIN(c.published_at)
                     FROM chapters c
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE c.series_id = s.id
                      AND c.state = 'PUBLISHED'
                      AND c.visibility = 'PUBLIC'
                      AND c.published_at IS NOT NULL
                      AND datetime(c.published_at) <= datetime('now')
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                 ),
                 s.created_at
               ) AS publicAt,
@@ -68,17 +75,21 @@ export async function GET(request: Request) {
               (
                 SELECT c.chapter_number
                   FROM chapters c
+                  LEFT JOIN content_visibility_overrides visibility_override
+                    ON visibility_override.chapter_id = c.id
                  WHERE c.series_id = s.id
                    AND c.state = 'PUBLISHED'
                    AND c.visibility = 'PUBLIC'
                    AND c.published_at IS NOT NULL
                    AND datetime(c.published_at) <= datetime('now')
+                   AND ${publicPaidChapterPredicate("c", "visibility_override")}
                  ORDER BY datetime(c.published_at) DESC, c.id DESC
                  LIMIT 1
               ) AS latestChapter
          FROM series s
         WHERE s.is_published = 1
           AND s.archived_at IS NULL
+          AND ${publicPaidSeriesPredicate("s")}
           AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
           AND s.rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
@@ -131,7 +142,7 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          "cache-control": "public, max-age=30, stale-while-revalidate=120",
+          "cache-control": "no-store",
         },
       },
     );

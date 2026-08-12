@@ -462,7 +462,13 @@ test("chapter reaction UI and API expose exactly six choices", async () => {
     route.indexOf("async function replyBadge"),
   );
   assert.match(snapshot, /cr\.slug IN \('upvote', 'laugh', 'heart', 'surprised', 'angry', 'sad'\)/u);
-  assert.match(snapshot, /CASE cr\.slug[\s\S]*WHEN 'upvote' THEN 0[\s\S]*WHEN 'sad' THEN 5/u);
-  assert.match(app, /What do you think about this chapter\?/u);
-  assert.match(app, /Choose one reaction\./u);
+  assert.match(snapshot, /CASE cr\.slug[\s\S]*WHEN 'upvote' THEN 0[\s\S]*WHEN 'sad' THEN 4[\s\S]*WHEN 'angry' THEN 5/u);
+  assert.match(app, /upvote: \{ label: "Like", order: 0 \}/u);
+  assert.match(app, /heart: \{ label: "Love", order: 1 \}/u);
+  assert.match(app, /laugh: \{ label: "Laugh", order: 2/u);
+  assert.match(app, /surprised: \{ label: "Wow", order: 3/u);
+  assert.match(app, /sad: \{ label: "Sad", order: 4/u);
+  assert.match(app, /angry: \{ label: "Angry", order: 5/u);
+  assert.match(app, />Chapter Reactions</u);
+  assert.doesNotMatch(app, /What do you think about this chapter\?|Choose one reaction\./u);
 });

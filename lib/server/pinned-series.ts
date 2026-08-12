@@ -4,6 +4,10 @@ import { auditStatement } from "@/lib/server/admin-utils";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export type PinnedSeriesInput = {
   id?: string;
@@ -92,7 +96,8 @@ function serializePinnedSeries(row: PinnedSeriesRow) {
   };
 }
 
-const pinnedSelect = `
+function pinnedSelect(chapterVisibilityPredicate = "") {
+  return `
   SELECT pin.id, pin.series_id AS seriesId,
          pin.display_order AS displayOrder,
          pin.is_featured AS featured,
@@ -103,18 +108,23 @@ const pinnedSelect = `
          s.banner_key AS bannerKey, s.revision,
          COUNT(DISTINCT CASE
            WHEN c.state = 'PUBLISHED' AND c.visibility = 'PUBLIC'
-             AND datetime(c.published_at) <= datetime('now') THEN c.id
+             AND datetime(c.published_at) <= datetime('now')
+             ${chapterVisibilityPredicate} THEN c.id
          END) AS chapterCount
     FROM home_pinned_series pin
     JOIN series s ON s.id = pin.series_id
-    LEFT JOIN chapters c ON c.series_id = s.id`;
+    LEFT JOIN chapters c ON c.series_id = s.id
+    LEFT JOIN content_visibility_overrides visibility_override
+      ON visibility_override.chapter_id = c.id`;
+}
 
 export async function listPublicPinnedSeries() {
   const rows = await database()
     .prepare(
-      `${pinnedSelect}
+      `${pinnedSelect(`AND ${publicPaidChapterPredicate("c", "visibility_override")}`)}
        WHERE s.is_published = 1
          AND s.archived_at IS NULL
+         AND ${publicPaidSeriesPredicate("s")}
          AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
          AND s.rights_status IN ('LICENSED','AUTHORIZED','DEMO_ORIGINAL','TEST_ORIGINAL')
          AND pin.is_featured = 1
@@ -134,7 +144,7 @@ export async function listAdminPinnedSeries(query = "") {
   const [pins, series, state] = await Promise.all([
     db
       .prepare(
-        `${pinnedSelect}
+        `${pinnedSelect()}
          WHERE s.archived_at IS NULL
          GROUP BY pin.id, s.id
          ORDER BY pin.display_order, datetime(pin.created_at), pin.id`,

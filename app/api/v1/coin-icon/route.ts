@@ -8,6 +8,7 @@ import {
 import { assertSameOrigin, requestIdFor, sha256Hex } from "@/lib/server/admin-utils";
 import { requireActor, requireOwner } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,11 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const document = await getCommercialSettingsDocument();
-    if (!document.settings.economy.premiumEconomyPublic) {
+    const featureStates = env.DB ? await getFeatureStates(env.DB) : null;
+    if (
+      !document.settings.economy.premiumEconomyPublic ||
+      !featureStates?.premium_unlocks.effective
+    ) {
       throw new ApiError(
         404,
         "COIN_ICON_NOT_FOUND",

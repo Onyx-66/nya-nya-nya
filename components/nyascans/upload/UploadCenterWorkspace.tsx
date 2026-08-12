@@ -50,7 +50,11 @@ import {
   AddSeriesRequestPanel,
   SeriesRequestsPanel,
 } from "@/components/nyascans/upload/SeriesRequestWorkspace";
-import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  AdminCombobox,
+  ConfirmActionDialog,
+  type AdminComboboxOption,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
@@ -81,6 +85,13 @@ type UploadTeamOption = {
   canControlFixedReaderPages: boolean;
 };
 
+type UploadVisibilityDefaults = {
+  defaultAccessType: "FREE" | "PAID";
+  defaultPriceOnyx: number;
+  autoFreeAfterDays: number | null;
+  revision: number;
+};
+
 type UploadOptions = {
   series: Array<{
     id: string;
@@ -101,6 +112,7 @@ type UploadOptions = {
     reason: string;
   }>;
   limits: typeof UPLOAD_LIMITS;
+  visibilityDefaults: UploadVisibilityDefaults;
   admin: boolean;
   uploaderReview: {
     status: "UNAPPROVED" | "APPROVED" | "UNDER_SCOPE" | "REJECTED";
@@ -142,6 +154,7 @@ type UploadItem = {
   version: number;
   releaseNotes: string;
   credits: Credits;
+  useVisibilityDefault: boolean;
   accessType: "FREE" | "PAID";
   priceOnyx: number;
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
@@ -221,6 +234,13 @@ const uploadLanguages = [
   ["zh", "🇨🇳", "Chinese"],
 ] as const;
 
+const uploadLanguageComboboxOptions: readonly AdminComboboxOption[] =
+  uploadLanguages.map(([code, flag, name]) => ({
+    value: code,
+    label: `${flag} ${name}`,
+    description: code.toUpperCase(),
+  }));
+
 type ComposerItem = {
   clientKey: string;
   sourceLabel: string;
@@ -231,6 +251,7 @@ type ComposerItem = {
   version: number;
   releaseNotes: string;
   credits: Credits;
+  useVisibilityDefault: boolean;
   accessType: "FREE" | "PAID";
   priceOnyx: number;
   visibility: "PUBLIC" | "UNLISTED" | "HIDDEN";
@@ -306,6 +327,12 @@ const emptyCredits: Credits = {
 function newComposerItem(
   chapterNumber = "1",
   sourceLabel = "Chapter 1",
+  defaults: UploadVisibilityDefaults = {
+    defaultAccessType: "FREE",
+    defaultPriceOnyx: 0,
+    autoFreeAfterDays: null,
+    revision: 1,
+  },
 ): ComposerItem {
   return {
     clientKey: crypto.randomUUID(),
@@ -317,8 +344,12 @@ function newComposerItem(
     version: 1,
     releaseNotes: "",
     credits: { ...emptyCredits },
-    accessType: "FREE",
-    priceOnyx: 0,
+    useVisibilityDefault: true,
+    accessType: defaults.defaultAccessType,
+    priceOnyx:
+      defaults.defaultAccessType === "PAID"
+        ? defaults.defaultPriceOnyx
+        : 0,
     visibility: "PUBLIC",
     scheduledAt: "",
     commentsEnabled: true,
@@ -778,6 +809,7 @@ function ChapterMetadataFields({
   thumbnailUrl = null,
   onThumbnailChange,
   coinName = "Paw Coin",
+  visibilityDefaults,
   disabled = false,
   showFixedPageChoices = false,
   singleMode = false,
@@ -791,6 +823,7 @@ function ChapterMetadataFields({
   thumbnailUrl?: string | null;
   onThumbnailChange?(file: File | null): void;
   coinName?: string;
+  visibilityDefaults: UploadVisibilityDefaults;
   disabled?: boolean;
   showFixedPageChoices?: boolean;
   singleMode?: boolean;
@@ -841,19 +874,19 @@ function ChapterMetadataFields({
           onChange={(event) => onChange({ ...item, title: event.target.value })}
         />
       </label>
-      <label>
+      <div className="upload-combobox-field">
         <span>Language</span>
-        <select
+        <AdminCombobox
           disabled={disabled}
           value={item.language}
-          required
-          onChange={(event) =>
-            onChange({ ...item, language: event.target.value.toLowerCase() })
+          options={uploadLanguageComboboxOptions}
+          onChange={(value) =>
+            onChange({ ...item, language: value.toLowerCase() })
           }
-        >
-          {uploadLanguages.map(([code, flag, name]) => <option value={code} key={code}>{flag} {name}</option>)}
-        </select>
-      </label>
+          ariaLabel="Chapter language"
+          placeholder="Search languages…"
+        />
+      </div>
       {!singleMode ? <label>
         <span>Version</span>
         <input
@@ -870,36 +903,61 @@ function ChapterMetadataFields({
           }
         />
       </label> : null}
-      {showCommerce ? (
-        <>
-          <label>
-            <span>Availability</span>
-            <select
-              disabled={disabled}
-              value={item.accessType}
-              onChange={(event) =>
-                onChange({
-                  ...item,
-                  accessType: event.target.value as "FREE" | "PAID",
-                  priceOnyx:
-                    event.target.value === "FREE"
-                      ? 0
-                      : Math.max(1, item.priceOnyx),
-                })
-              }
-            >
-              <option value="FREE">Free</option>
-              <option value="PAID">Paid</option>
-            </select>
-          </label>
+      <label>
+        <span>Availability</span>
+        <select
+          disabled={disabled}
+          value={item.useVisibilityDefault ? "DEFAULT" : item.accessType}
+          onChange={(event) => {
+            const value = event.target.value as "DEFAULT" | "FREE" | "PAID";
+            onChange(
+              value === "DEFAULT"
+                ? {
+                    ...item,
+                    useVisibilityDefault: true,
+                    accessType: visibilityDefaults.defaultAccessType,
+                    priceOnyx:
+                      visibilityDefaults.defaultAccessType === "PAID"
+                        ? visibilityDefaults.defaultPriceOnyx
+                        : 0,
+                  }
+                : {
+                    ...item,
+                    useVisibilityDefault: false,
+                    accessType: value,
+                    priceOnyx:
+                      value === "FREE" ? 0 : Math.max(1, item.priceOnyx),
+                  },
+            );
+          }}
+        >
+          <option value="DEFAULT">
+            Global default · {visibilityDefaults.defaultAccessType === "PAID"
+              ? `Paid (${visibilityDefaults.defaultPriceOnyx.toLocaleString()} ${coinName})`
+              : "Free"}
+          </option>
+          <option value="FREE">Free exception</option>
+          {showCommerce ? <option value="PAID">Paid exception</option> : null}
+        </select>
+        <small>
+          {item.useVisibilityDefault
+            ? visibilityDefaults.autoFreeAfterDays == null
+              ? "Inherits the current global rule."
+              : `Inherited paid access becomes free ${visibilityDefaults.autoFreeAfterDays} days after publication.`
+            : "Explicit exception for this chapter."}
+        </small>
+      </label>
+      {showCommerce &&
+      !item.useVisibilityDefault &&
+      item.accessType === "PAID" ? (
           <label>
             <span>Price <small>{coinName} required to unlock</small></span>
             <input
               type="number"
               min="1"
               max="100000"
-              disabled={disabled || item.accessType !== "PAID"}
-              value={item.accessType === "PAID" ? item.priceOnyx : 0}
+              disabled={disabled}
+              value={item.priceOnyx}
               onChange={(event) =>
                 onChange({
                   ...item,
@@ -908,7 +966,6 @@ function ChapterMetadataFields({
               }
             />
           </label>
-        </>
       ) : null}
       <label>
         <span>Visibility</span>
@@ -1428,7 +1485,9 @@ function UploadComposer({
         : "DIRECT_IMAGES"
       : ingestMethod;
   const [googleDriveUrl, setGoogleDriveUrl] = useState("");
-  const [items, setItems] = useState<ComposerItem[]>([newComposerItem()]);
+  const [items, setItems] = useState<ComposerItem[]>(() => [
+    newComposerItem("1", "Chapter 1", options.visibilityDefaults),
+  ]);
   const [localPages, setLocalPages] = useState<LocalPage[]>([]);
   const [batchPaidEnabled, setBatchPaidEnabled] = useState(false);
   const [batchPaidPrice, setBatchPaidPrice] = useState(1);
@@ -1453,6 +1512,11 @@ function UploadComposer({
     existingChapterId: string;
     chapterNumber: string;
   } | null>(null);
+  const [pageRemovalPrompt, setPageRemovalPrompt] = useState<{
+    item: UploadItem;
+    file: UploadFileRecord;
+  } | null>(null);
+  const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
   const [activePreviewGroup, setActivePreviewGroup] = useState("");
   const [previewOffsets, setPreviewOffsets] = useState<Record<string, number>>(
     {},
@@ -1525,6 +1589,7 @@ function UploadComposer({
             version: item.version,
             releaseNotes: item.releaseNotes,
             credits: { ...emptyCredits, ...item.credits },
+            useVisibilityDefault: item.useVisibilityDefault ?? false,
             accessType: item.accessType,
             priceOnyx: item.priceOnyx,
             visibility: item.visibility,
@@ -1543,12 +1608,21 @@ function UploadComposer({
         const firstPaidItem = nextItems.find(
           (item) => item.accessType === "PAID",
         );
+        const firstExplicitPaidItem = nextItems.find(
+          (item) =>
+            !item.useVisibilityDefault && item.accessType === "PAID",
+        );
         const resumedPaidPrices = new Set(
           nextItems
             .filter((item) => item.accessType === "PAID")
             .map((item) => item.priceOnyx),
         );
-        const resumedPrice = normalizedPaidPrice(firstPaidItem?.priceOnyx ?? 1);
+        const resumedPrice = normalizedPaidPrice(
+          firstExplicitPaidItem?.priceOnyx ??
+            firstPaidItem?.priceOnyx ??
+            options.visibilityDefaults.defaultPriceOnyx ??
+            1,
+        );
         const premiumAllowed = commercial.economy.premiumEconomyPublic;
         const priceNeedsCleanup = resumedPaidPrices.size > 1;
         const privacyNeedsCleanup = Boolean(firstPaidItem) && !premiumAllowed;
@@ -1556,10 +1630,13 @@ function UploadComposer({
           ? nextItems
           : nextItems.map((item) => ({
               ...item,
+              useVisibilityDefault: false,
               accessType: "FREE" as const,
               priceOnyx: 0,
             }));
-        setBatchPaidEnabled(premiumAllowed && Boolean(firstPaidItem));
+        setBatchPaidEnabled(
+          premiumAllowed && Boolean(firstExplicitPaidItem),
+        );
         setBatchPaidPrice(resumedPrice);
         setBatchVisibility(visibleItems[0]?.visibility ?? "PUBLIC");
         setItems(visibleItems);
@@ -1596,6 +1673,7 @@ function UploadComposer({
     kind,
     options.admin,
     options.teams,
+    options.visibilityDefaults.defaultPriceOnyx,
     resumeJobId,
   ]);
 
@@ -1647,13 +1725,35 @@ function UploadComposer({
     if (busy || persistingRef.current) return;
     setBatchPaidEnabled(enabled);
     markComposerDirty();
+    if (
+      enabled &&
+      items.some(
+        (item) => item.useVisibilityDefault && item.accessType === "PAID",
+      )
+    ) {
+      setBatchPaidPrice(options.visibilityDefaults.defaultPriceOnyx);
+      setItems((current) =>
+        current.map((item) =>
+          !item.useVisibilityDefault && item.accessType === "PAID"
+            ? {
+                ...item,
+                priceOnyx: options.visibilityDefaults.defaultPriceOnyx,
+              }
+            : item,
+        ),
+      );
+    }
     if (!enabled) {
       setItems((current) =>
-        current.map((item) => ({
-          ...item,
-          accessType: "FREE",
-          priceOnyx: 0,
-        })),
+        current.map((item) =>
+          item.useVisibilityDefault
+            ? item
+            : {
+                ...item,
+                accessType: "FREE",
+                priceOnyx: 0,
+              },
+        ),
       );
     }
   }
@@ -1665,7 +1765,7 @@ function UploadComposer({
     markComposerDirty();
     setItems((current) =>
       current.map((item) =>
-        item.accessType === "PAID"
+        !item.useVisibilityDefault && item.accessType === "PAID"
           ? { ...item, priceOnyx: nextPrice }
           : item,
       ),
@@ -1680,12 +1780,63 @@ function UploadComposer({
         item.clientKey === clientKey
           ? {
               ...item,
+              useVisibilityDefault: false,
               accessType: enabled ? "PAID" : "FREE",
               priceOnyx: enabled ? batchPaidPrice : 0,
             }
           : item,
       ),
     );
+  }
+
+  function changeBatchItemVisibilityDefault(
+    clientKey: string,
+    enabled: boolean,
+  ) {
+    if (busy || persistingRef.current) return;
+    markComposerDirty();
+    const selectedItem = items.find((item) => item.clientKey === clientKey);
+    if (
+      !enabled &&
+      selectedItem?.accessType === "PAID"
+    ) {
+      setBatchPaidEnabled(true);
+      setBatchPaidPrice(normalizedPaidPrice(selectedItem.priceOnyx));
+    }
+    setItems((current) =>
+      current.map((item) => {
+        if (item.clientKey !== clientKey) return item;
+        if (enabled) {
+          const inheritedItem = {
+            ...item,
+            useVisibilityDefault: true,
+            accessType: options.visibilityDefaults.defaultAccessType,
+            priceOnyx:
+              options.visibilityDefaults.defaultAccessType === "PAID"
+                ? options.visibilityDefaults.defaultPriceOnyx
+                : 0,
+          };
+          return inheritedItem;
+        }
+        return { ...item, useVisibilityDefault: false };
+      }),
+    );
+    if (
+      enabled &&
+      options.visibilityDefaults.defaultAccessType === "PAID"
+    ) {
+      setBatchPaidPrice(options.visibilityDefaults.defaultPriceOnyx);
+      setItems((current) =>
+        current.map((item) =>
+          !item.useVisibilityDefault && item.accessType === "PAID"
+            ? {
+                ...item,
+                priceOnyx: options.visibilityDefaults.defaultPriceOnyx,
+              }
+            : item,
+        ),
+      );
+    }
   }
 
   function changeBatchVisibility(visibility: ComposerItem["visibility"]) {
@@ -1923,7 +2074,11 @@ function UploadComposer({
           if (existing) return existing;
           const metadata = detectBatchChapter(group, index + 1);
           return {
-            ...newComposerItem(metadata.chapterNumber, metadata.sourceLabel),
+            ...newComposerItem(
+              metadata.chapterNumber,
+              metadata.sourceLabel,
+              options.visibilityDefaults,
+            ),
             volume: metadata.volume,
             title: metadata.title,
             visibility: batchVisibility,
@@ -2109,7 +2264,7 @@ function UploadComposer({
     if (!job) {
       setItems([
         {
-          ...newComposerItem(),
+          ...newComposerItem("1", "Chapter 1", options.visibilityDefaults),
           visibility: batchVisibility,
         },
       ]);
@@ -2286,7 +2441,15 @@ function UploadComposer({
         if (kind === "BATCH") {
           const paidClientKeys = new Set(
             selectedItems
-              .filter((item) => item.accessType === "PAID")
+              .filter(
+                (item) =>
+                  !item.useVisibilityDefault && item.accessType === "PAID",
+              )
+              .map((item) => item.clientKey),
+          );
+          const visibilityDefaultClientKeys = new Set(
+            selectedItems
+              .filter((item) => item.useVisibilityDefault)
               .map((item) => item.clientKey),
           );
           const updated = await readJson<{ data: UploadJob }>(
@@ -2300,6 +2463,11 @@ function UploadComposer({
                 priceOnyx: batchPaidPrice,
                 paidItemIds: (current.items ?? [])
                   .filter((item) => paidClientKeys.has(item.clientKey))
+                  .map((item) => item.id),
+                visibilityDefaultItemIds: (current.items ?? [])
+                  .filter((item) =>
+                    visibilityDefaultClientKeys.has(item.clientKey),
+                  )
                   .map((item) => item.id),
               }),
             }),
@@ -2609,7 +2777,7 @@ function UploadComposer({
   }
 
   async function removeServerPage(item: UploadItem, file: UploadFileRecord) {
-    if (!job || !window.confirm(`Remove ${file.filename} from this draft?`)) return;
+    if (!job) return;
     setBusy(true);
     setConfirmed(false);
     setError("");
@@ -2636,6 +2804,7 @@ function UploadComposer({
       );
     } finally {
       setBusy(false);
+      setPageRemovalPrompt(null);
     }
   }
 
@@ -2684,14 +2853,7 @@ function UploadComposer({
   }
 
   async function discard() {
-    if (
-      !job ||
-      !window.confirm(
-        "Discard this draft and remove its temporary page objects? This cannot be undone.",
-      )
-    ) {
-      return;
-    }
+    if (!job) return;
     setBusy(true);
     try {
       await readJson(
@@ -2705,6 +2867,7 @@ function UploadComposer({
           }),
         }),
       );
+      setDiscardPromptOpen(false);
       window.location.href = routeFor("drafts");
     } catch (discardError) {
       setError(
@@ -2712,6 +2875,7 @@ function UploadComposer({
           ? discardError.message
           : "The draft could not be discarded.",
       );
+      setDiscardPromptOpen(false);
       setBusy(false);
     }
   }
@@ -2723,6 +2887,19 @@ function UploadComposer({
           all.findIndex((candidate) => candidate.id === entry.id) === index,
       ),
     [options.series],
+  );
+  const eligibleSeriesComboboxOptions = useMemo<
+    readonly AdminComboboxOption[]
+  >(
+    () =>
+      eligibleSeries.map((series) => ({
+        value: series.id,
+        label: series.title,
+        description: [series.slug, series.teamName]
+          .filter(Boolean)
+          .join(" · "),
+      })),
+    [eligibleSeries],
   );
   const selectedTeam = options.teams.find((team) => team.id === teamId) ?? null;
   function selectPublishingTeam(nextTeamId: string) {
@@ -2749,6 +2926,9 @@ function UploadComposer({
     return localCount + storedCount > 0;
   }).length;
   const hasQueuedPages = queuedPageCount > 0;
+  const hasInheritedPaid = items.some(
+    (item) => item.useVisibilityDefault && item.accessType === "PAID",
+  );
 
   return (
     <>
@@ -2883,24 +3063,22 @@ function UploadComposer({
                 ) : null}
               </div>
               <div className="upload-quick-grid">
-                <label>
+                <div className="upload-combobox-field">
                   <span>Series</span>
-                  <select
-                    required
+                  <AdminCombobox
                     value={seriesId}
                     disabled={busy || Boolean(job)}
-                    onChange={(event) => setSeriesId(event.target.value)}
-                  >
-                    {!eligibleSeries.length ? (
-                      <option value="">No public series available</option>
-                    ) : null}
-                    {eligibleSeries.map((series) => (
-                      <option value={series.id} key={series.id}>
-                        {series.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    options={eligibleSeriesComboboxOptions}
+                    onChange={setSeriesId}
+                    ariaLabel="Search eligible public series"
+                    placeholder="Search public series…"
+                    emptyLabel={
+                      eligibleSeries.length
+                        ? undefined
+                        : "No public series available"
+                    }
+                  />
+                </div>
                 <label>
                   <span>Release visibility</span>
                   <select
@@ -2923,6 +3101,18 @@ function UploadComposer({
                   <small>Multiple sources can be combined in one queue.</small>
                 </div>
               </div>
+              <p className="upload-page-preview-note">
+                <Info size={15} aria-hidden="true" /> New chapters inherit the
+                global access rule by default: {" "}
+                <strong>
+                  {options.visibilityDefaults.defaultAccessType === "PAID"
+                    ? `Paid · ${options.visibilityDefaults.defaultPriceOnyx.toLocaleString()} ${commercial.economy.coinName}`
+                    : "Free"}
+                </strong>
+                {options.visibilityDefaults.autoFreeAfterDays == null
+                  ? "."
+                  : `, then free ${options.visibilityDefaults.autoFreeAfterDays} days after publication.`}
+              </p>
               {commercialLoaded &&
               commercial.economy.premiumEconomyPublic ? (
                 <div className="upload-batch-paid-panel">
@@ -2963,7 +3153,7 @@ function UploadComposer({
                     type="number"
                     min="1"
                     max="100000"
-                    disabled={busy || !batchPaidEnabled}
+                    disabled={busy || !batchPaidEnabled || hasInheritedPaid}
                     value={batchPaidPrice}
                     onChange={(event) =>
                       changeBatchPaidPrice(Number(event.target.value))
@@ -2981,24 +3171,22 @@ function UploadComposer({
                 disabled={busy || Boolean(job)}
                 onSelect={selectPublishingTeam}
               />
-              <label>
+              <div className="upload-combobox-field">
                 <span>Series</span>
-                <select
-                  required
+                <AdminCombobox
                   value={seriesId}
                   disabled={busy || Boolean(job)}
-                  onChange={(event) => setSeriesId(event.target.value)}
-                >
-                  {!eligibleSeries.length ? (
-                    <option value="">No public series available</option>
-                  ) : null}
-                  {eligibleSeries.map((series) => (
-                    <option value={series.id} key={series.id}>
-                      {series.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  options={eligibleSeriesComboboxOptions}
+                  onChange={setSeriesId}
+                  ariaLabel="Search eligible public series"
+                  placeholder="Search public series…"
+                  emptyLabel={
+                    eligibleSeries.length
+                      ? undefined
+                      : "No public series available"
+                  }
+                />
+              </div>
             </div>
           )}
         </section>
@@ -3015,6 +3203,7 @@ function UploadComposer({
               singleMode
               disabled={busy}
               coinName={commercial.economy.coinName}
+              visibilityDefaults={options.visibilityDefaults}
               showCommerce={
                 commercialLoaded &&
                 commercial.economy.premiumEconomyPublic
@@ -3140,7 +3329,7 @@ function UploadComposer({
                       type="button"
                       className="button button-danger"
                       disabled={busy}
-                      onClick={() => void discard()}
+                      onClick={() => setDiscardPromptOpen(true)}
                     >
                       <Trash size={17} /> Discard draft
                     </button>
@@ -3481,7 +3670,7 @@ function UploadComposer({
                         type="button"
                         aria-label="Remove page"
                         disabled={busy}
-                        onClick={() => void removeServerPage(item, file)}
+                        onClick={() => setPageRemovalPrompt({ item, file })}
                       ><Trash size={16} /></button>
                     </li>
                   ))}
@@ -3577,36 +3766,59 @@ function UploadComposer({
                             {item.chapterNumber}
                           </small>
                         </div>
-                        {commercialLoaded &&
-                        commercial.economy.premiumEconomyPublic ? (
+                        <div className="upload-queue-access-controls">
                           <label className="upload-queue-paid-toggle">
-                          <input
-                            type="checkbox"
-                            checked={item.accessType === "PAID"}
-                            disabled={busy || !batchPaidEnabled}
-                            onChange={(event) =>
-                              changeBatchItemPaid(
-                                item.clientKey,
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          <span aria-hidden="true" />
-                          <b>
-                            {item.accessType === "PAID"
-                              ? `Paid · ${batchPaidPrice.toLocaleString()} ${commercial.economy.coinName}`
-                              : batchPaidEnabled
-                                ? "Free chapter"
-                                : "Paid option off"}
-                          </b>
+                            <input
+                              type="checkbox"
+                              checked={item.useVisibilityDefault}
+                              disabled={busy}
+                              onChange={(event) =>
+                                changeBatchItemVisibilityDefault(
+                                  item.clientKey,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            <span aria-hidden="true" />
+                            <b>
+                              {item.useVisibilityDefault
+                                ? `Global default · ${item.accessType === "PAID" ? `Paid ${item.priceOnyx.toLocaleString()}` : "Free"}`
+                                : "Explicit exception"}
+                            </b>
                           </label>
-                        ) : null}
+                          {!item.useVisibilityDefault &&
+                          commercialLoaded &&
+                          commercial.economy.premiumEconomyPublic ? (
+                            <label className="upload-queue-paid-toggle">
+                              <input
+                                type="checkbox"
+                                checked={item.accessType === "PAID"}
+                                disabled={busy || !batchPaidEnabled}
+                                onChange={(event) =>
+                                  changeBatchItemPaid(
+                                    item.clientKey,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              <span aria-hidden="true" />
+                              <b>
+                                {item.accessType === "PAID"
+                                  ? `Paid · ${batchPaidPrice.toLocaleString()} ${commercial.economy.coinName}`
+                                  : batchPaidEnabled
+                                    ? "Free chapter"
+                                    : "Paid option off"}
+                              </b>
+                            </label>
+                          ) : null}
+                        </div>
                       </header>
                       <details className="upload-queue-details">
                         <summary>Edit chapter metadata</summary>
                         <ChapterMetadataFields
                           disabled={busy}
                           coinName={commercial.economy.coinName}
+                          visibilityDefaults={options.visibilityDefaults}
                           compact={false}
                           showCommerce={false}
                           item={item}
@@ -3696,7 +3908,7 @@ function UploadComposer({
               type="button"
               className="button button-secondary"
               disabled={busy}
-              onClick={() => void discard()}
+              onClick={() => setDiscardPromptOpen(true)}
             >
               <Trash size={17} /> Discard draft
             </button>
@@ -3715,6 +3927,30 @@ function UploadComposer({
         </>
       )}
     </section>
+    <ConfirmActionDialog
+      open={Boolean(pageRemovalPrompt)}
+      title="Remove this page?"
+      description={`Remove ${pageRemovalPrompt?.file.filename ?? "this page"} from this draft?`}
+      confirmLabel="Remove page"
+      busy={busy}
+      onCancel={() => setPageRemovalPrompt(null)}
+      onConfirm={() => {
+        if (!pageRemovalPrompt) return;
+        void removeServerPage(
+          pageRemovalPrompt.item,
+          pageRemovalPrompt.file,
+        );
+      }}
+    />
+    <ConfirmActionDialog
+      open={discardPromptOpen}
+      title="Discard this draft?"
+      description="Discard this draft and remove its temporary page objects? This cannot be undone."
+      confirmLabel="Discard draft"
+      busy={busy}
+      onCancel={() => setDiscardPromptOpen(false)}
+      onConfirm={() => void discard()}
+    />
     <ConfirmActionDialog
       open={Boolean(duplicatePrompt)}
       title="Do you want to replace existing chapter?"
@@ -4035,38 +4271,38 @@ export function UploadCenterWorkspace({
 
   return (
     <section
-      className="upload-center-workspace"
+      className="control-panel"
       data-administrator={admin ? "true" : "false"}
     >
-      <aside className="upload-center-nav">
+      <header className="upload-section-heading">
         <div>
           <CloudArrowUp size={23} />
-          <span><strong>Upload Center</strong><small>Team publishing workspace</small></span>
+          <span>
+            <strong>Upload Center</strong>
+            <small>Team publishing workspace</small>
+          </span>
         </div>
-        <nav aria-label="Upload Center sections">
-          {availableNavItems.map(([id, label, Icon]) => (
-            <a
-              href={routeFor(id)}
-              key={id}
-              aria-current={selectedMode === id ? "page" : undefined}
-            >
-              <Icon size={18} /><span>{label}</span>
-            </a>
-          ))}
-        </nav>
-      </aside>
-      <main className="upload-center-main">
-        <label className="upload-center-mobile-nav">
-          <span>Upload Center section</span>
-          <select
-            value={selectedMode}
-            onChange={(event) => {
-              window.location.href = routeFor(event.target.value as UploadMode);
+      </header>
+      <nav
+        className="admin-subnav"
+        aria-label="Upload Center sections"
+        role="tablist"
+      >
+        {availableNavItems.map(([id, label, Icon]) => (
+          <button
+            type="button"
+            role="tab"
+            key={id}
+            aria-selected={selectedMode === id}
+            onClick={() => {
+              window.location.href = routeFor(id);
             }}
           >
-            {availableNavItems.map(([id, label]) => <option value={id} key={id}>{label}</option>)}
-          </select>
-        </label>
+            <Icon size={18} /><span>{label}</span>
+          </button>
+        ))}
+      </nav>
+      <main className="upload-center-main">
         {error ? (
           <div className="upload-alert is-error" role="alert">
             <WarningCircle size={19} /> {error}

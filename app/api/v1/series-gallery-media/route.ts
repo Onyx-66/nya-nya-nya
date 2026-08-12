@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requestIdFor } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse } from "@/lib/server/api";
 import { getActor } from "@/lib/server/policy";
+import { publicPaidSeriesPredicate } from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
          FROM series_gallery_assets sga
          JOIN series s ON s.id = sga.series_id
         WHERE sga.id = ?
+          AND ${publicPaidSeriesPredicate("s")}
         LIMIT 1`,
     )
       .bind(id)
@@ -89,9 +91,7 @@ export async function GET(request: Request) {
     headers.set("content-disposition", "inline");
     headers.set(
       "cache-control",
-      publiclyAvailable
-        ? "public, max-age=3600, stale-while-revalidate=86400"
-        : "private, no-store",
+      "private, no-store",
     );
     headers.set("etag", object.httpEtag);
     headers.set("x-request-id", requestId);

@@ -30,6 +30,7 @@ import {
 } from "@/lib/server/upload-jobs";
 import { requireActor, type Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
@@ -92,6 +93,109 @@ async function assertPaidEconomyGuardFresh(expectedRevision: number) {
       "Commercial settings changed while this upload was being saved. Review the paid chapter selection and retry.",
     );
   }
+}
+
+type VisibilityDefaults = {
+  defaultAccessType: "FREE" | "PAID";
+  defaultPriceOnyx: number;
+  autoFreeAfterDays: number | null;
+  revision: number;
+};
+
+async function readVisibilityDefaults(db: D1Database) {
+  const row = await db
+    .prepare(
+      `SELECT default_access_type AS defaultAccessType,
+              default_price_onyx AS defaultPriceOnyx,
+              auto_free_after_days AS autoFreeAfterDays,
+              revision
+         FROM content_visibility_settings
+        WHERE id = 'active'
+        LIMIT 1`,
+    )
+    .first<VisibilityDefaults>();
+  if (!row || !["FREE", "PAID"].includes(row.defaultAccessType)) {
+    throw new ApiError(
+      503,
+      "CONTENT_VISIBILITY_NOT_INITIALIZED",
+      "The default chapter access policy is unavailable.",
+    );
+  }
+  if (
+    row.defaultAccessType === "PAID" &&
+    (!Number.isSafeInteger(Number(row.defaultPriceOnyx)) ||
+      Number(row.defaultPriceOnyx) < 1)
+  ) {
+    throw new ApiError(
+      503,
+      "CONTENT_VISIBILITY_INVALID",
+      "The default paid chapter price is invalid.",
+    );
+  }
+  return {
+    defaultAccessType: row.defaultAccessType,
+    defaultPriceOnyx:
+      row.defaultAccessType === "PAID" ? Number(row.defaultPriceOnyx) : 0,
+    autoFreeAfterDays:
+      row.autoFreeAfterDays == null ? null : Number(row.autoFreeAfterDays),
+    revision: Number(row.revision),
+  } satisfies VisibilityDefaults;
+}
+
+function visibilityDefaultsRevisionSql(expectedRevision: number) {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    throw new ApiError(
+      409,
+      "CONTENT_VISIBILITY_CHANGED",
+      "The default chapter access policy changed. Reload and retry.",
+    );
+  }
+  return `EXISTS (
+    SELECT 1 FROM content_visibility_settings live_visibility_defaults
+     WHERE live_visibility_defaults.id = 'active'
+       AND live_visibility_defaults.revision = ${expectedRevision}
+  )`;
+}
+
+async function assertVisibilityDefaultsFresh(
+  db: D1Database,
+  expectedRevision: number,
+) {
+  const current = await readVisibilityDefaults(db);
+  if (current.revision !== expectedRevision) {
+    throw new ApiError(
+      409,
+      "CONTENT_VISIBILITY_CHANGED",
+      "The default chapter access policy changed. Reload and retry.",
+    );
+  }
+}
+
+function resolveVisibilityDefault<
+  T extends {
+    useVisibilityDefault: boolean;
+    accessType: "FREE" | "PAID";
+    priceOnyx: number;
+  },
+>(item: T, defaults: VisibilityDefaults | null): T {
+  if (!item.useVisibilityDefault || !defaults) return item;
+  return {
+    ...item,
+    accessType: defaults.defaultAccessType,
+    priceOnyx:
+      defaults.defaultAccessType === "PAID" ? defaults.defaultPriceOnyx : 0,
+  };
+}
+
+function uploadCreditsJson(
+  credits: Record<string, string>,
+  useVisibilityDefault: boolean,
+) {
+  return JSON.stringify({ ...credits, useVisibilityDefault });
+}
+
+function usesVisibilityDefault(value: unknown) {
+  return value === true || value === 1;
 }
 
 type UploadItemRow = {
@@ -373,24 +477,30 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
   }
   return {
     ...job,
-    items: itemsResult.results.map((item) => ({
-      ...item,
-      credits: parseJson(item.creditsJson, {}),
-      commentsEnabled: Boolean(item.commentsEnabled),
-      includeFixedFirstPage: Boolean(item.includeFixedFirstPage),
-      includeFixedLastPage: Boolean(item.includeFixedLastPage),
-      thumbnailUrl: item.thumbnailKey
-        ? `/api/v1/upload-job-thumbnail?jobId=${encodeURIComponent(jobId)}&itemId=${encodeURIComponent(item.id)}&v=${item.revision}`
-        : null,
-      files: filesByItem.get(item.id) ?? [],
-    })),
+    items: itemsResult.results.map((item) => {
+      const credits = parseJson<Record<string, unknown>>(item.creditsJson, {});
+      return {
+        ...item,
+        credits,
+        useVisibilityDefault: usesVisibilityDefault(
+          credits.useVisibilityDefault,
+        ),
+        commentsEnabled: Boolean(item.commentsEnabled),
+        includeFixedFirstPage: Boolean(item.includeFixedFirstPage),
+        includeFixedLastPage: Boolean(item.includeFixedLastPage),
+        thumbnailUrl: item.thumbnailKey
+          ? `/api/v1/upload-job-thumbnail?jobId=${encodeURIComponent(jobId)}&itemId=${encodeURIComponent(item.id)}&v=${item.revision}`
+          : null,
+        files: filesByItem.get(item.id) ?? [],
+      };
+    }),
   };
 }
 
 async function uploadOptions(db: D1Database, actor: Actor) {
   const admin = isUploadAdmin(actor);
   const owner = actor.roles.includes("OWNER");
-  const [seriesResult, teamsResult] = await Promise.all([
+  const [seriesResult, teamsResult, visibilityDefaults] = await Promise.all([
     db
       .prepare(
         `SELECT s.id,
@@ -446,6 +556,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
         logoUrl: string | null;
         bannerUrl: string | null;
       }>(),
+    readVisibilityDefaults(db),
   ]);
   const canPublishByRole =
     admin ||
@@ -483,6 +594,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
     })(),
     methods: UPLOAD_METHODS,
     limits: UPLOAD_LIMITS,
+    visibilityDefaults,
     admin,
   };
 }
@@ -668,9 +780,6 @@ export async function POST(request: Request) {
       );
     }
     const payload = createUploadJobSchema.parse(await request.json());
-    const hasPaidItems = payload.items.some(
-      (item) => item.accessType === "PAID",
-    );
     const existing = await env.DB.prepare(
       `SELECT id
          FROM upload_jobs
@@ -690,19 +799,45 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "private, no-store" } },
       );
     }
+    const visibilityDefaults = payload.items.some(
+      (item) => item.useVisibilityDefault,
+    )
+      ? await readVisibilityDefaults(env.DB)
+      : null;
+    const resolvedItems = payload.items.map((item) =>
+      resolveVisibilityDefault(item, visibilityDefaults),
+    );
+    const hasPaidItems = resolvedItems.some(
+      (item) => item.accessType === "PAID",
+    );
+    const resolvedPaidPrices = new Set(
+      resolvedItems
+        .filter((item) => item.accessType === "PAID")
+        .map((item) => item.priceOnyx),
+    );
+    if (payload.kind === "BATCH" && resolvedPaidPrices.size > 1) {
+      throw new ApiError(
+        422,
+        "BATCH_PAID_PRICE_MISMATCH",
+        "Inherited and explicit paid chapters in one batch must use the same price.",
+      );
+    }
     const paidEconomyRevision = hasPaidItems
       ? (await requirePaidEconomyPublicDocument()).revision
       : null;
+    const visibilityDefaultsRevision = visibilityDefaults?.revision ?? null;
+    const creationGuardRequired =
+      paidEconomyRevision !== null || visibilityDefaultsRevision !== null;
     await assertUploadRateLimit(env.DB, actor, "JOB");
     const scope = await requireUploadScope(
       env.DB,
       actor,
       payload.seriesId,
       payload.teamId,
-      payload.items.map((item) => item.language),
+      resolvedItems.map((item) => item.language),
     );
-    await assertFixedReaderPageControl(env.DB, scope.teamId, payload.items);
-    for (const item of payload.items) {
+    await assertFixedReaderPageControl(env.DB, scope.teamId, resolvedItems);
+    for (const item of resolvedItems) {
       const duplicate = await env.DB.prepare(
         `SELECT c.id, c.state
            FROM chapters c
@@ -747,7 +882,7 @@ export async function POST(request: Request) {
       }
     }
     const jobId = `upj_${randomId()}`;
-    const itemRecords = payload.items.map((item) => ({
+    const itemRecords = resolvedItems.map((item) => ({
       ...item,
       id: `upi_${randomId()}`,
     }));
@@ -773,7 +908,14 @@ export async function POST(request: Request) {
             paidEconomyRevision === null
               ? "1 = 1"
               : paidEconomyPublicSql(paidEconomyRevision)
-          }`,
+          }
+            AND ${
+              visibilityDefaultsRevision === null
+                ? "1 = 1"
+                : visibilityDefaultsRevisionSql(
+                    visibilityDefaultsRevision,
+                  )
+            }`,
       ).bind(
         jobId,
         actor.id,
@@ -786,7 +928,7 @@ export async function POST(request: Request) {
         `+${UPLOAD_LIMITS.draftLifetimeDays} days`,
         ...createAuthorization.bindings,
       ),
-      ...(paidEconomyRevision === null
+      ...(!creationGuardRequired
         ? []
         : [
             env.DB.prepare(
@@ -819,7 +961,7 @@ export async function POST(request: Request) {
           item.language,
           item.version,
           item.releaseNotes,
-          JSON.stringify(item.credits),
+          uploadCreditsJson(item.credits, item.useVisibilityDefault),
           item.accessType,
           item.priceOnyx,
           item.visibility,
@@ -844,7 +986,7 @@ export async function POST(request: Request) {
           chapterCount: itemRecords.length,
         },
       }),
-      ...(paidEconomyRevision === null
+      ...(!creationGuardRequired
         ? []
         : [
             env.DB.prepare(
@@ -855,8 +997,16 @@ export async function POST(request: Request) {
     try {
       await env.DB.batch(createStatements);
     } catch (error) {
-      if (paidEconomyRevision !== null && isUploadGuardFailure(error)) {
-        await assertPaidEconomyGuardFresh(paidEconomyRevision);
+      if (creationGuardRequired && isUploadGuardFailure(error)) {
+        if (paidEconomyRevision !== null) {
+          await assertPaidEconomyGuardFresh(paidEconomyRevision);
+        }
+        if (visibilityDefaultsRevision !== null) {
+          await assertVisibilityDefaultsFresh(
+            env.DB,
+            visibilityDefaultsRevision,
+          );
+        }
         throw new ApiError(
           409,
           "UPLOAD_JOB_CHANGED",
@@ -953,8 +1103,18 @@ export async function PATCH(request: Request) {
           "This upload can no longer be edited.",
         );
       }
+      const itemVisibilityDefaults =
+        job.kind === "SINGLE" && payload.item.useVisibilityDefault
+          ? await readVisibilityDefaults(env.DB)
+          : null;
+      const resolvedItem = resolveVisibilityDefault(
+        payload.item,
+        itemVisibilityDefaults,
+      );
+      const itemVisibilityDefaultsRevision =
+        itemVisibilityDefaults?.revision ?? null;
       const singlePaidUpdate =
-        job.kind === "SINGLE" && payload.item.accessType === "PAID";
+        job.kind === "SINGLE" && resolvedItem.accessType === "PAID";
       const singlePaidEconomyRevision = singlePaidUpdate
         ? (await requirePaidEconomyPublicDocument()).revision
         : null;
@@ -963,9 +1123,9 @@ export async function PATCH(request: Request) {
         actor,
         job.seriesId,
         job.teamId,
-        [payload.item.language],
+        [resolvedItem.language],
       );
-      await assertFixedReaderPageControl(env.DB, job.teamId, [payload.item]);
+      await assertFixedReaderPageControl(env.DB, job.teamId, [resolvedItem]);
       const duplicate = await env.DB.prepare(
         `SELECT id
            FROM chapters
@@ -979,15 +1139,15 @@ export async function PATCH(request: Request) {
       )
         .bind(
           job.seriesId,
-          payload.item.chapterNumber,
-          payload.item.language,
+          resolvedItem.chapterNumber,
+          resolvedItem.language,
           job.teamId,
-          payload.item.version,
+          resolvedItem.version,
         )
         .first<{ id: string }>();
       if (
         duplicate &&
-        payload.item.replacementChapterId !== duplicate.id
+        resolvedItem.replacementChapterId !== duplicate.id
       ) {
         throw new ApiError(
           409,
@@ -995,13 +1155,13 @@ export async function PATCH(request: Request) {
           "This exact release already exists.",
           undefined,
           {
-            clientKey: payload.item.clientKey,
+            clientKey: resolvedItem.clientKey,
             existingChapterId: duplicate.id,
-            chapterNumber: payload.item.chapterNumber,
+            chapterNumber: resolvedItem.chapterNumber,
           },
         );
       }
-      if (payload.item.replacementChapterId && !duplicate) {
+      if (resolvedItem.replacementChapterId && !duplicate) {
         throw new ApiError(
           409,
           "REPLACEMENT_TARGET_CHANGED",
@@ -1025,6 +1185,11 @@ export async function PATCH(request: Request) {
                   ? ""
                   : `AND ${paidEconomyPublicSql(singlePaidEconomyRevision)}`
               }
+              ${
+                itemVisibilityDefaultsRevision === null
+                  ? ""
+                  : `AND ${visibilityDefaultsRevisionSql(itemVisibilityDefaultsRevision)}`
+              }
               AND ${authorization.sql}`,
         ).bind(payload.jobId, job.revision, ...authorization.bindings),
         env.DB.prepare(
@@ -1041,7 +1206,20 @@ export async function PATCH(request: Request) {
                   language = ?,
                   version = ?,
                   release_notes = ?,
-                  credits_json = ?,
+                  credits_json = CASE
+                    WHEN ? = 'BATCH' THEN json_set(
+                      ?,
+                      '$.useVisibilityDefault',
+                      COALESCE(
+                        json_extract(
+                          credits_json,
+                          '$.useVisibilityDefault'
+                        ),
+                        0
+                      )
+                    )
+                    ELSE ?
+                  END,
                   access_type =
                     CASE WHEN ? = 'BATCH' THEN access_type ELSE ? END,
                   price_onyx =
@@ -1088,35 +1266,40 @@ export async function PATCH(request: Request) {
                 )
               )`,
         ).bind(
-          payload.item.sourceLabel,
-          payload.item.replacementChapterId,
-          payload.item.volume || null,
-          payload.item.chapterNumber,
-          payload.item.title,
-          payload.item.language,
-          payload.item.version,
-          payload.item.releaseNotes,
-          JSON.stringify(payload.item.credits),
+          resolvedItem.sourceLabel,
+          resolvedItem.replacementChapterId,
+          resolvedItem.volume || null,
+          resolvedItem.chapterNumber,
+          resolvedItem.title,
+          resolvedItem.language,
+          resolvedItem.version,
+          resolvedItem.releaseNotes,
           job.kind,
-          payload.item.accessType,
+          JSON.stringify(resolvedItem.credits),
+          uploadCreditsJson(
+            resolvedItem.credits,
+            resolvedItem.useVisibilityDefault,
+          ),
           job.kind,
-          payload.item.priceOnyx,
-          payload.item.visibility,
-          payload.item.scheduledAt,
-          payload.item.includeFixedFirstPage ? 1 : 0,
-          payload.item.includeFixedLastPage ? 1 : 0,
+          resolvedItem.accessType,
+          job.kind,
+          resolvedItem.priceOnyx,
+          resolvedItem.visibility,
+          resolvedItem.scheduledAt,
+          resolvedItem.includeFixedFirstPage ? 1 : 0,
+          resolvedItem.includeFixedLastPage ? 1 : 0,
           1,
           payload.itemId,
           payload.jobId,
           payload.expectedRevision,
           payload.jobId,
-          payload.item.chapterNumber,
-          payload.item.language,
-          payload.item.version,
-          payload.item.replacementChapterId,
-          payload.item.chapterNumber,
-          payload.item.language,
-          payload.item.version,
+          resolvedItem.chapterNumber,
+          resolvedItem.language,
+          resolvedItem.version,
+          resolvedItem.replacementChapterId,
+          resolvedItem.chapterNumber,
+          resolvedItem.language,
+          resolvedItem.version,
         ),
         env.DB.prepare(
           `UPDATE upload_publish_guards
@@ -1129,10 +1312,17 @@ export async function PATCH(request: Request) {
         ]);
       } catch (error) {
         if (
-          singlePaidEconomyRevision !== null &&
           isUploadGuardFailure(error)
         ) {
-          await assertPaidEconomyGuardFresh(singlePaidEconomyRevision);
+          if (singlePaidEconomyRevision !== null) {
+            await assertPaidEconomyGuardFresh(singlePaidEconomyRevision);
+          }
+          if (itemVisibilityDefaultsRevision !== null) {
+            await assertVisibilityDefaultsFresh(
+              env.DB,
+              itemVisibilityDefaultsRevision,
+            );
+          }
         }
         throw error;
       }
@@ -1162,11 +1352,25 @@ export async function PATCH(request: Request) {
         );
       }
       const paidItemIds = [...new Set(payload.paidItemIds)];
+      const visibilityDefaultItemIds = [
+        ...new Set(payload.visibilityDefaultItemIds),
+      ];
       if (paidItemIds.length !== payload.paidItemIds.length) {
         throw new ApiError(
           422,
           "BATCH_PAID_ITEMS_INVALID",
           "Paid chapter selections must be unique.",
+        );
+      }
+      if (
+        visibilityDefaultItemIds.length !==
+          payload.visibilityDefaultItemIds.length ||
+        visibilityDefaultItemIds.some((itemId) => paidItemIds.includes(itemId))
+      ) {
+        throw new ApiError(
+          422,
+          "BATCH_VISIBILITY_DEFAULTS_INVALID",
+          "Inherited chapters must be unique and cannot also be explicit paid chapters.",
         );
       }
       const storedItems = await env.DB.prepare(
@@ -1180,7 +1384,9 @@ export async function PATCH(request: Request) {
       const storedItemIds = new Set(storedItems.results.map((item) => item.id));
       if (
         storedItems.results.length === 0 ||
-        paidItemIds.some((itemId) => !storedItemIds.has(itemId))
+        [...paidItemIds, ...visibilityDefaultItemIds].some(
+          (itemId) => !storedItemIds.has(itemId),
+        )
       ) {
         throw new ApiError(
           422,
@@ -1188,7 +1394,24 @@ export async function PATCH(request: Request) {
           "Every paid chapter must belong to this upload batch.",
         );
       }
-      const paidEconomyRevision = paidItemIds.length
+      const visibilityDefaults = visibilityDefaultItemIds.length
+        ? await readVisibilityDefaults(env.DB)
+        : null;
+      const visibilityDefaultsRevision = visibilityDefaults?.revision ?? null;
+      const inheritedPaid =
+        visibilityDefaults?.defaultAccessType === "PAID";
+      if (
+        inheritedPaid &&
+        paidItemIds.length > 0 &&
+        payload.priceOnyx !== visibilityDefaults.defaultPriceOnyx
+      ) {
+        throw new ApiError(
+          422,
+          "BATCH_PAID_PRICE_MISMATCH",
+          "Explicit paid chapters must use the inherited batch price.",
+        );
+      }
+      const paidEconomyRevision = paidItemIds.length || inheritedPaid
         ? (await requirePaidEconomyPublicDocument()).revision
         : null;
       await requireUploadScope(
@@ -1200,6 +1423,9 @@ export async function PATCH(request: Request) {
       );
       const paidCondition = paidItemIds.length
         ? `id IN (${paidItemIds.map(() => "?").join(", ")})`
+        : "0";
+      const visibilityDefaultCondition = visibilityDefaultItemIds.length
+        ? `id IN (${visibilityDefaultItemIds.map(() => "?").join(", ")})`
         : "0";
       const authorization = liveJobAuthorization(actor, {
         alias: "upload_jobs",
@@ -1218,6 +1444,11 @@ export async function PATCH(request: Request) {
                     ? ""
                     : `AND ${paidEconomyPublicSql(paidEconomyRevision)}`
                 }
+                ${
+                  visibilityDefaultsRevision === null
+                    ? ""
+                    : `AND ${visibilityDefaultsRevisionSql(visibilityDefaultsRevision)}`
+                }
                 AND ${authorization.sql}`,
           ).bind(
             payload.jobId,
@@ -1231,9 +1462,23 @@ export async function PATCH(request: Request) {
           env.DB.prepare(
             `UPDATE upload_job_items
                 SET access_type =
-                      CASE WHEN ${paidCondition} THEN 'PAID' ELSE 'FREE' END,
+                      CASE
+                        WHEN ${visibilityDefaultCondition} THEN ?
+                        WHEN ${paidCondition} THEN 'PAID'
+                        ELSE 'FREE'
+                      END,
                     price_onyx =
-                      CASE WHEN ${paidCondition} THEN ? ELSE 0 END,
+                      CASE
+                        WHEN ${visibilityDefaultCondition} THEN ?
+                        WHEN ${paidCondition} THEN ?
+                        ELSE 0
+                      END,
+                    credits_json = json_set(
+                      CASE WHEN json_valid(credits_json)
+                        THEN credits_json ELSE '{}' END,
+                      '$.useVisibilityDefault',
+                      CASE WHEN ${visibilityDefaultCondition} THEN 1 ELSE 0 END
+                    ),
                     revision = revision + 1,
                     updated_at = CURRENT_TIMESTAMP
               WHERE job_id = ?
@@ -1243,9 +1488,14 @@ export async function PATCH(request: Request) {
                    WHERE job_id = ? AND verified = 1
                 )`,
           ).bind(
+            ...visibilityDefaultItemIds,
+            visibilityDefaults?.defaultAccessType ?? "FREE",
             ...paidItemIds,
+            ...visibilityDefaultItemIds,
+            visibilityDefaults?.defaultPriceOnyx ?? 0,
             ...paidItemIds,
             payload.priceOnyx,
+            ...visibilityDefaultItemIds,
             payload.jobId,
             payload.jobId,
           ),
@@ -1269,6 +1519,8 @@ export async function PATCH(request: Request) {
               newValue: {
                 priceOnyx: payload.priceOnyx,
                 paidItemIds,
+                visibilityDefaultItemIds,
+                visibilityDefaultsRevision,
               },
             },
             `EXISTS (
@@ -1285,6 +1537,12 @@ export async function PATCH(request: Request) {
         if (isUploadGuardFailure(error)) {
           if (paidEconomyRevision !== null) {
             await assertPaidEconomyGuardFresh(paidEconomyRevision);
+          }
+          if (visibilityDefaultsRevision !== null) {
+            await assertVisibilityDefaultsFresh(
+              env.DB,
+              visibilityDefaultsRevision,
+            );
           }
           throw new ApiError(
             409,
@@ -1603,14 +1861,24 @@ export async function PATCH(request: Request) {
       );
     }
     const detail = await jobDetail(env.DB, actor, payload.jobId);
-    const items = detail.items as unknown as Array<
+    const storedItems = detail.items as unknown as Array<
       Omit<UploadItemRow, "commentsEnabled" | "includeFixedFirstPage" | "includeFixedLastPage"> & {
         commentsEnabled: boolean;
         includeFixedFirstPage: boolean;
         includeFixedLastPage: boolean;
+        useVisibilityDefault: boolean;
         files: UploadFileRow[];
       }
     >;
+    const visibilityDefaults = storedItems.some(
+      (item) => item.useVisibilityDefault,
+    )
+      ? await readVisibilityDefaults(env.DB)
+      : null;
+    const visibilityDefaultsRevision = visibilityDefaults?.revision ?? null;
+    const items = storedItems.map((item) =>
+      resolveVisibilityDefault(item, visibilityDefaults),
+    );
     const detailSummary = detail as Record<string, unknown>;
     if (
       items.length === 0 ||
@@ -1628,11 +1896,15 @@ export async function PATCH(request: Request) {
         "Every chapter needs validated pages before it can be published.",
       );
     }
-    const commercialDocument = await getCommercialSettingsDocument();
+    const [commercialDocument, featureStates] = await Promise.all([
+      getCommercialSettingsDocument(),
+      getFeatureStates(env.DB),
+    ]);
     const paidPolicyPublic =
       !commercialDocument.recoveredFromInvalid &&
       commercialDocument.revision > 0 &&
-      commercialDocument.settings.economy.premiumEconomyPublic;
+      commercialDocument.settings.economy.premiumEconomyPublic &&
+      featureStates.premium_unlocks.effective;
     const forcedAccess = new Map<
       string,
       { reference: PaidChapterReference; decisionId: string }
@@ -1765,6 +2037,11 @@ export async function PATCH(request: Request) {
                 ? "1 = 1"
                 : paidEconomyPublicSql(paidEconomyRevision)
             }
+            AND ${
+              visibilityDefaultsRevision === null
+                ? "1 = 1"
+                : visibilityDefaultsRevisionSql(visibilityDefaultsRevision)
+            }
             AND ${authorization.sql}`,
       ).bind(
         payload.idempotencyKey,
@@ -1772,6 +2049,40 @@ export async function PATCH(request: Request) {
         payload.expectedRevision,
         ...authorization.bindings,
       ),
+      ...items
+        .filter((item) => item.useVisibilityDefault)
+        .map((item) =>
+          env.DB!.prepare(
+            `UPDATE upload_job_items
+                SET access_type = ?,
+                    price_onyx = ?,
+                    revision = revision + 1,
+                    updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND job_id = ?
+                AND status = 'READY'
+                AND json_valid(credits_json)
+                AND COALESCE(
+                      json_extract(
+                        credits_json,
+                        '$.useVisibilityDefault'
+                      ),
+                      0
+                    ) = 1
+                AND EXISTS (
+                  SELECT 1 FROM upload_jobs inherited_job
+                   WHERE inherited_job.id = upload_job_items.job_id
+                     AND inherited_job.status = 'PUBLISHING'
+                     AND inherited_job.revision = ?
+                )`,
+          ).bind(
+            item.accessType,
+            item.priceOnyx,
+            item.id,
+            payload.jobId,
+            nextRevision,
+          ),
+        ),
     ];
     for (const [itemId, forced] of forcedAccess) {
       statements.push(
@@ -1827,7 +2138,32 @@ export async function PATCH(request: Request) {
            SELECT ?, uji.series_id, uji.team_id, ?, ?, uji.volume,
                   uji.chapter_number, uji.title, uji.language, 'VERTICAL',
                   ?, uji.access_type, uji.price_onyx, uji.page_count, ?,
-                  NULL, uji.version, uji.release_notes, uji.credits_json,
+                  CASE
+                    WHEN uji.access_type = 'PAID'
+                     AND json_valid(uji.credits_json)
+                     AND COALESCE(
+                       json_extract(
+                         uji.credits_json,
+                         '$.useVisibilityDefault'
+                       ),
+                       0
+                     ) = 1
+                     AND EXISTS (
+                       SELECT 1 FROM content_visibility_settings settings
+                        WHERE settings.id = 'active'
+                          AND settings.auto_free_after_days IS NOT NULL
+                     )
+                    THEN datetime(
+                      ?,
+                      '+' || (
+                        SELECT auto_free_after_days
+                          FROM content_visibility_settings
+                         WHERE id = 'active'
+                      ) || ' days'
+                    )
+                    ELSE NULL
+                  END,
+                  uji.version, uji.release_notes, uji.credits_json,
                   uji.thumbnail_key, uji.visibility, 1, 1,
                   uji.include_fixed_first_page, uji.include_fixed_last_page
              FROM upload_job_items uji
@@ -1887,6 +2223,7 @@ export async function PATCH(request: Request) {
             item.id,
           ),
           chapterState,
+          publishedAt,
           publishedAt,
           item.id,
           payload.jobId,
@@ -2122,6 +2459,12 @@ export async function PATCH(request: Request) {
       if (isUploadGuardFailure(error)) {
         if (paidEconomyRevision !== null) {
           await assertPaidEconomyGuardFresh(paidEconomyRevision);
+        }
+        if (visibilityDefaultsRevision !== null) {
+          await assertVisibilityDefaultsFresh(
+            env.DB,
+            visibilityDefaultsRevision,
+          );
         }
         throw new ApiError(
           409,

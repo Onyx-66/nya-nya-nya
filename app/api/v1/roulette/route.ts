@@ -15,6 +15,7 @@ import { requireActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { getRewardSettingsDocument } from "@/lib/server/reward-settings";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -385,9 +386,10 @@ async function availableRewards(
 }
 
 async function responseData(userId: string) {
-  const [document, commercial, state, history, balances, weekly] = await Promise.all([
+  const [document, commercial, featureStates, state, history, balances, weekly] = await Promise.all([
     getRewardSettingsDocument(),
     getCommercialSettingsDocument(),
+    getFeatureStates(database()),
     database()
       .prepare(
         `SELECT next_eligible_at AS nextEligibleAt,
@@ -422,6 +424,10 @@ async function responseData(userId: string) {
     weeklyTaskProgress(userId),
   ]);
   const now = Date.now();
+  const premiumEconomyPublic = Boolean(
+    commercial.settings.economy.premiumEconomyPublic &&
+      featureStates.premium_unlocks.effective,
+  );
   const nextEligibleAt =
     state?.nextEligibleAt ?? "1970-01-01T00:00:00.000Z";
   const eligible = Date.parse(nextEligibleAt) <= now;
@@ -430,16 +436,14 @@ async function responseData(userId: string) {
       userId,
       document.settings.rouletteRewards.filter(
         (reward) =>
-          commercial.settings.economy.premiumEconomyPublic ||
-          reward.type !== "ONYX",
+          premiumEconomyPublic || reward.type !== "ONYX",
       ),
     ),
     availableRewards(
       userId,
       document.settings.roulettePaidRewards.filter(
         (reward) =>
-          commercial.settings.economy.premiumEconomyPublic ||
-          reward.type !== "ONYX",
+          premiumEconomyPublic || reward.type !== "ONYX",
       ),
     ),
   ]);
@@ -455,16 +459,13 @@ async function responseData(userId: string) {
       ),
     ]),
   );
-  const premiumEconomyPublic =
-    commercial.settings.economy.premiumEconomyPublic;
   const paidCosts = {
     SHARDS: document.settings.roulettePaidSpinShardCost,
     ONYX: document.settings.roulettePaidSpinOnyxCost,
   };
   const paidCurrencies = document.settings.roulettePaidCurrencies.filter(
     (currency) =>
-      commercial.settings.economy.premiumEconomyPublic ||
-      currency !== "ONYX",
+      premiumEconomyPublic || currency !== "ONYX",
   );
   const canAffordPaidSpin = paidCurrencies.some(
     (currency) =>
@@ -696,10 +697,15 @@ export async function POST(request: Request) {
         { headers: privateHeaders },
       );
     }
-    const [document, commercial] = await Promise.all([
+    const [document, commercial, featureStates] = await Promise.all([
       getRewardSettingsDocument(),
       getCommercialSettingsDocument(),
+      getFeatureStates(db),
     ]);
+    const premiumEconomyPublic = Boolean(
+      commercial.settings.economy.premiumEconomyPublic &&
+        featureStates.premium_unlocks.effective,
+    );
     if (
       payload.mode === "PAID" &&
       !document.settings.roulettePaidSpinsEnabled
@@ -717,7 +723,7 @@ export async function POST(request: Request) {
     if (
       payload.mode === "PAID" &&
       paidCurrency === "ONYX" &&
-      !commercial.settings.economy.premiumEconomyPublic
+      !premiumEconomyPublic
     ) {
       throw new ApiError(
         403,
@@ -741,8 +747,7 @@ export async function POST(request: Request) {
         : document.settings.rouletteRewards
     ).filter(
       (reward) =>
-        commercial.settings.economy.premiumEconomyPublic ||
-        reward.type !== "ONYX",
+        premiumEconomyPublic || reward.type !== "ONYX",
     );
     const candidates = await availableRewards(
       actor.id,

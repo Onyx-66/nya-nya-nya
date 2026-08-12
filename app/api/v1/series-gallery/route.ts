@@ -12,6 +12,7 @@ import { languageCodeSchema } from "@/lib/admin-metadata";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { getActor, requireActor, type Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { publicPaidSeriesPredicate } from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -132,13 +133,14 @@ export async function GET(request: Request) {
     const series = await env.DB.prepare(
       `SELECT id, slug, title, original_language AS originalLanguage,
               cover_key AS coverKey, revision
-         FROM series
-        WHERE slug = ?
-          AND is_published = 1
-          AND archived_at IS NULL
-          AND status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
-          AND rights_status IN
+         FROM series s
+        WHERE s.slug = ?
+          AND s.is_published = 1
+          AND s.archived_at IS NULL
+          AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+          AND s.rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+          AND ${publicPaidSeriesPredicate("s")}
         LIMIT 1`,
     )
       .bind(slug)
@@ -349,13 +351,14 @@ export async function POST(request: Request) {
     }
     const series = await env.DB.prepare(
       `SELECT id, title
-         FROM series
-        WHERE slug = ?
-          AND is_published = 1
-          AND archived_at IS NULL
-          AND status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
-          AND rights_status IN
+         FROM series s
+        WHERE s.slug = ?
+          AND s.is_published = 1
+          AND s.archived_at IS NULL
+          AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+          AND s.rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+          AND ${publicPaidSeriesPredicate("s")}
         LIMIT 1`,
     )
       .bind(payload.seriesSlug)

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
 import { preferredSeriesArtworkUrl } from "@/lib/server/series-media-url";
+import { publicPaidSeriesPredicate } from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
           AND (hs.series_id IS NULL OR (
             s.is_published = 1 AND s.archived_at IS NULL
             AND s.rights_status IN ('LICENSED','AUTHORIZED','DEMO_ORIGINAL','TEST_ORIGINAL')
+            AND ${publicPaidSeriesPredicate("s")}
           ))
         ORDER BY hs.sort_order DESC, datetime(hs.created_at) DESC
         LIMIT 9`,
@@ -46,7 +48,7 @@ export async function GET(request: Request) {
             : null,
         href: String(row.destinationUrl || (row.seriesSlug ? `/title/${row.seriesSlug}` : "/browse")),
       })),
-    }, { headers: { "cache-control": "public, max-age=30, stale-while-revalidate=120" } });
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return errorResponse(requestId, error);
   }

@@ -173,12 +173,12 @@ test("series requests, catalogue editing, and chapter thumbnails preserve visual
   assert.match(requests, /record\.coverUrl/u);
   assert.doesNotMatch(requests, /Select a request/u);
 
-  assert.match(
-    seriesPanel,
-    /Select and edit an existing series[\s\S]+reviewed series-request queue/u,
-  );
+  assert.match(seriesPanel, /Select and edit an existing series/u);
   assert.match(seriesPanel, /record\.coverUrl[\s\S]+<img src=\{record\.coverUrl\}/u);
-  assert.doesNotMatch(seriesPanel, /setMode\("create"\)|startCreate|createSeries/u);
+  assert.match(seriesPanel, /\+ Add Series/u);
+  assert.match(seriesPanel, /method: form\.id \? "PUT" : "POST"/u);
+  assert.match(seriesPanel, /Save as draft/u);
+  assert.match(seriesPanel, /Publish now/u);
 
   assert.match(upload, /className="upload-series-cover"/u);
   assert.match(upload, /series\.coverUrl/u);
@@ -264,20 +264,21 @@ test("Paw Coins, premium visibility, and interval Roulette rewards are configura
 });
 
 test("Users Control and the administrator shell are complete, safe, and responsive", async () => {
-  const [app, panel, api, css] = await Promise.all([
+  const [app, navigation, panel, api, css] = await Promise.all([
     read("components/nyascans/NyaScansApp.tsx"),
+    read("lib/admin-navigation.ts"),
     read("components/nyascans/OperationsControlPanel.tsx"),
     read("app/api/v1/[...resource]/route.ts"),
-    read("app/globals.css"),
+    read("app/admin.css"),
   ]);
 
   for (const label of [
-    "Users & roles",
-    "User activity",
-    "Purchases",
-    "Balances",
+    "Users & Roles",
+    "Activity Log",
+    "Transactions",
+    "Wallet & Balances",
   ]) {
-    assert.ok(app.includes(label));
+    assert.ok(navigation.includes(label));
   }
   assert.match(app, /<details className="ops-account-menu">/u);
   assert.match(app, /actor\.avatarUrl/u);
@@ -297,22 +298,20 @@ test("Users Control and the administrator shell are complete, safe, and responsi
   assert.match(api, /buyer_entry\.amount < 0/u);
   assert.match(api, /This adjustment would make the user balance negative/u);
 
-  const finalCascade = css.lastIndexOf("Version 34 canonical final cascade");
-  assert.ok(finalCascade > css.lastIndexOf("Version 33 final cascade"));
-  const finalCss = css.slice(finalCascade);
-  assert.match(finalCss, /select:not\(\[multiple\]\)[\s\S]+appearance:\s*none/u);
-  assert.match(finalCss, /color-scheme:\s*normal/u);
+  const finalCss = css;
+  assert.match(finalCss, /:is\(input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\), select, textarea\)/u);
+  assert.match(finalCss, /color-scheme:\s*dark/u);
   assert.match(
     finalCss,
-    /\.ops-sidebar[\s\S]+grid-template-rows:\s*auto minmax\(0, 1fr\) auto/u,
+    /\.ops-sidebar[\s\S]+grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto auto/u,
   );
-  assert.match(finalCss, /\.ops-header,[\s\S]+display:\s*none !important/u);
   assert.match(finalCss, /\.ops-account-menu/u);
-  assert.match(finalCss, /\.user-role-chips/u);
-  assert.match(finalCss, /\.users-control-metrics/u);
-  assert.match(finalCss, /\.chapter-access-manager/u);
-  assert.match(finalCss, /\.roulette-admin-list/u);
-  assert.match(finalCss, /@media \(max-width: 700px\)/u);
+  assert.match(finalCss, /\.ops-admin-mobile-bar/u);
+  assert.match(finalCss, /table\[data-mobile-cards="true"\]/u);
+  assert.match(panel, /groupEffectivePermissions/u);
+  assert.match(panel, /className="users-control-metrics"/u);
+  assert.match(finalCss, /@media \(max-width: 767px\)/u);
+  assert.match(finalCss, /@media \(max-width: 1023px\)/u);
 });
 
 test("site overview analytics bind country changes to readable decision metrics", async () => {

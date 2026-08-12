@@ -7,7 +7,12 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
-import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  AdminCombobox,
+  AdminPageScaffold,
+  ConfirmActionDialog,
+  useUnsavedChanges,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type EntityType = "GENRE" | "CREATOR" | "PUBLISHER";
@@ -18,6 +23,14 @@ type TaxonomyEntry = {
   archivedAt: string | null;
   revision: number;
   usageCount: number;
+};
+
+type PendingTaxonomyConfirmation = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive: boolean;
+  run: () => void | Promise<void>;
 };
 
 async function request<T>(input: RequestInfo | URL, init?: RequestInit) {
@@ -56,9 +69,24 @@ export function TaxonomyManager() {
     kind: "success" | "error" | "neutral";
     text: string;
   } | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<PendingTaxonomyConfirmation | null>(null);
   const selected = useMemo(
     () => entries.find((entry) => entry.id === selectedId) ?? null,
     [entries, selectedId],
+  );
+  const replacementComboboxOptions = useMemo(
+    () =>
+      replacementOptions
+        .filter(
+          (entry) => entry.id !== selected?.id && !entry.archivedAt,
+        )
+        .map((entry) => ({
+          value: entry.id,
+          label: entry.name,
+          description: `${entry.usageCount} series`,
+        })),
+    [replacementOptions, selected?.id],
   );
   const dirty = Boolean(
     (selected && name !== selected.name) || replacementId || newName,
@@ -139,14 +167,28 @@ export function TaxonomyManager() {
     };
   }, [replacementQuery, selected, type]);
 
-  function select(entry: TaxonomyEntry) {
-    if (dirty && !window.confirm("Discard unsaved taxonomy changes?")) return;
+  function applySelection(entry: TaxonomyEntry) {
     setSelectedId(entry.id);
     setName(entry.name);
     setReplacementId("");
     setReplacementQuery("");
     setNewName("");
     setMessage(null);
+  }
+
+  function select(entry: TaxonomyEntry) {
+    if (dirty) {
+      setPendingConfirmation({
+        title: "Discard unsaved taxonomy changes?",
+        description:
+          "The current name, replacement, and new-entry draft will be discarded before another entry opens.",
+        confirmLabel: "Discard and open entry",
+        destructive: true,
+        run: () => applySelection(entry),
+      });
+      return;
+    }
+    applySelection(entry);
   }
 
   async function create() {
@@ -183,26 +225,10 @@ export function TaxonomyManager() {
     }
   }
 
-  async function mutate(
+  async function executeMutation(
     action: "RENAME" | "ARCHIVE" | "RESTORE" | "MERGE",
   ) {
     if (!selected) return;
-    if (
-      action === "MERGE" &&
-      !window.confirm(
-        `Merge ${selected.name} into the selected replacement? All series references will move atomically.`,
-      )
-    ) {
-      return;
-    }
-    if (
-      action === "ARCHIVE" &&
-      !window.confirm(
-        `${selected.name} is used by ${selected.usageCount} series. Archive it from future selection?`,
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     try {
       await request("/api/v1/admin/taxonomy", {
@@ -238,43 +264,71 @@ export function TaxonomyManager() {
     }
   }
 
+  function mutate(
+    action: "RENAME" | "ARCHIVE" | "RESTORE" | "MERGE",
+  ) {
+    if (!selected) return;
+    if (action === "MERGE") {
+      setPendingConfirmation({
+        title: `Merge ${selected.name}?`,
+        description:
+          "All series references will move atomically to the selected replacement, and this duplicate will be archived.",
+        confirmLabel: "Merge references",
+        destructive: true,
+        run: () => executeMutation(action),
+      });
+      return;
+    }
+    if (action === "ARCHIVE") {
+      setPendingConfirmation({
+        title: `Archive ${selected.name}?`,
+        description: `${selected.name} is used by ${selected.usageCount} series. It will remain on existing series but disappear from future selection.`,
+        confirmLabel: "Archive entry",
+        destructive: true,
+        run: () => executeMutation(action),
+      });
+      return;
+    }
+    void executeMutation(action);
+  }
+
   if (!hasLoaded) {
     return (
-      <section className="admin-form-section taxonomy-manager">
-        <div
-          className="admin-state-card"
-          role={loading ? "status" : "alert"}
-        >
-          <h3>
-            {loading
-              ? "Loading canonical taxonomy"
-              : "Taxonomy could not be loaded"}
-          </h3>
-          <p>
-            {loading
-              ? "Loading genres, creators, publishers, and usage counts…"
-              : message?.text ??
-                "The taxonomy service is temporarily unavailable."}
-          </p>
-          {!loading ? (
-            <button
-              className="button button-secondary"
-              type="button"
-              onClick={() => void load()}
-            >
-              <ArrowClockwise size={16} /> Retry
-            </button>
-          ) : null}
-        </div>
-      </section>
+      <AdminPageScaffold
+        breadcrumbs={["Catalog", "Genres & Tags"]}
+        kicker="Canonical taxonomy"
+        title="Genres & Tags"
+        description="Manage the shared genre and tag vocabulary used by series metadata and external imports."
+        state={
+          loading
+            ? { kind: "loading", message: "Loading genres, tags, creators, publishers, and usage counts…" }
+            : {
+                kind: "error",
+                title: "Taxonomy could not be loaded",
+                message:
+                  message?.text ??
+                  "The taxonomy service is temporarily unavailable.",
+                onRetry: () => void load(),
+              }
+        }
+      >
+        {null}
+      </AdminPageScaffold>
     );
   }
 
   return (
+    <>
+    <AdminPageScaffold
+      breadcrumbs={["Catalog", "Genres & Tags"]}
+      kicker="Canonical taxonomy"
+      title="Genres & Tags"
+      description="Manage genres, tags, creator credits, and publishers without breaking existing series relationships."
+    >
     <section className="admin-form-section taxonomy-manager">
       <header>
         <div>
-          <h3>Canonical taxonomy and credits</h3>
+          <h3>Taxonomy and credits</h3>
           <p>
             Inspect usage, reuse capitalization-only duplicates, and move
             references safely before archiving an entry.
@@ -293,14 +347,26 @@ export function TaxonomyManager() {
           <select
             value={type}
             onChange={(event) => {
-              if (dirty && !window.confirm("Discard unsaved taxonomy changes?")) {
+              const nextType = event.target.value as EntityType;
+              const applyType = () => {
+                setType(nextType);
+                setPage(1);
+              };
+              if (dirty) {
+                setPendingConfirmation({
+                  title: "Discard unsaved taxonomy changes?",
+                  description:
+                    "The current taxonomy draft will be discarded before another entity type opens.",
+                  confirmLabel: "Discard and switch type",
+                  destructive: true,
+                  run: applyType,
+                });
                 return;
               }
-              setType(event.target.value as EntityType);
-              setPage(1);
+              applyType();
             }}
           >
-            <option value="GENRE">Genres</option>
+            <option value="GENRE">Genres & tags</option>
             <option value="CREATOR">Authors and artists</option>
             <option value="PUBLISHER">Publishing studios</option>
           </select>
@@ -417,23 +483,15 @@ export function TaxonomyManager() {
               </label>
               <label>
                 Merge into active replacement
-                <select
+                <AdminCombobox
                   value={replacementId}
                   disabled={Boolean(selected.archivedAt)}
-                  onChange={(event) => setReplacementId(event.target.value)}
-                >
-                  <option value="">Choose replacement</option>
-                  {replacementOptions
-                    .filter(
-                      (entry) =>
-                        entry.id !== selected.id && !entry.archivedAt,
-                    )
-                    .map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.name} · {entry.usageCount} series
-                      </option>
-                    ))}
-                </select>
+                  ariaLabel="Merge into active replacement"
+                  placeholder="Search active replacements"
+                  emptyLabel="Choose replacement"
+                  options={replacementComboboxOptions}
+                  onChange={setReplacementId}
+                />
               </label>
               <button
                 className="button button-danger"
@@ -485,5 +543,23 @@ export function TaxonomyManager() {
         </button>
       </footer>
     </section>
+    </AdminPageScaffold>
+      <ConfirmActionDialog
+        open={Boolean(pendingConfirmation)}
+        title={pendingConfirmation?.title ?? "Confirm action"}
+        description={pendingConfirmation?.description ?? ""}
+        confirmLabel={pendingConfirmation?.confirmLabel ?? "Continue"}
+        destructive={pendingConfirmation?.destructive ?? false}
+        busy={busy}
+        onCancel={() => {
+          if (!busy) setPendingConfirmation(null);
+        }}
+        onConfirm={() => {
+          const confirmation = pendingConfirmation;
+          setPendingConfirmation(null);
+          void confirmation?.run();
+        }}
+      />
+    </>
   );
 }

@@ -2,11 +2,16 @@ import { env } from "cloudflare:workers";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { canAny } from "@/lib/permissions.mjs";
 import { ApiError } from "@/lib/server/api";
-import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 import { resolveActiveChapterDiscount } from "@/lib/server/content-discounts";
 import type { Actor } from "@/lib/server/policy";
+import {
+  effectiveChapterAccessSql,
+  paidContentIsPublic,
+} from "@/lib/server/public-content-visibility";
 
 export type ChapterAccessType = "FREE" | "PAID";
+export type ChapterAccessLevel = ChapterAccessType | "PREMIUM";
 
 export type ChapterAccessDecision = {
   chapterId: string;
@@ -20,6 +25,7 @@ export type ChapterAccessDecision = {
   version: number;
   teamName: string | null;
   accessType: ChapterAccessType;
+  accessLevel: ChapterAccessLevel;
   priceOnyx: number;
   basePriceOnyx: number;
   discountId: string | null;
@@ -34,9 +40,11 @@ export type ChapterAccessDecision = {
   reason:
     | "FREE"
     | "UNLOCKED"
+    | "MEMBERSHIP"
     | "ADMINISTRATOR_PREVIEW"
     | "SIGN_IN_REQUIRED"
     | "PURCHASE_REQUIRED"
+    | "MEMBERSHIP_REQUIRED"
     | "UNAVAILABLE";
 };
 
@@ -57,6 +65,7 @@ function decisionBase(chapter: ChapterAccessRecord) {
     version: chapter.version,
     teamName: chapter.teamName,
     accessType: chapter.accessType,
+    accessLevel: chapter.accessLevel,
     priceOnyx: chapter.priceOnyx,
     basePriceOnyx: chapter.basePriceOnyx ?? chapter.priceOnyx,
     discountId: chapter.discountId ?? null,
@@ -79,7 +88,9 @@ export type ChapterAccessRecord = {
   language: string;
   version: number;
   teamName: string | null;
+  seriesAccessType: ChapterAccessType;
   accessType: ChapterAccessType;
+  accessLevel: ChapterAccessLevel;
   priceOnyx: number;
   basePriceOnyx?: number;
   discountId?: string | null;
@@ -125,8 +136,17 @@ async function databaseChapterRecord(
             c.language,
             c.version,
             t.name AS teamName,
-            c.access_type AS accessType,
-            c.price_onyx AS priceOnyx,
+            s.access_type AS seriesAccessType,
+            CASE
+              WHEN (${effectiveChapterAccessSql("c", "visibility_override")}) = 'FREE'
+              THEN 'FREE' ELSE 'PAID'
+            END AS accessType,
+            ${effectiveChapterAccessSql("c", "visibility_override")} AS accessLevel,
+            CASE
+              WHEN (${effectiveChapterAccessSql("c", "visibility_override")})
+                   IN ('FREE', 'PREMIUM')
+              THEN 0 ELSE c.price_onyx
+            END AS priceOnyx,
             c.published_at AS publishedAt,
             c.state,
             c.visibility,
@@ -143,6 +163,8 @@ async function databaseChapterRecord(
        FROM chapters c
        JOIN series s ON s.id = c.series_id
        LEFT JOIN teams t ON t.id = c.team_id
+       LEFT JOIN content_visibility_overrides visibility_override
+         ON visibility_override.chapter_id = c.id
       WHERE s.slug = ? AND c.slug = ?
       LIMIT 1`,
   )
@@ -158,7 +180,9 @@ async function databaseChapterRecord(
       language: string;
       version: number;
       teamName: string | null;
+      seriesAccessType: ChapterAccessType;
       accessType: ChapterAccessType;
+      accessLevel: ChapterAccessLevel;
       priceOnyx: number;
       publishedAt: string | null;
       state: string;
@@ -181,6 +205,7 @@ export function decideChapterAccess(
   chapter: ChapterAccessRecord,
   actor: Actor | null,
   isUnlocked: boolean,
+  hasMembership = false,
 ): ChapterAccessDecision {
   const rightsBlocked =
     Boolean(chapter.seriesArchivedAt) ||
@@ -234,13 +259,40 @@ export function decideChapterAccess(
       reason: "ADMINISTRATOR_PREVIEW",
     };
   }
-  if (chapter.accessType === "FREE") {
+  if (chapter.accessLevel === "FREE") {
     return {
       ...decisionBase(chapter),
       canRead: true,
       isUnlocked: false,
       administratorPreview: false,
       reason: "FREE",
+    };
+  }
+  if (chapter.accessLevel === "PREMIUM") {
+    if (hasMembership) {
+      return {
+        ...decisionBase(chapter),
+        canRead: true,
+        isUnlocked: true,
+        administratorPreview: false,
+        reason: "MEMBERSHIP",
+      };
+    }
+    if (!actor) {
+      return {
+        ...decisionBase(chapter),
+        canRead: false,
+        isUnlocked: false,
+        administratorPreview: false,
+        reason: "SIGN_IN_REQUIRED",
+      };
+    }
+    return {
+      ...decisionBase(chapter),
+      canRead: false,
+      isUnlocked: false,
+      administratorPreview: false,
+      reason: "MEMBERSHIP_REQUIRED",
     };
   }
   if (isUnlocked) {
@@ -291,13 +343,19 @@ export async function resolveChapterAccess(
     );
   }
 
-  if (
-    chapter.accessType === "PAID" &&
-    actor?.primaryRole !== "OWNER" &&
-    !actor?.roles.includes("OWNER")
-  ) {
-    const commercial = await getCommercialSettingsDocument().catch(() => null);
-    if (!commercial?.settings.economy.premiumEconomyPublic) {
+  let paidFeatureStates: Awaited<ReturnType<typeof getFeatureStates>> | null = null;
+  if (chapter.accessLevel !== "FREE") {
+    if (!env.DB || !(await paidContentIsPublic(env.DB))) {
+      throw new ApiError(
+        404,
+        "CHAPTER_NOT_FOUND",
+        "This chapter is not available.",
+      );
+    }
+  }
+  if (chapter.accessLevel !== "FREE") {
+    paidFeatureStates = await getFeatureStates();
+    if (!paidFeatureStates.premium_unlocks.effective) {
       throw new ApiError(
         404,
         "CHAPTER_NOT_FOUND",
@@ -324,8 +382,32 @@ export async function resolveChapterAccess(
         };
   const pricedChapter = { ...chapter, ...price };
   const initial = decideChapterAccess(pricedChapter, actor, false);
-  if (initial.reason !== "PURCHASE_REQUIRED" || !actor || !env.DB) {
+  if (
+    !["PURCHASE_REQUIRED", "MEMBERSHIP_REQUIRED"].includes(initial.reason) ||
+    !actor ||
+    !env.DB
+  ) {
     return initial;
+  }
+  if (initial.reason === "MEMBERSHIP_REQUIRED") {
+    paidFeatureStates ??= await getFeatureStates();
+    if (!paidFeatureStates.memberships.effective) return initial;
+    const membership = await env.DB.prepare(
+      `SELECT membership.id FROM user_memberships membership
+        WHERE membership.user_id = ?
+          AND membership.status IN ('ACTIVE', 'TRIALING')
+          AND (membership.current_period_end IS NULL
+               OR datetime(membership.current_period_end) > datetime('now'))
+          AND NOT EXISTS (
+            SELECT 1 FROM payment_financial_states financial_state
+             WHERE financial_state.membership_id = membership.id
+               AND financial_state.membership_risk_active = 1
+          )
+        LIMIT 1`,
+    )
+      .bind(actor.id)
+      .first();
+    return decideChapterAccess(pricedChapter, actor, false, Boolean(membership));
   }
   let isUnlocked = false;
   if (actor) {
@@ -347,7 +429,7 @@ export async function resolveChapterAccess(
 }
 
 export async function requireReadableChapter(
-  actor: Actor,
+  actor: Actor | null,
   chapterId: string,
 ) {
   if (!env.DB) {
@@ -382,7 +464,7 @@ export async function requireReadableChapter(
     throw new ApiError(
       403,
       "CHAPTER_LOCKED",
-      "Unlock this chapter before saving reader activity.",
+      "This chapter is not available to this account.",
     );
   }
   return decision;

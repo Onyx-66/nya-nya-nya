@@ -84,9 +84,7 @@ export async function GET(request: Request) {
     headers.set("content-disposition", "inline");
     headers.set(
       "cache-control",
-      publiclyAvailable
-        ? "public, max-age=0, must-revalidate"
-        : "private, no-store",
+      "private, no-store",
     );
     headers.set("etag", object.httpEtag);
     headers.set("x-request-id", requestId);

@@ -9,7 +9,7 @@ async function read(relativePath) {
   return fs.readFile(path.join(root, relativePath), "utf8");
 }
 
-test("administrator and team request previews reuse one MangaDex boundary", async () => {
+test("administrator and team request previews reuse the shared MangaDex boundary", async () => {
   const [service, adminRoute, teamRoute] = await Promise.all([
     read("lib/server/metadata-import.ts"),
     read("app/api/v1/admin/metadata-import/route.ts"),
@@ -21,8 +21,8 @@ test("administrator and team request previews reuse one MangaDex boundary", asyn
   assert.doesNotMatch(teamRoute, /api\.mangadex\.org/);
   assert.equal(
     (service.match(/api\.mangadex\.org/g) ?? []).length,
-    1,
-    "the external provider URL should exist in one shared implementation",
+    2,
+    "title search and detail lookup should both stay in the shared provider service",
   );
 });
 
@@ -57,6 +57,113 @@ test("shared import service validates sources, rate-limits, caches and detects e
   assert.match(service, /mapMangaUpdates/);
   assert.match(service, /coverReferenceUrl/);
   assert.match(service, /result = 'FAILURE'/);
+});
+
+test("MangaUpdates URLs keep the public token separate from the numeric API ID", async () => {
+  const {
+    mangaUpdatesExternalIdAliases,
+    mangaUpdatesIdentifierFromProviderId,
+    mangaUpdatesIdentifierFromUrl,
+  } = await import("../lib/mangaupdates-identifiers.ts");
+  const expected = {
+    externalId: "623698779",
+    providerId: "623698779",
+    sourceToken: "abc123",
+    sourceUrl: "https://www.mangaupdates.com/series/abc123",
+  };
+  assert.deepEqual(
+    mangaUpdatesIdentifierFromUrl(
+      "https://www.mangaupdates.com/series/abc123/a-human-readable-slug",
+    ),
+    expected,
+  );
+  assert.deepEqual(
+    mangaUpdatesIdentifierFromUrl(
+      "https://www.mangaupdates.com/series.html?id=623698779",
+    ),
+    expected,
+  );
+  assert.deepEqual(
+    mangaUpdatesIdentifierFromProviderId("623698779"),
+    expected,
+  );
+  assert.deepEqual(
+    mangaUpdatesExternalIdAliases(
+      "623698779",
+      "https://www.mangaupdates.com/series/abc123",
+    ),
+    ["623698779", "abc123"],
+  );
+  assert.deepEqual(
+    mangaUpdatesExternalIdAliases(
+      "1371",
+      "https://www.mangaupdates.com/series/123",
+    ),
+    ["1371", "123"],
+    "the canonical URL disambiguates an all-numeric legacy base-36 token",
+  );
+  for (const invalid of [
+    "http://www.mangaupdates.com/series/abc123/title",
+    "https://example.com/series/abc123/title",
+    "https://www.mangaupdates.com/series/",
+  ]) {
+    assert.equal(mangaUpdatesIdentifierFromUrl(invalid), null);
+  }
+});
+
+test("MangaUpdates duplicate checks accept decimal and legacy URL-token IDs", async () => {
+  const [service, seriesRoute, adminMetadata] = await Promise.all([
+    read("lib/server/metadata-import.ts"),
+    read("app/api/v1/admin/series-management/route.ts"),
+    read("lib/admin-metadata.ts"),
+  ]);
+  assert.match(
+    service,
+    /mangaUpdatesExternalIdAliases\(normalized\.id, normalized\.url\)/u,
+  );
+  assert.match(
+    seriesRoute,
+    /mangaUpdatesExternalIdAliases\(source\.externalId, source\.sourceUrl\)/u,
+  );
+  for (const source of [service, seriesRoute]) {
+    assert.match(
+      source,
+      /mangaupdates_id = \? OR mangaupdates_id = \?/u,
+    );
+    assert.match(
+      source,
+      /ses\.external_id = \?[\s\S]*ses\.external_id = \?/u,
+    );
+  }
+  assert.match(
+    adminMetadata,
+    /exactLegacyUrl && linkedIdentifier[\s\S]*resolvedIdentifier\.externalId/u,
+    "an all-numeric legacy URL token must win over ambiguous decimal parsing",
+  );
+});
+
+test("every outbound provider attempt reserves its own indexed budget entry", async () => {
+  const [service, schema, migration, snapshotText] = await Promise.all([
+    read("lib/server/metadata-import.ts"),
+    read("db/schema.ts"),
+    read("drizzle/0049_cold_union_jack.sql"),
+    read("drizzle/meta/0049_snapshot.json"),
+  ]);
+  assert.match(service, /async function reserveProviderFetch/u);
+  assert.match(service, /action = 'PROVIDER_FETCH'/u);
+  assert.match(
+    service,
+    /for \(let attempt = 0; attempt < 2; attempt \+= 1\) \{\s*const providerLogId = await reserveProviderFetch/u,
+  );
+  assert.match(service, /normalized\.providerId/u);
+  assert.match(schema, /metadata_import_source_action_time_idx/u);
+  assert.match(migration, /metadata_import_source_action_time_idx/u);
+  const snapshot = JSON.parse(snapshotText);
+  assert.deepEqual(
+    snapshot.tables.metadata_import_logs.indexes
+      .metadata_import_source_action_time_idx.columns,
+    ["source", "action", "created_at"],
+  );
 });
 
 test("request workspace requires preview and explicit per-field acceptance", async () => {

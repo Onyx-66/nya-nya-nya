@@ -26,7 +26,11 @@ import {
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 import { optimizeReactionAsset } from "@/lib/client/reaction-media";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
-import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  AdminCombobox,
+  ConfirmActionDialog,
+  useUnsavedChanges,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 
 type StoreCollection = {
@@ -73,7 +77,38 @@ type PreviewConfig = {
     | "STAR"
     | "COMPASS"
     | "COMET";
+  bannerPlacement?: "PROFILE_HEADER" | "PROFILE_SHELF" | "PROFILE_BACKGROUND";
+  displayDurationDays?: number | null;
+  targetLink?: string | null;
+  rarity?: "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY";
+  unlockMethod?: "PURCHASE" | "ROULETTE" | "MEMBERSHIP" | "EVENT";
+  cosmeticSlot?:
+    | "PROFILE_BANNER"
+    | "PROFILE_FRAME"
+    | "USERNAME"
+    | "COMMENT"
+    | "PROFILE_THEME"
+    | "SITE_LOGO";
+  animationType?: "GLOW" | "PULSE" | "SHIMMER" | "ORBIT" | "GLITCH";
+  animationDurationMs?: number;
 };
+
+const storeSymbolOptions = [
+  "SUN",
+  "RING",
+  "SPARK",
+  "WAVE",
+  "INK",
+  "SLASH",
+  "STEEL",
+  "HARBOR",
+  "COIN",
+  "GLYPH",
+  "MOSAIC",
+  "STAR",
+  "COMPASS",
+  "COMET",
+].map((symbol) => ({ value: symbol, label: symbol }));
 
 type StoreItem = {
   id: string;
@@ -101,6 +136,62 @@ type StoreItem = {
   revision: number;
 };
 
+type StoreConfirmation =
+  | { kind: "select-item"; item: StoreItem }
+  | { kind: "delete-item"; item: StoreItem }
+  | { kind: "toggle-new-collection" }
+  | { kind: "edit-collection"; collection: StoreCollection }
+  | { kind: "close-collection-editor" };
+
+function storeConfirmationCopy(
+  confirmation: StoreConfirmation | null,
+  currentItemName: string,
+) {
+  if (confirmation?.kind === "select-item") {
+    return {
+      title: "Discard Store item changes?",
+      description: `Unsaved edits and staged preview changes for ${currentItemName} will be discarded before ${confirmation.item.name} opens.`,
+      confirmLabel: "Discard and open",
+    };
+  }
+  if (confirmation?.kind === "delete-item") {
+    return confirmation.item.purchaseCount
+      ? {
+          title: `Archive ${confirmation.item.name}?`,
+          description:
+            "This item has owners. It will leave the Store, but existing owners will keep access to it.",
+          confirmLabel: "Archive item",
+        }
+      : {
+          title: `Delete ${confirmation.item.name}?`,
+          description:
+            "This unowned Store item will be permanently deleted. This action cannot be undone.",
+          confirmLabel: "Delete item",
+        };
+  }
+  if (confirmation?.kind === "toggle-new-collection") {
+    return {
+      title: "Discard this collection draft?",
+      description:
+        "The unsaved collection name, schedule, description, and visibility settings will be lost.",
+      confirmLabel: "Discard collection",
+    };
+  }
+  if (confirmation?.kind === "edit-collection") {
+    return {
+      title: "Discard collection changes?",
+      description: `Unsaved changes to the current collection will be lost before ${confirmation.collection.name} opens.`,
+      confirmLabel: "Discard and open",
+    };
+  }
+  return {
+    title: "Discard collection changes?",
+    description:
+      "Unsaved collection details, schedule, and visibility changes will be lost when the editor closes.",
+    confirmLabel: "Discard changes",
+  };
+}
+
 const defaultPreview: PreviewConfig = {
   from: "#0b4f7d",
   to: "#07111f",
@@ -108,6 +199,46 @@ const defaultPreview: PreviewConfig = {
   commentOpacity: 65,
   symbol: "STAR",
 };
+
+function cosmeticSlot(category: StoreItem["category"]): NonNullable<PreviewConfig["cosmeticSlot"]> {
+  return {
+    PROFILE_BANNER: "PROFILE_BANNER",
+    PROFILE_FRAME: "PROFILE_FRAME",
+    USERNAME_DECORATION: "USERNAME",
+    COMMENT_EFFECT: "COMMENT",
+    COMMENT_GRADIENT: "COMMENT",
+    SEASONAL_PROFILE: "PROFILE_THEME",
+    LOGO_EFFECT: "SITE_LOGO",
+  }[category] as NonNullable<PreviewConfig["cosmeticSlot"]>;
+}
+
+function defaultPreviewForCategory(category: StoreItem["category"]): PreviewConfig {
+  const shared = { ...defaultPreview, cosmeticSlot: cosmeticSlot(category) };
+  if (category === "PROFILE_BANNER") {
+    return {
+      ...shared,
+      bannerPlacement: "PROFILE_HEADER",
+      displayDurationDays: null,
+      targetLink: null,
+      rarity: "RARE",
+      unlockMethod: "PURCHASE",
+    };
+  }
+  if (category === "LOGO_EFFECT") {
+    return {
+      ...shared,
+      rarity: "EPIC",
+      unlockMethod: "PURCHASE",
+      animationType: "GLOW",
+      animationDurationMs: 1_500,
+    };
+  }
+  return {
+    ...shared,
+    rarity: "RARE",
+    unlockMethod: "PURCHASE",
+  };
+}
 
 const initialCollectionDraft: NewCollectionFormDraft = {
   slug: "",
@@ -229,6 +360,43 @@ function categoryLabel(value: StoreItem["category"]) {
   }[value];
 }
 
+function categoryEditorCopy(category: StoreItem["category"]) {
+  if (category === "PROFILE_BANNER") {
+    return {
+      title: "Profile banner placement",
+      description:
+        "This item is limited to the profile banner placement. Display dates come from its collection; artwork and preview colors stay specific to this banner.",
+      slotLabel: "Placement",
+      startLabel: "Banner background start",
+      endLabel: "Banner background end",
+      accentLabel: "Banner accent",
+      symbolLabel: "Fallback banner motif",
+    };
+  }
+  if (category === "LOGO_EFFECT") {
+    return {
+      title: "Logo effect preview",
+      description:
+        "Logo effects use the existing safe gradient, accent, and motif parameters. Their marketplace window comes from the selected collection.",
+      slotLabel: "Effect slot",
+      startLabel: "Effect color start",
+      endLabel: "Effect color end",
+      accentLabel: "Effect highlight",
+      symbolLabel: "Effect motif",
+    };
+  }
+  return {
+    title: "Cosmetic slot and preview",
+    description:
+      "The category selects the equip slot. Preview artwork and the existing safe visual parameters are isolated to this cosmetic.",
+    slotLabel: "Cosmetic slot",
+    startLabel: "Preview background start",
+    endLabel: "Preview background end",
+    accentLabel: "Preview accent",
+    symbolLabel: "Preview motif",
+  };
+}
+
 async function readJson<T>(response: Response) {
   const payload = (await response.json()) as T & {
     error?: { message?: string };
@@ -280,6 +448,8 @@ export function StoreManagementPanel({
     url: string;
   } | null>(null);
   const [removePreviewPending, setRemovePreviewPending] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<StoreConfirmation | null>(null);
   const persistedDraft = draft
     ? items.find((item) => item.id === draft.id) ?? null
     : null;
@@ -305,6 +475,19 @@ export function StoreManagementPanel({
   const mediaDirty = Boolean(pendingPreview) || removePreviewPending;
   const dirty =
     itemDirty || collectionDirty || newCollectionDirty || mediaDirty;
+  const confirmationCopy = storeConfirmationCopy(
+    pendingConfirmation,
+    draft?.name ?? "the current Store item",
+  );
+  const collectionOptions = useMemo(
+    () =>
+      collections.map((collection) => ({
+        value: collection.id,
+        label: collection.name,
+        description: `/${collection.slug}${collection.enabled ? "" : " · Hidden"}`,
+      })),
+    [collections],
+  );
   useUnsavedChanges(dirty, "Store item changes");
 
   useEffect(
@@ -386,13 +569,9 @@ export function StoreManagementPanel({
     [collections, visibleItems],
   );
 
-  function selectItem(item: StoreItem) {
-    if (
-      (itemDirty || mediaDirty) &&
-      !window.confirm(
-        `Discard unsaved changes to ${draft?.name ?? "the current Store item"}?`,
-      )
-    ) {
+  function selectItem(item: StoreItem, confirmed = false) {
+    if ((itemDirty || mediaDirty) && !confirmed) {
+      setPendingConfirmation({ kind: "select-item", item });
       return;
     }
     setPendingPreview(null);
@@ -451,15 +630,16 @@ export function StoreManagementPanel({
       return;
     }
     const suffix = Date.now().toString(36);
+    const itemType = categoryLabel(defaultCategory).toLowerCase();
     const item = {
-      slug: `new-cosmetic-${suffix}`,
+      slug: `new-${defaultCategory.toLowerCase().replaceAll("_", "-")}-${suffix}`,
       collectionId: collection.id,
-      name: "New cosmetic",
-      description: "Describe how this Store item appears and what it changes.",
+      name: `New ${itemType}`,
+      description: `Describe how this ${itemType} appears and what it changes.`,
       category: defaultCategory,
       priceOnyx: 200,
       priceCurrency: "ONYX" as const,
-      previewConfig: defaultPreview,
+      previewConfig: defaultPreviewForCategory(defaultCategory),
       isPublished: false,
       isHidden: false,
       sortOrder: 100,
@@ -487,14 +667,9 @@ export function StoreManagementPanel({
     }
   }
 
-  async function deleteItem(item: StoreItem) {
-    if (
-      !window.confirm(
-        item.purchaseCount
-          ? "This item has owners. It will be archived and remain available to them. Continue?"
-          : "Permanently delete this unowned Store item?",
-      )
-    ) {
+  async function deleteItem(item: StoreItem, confirmed = false) {
+    if (!confirmed) {
+      setPendingConfirmation({ kind: "delete-item", item });
       return;
     }
     setBusy(item.id);
@@ -659,12 +834,9 @@ export function StoreManagementPanel({
     setError("");
   }
 
-  function toggleNewCollection() {
-    if (
-      newCollectionOpen &&
-      newCollectionDirty &&
-      !window.confirm("Discard this unsaved collection?")
-    ) {
+  function toggleNewCollection(confirmed = false) {
+    if (newCollectionOpen && newCollectionDirty && !confirmed) {
+      setPendingConfirmation({ kind: "toggle-new-collection" });
       return;
     }
     if (newCollectionOpen) {
@@ -673,12 +845,13 @@ export function StoreManagementPanel({
     setNewCollectionOpen((value) => !value);
   }
 
-  function beginCollectionEdit(collection: StoreCollection) {
+  function beginCollectionEdit(collection: StoreCollection, confirmed = false) {
     if (
       collectionDirty &&
       collectionEditDraft?.id !== collection.id &&
-      !window.confirm("Discard unsaved collection changes?")
+      !confirmed
     ) {
+      setPendingConfirmation({ kind: "edit-collection", collection });
       return;
     }
     setCollectionEditorId(collection.id);
@@ -688,15 +861,29 @@ export function StoreManagementPanel({
   }
 
   function closeCollectionEdit(force = false) {
-    if (
-      !force &&
-      collectionDirty &&
-      !window.confirm("Discard unsaved collection changes?")
-    ) {
+    if (!force && collectionDirty) {
+      setPendingConfirmation({ kind: "close-collection-editor" });
       return;
     }
     setCollectionEditorId(null);
     setCollectionEditDraft(null);
+  }
+
+  function confirmPendingAction() {
+    const confirmation = pendingConfirmation;
+    if (!confirmation) return;
+    setPendingConfirmation(null);
+    if (confirmation.kind === "select-item") {
+      selectItem(confirmation.item, true);
+    } else if (confirmation.kind === "delete-item") {
+      void deleteItem(confirmation.item, true);
+    } else if (confirmation.kind === "toggle-new-collection") {
+      toggleNewCollection(true);
+    } else if (confirmation.kind === "edit-collection") {
+      beginCollectionEdit(confirmation.collection, true);
+    } else {
+      closeCollectionEdit(true);
+    }
   }
 
   async function saveCollection(
@@ -836,7 +1023,7 @@ export function StoreManagementPanel({
           <button
             className="button button-secondary"
             type="button"
-            onClick={toggleNewCollection}
+            onClick={() => toggleNewCollection()}
           >
             <Plus size={16} /> Collection
           </button>
@@ -1397,11 +1584,21 @@ export function StoreManagementPanel({
               </div>
             </header>
 
+            <section className="admin-notice admin-notice-neutral">
+              <strong>{categoryEditorCopy(draft.category).title}</strong>
+              <p>{categoryEditorCopy(draft.category).description}</p>
+            </section>
+
             <div
               className="store-admin-preview"
+              data-placement={draft.previewConfig.bannerPlacement}
+              data-animation={draft.previewConfig.animationType}
               style={{
                 background: `linear-gradient(135deg, ${draft.previewConfig.from}, ${draft.previewConfig.to})`,
                 color: draft.previewConfig.accent,
+                animationDuration: draft.previewConfig.animationDurationMs
+                  ? `${draft.previewConfig.animationDurationMs}ms`
+                  : undefined,
               }}
             >
               {pendingPreview?.itemId === draft.id ? (
@@ -1433,6 +1630,13 @@ export function StoreManagementPanel({
                   <Trash size={15} /> Remove image
                 </button>
               ) : null}
+              <small>
+                {draft.category === "PROFILE_BANNER"
+                  ? `${(draft.previewConfig.bannerPlacement ?? "PROFILE_HEADER").replaceAll("_", " ")} · ${draft.previewConfig.displayDurationDays ? `${draft.previewConfig.displayDurationDays} days` : "permanent"}`
+                  : draft.category === "LOGO_EFFECT"
+                    ? `${draft.previewConfig.animationType ?? "GLOW"} · ${draft.previewConfig.animationDurationMs ?? 1_500} ms · ${(draft.previewConfig.unlockMethod ?? "PURCHASE").toLowerCase()}`
+                    : `${draft.previewConfig.rarity ?? "RARE"} · ${(draft.previewConfig.unlockMethod ?? "PURCHASE").toLowerCase()} · ${(draft.previewConfig.cosmeticSlot ?? cosmeticSlot(draft.category)).replaceAll("_", " ")}`}
+              </small>
               <small>
                 JPEG, PNG, WebP, or GIF · 5 MB maximum · 64–8192 px.
                 Changes publish only when you save.
@@ -1476,29 +1680,31 @@ export function StoreManagementPanel({
               </label>
               <label>
                 Collection
-                <select
+                <AdminCombobox
+                  ariaLabel="Search and choose a Store collection"
                   value={draft.collectionId}
-                  onChange={(event) =>
-                    setDraft({ ...draft, collectionId: event.target.value })
+                  options={collectionOptions}
+                  placeholder="Search Store collections…"
+                  onChange={(collectionId) =>
+                    setDraft({ ...draft, collectionId })
                   }
-                >
-                  {collections.map((collection) => (
-                    <option key={collection.id} value={collection.id}>
-                      {collection.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
               <label>
-                Category
+                {categoryEditorCopy(draft.category).slotLabel}
                 <select
                   value={draft.category}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const category = event.target.value as StoreItem["category"];
                     setDraft({
                       ...draft,
-                      category: event.target.value as StoreItem["category"],
-                    })
-                  }
+                      category,
+                      previewConfig: {
+                        ...draft.previewConfig,
+                        cosmeticSlot: cosmeticSlot(category),
+                      },
+                    });
+                  }}
                 >
                   {(categoryFilter?.length
                     ? categoryFilter
@@ -1558,8 +1764,196 @@ export function StoreManagementPanel({
                   }
                 />
               </label>
+              {draft.category === "PROFILE_BANNER" ? (
+                <>
+                  <label>
+                    Banner placement
+                    <select
+                      value={draft.previewConfig.bannerPlacement ?? "PROFILE_HEADER"}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            bannerPlacement: event.target.value as NonNullable<PreviewConfig["bannerPlacement"]>,
+                          },
+                        })
+                      }
+                    >
+                      <option value="PROFILE_HEADER">Profile header</option>
+                      <option value="PROFILE_SHELF">Profile shelf</option>
+                      <option value="PROFILE_BACKGROUND">Profile background</option>
+                    </select>
+                  </label>
+                  <label>
+                    Display duration (days)
+                    <input
+                      type="number"
+                      min={1}
+                      max={3_650}
+                      value={draft.previewConfig.displayDurationDays ?? ""}
+                      placeholder="Permanent"
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            displayDurationDays: event.target.value
+                              ? Number(event.target.value)
+                              : null,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="store-admin-wide">
+                    Optional target link
+                    <input
+                      type="text"
+                      maxLength={2_048}
+                      value={draft.previewConfig.targetLink ?? ""}
+                      placeholder="/series/example or https://…"
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            targetLink: event.target.value || null,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                </>
+              ) : draft.category === "LOGO_EFFECT" ? (
+                <>
+                  <label>
+                    Animation type
+                    <select
+                      value={draft.previewConfig.animationType ?? "GLOW"}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            animationType: event.target.value as NonNullable<PreviewConfig["animationType"]>,
+                          },
+                        })
+                      }
+                    >
+                      <option value="GLOW">Glow</option>
+                      <option value="PULSE">Pulse</option>
+                      <option value="SHIMMER">Shimmer</option>
+                      <option value="ORBIT">Orbit</option>
+                      <option value="GLITCH">Glitch</option>
+                    </select>
+                  </label>
+                  <label>
+                    Animation duration (ms)
+                    <input
+                      type="number"
+                      min={250}
+                      max={20_000}
+                      step={50}
+                      value={draft.previewConfig.animationDurationMs ?? 1_500}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            animationDurationMs: Number(event.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Unlock method
+                    <select
+                      value={draft.previewConfig.unlockMethod ?? "PURCHASE"}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            unlockMethod: event.target.value as NonNullable<PreviewConfig["unlockMethod"]>,
+                          },
+                        })
+                      }
+                    >
+                      <option value="PURCHASE">Store purchase</option>
+                      <option value="ROULETTE">Roulette reward</option>
+                      <option value="MEMBERSHIP">Membership</option>
+                      <option value="EVENT">Event grant</option>
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Rarity
+                    <select
+                      value={draft.previewConfig.rarity ?? "RARE"}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            rarity: event.target.value as NonNullable<PreviewConfig["rarity"]>,
+                          },
+                        })
+                      }
+                    >
+                      <option value="COMMON">Common</option>
+                      <option value="UNCOMMON">Uncommon</option>
+                      <option value="RARE">Rare</option>
+                      <option value="EPIC">Epic</option>
+                      <option value="LEGENDARY">Legendary</option>
+                    </select>
+                  </label>
+                  <label>
+                    Unlock method
+                    <select
+                      value={draft.previewConfig.unlockMethod ?? "PURCHASE"}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            unlockMethod: event.target.value as NonNullable<PreviewConfig["unlockMethod"]>,
+                          },
+                        })
+                      }
+                    >
+                      <option value="PURCHASE">Store purchase</option>
+                      <option value="ROULETTE">Roulette reward</option>
+                      <option value="MEMBERSHIP">Membership</option>
+                      <option value="EVENT">Event grant</option>
+                    </select>
+                  </label>
+                  <label>
+                    Equip slot
+                    <select
+                      value={draft.previewConfig.cosmeticSlot ?? cosmeticSlot(draft.category)}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          previewConfig: {
+                            ...draft.previewConfig,
+                            cosmeticSlot: event.target.value as NonNullable<PreviewConfig["cosmeticSlot"]>,
+                          },
+                        })
+                      }
+                    >
+                      <option value={cosmeticSlot(draft.category)}>
+                        {categoryLabel(draft.category)}
+                      </option>
+                    </select>
+                  </label>
+                </>
+              )}
               <label>
-                Preview start
+                {categoryEditorCopy(draft.category).startLabel}
                 <input
                   type="color"
                   value={draft.previewConfig.from}
@@ -1575,7 +1969,7 @@ export function StoreManagementPanel({
                 />
               </label>
               <label>
-                Preview end
+                {categoryEditorCopy(draft.category).endLabel}
                 <input
                   type="color"
                   value={draft.previewConfig.to}
@@ -1591,7 +1985,7 @@ export function StoreManagementPanel({
                 />
               </label>
               <label>
-                Preview accent
+                {categoryEditorCopy(draft.category).accentLabel}
                 <input
                   type="color"
                   value={draft.previewConfig.accent}
@@ -1629,38 +2023,22 @@ export function StoreManagementPanel({
                 </label>
               ) : null}
               <label>
-                Preview symbol
-                <select
+                {categoryEditorCopy(draft.category).symbolLabel}
+                <AdminCombobox
+                  ariaLabel={categoryEditorCopy(draft.category).symbolLabel}
                   value={draft.previewConfig.symbol}
-                  onChange={(event) =>
+                  options={storeSymbolOptions}
+                  placeholder="Search safe motifs…"
+                  onChange={(symbol) =>
                     setDraft({
                       ...draft,
                       previewConfig: {
                         ...draft.previewConfig,
-                        symbol: event.target.value as PreviewConfig["symbol"],
+                        symbol: symbol as PreviewConfig["symbol"],
                       },
                     })
                   }
-                >
-                  {[
-                    "SUN",
-                    "RING",
-                    "SPARK",
-                    "WAVE",
-                    "INK",
-                    "SLASH",
-                    "STEEL",
-                    "HARBOR",
-                    "COIN",
-                    "GLYPH",
-                    "MOSAIC",
-                    "STAR",
-                    "COMPASS",
-                    "COMET",
-                  ].map((symbol) => (
-                    <option key={symbol}>{symbol}</option>
-                  ))}
-                </select>
+                />
               </label>
               <label className="store-admin-check">
                 <input
@@ -1708,6 +2086,14 @@ export function StoreManagementPanel({
           </div>
         )}
       </div>
+      <ConfirmActionDialog
+        open={Boolean(pendingConfirmation)}
+        title={confirmationCopy.title}
+        description={confirmationCopy.description}
+        confirmLabel={confirmationCopy.confirmLabel}
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={confirmPendingAction}
+      />
     </section>
   );
 }

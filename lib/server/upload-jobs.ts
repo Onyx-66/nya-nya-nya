@@ -54,6 +54,9 @@ export const uploadItemInputSchema = z
       proofreader: "",
       qualityControl: "",
     }),
+    // Missing means an older client/draft explicitly chose its access values.
+    // The current Upload Center sends true for newly composed chapters.
+    useVisibilityDefault: z.boolean().default(false),
     accessType: z.enum(["FREE", "PAID"]).default("FREE"),
     priceOnyx: z.number().int().min(0).max(100_000).default(0),
     visibility: z.enum(["PUBLIC", "UNLISTED", "HIDDEN"]).default("PUBLIC"),
@@ -73,14 +76,22 @@ export const uploadItemInputSchema = z
       .default(null),
   })
   .superRefine((value, context) => {
-    if (value.accessType === "PAID" && value.priceOnyx < 1) {
+    if (
+      !value.useVisibilityDefault &&
+      value.accessType === "PAID" &&
+      value.priceOnyx < 1
+    ) {
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
         message: "Paid chapters need a premium coin price of at least 1.",
       });
     }
-    if (value.accessType === "FREE" && value.priceOnyx !== 0) {
+    if (
+      !value.useVisibilityDefault &&
+      value.accessType === "FREE" &&
+      value.priceOnyx !== 0
+    ) {
       context.addIssue({
         code: "custom",
         path: ["priceOnyx"],
@@ -118,7 +129,10 @@ export const createUploadJobSchema = z
     }
     const paidPrices = new Set(
       value.items
-        .filter((item) => item.accessType === "PAID")
+        .filter(
+          (item) =>
+            !item.useVisibilityDefault && item.accessType === "PAID",
+        )
         .map((item) => item.priceOnyx),
     );
     if (value.kind === "BATCH" && paidPrices.size > 1) {
@@ -173,6 +187,10 @@ export const uploadJobMutationSchema = z.discriminatedUnion("action", [
     paidItemIds: z
       .array(z.string().min(3).max(120))
       .max(UPLOAD_LIMITS.maxChaptersPerJob),
+    visibilityDefaultItemIds: z
+      .array(z.string().min(3).max(120))
+      .max(UPLOAD_LIMITS.maxChaptersPerJob)
+      .default([]),
   }),
   z.object({
     action: z.literal("REORDER"),

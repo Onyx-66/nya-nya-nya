@@ -13,6 +13,7 @@ import {
 } from "@/lib/site-theme";
 import { SystemNotificationProvider } from "@/components/nyascans/SystemNotifications";
 import "./globals.css";
+import "./admin.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

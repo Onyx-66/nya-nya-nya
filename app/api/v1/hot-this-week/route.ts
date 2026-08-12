@@ -2,6 +2,10 @@ import { env } from "cloudflare:workers";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -44,11 +48,15 @@ export async function GET(request: Request) {
            FROM reading_progress rp
            JOIN chapters c ON c.id = rp.chapter_id
            JOIN series s ON s.id = c.series_id
+           LEFT JOIN content_visibility_overrides visibility_override
+             ON visibility_override.chapter_id = c.id
           WHERE rp.onsite_activity_at >= datetime('now', '-7 days')
             AND rp.onsite_activity_at < CURRENT_TIMESTAMP
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
             AND datetime(c.published_at) <= CURRENT_TIMESTAMP
+            AND ${publicPaidSeriesPredicate("s")}
+            AND ${publicPaidChapterPredicate("c", "visibility_override")}
           GROUP BY s.slug
        ),
        weekly_comments AS (
@@ -65,11 +73,15 @@ export async function GET(request: Request) {
                   FROM series comment_series
                   JOIN chapters comment_chapter
                     ON comment_chapter.series_id = comment_series.id
+                  LEFT JOIN content_visibility_overrides comment_visibility
+                    ON comment_visibility.chapter_id = comment_chapter.id
                  WHERE comment_series.slug = dc.series_slug
                    AND comment_chapter.slug = dc.chapter_slug
                    AND comment_chapter.state = 'PUBLISHED'
                    AND comment_chapter.visibility = 'PUBLIC'
                    AND datetime(comment_chapter.published_at) <= CURRENT_TIMESTAMP
+                   AND ${publicPaidSeriesPredicate("comment_series")}
+                   AND ${publicPaidChapterPredicate("comment_chapter", "comment_visibility")}
               )
             )
             AND dc.created_at >= datetime('now', '-7 days')
@@ -91,11 +103,15 @@ export async function GET(request: Request) {
                   FROM series reaction_series
                   JOIN chapters reaction_chapter
                     ON reaction_chapter.series_id = reaction_series.id
+                  LEFT JOIN content_visibility_overrides reaction_visibility
+                    ON reaction_visibility.chapter_id = reaction_chapter.id
                  WHERE reaction_series.slug = dc.series_slug
                    AND reaction_chapter.slug = dc.chapter_slug
                    AND reaction_chapter.state = 'PUBLISHED'
                    AND reaction_chapter.visibility = 'PUBLIC'
                    AND datetime(reaction_chapter.published_at) <= CURRENT_TIMESTAMP
+                   AND ${publicPaidSeriesPredicate("reaction_series")}
+                   AND ${publicPaidChapterPredicate("reaction_chapter", "reaction_visibility")}
               )
             )
             AND dr.created_at >= datetime('now', '-7 days')
@@ -109,11 +125,15 @@ export async function GET(request: Request) {
            FROM chapter_reactions cr
            JOIN chapters c ON c.id = cr.chapter_id
            JOIN series s ON s.id = c.series_id
+           LEFT JOIN content_visibility_overrides visibility_override
+             ON visibility_override.chapter_id = c.id
           WHERE cr.created_at >= datetime('now', '-7 days')
             AND cr.created_at < CURRENT_TIMESTAMP
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
             AND datetime(c.published_at) <= CURRENT_TIMESTAMP
+            AND ${publicPaidSeriesPredicate("s")}
+            AND ${publicPaidChapterPredicate("c", "visibility_override")}
           GROUP BY s.slug
        )
        SELECT s.id,
@@ -147,6 +167,7 @@ export async function GET(request: Request) {
          LEFT JOIN weekly_chapter_reactions wcr ON wcr.seriesSlug = s.slug
         WHERE s.is_published = 1
           AND s.archived_at IS NULL
+          AND ${publicPaidSeriesPredicate("s")}
           AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
           AND s.rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
@@ -191,7 +212,7 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          "cache-control": "public, max-age=45, stale-while-revalidate=120",
+          "cache-control": "no-store",
         },
       },
     );

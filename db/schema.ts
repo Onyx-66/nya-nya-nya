@@ -1114,6 +1114,7 @@ export const seriesRequests = sqliteTable(
     description: text("description").notNull(),
     seriesType: text("series_type").notNull(),
     publicationStatus: text("publication_status").notNull(),
+    publicationYear: integer("publication_year"),
     authorsJson: text("authors_json").notNull().default("[]"),
     artistsJson: text("artists_json").notNull().default("[]"),
     publisherName: text("publisher_name").notNull().default(""),
@@ -1168,6 +1169,10 @@ export const seriesRequests = sqliteTable(
         'REJECTED',
         'WITHDRAWN'
       )`,
+    ),
+    check(
+      "series_requests_publication_year_check",
+      sql`${table.publicationYear} IS NULL OR ${table.publicationYear} BETWEEN 1800 AND 2200`,
     ),
     check(
       "series_requests_type_check",
@@ -1387,6 +1392,11 @@ export const metadataImportLogs = sqliteTable(
       table.externalId,
       table.createdAt,
     ),
+    index("metadata_import_source_action_time_idx").on(
+      table.source,
+      table.action,
+      table.createdAt,
+    ),
   ],
 );
 
@@ -1514,6 +1524,10 @@ export const floatingAds = sqliteTable(
     imageKey: text("image_key"),
     fallbackImageUrl: text("fallback_image_url").notNull().default(""),
     effect: text("effect").notNull().default("WAVE"),
+    displaySlot: integer("display_slot").notNull().default(1),
+    primaryColor: text("primary_color").notNull().default("#65B5FF"),
+    secondaryColor: text("secondary_color").notNull().default("#8B5CF6"),
+    backgroundColor: text("background_color").notNull().default("#07111C"),
     isActive: integer("is_active", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -1528,13 +1542,21 @@ export const floatingAds = sqliteTable(
     updatedAt,
   },
   (table) => [
-    index("floating_ads_active_idx").on(table.isActive, table.updatedAt),
-    uniqueIndex("floating_ads_single_active_uidx")
-      .on(table.isActive)
+    index("floating_ads_active_idx").on(
+      table.isActive,
+      table.displaySlot,
+      table.updatedAt,
+    ),
+    uniqueIndex("floating_ads_active_slot_uidx")
+      .on(table.displaySlot)
       .where(sql`${table.isActive} = 1`),
     check(
       "floating_ads_effect_check",
       sql`${table.effect} IN ('WAVE', 'PULSE', 'GLOW')`,
+    ),
+    check(
+      "floating_ads_display_slot_check",
+      sql`${table.displaySlot} IN (1, 2)`,
     ),
   ],
 );
@@ -2558,6 +2580,9 @@ export const orders = sqliteTable(
   },
   (table) => [
     uniqueIndex("orders_idempotency_uidx").on(table.userId, table.idempotencyKey),
+    uniqueIndex("orders_provider_reference_uidx")
+      .on(table.provider, table.providerReference)
+      .where(sql`${table.providerReference} IS NOT NULL`),
     index("orders_user_idx").on(table.userId, table.createdAt),
   ],
 );
@@ -2588,6 +2613,735 @@ export const orderItems = sqliteTable(
   (table) => [
     index("order_items_order_idx").on(table.orderId),
     index("order_items_product_idx").on(table.productId, table.createdAt),
+  ],
+);
+
+export const paymentCheckoutSessions = sqliteTable(
+  "payment_checkout_sessions",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("STRIPE"),
+    providerSessionId: text("provider_session_id"),
+    providerPaymentIntentId: text("provider_payment_intent_id"),
+    providerInvoiceId: text("provider_invoice_id"),
+    providerSubscriptionId: text("provider_subscription_id"),
+    providerCustomerId: text("provider_customer_id"),
+    checkoutUrl: text("checkout_url"),
+    mode: text("mode").notNull(),
+    billingCycle: text("billing_cycle").notNull().default("ONE_TIME"),
+    userIdSnapshot: text("user_id_snapshot").notNull().default(""),
+    productIdSnapshot: text("product_id_snapshot").notNull(),
+    productRevisionSnapshot: integer("product_revision_snapshot")
+      .notNull(),
+    productKindSnapshot: text("product_kind_snapshot").notNull(),
+    fulfillmentOnyxSnapshot: integer("fulfillment_onyx_snapshot")
+      .notNull()
+      .default(0),
+    status: text("status").notNull().default("CREATING"),
+    amountMinor: integer("amount_minor").notNull(),
+    billingCurrency: text("billing_currency").notNull(),
+    expiresAt: text("expires_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("payment_checkout_sessions_order_uidx").on(table.orderId),
+    uniqueIndex("payment_checkout_sessions_provider_uidx")
+      .on(table.provider, table.providerSessionId)
+      .where(sql`${table.providerSessionId} IS NOT NULL`),
+    uniqueIndex("payment_checkout_sessions_payment_intent_uidx")
+      .on(table.provider, table.providerPaymentIntentId)
+      .where(sql`${table.providerPaymentIntentId} IS NOT NULL`),
+    uniqueIndex("payment_checkout_sessions_invoice_uidx")
+      .on(table.provider, table.providerInvoiceId)
+      .where(sql`${table.providerInvoiceId} IS NOT NULL`),
+    uniqueIndex("payment_checkout_sessions_subscription_uidx")
+      .on(table.provider, table.providerSubscriptionId)
+      .where(sql`${table.providerSubscriptionId} IS NOT NULL`),
+    index("payment_checkout_sessions_status_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
+    index("payment_checkout_sessions_user_product_idx").on(
+      table.userIdSnapshot,
+      table.productIdSnapshot,
+      table.status,
+    ),
+    check(
+      "payment_checkout_sessions_mode_check",
+      sql`${table.mode} IN ('PAYMENT', 'SUBSCRIPTION')`,
+    ),
+    check(
+      "payment_checkout_sessions_cycle_check",
+      sql`(${table.mode} = 'PAYMENT' AND ${table.billingCycle} = 'ONE_TIME') OR (${table.mode} = 'SUBSCRIPTION' AND ${table.billingCycle} IN ('MONTHLY', 'ANNUAL'))`,
+    ),
+    check(
+      "payment_checkout_sessions_user_snapshot_check",
+      sql`length(${table.userIdSnapshot}) > 0`,
+    ),
+    check(
+      "payment_checkout_sessions_product_kind_check",
+      sql`(${table.mode} = 'PAYMENT' AND ${table.productKindSnapshot} = 'CURRENCY_PACKAGE') OR (${table.mode} = 'SUBSCRIPTION' AND ${table.productKindSnapshot} = 'MEMBERSHIP')`,
+    ),
+    check(
+      "payment_checkout_sessions_fulfillment_check",
+      sql`${table.fulfillmentOnyxSnapshot} >= 0`,
+    ),
+    check(
+      "payment_checkout_sessions_status_check",
+      sql`${table.status} IN ('CREATING', 'OPEN', 'COMPLETED', 'EXPIRED', 'FAILED')`,
+    ),
+    check(
+      "payment_checkout_sessions_amount_check",
+      sql`${table.amountMinor} > 0`,
+    ),
+  ],
+);
+
+export const paymentWebhookEvents = sqliteTable(
+  "payment_webhook_events",
+  {
+    id: text("id").primaryKey(),
+    provider: text("provider").notNull().default("STRIPE"),
+    eventType: text("event_type").notNull(),
+    payloadSha256: text("payload_sha256").notNull(),
+    status: text("status").notNull().default("RECEIVED"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    processedAt: text("processed_at"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("payment_webhook_events_status_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
+    check(
+      "payment_webhook_events_status_check",
+      sql`${table.status} IN ('RECEIVED', 'PROCESSING', 'PROCESSED', 'IGNORED', 'FAILED')`,
+    ),
+    check(
+      "payment_webhook_events_attempt_check",
+      sql`${table.attemptCount} >= 0`,
+    ),
+  ],
+);
+
+export const userMemberships = sqliteTable(
+  "user_memberships",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => products.id, {
+      onDelete: "set null",
+    }),
+    provider: text("provider").notNull().default("STRIPE"),
+    providerCustomerId: text("provider_customer_id"),
+    providerSubscriptionId: text("provider_subscription_id").notNull(),
+    providerLatestInvoiceId: text("provider_latest_invoice_id"),
+    providerLastEventCreated: integer("provider_last_event_created")
+      .notNull()
+      .default(0),
+    providerLastEventId: text("provider_last_event_id"),
+    billingCycle: text("billing_cycle").notNull().default("MONTHLY"),
+    renewalAmountMinor: integer("renewal_amount_minor").notNull().default(0),
+    billingCurrency: text("billing_currency").notNull().default(""),
+    onyxAllowance: integer("onyx_allowance").notNull().default(0),
+    status: text("status").notNull().default("ACTIVE"),
+    currentPeriodStart: text("current_period_start"),
+    currentPeriodEnd: text("current_period_end"),
+    cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("user_memberships_provider_subscription_uidx").on(
+      table.provider,
+      table.providerSubscriptionId,
+    ),
+    index("user_memberships_user_status_idx").on(
+      table.userId,
+      table.status,
+      table.currentPeriodEnd,
+    ),
+    index("user_memberships_user_product_status_idx").on(
+      table.userId,
+      table.productId,
+      table.status,
+    ),
+    check(
+      "user_memberships_status_check",
+      sql`${table.status} IN ('ACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'EXPIRED')`,
+    ),
+    check(
+      "user_memberships_onyx_allowance_check",
+      sql`${table.onyxAllowance} >= 0`,
+    ),
+    check(
+      "user_memberships_cycle_check",
+      sql`${table.billingCycle} IN ('MONTHLY', 'ANNUAL')`,
+    ),
+    check(
+      "user_memberships_billing_check",
+      sql`${table.renewalAmountMinor} > 0 AND ${table.billingCurrency} GLOB '[A-Z][A-Z][A-Z]'`,
+    ),
+    check(
+      "user_memberships_provider_event_check",
+      sql`${table.providerLastEventCreated} >= 0 AND ((${table.providerLastEventCreated} = 0 AND ${table.providerLastEventId} IS NULL) OR (${table.providerLastEventCreated} > 0 AND ${table.providerLastEventId} IS NOT NULL))`,
+    ),
+  ],
+);
+
+export const membershipCoinGrants = sqliteTable(
+  "membership_coin_grants",
+  {
+    id: text("id").primaryKey(),
+    membershipId: text("membership_id")
+      .notNull()
+      .references(() => userMemberships.id, { onDelete: "cascade" }),
+    providerEventId: text("provider_event_id").notNull(),
+    providerInvoiceId: text("provider_invoice_id"),
+    providerPaymentIntentId: text("provider_payment_intent_id"),
+    ledgerTransactionId: text("ledger_transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    amountOnyx: integer("amount_onyx").notNull(),
+    amountMinor: integer("amount_minor").notNull().default(0),
+    billingCurrency: text("billing_currency").notNull().default(""),
+    periodKey: text("period_key").notNull().default(""),
+    periodStart: text("period_start"),
+    periodEnd: text("period_end"),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("membership_coin_grants_event_uidx").on(table.providerEventId),
+    uniqueIndex("membership_coin_grants_ledger_uidx").on(
+      table.ledgerTransactionId,
+    ),
+    uniqueIndex("membership_coin_grants_period_uidx").on(
+      table.membershipId,
+      table.periodKey,
+    ),
+    uniqueIndex("membership_coin_grants_invoice_uidx")
+      .on(table.providerInvoiceId)
+      .where(sql`${table.providerInvoiceId} IS NOT NULL`),
+    uniqueIndex("membership_coin_grants_payment_intent_uidx")
+      .on(table.providerPaymentIntentId)
+      .where(sql`${table.providerPaymentIntentId} IS NOT NULL`),
+    index("membership_coin_grants_membership_idx").on(
+      table.membershipId,
+      table.createdAt,
+    ),
+    check(
+      "membership_coin_grants_amount_check",
+      sql`${table.amountOnyx} > 0`,
+    ),
+    check(
+      "membership_coin_grants_billing_check",
+      sql`${table.amountMinor} > 0 AND ${table.billingCurrency} GLOB '[A-Z][A-Z][A-Z]'`,
+    ),
+    check(
+      "membership_coin_grants_period_check",
+      sql`length(${table.periodKey}) > 0 AND ((${table.periodStart} IS NULL AND ${table.periodEnd} IS NULL) OR (${table.periodStart} IS NOT NULL AND ${table.periodEnd} IS NOT NULL AND datetime(${table.periodEnd}) > datetime(${table.periodStart})))`,
+    ),
+  ],
+);
+
+export const paymentInvoiceSnapshots = sqliteTable(
+  "payment_invoice_snapshots",
+  {
+    id: text("id").primaryKey(),
+    membershipId: text("membership_id")
+      .notNull()
+      .references(() => userMemberships.id, { onDelete: "restrict" }),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    providerEventId: text("provider_event_id")
+      .notNull()
+      .references(() => paymentWebhookEvents.id, { onDelete: "restrict" }),
+    providerInvoiceId: text("provider_invoice_id").notNull(),
+    providerPaymentIntentId: text("provider_payment_intent_id"),
+    amountMinor: integer("amount_minor").notNull(),
+    billingCurrency: text("billing_currency").notNull(),
+    fulfillmentOnyx: integer("fulfillment_onyx").notNull().default(0),
+    periodKey: text("period_key").notNull(),
+    periodStart: text("period_start").notNull(),
+    periodEnd: text("period_end").notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("payment_invoice_snapshots_invoice_uidx").on(
+      table.providerInvoiceId,
+    ),
+    uniqueIndex("payment_invoice_snapshots_payment_intent_uidx")
+      .on(table.providerPaymentIntentId)
+      .where(sql`${table.providerPaymentIntentId} IS NOT NULL`),
+    uniqueIndex("payment_invoice_snapshots_period_uidx").on(
+      table.membershipId,
+      table.periodKey,
+    ),
+    index("payment_invoice_snapshots_membership_idx").on(
+      table.membershipId,
+      table.createdAt,
+    ),
+    index("payment_invoice_snapshots_order_idx").on(
+      table.orderId,
+      table.createdAt,
+    ),
+    check(
+      "payment_invoice_snapshots_amount_check",
+      sql`${table.amountMinor} > 0 AND ${table.fulfillmentOnyx} >= 0`,
+    ),
+    check(
+      "payment_invoice_snapshots_currency_check",
+      sql`${table.billingCurrency} GLOB '[A-Z][A-Z][A-Z]'`,
+    ),
+    check(
+      "payment_invoice_snapshots_period_check",
+      sql`length(${table.periodKey}) > 0 AND datetime(${table.periodEnd}) > datetime(${table.periodStart})`,
+    ),
+  ],
+);
+
+export const paymentFinancialStates = sqliteTable(
+  "payment_financial_states",
+  {
+    id: text("id").primaryKey(),
+    subjectType: text("subject_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    membershipId: text("membership_id").references(() => userMemberships.id, {
+      onDelete: "restrict",
+    }),
+    provider: text("provider").notNull().default("STRIPE"),
+    providerChargeId: text("provider_charge_id").notNull(),
+    providerPaymentIntentId: text("provider_payment_intent_id"),
+    providerInvoiceId: text("provider_invoice_id"),
+    totalMinor: integer("total_minor").notNull(),
+    currency: text("currency").notNull(),
+    fulfillmentOnyx: integer("fulfillment_onyx").notNull(),
+    refundedMinor: integer("refunded_minor").notNull().default(0),
+    reversedOnyx: integer("reversed_onyx").notNull().default(0),
+    membershipStatusBeforeRisk: text("membership_status_before_risk"),
+    membershipProviderEventCreatedAtRisk: integer(
+      "membership_provider_event_created_at_risk",
+    ),
+    membershipRiskActive: integer("membership_risk_active", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
+    revision: integer("revision").notNull().default(1),
+    lastProviderEventId: text("last_provider_event_id").references(
+      () => paymentWebhookEvents.id,
+      { onDelete: "restrict" },
+    ),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("payment_financial_states_subject_uidx").on(
+      table.subjectType,
+      table.subjectId,
+    ),
+    uniqueIndex("payment_financial_states_charge_uidx").on(
+      table.provider,
+      table.providerChargeId,
+    ),
+    index("payment_financial_states_user_idx").on(
+      table.userId,
+      table.updatedAt,
+    ),
+    index("payment_financial_states_order_idx").on(table.orderId),
+    index("payment_financial_states_risk_idx").on(
+      table.refundedMinor,
+      table.reversedOnyx,
+      table.updatedAt,
+    ),
+    check(
+      "payment_financial_states_subject_check",
+      sql`${table.subjectType} IN ('ORDER', 'INVOICE')`,
+    ),
+    check("payment_financial_states_provider_check", sql`${table.provider} = 'STRIPE'`),
+    check(
+      "payment_financial_states_reference_check",
+      sql`${table.providerPaymentIntentId} IS NOT NULL OR ${table.providerInvoiceId} IS NOT NULL`,
+    ),
+    check(
+      "payment_financial_states_amount_check",
+      sql`${table.totalMinor} > 0 AND ${table.refundedMinor} BETWEEN 0 AND ${table.totalMinor}`,
+    ),
+    check(
+      "payment_financial_states_onyx_check",
+      sql`${table.fulfillmentOnyx} >= 0 AND ${table.reversedOnyx} BETWEEN 0 AND ${table.fulfillmentOnyx}`,
+    ),
+    check(
+      "payment_financial_states_membership_risk_check",
+      sql`(${table.membershipId} IS NULL AND ${table.membershipStatusBeforeRisk} IS NULL AND ${table.membershipProviderEventCreatedAtRisk} IS NULL AND ${table.membershipRiskActive} = 0)
+        OR (${table.membershipId} IS NOT NULL AND (${table.membershipStatusBeforeRisk} IS NULL OR ${table.membershipStatusBeforeRisk} IN ('ACTIVE', 'TRIALING')) AND (${table.membershipProviderEventCreatedAtRisk} IS NULL OR ${table.membershipProviderEventCreatedAtRisk} >= 0))`,
+    ),
+    check(
+      "payment_financial_states_currency_check",
+      sql`${table.currency} GLOB '[A-Z][A-Z][A-Z]'`,
+    ),
+    check("payment_financial_states_revision_check", sql`${table.revision} >= 1`),
+  ],
+);
+
+export const paymentDisputes = sqliteTable(
+  "payment_disputes",
+  {
+    id: text("id").primaryKey(),
+    stateId: text("state_id")
+      .notNull()
+      .references(() => paymentFinancialStates.id, { onDelete: "restrict" }),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    status: text("status").notNull().default("OPEN"),
+    providerEventCreated: integer("provider_event_created").notNull(),
+    providerEventId: text("provider_event_id")
+      .notNull()
+      .references(() => paymentWebhookEvents.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull().default("unknown"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("payment_disputes_state_status_idx").on(
+      table.stateId,
+      table.status,
+    ),
+    index("payment_disputes_status_updated_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
+    check("payment_disputes_amount_check", sql`${table.amountMinor} > 0`),
+    check(
+      "payment_disputes_currency_check",
+      sql`${table.currency} GLOB '[A-Z][A-Z][A-Z]'`,
+    ),
+    check(
+      "payment_disputes_status_check",
+      sql`${table.status} IN ('OPEN', 'WON', 'LOST')`,
+    ),
+    check(
+      "payment_disputes_event_order_check",
+      sql`${table.providerEventCreated} >= 0`,
+    ),
+    check("payment_disputes_revision_check", sql`${table.revision} >= 1`),
+  ],
+);
+
+export const paymentAdverseAdjustments = sqliteTable(
+  "payment_adverse_adjustments",
+  {
+    id: text("id").primaryKey(),
+    stateId: text("state_id")
+      .notNull()
+      .references(() => paymentFinancialStates.id, { onDelete: "restrict" }),
+    providerEventId: text("provider_event_id")
+      .notNull()
+      .references(() => paymentWebhookEvents.id, { onDelete: "restrict" }),
+    providerObjectType: text("provider_object_type").notNull(),
+    providerObjectId: text("provider_object_id").notNull(),
+    kind: text("kind").notNull(),
+    atRiskMinorAfter: integer("at_risk_minor_after").notNull(),
+    onyxDelta: integer("onyx_delta").notNull(),
+    ledgerTransactionId: text("ledger_transaction_id").references(
+      () => ledgerTransactions.id,
+      { onDelete: "restrict" },
+    ),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("payment_adverse_adjustments_event_uidx").on(
+      table.providerEventId,
+    ),
+    uniqueIndex("payment_adverse_adjustments_ledger_uidx")
+      .on(table.ledgerTransactionId)
+      .where(sql`${table.ledgerTransactionId} IS NOT NULL`),
+    index("payment_adverse_adjustments_state_idx").on(
+      table.stateId,
+      table.createdAt,
+    ),
+    index("payment_adverse_adjustments_kind_idx").on(
+      table.kind,
+      table.createdAt,
+    ),
+    check(
+      "payment_adverse_adjustments_object_type_check",
+      sql`${table.providerObjectType} IN ('CHARGE', 'DISPUTE')`,
+    ),
+    check(
+      "payment_adverse_adjustments_kind_check",
+      sql`${table.kind} IN ('REFUND', 'DISPUTE_OPEN', 'DISPUTE_WON', 'DISPUTE_LOST', 'DISPUTE_UPDATE')`,
+    ),
+    check(
+      "payment_adverse_adjustments_risk_check",
+      sql`${table.atRiskMinorAfter} >= 0`,
+    ),
+    check(
+      "payment_adverse_adjustments_ledger_check",
+      sql`(${table.onyxDelta} = 0 AND ${table.ledgerTransactionId} IS NULL) OR (${table.onyxDelta} <> 0 AND ${table.ledgerTransactionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const orderFulfillments = sqliteTable(
+  "order_fulfillments",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    orderItemId: text("order_item_id")
+      .notNull()
+      .references(() => orderItems.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    ledgerTransactionId: text("ledger_transaction_id").references(
+      () => ledgerTransactions.id,
+    ),
+    membershipId: text("membership_id").references(() => userMemberships.id),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("order_fulfillments_order_item_uidx").on(table.orderItemId),
+    uniqueIndex("order_fulfillments_event_uidx").on(table.providerEventId),
+    check(
+      "order_fulfillments_kind_check",
+      sql`${table.kind} IN ('ONYX', 'MEMBERSHIP')`,
+    ),
+  ],
+);
+
+export const contentVisibilitySettings = sqliteTable(
+  "content_visibility_settings",
+  {
+    id: text("id").primaryKey(),
+    defaultAccessType: text("default_access_type").notNull().default("FREE"),
+    defaultPriceOnyx: integer("default_price_onyx").notNull().default(0),
+    autoFreeAfterDays: integer("auto_free_after_days"),
+    revision: integer("revision").notNull().default(1),
+    updatedByUserId: text("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "content_visibility_settings_id_check",
+      sql`${table.id} = 'active'`,
+    ),
+    check(
+      "content_visibility_settings_access_check",
+      sql`${table.defaultAccessType} IN ('FREE', 'PAID')`,
+    ),
+    check(
+      "content_visibility_settings_price_check",
+      sql`(${table.defaultAccessType} = 'FREE' AND ${table.defaultPriceOnyx} = 0) OR (${table.defaultAccessType} = 'PAID' AND ${table.defaultPriceOnyx} > 0)`,
+    ),
+    check(
+      "content_visibility_settings_auto_free_check",
+      sql`${table.autoFreeAfterDays} IS NULL OR ${table.autoFreeAfterDays} BETWEEN 1 AND 3650`,
+    ),
+  ],
+);
+
+export const contentVisibilityOverrides = sqliteTable(
+  "content_visibility_overrides",
+  {
+    chapterId: text("chapter_id")
+      .primaryKey()
+      .references(() => chapters.id, { onDelete: "cascade" }),
+    accessType: text("access_type").notNull(),
+    priceOnyx: integer("price_onyx").notNull().default(0),
+    autoFreeExempt: integer("auto_free_exempt", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    reason: text("reason").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    updatedByUserId: text("updated_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("content_visibility_overrides_access_idx").on(
+      table.accessType,
+      table.updatedAt,
+    ),
+    check(
+      "content_visibility_overrides_access_check",
+      sql`${table.accessType} IN ('FREE', 'PAID', 'PREMIUM')`,
+    ),
+    check(
+      "content_visibility_overrides_price_check",
+      sql`(${table.accessType} = 'FREE' AND ${table.priceOnyx} = 0) OR (${table.accessType} = 'PAID' AND ${table.priceOnyx} > 0) OR (${table.accessType} = 'PREMIUM' AND ${table.priceOnyx} = 0)`,
+    ),
+  ],
+);
+
+export const adUnlockChallenges = sqliteTable(
+  "ad_unlock_challenges",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapters.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    providerReference: text("provider_reference"),
+    status: text("status").notNull().default("PENDING"),
+    expiresAt: text("expires_at").notNull(),
+    verifiedAt: text("verified_at"),
+    claimedAt: text("claimed_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("ad_unlock_challenges_provider_reference_uidx")
+      .on(table.providerReference)
+      .where(sql`${table.providerReference} IS NOT NULL`),
+    index("ad_unlock_challenges_user_chapter_idx").on(
+      table.userId,
+      table.chapterId,
+      table.status,
+      table.expiresAt,
+    ),
+    index("ad_unlock_challenges_status_expiry_idx").on(
+      table.status,
+      table.expiresAt,
+    ),
+    check(
+      "ad_unlock_challenges_status_check",
+      sql`${table.status} IN ('PENDING', 'VERIFIED', 'CLAIMED', 'EXPIRED')`,
+    ),
+    check(
+      "ad_unlock_challenges_revision_check",
+      sql`${table.revision} >= 1`,
+    ),
+    check(
+      "ad_unlock_challenges_verification_check",
+      sql`(${table.providerReference} IS NULL AND ${table.verifiedAt} IS NULL)
+        OR (${table.providerReference} IS NOT NULL AND ${table.verifiedAt} IS NOT NULL)`,
+    ),
+    check(
+      "ad_unlock_challenges_lifecycle_check",
+      sql`(${table.status} = 'PENDING' AND ${table.providerReference} IS NULL AND ${table.verifiedAt} IS NULL AND ${table.claimedAt} IS NULL)
+        OR (${table.status} = 'VERIFIED' AND ${table.providerReference} IS NOT NULL AND ${table.verifiedAt} IS NOT NULL AND ${table.claimedAt} IS NULL)
+        OR (${table.status} = 'CLAIMED' AND ${table.providerReference} IS NOT NULL AND ${table.verifiedAt} IS NOT NULL AND ${table.claimedAt} IS NOT NULL)
+        OR (${table.status} = 'EXPIRED' AND ${table.claimedAt} IS NULL)`,
+    ),
+  ],
+);
+
+export const teamPayoutAccounts = sqliteTable(
+  "team_payout_accounts",
+  {
+    teamId: text("team_id")
+      .primaryKey()
+      .references(() => teams.id, { onDelete: "restrict" }),
+    provider: text("provider").notNull().default("STRIPE"),
+    providerAccountId: text("provider_account_id").notNull(),
+    revision: integer("revision").notNull().default(1),
+    updatedByUserId: text("updated_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("team_payout_accounts_provider_uidx").on(
+      table.provider,
+      table.providerAccountId,
+    ),
+    index("team_payout_accounts_updated_idx").on(table.updatedAt),
+    check("team_payout_accounts_provider_check", sql`${table.provider} = 'STRIPE'`),
+    check("team_payout_accounts_revision_check", sql`${table.revision} >= 1`),
+  ],
+);
+
+export const teamPayoutRequests = sqliteTable(
+  "team_payout_requests",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "restrict" }),
+    requestedByUserId: text("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    amountOnyx: integer("amount_onyx").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    providerTransferId: text("provider_transfer_id"),
+    reason: text("reason").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: text("reviewed_at"),
+    paidAt: text("paid_at"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("team_payout_requests_transfer_uidx")
+      .on(table.providerTransferId)
+      .where(sql`${table.providerTransferId} IS NOT NULL`),
+    index("team_payout_requests_status_idx").on(table.status, table.createdAt),
+    index("team_payout_requests_team_status_idx").on(
+      table.teamId,
+      table.status,
+      table.createdAt,
+    ),
+    check("team_payout_requests_onyx_check", sql`${table.amountOnyx} > 0`),
+    check("team_payout_requests_minor_check", sql`${table.amountMinor} > 0`),
+    check("team_payout_requests_currency_check", sql`${table.currency} GLOB '[A-Z][A-Z][A-Z]'`),
+    check(
+      "team_payout_requests_status_check",
+      sql`${table.status} IN ('PENDING', 'APPROVED', 'PROCESSING', 'PAID', 'REJECTED')`,
+    ),
+    check("team_payout_requests_revision_check", sql`${table.revision} >= 1`),
+    check(
+      "team_payout_requests_reviewer_separation_check",
+      sql`${table.reviewedByUserId} IS NULL OR ${table.reviewedByUserId} <> ${table.requestedByUserId}`,
+    ),
+    check(
+      "team_payout_requests_state_check",
+      sql`(${table.status} = 'PENDING' AND ${table.reviewedByUserId} IS NULL AND ${table.reviewedAt} IS NULL AND ${table.providerTransferId} IS NULL AND ${table.paidAt} IS NULL)
+        OR (${table.status} = 'APPROVED' AND ${table.reviewedByUserId} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL AND ${table.providerTransferId} IS NULL AND ${table.paidAt} IS NULL)
+        OR (${table.status} = 'PROCESSING' AND ${table.reviewedByUserId} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL AND ${table.paidAt} IS NULL)
+        OR (${table.status} = 'PAID' AND ${table.reviewedByUserId} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL AND ${table.providerTransferId} IS NOT NULL AND ${table.paidAt} IS NOT NULL)
+        OR (${table.status} = 'REJECTED' AND ${table.reviewedByUserId} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL AND ${table.paidAt} IS NULL)`,
+    ),
   ],
 );
 

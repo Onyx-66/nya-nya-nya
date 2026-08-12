@@ -16,6 +16,7 @@ import {
   requirePaidEconomyPublicDocument,
 } from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 import { randomId } from "@/lib/server/random-id";
 import { storePurchaseSchema } from "@/lib/storefront";
 
@@ -41,18 +42,6 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const actor = await requireActor();
     const payload = storePurchaseSchema.parse(await request.json());
-    const commercial = await getCommercialSettingsDocument();
-    const premiumEconomyPublic =
-      !commercial.recoveredFromInvalid &&
-      commercial.settings.economy.premiumEconomyPublic;
-    const ownerPreview = actor.roles.includes("OWNER");
-    if (!premiumEconomyPublic && !ownerPreview) {
-      throw new ApiError(
-        403,
-        "LOCK_AND_PAY_PRIVATE",
-        "Purchases are currently private.",
-      );
-    }
     if (!env.DB) {
       throw new ApiError(
         503,
@@ -60,6 +49,13 @@ export async function POST(request: Request) {
         "Store purchases are temporarily unavailable.",
       );
     }
+    const commercial = await getCommercialSettingsDocument();
+    const featureStates = await getFeatureStates(env.DB);
+    const premiumEconomyPublic = Boolean(
+      !commercial.recoveredFromInvalid &&
+        commercial.settings.economy.premiumEconomyPublic &&
+        featureStates.premium_unlocks.effective,
+    );
     const item = await env.DB.prepare(
       `SELECT si.id, si.name, si.price_onyx AS priceAmount,
               si.price_currency AS priceCurrency, si.category,
@@ -114,7 +110,7 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "private, no-store", vary: "Cookie" } },
       );
     }
-    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic && !ownerPreview) {
+    if (item.priceCurrency === "ONYX" && !premiumEconomyPublic) {
       throw new ApiError(
         403,
         "PAID_ECONOMY_HIDDEN",
@@ -123,9 +119,7 @@ export async function POST(request: Request) {
     }
     const paidCommercial =
       item.priceCurrency === "ONYX"
-        ? ownerPreview
-          ? commercial
-          : await requirePaidEconomyPublicDocument()
+        ? await requirePaidEconomyPublicDocument()
         : null;
     const paidEconomyRevision = paidCommercial?.revision ?? null;
     const amount = Number(item.priceAmount);

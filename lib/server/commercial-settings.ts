@@ -88,11 +88,17 @@ export async function getCommercialSettingsDocument(): Promise<CommercialSetting
 
 export async function requirePaidEconomyPublicDocument() {
   const document = await getCommercialSettingsDocument();
+  const premiumFeature = env.DB
+    ? await env.DB.prepare(
+        "SELECT enabled FROM feature_flags WHERE key = 'premium_unlocks' LIMIT 1",
+      ).first<{ enabled: number | boolean }>()
+    : null;
   if (
     document.recoveredFromInvalid ||
     !Number.isSafeInteger(document.revision) ||
     document.revision < 1 ||
-    !document.settings.economy.premiumEconomyPublic
+    !document.settings.economy.premiumEconomyPublic ||
+    !Boolean(premiumFeature?.enabled)
   ) {
     throw new ApiError(
       403,
@@ -129,6 +135,12 @@ export function paidEconomyRevisionGuardSql(expectedRevision: number) {
              END,
              '$.economy.premiumEconomyPublic'
            ) = 'true'
+       AND EXISTS (
+         SELECT 1
+           FROM feature_flags premium_feature
+          WHERE premium_feature.key = 'premium_unlocks'
+            AND premium_feature.enabled = 1
+       )
   )`;
 }
 

@@ -114,13 +114,15 @@ async function api<T>(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 export function ReactionLibraryPanel({
+  moderationPanel,
   settingsPanel,
 }: {
+  moderationPanel?: ReactNode;
   settingsPanel?: ReactNode;
 }) {
-  const [workspaceTab, setWorkspaceTab] = useState<"library" | "settings">(
-    "library",
-  );
+  const [workspaceTab, setWorkspaceTab] = useState<
+    "moderation" | "library" | "settings"
+  >("moderation");
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -141,6 +143,10 @@ export function ReactionLibraryPanel({
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<Reaction | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    description: string;
+    run: () => void;
+  } | null>(null);
   const [message, setMessage] = useState<{
     kind: "success" | "error" | "neutral";
     text: string;
@@ -219,9 +225,16 @@ export function ReactionLibraryPanel({
     [],
   );
 
-  function select(reaction: Reaction) {
+  function requestDraftDiscard(description: string, run: () => void) {
     if (optimizing) return;
-    if (dirty && !window.confirm("Discard unsaved reaction changes?")) return;
+    if (dirty) {
+      setPendingNavigation({ description, run });
+      return;
+    }
+    run();
+  }
+
+  function applySelection(reaction: Reaction) {
     setDraft(reaction);
     setSaved(reaction);
     setAssetFile(null);
@@ -230,24 +243,34 @@ export function ReactionLibraryPanel({
     setMessage(null);
   }
 
+  function select(reaction: Reaction) {
+    requestDraftDiscard(
+      "The current reaction draft and asset changes will be discarded before another item opens.",
+      () => applySelection(reaction),
+    );
+  }
+
   function createReaction() {
-    if (optimizing) return;
-    if (dirty && !window.confirm("Discard unsaved reaction changes?")) return;
-    const nextDraft: Draft = {
-      ...emptyDraft,
-      usageKind:
-        usageFilter === "COMMENT_GIF" ? "COMMENT_GIF" : "REACTION",
-      displayOrder:
-        reactions.reduce(
-          (maximum, reaction) => Math.max(maximum, reaction.displayOrder),
-          0,
-        ) + 10,
-    };
-    setDraft(nextDraft);
-    setSaved(nextDraft);
-    setAssetFile(null);
-    setOptimizationNote("");
-    setRemoveAsset(false);
+    requestDraftDiscard(
+      "The current reaction draft and asset changes will be discarded before a new item is created.",
+      () => {
+        const nextDraft: Draft = {
+          ...emptyDraft,
+          usageKind:
+            usageFilter === "COMMENT_GIF" ? "COMMENT_GIF" : "REACTION",
+          displayOrder:
+            reactions.reduce(
+              (maximum, reaction) => Math.max(maximum, reaction.displayOrder),
+              0,
+            ) + 10,
+        };
+        setDraft(nextDraft);
+        setSaved(nextDraft);
+        setAssetFile(null);
+        setOptimizationNote("");
+        setRemoveAsset(false);
+      },
+    );
   }
 
   async function save(event: FormEvent) {
@@ -385,17 +408,20 @@ export function ReactionLibraryPanel({
   return (
     <>
       <AdminPageScaffold
-        breadcrumbs={["Administration", "Discussions"]}
+        breadcrumbs={["Community", "Discussions"]}
         kicker="Community systems"
-        title="Discussions, reactions & GIFs"
+        title="Discussions"
         description="Configure discussion behavior and manage safe reaction buttons and curated comment GIFs."
         tabs={[
-          { key: "library", label: "Media library", count: reactions.length },
+          { key: "moderation", label: "Moderation" },
           { key: "settings", label: "Discussion settings" },
+          { key: "library", label: "Reactions & GIFs", count: reactions.length },
         ]}
         activeTab={workspaceTab}
         onTabChange={(value) =>
-          setWorkspaceTab(value as "library" | "settings")
+          setWorkspaceTab(
+            value as "moderation" | "library" | "settings",
+          )
         }
         state={
           workspaceTab === "library" && loading
@@ -426,7 +452,14 @@ export function ReactionLibraryPanel({
           ) : null
         }
       >
-        {workspaceTab === "settings" ? (
+        {workspaceTab === "moderation" ? (
+          moderationPanel ?? (
+            <div className="admin-state-card">
+              <h2>Moderation unavailable</h2>
+              <p>The global comment moderation service could not be mounted.</p>
+            </div>
+          )
+        ) : workspaceTab === "settings" ? (
           settingsPanel ?? (
             <div className="admin-state-card">
               <h3>Settings unavailable</h3>
@@ -990,6 +1023,22 @@ export function ReactionLibraryPanel({
         busy={saving}
         onCancel={() => setRemoveTarget(null)}
         onConfirm={() => void archive()}
+      />
+      <ConfirmActionDialog
+        open={Boolean(pendingNavigation)}
+        title="Discard unsaved reaction changes?"
+        description={pendingNavigation?.description ?? ""}
+        confirmLabel="Discard and continue"
+        destructive
+        busy={saving || optimizing}
+        onCancel={() => {
+          if (!saving && !optimizing) setPendingNavigation(null);
+        }}
+        onConfirm={() => {
+          const navigation = pendingNavigation;
+          setPendingNavigation(null);
+          navigation?.run();
+        }}
       />
     </>
   );

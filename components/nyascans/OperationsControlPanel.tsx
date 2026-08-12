@@ -41,11 +41,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { CommercialSettingsPanel } from "@/components/nyascans/CommercialSettingsPanel";
 import { EditorialManagementPanel } from "@/components/nyascans/EditorialManagementPanel";
+import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { AuditLogPanel as OwnerAuditLogPanel } from "@/components/nyascans/admin/AuditLogPanel";
-import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
-import { CommerceOfferManager } from "@/components/nyascans/admin/CommerceOfferManager";
+import {
+  AdminCombobox,
+  AdminPageScaffold,
+  AdminSectionCard,
+  AdminStatusBadge,
+  ConfirmActionDialog,
+  PromptActionDialog,
+  useUnsavedChanges,
+} from "@/components/nyascans/admin/AdminPageScaffold";
+import { ReactionLibraryPanel } from "@/components/nyascans/admin/ReactionLibraryPanel";
 import { NewSeriesQueuePanel } from "@/components/nyascans/admin/NewSeriesQueuePanel";
 import { SeriesManagementPanel } from "@/components/nyascans/admin/SeriesManagementPanel";
 import { SeriesReportsPanel } from "@/components/nyascans/admin/SeriesReportsPanel";
@@ -65,11 +73,17 @@ import { RolePermissionsPanel } from "@/components/nyascans/admin/RolePermission
 import { SiteCoveragePanel } from "@/components/nyascans/admin/SiteCoveragePanel";
 import { ApiControlPanel } from "@/components/nyascans/admin/ApiControlPanel";
 import { ChapterAccessDecisionPanel } from "@/components/nyascans/admin/ChapterAccessDecisionPanel";
+import { ContentVisibilityPanel } from "@/components/nyascans/admin/ContentVisibilityPanel";
 import { UploadCenterWorkspace } from "@/components/nyascans/upload/UploadCenterWorkspace";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { TeamCommunityPanel } from "@/components/nyascans/TeamCommunityPanel";
 import { coinLabel } from "@/lib/commercial-settings";
+import { ADMIN_PERMISSION_REGISTRY } from "@/lib/admin-permissions";
+import {
+  findAdminNavigationDestination,
+  normalizeAdminNavigationKey,
+} from "@/lib/admin-navigation";
 
 type AdminSummary = {
   metrics: {
@@ -297,6 +311,7 @@ type AdminUser = {
   accessRevision: number;
   status: "ACTIVE" | "SUSPENDED";
   teamCount: number;
+  teamNames: string[];
   avatarUrl: string | null;
   emailVerifiedAt: string | null;
   createdAt: string;
@@ -336,6 +351,7 @@ type PanelProps = {
   subsection?: string;
   actorRole: string;
   actorRoles: string[];
+  capabilities: readonly string[];
   canUpload: boolean;
   canRequestSeries: boolean;
   canManageTeam: boolean;
@@ -392,12 +408,14 @@ async function readJson<T>(response: Response) {
 
 function PanelHeader({
   icon,
+  breadcrumbs,
   kicker,
   title,
   description,
   actions,
 }: {
   icon: ReactNode;
+  breadcrumbs?: readonly string[];
   kicker: string;
   title: string;
   description: string;
@@ -406,11 +424,19 @@ function PanelHeader({
   return (
     <header className="control-panel-header">
       <div>
+        <nav className="admin-breadcrumbs" aria-label="Breadcrumb">
+          {(breadcrumbs ?? ["Administration", kicker]).map((crumb, index) => (
+            <span key={`${crumb}-${index}`}>
+              {index ? <i aria-hidden="true">/</i> : null}
+              {crumb}
+            </span>
+          ))}
+        </nav>
         <span className="ops-kicker">
           {icon}
           {kicker}
         </span>
-        <h2>{title}</h2>
+        <h1>{title}</h1>
         <p>{description}</p>
       </div>
       {actions ? <div className="control-panel-actions">{actions}</div> : null}
@@ -459,11 +485,11 @@ function EmptyPanel({
   );
 }
 
-function AdminOverview({
+export function AdminOverview({
   onNavigate,
   actorRole,
 }: {
-  onNavigate: (section: string) => void;
+  onNavigate: (section: string, subsection?: string) => void;
   actorRole: string;
 }) {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
@@ -532,8 +558,9 @@ function AdminOverview({
     <section className="control-panel">
       <PanelHeader
         icon={<Pulse size={18} />}
+        breadcrumbs={["Dashboard", "Home"]}
         kicker="Live control room"
-        title="Site overview"
+        title="Home"
         description="Real platform counts, publishing workload, service checks, and recent administrator actions."
         actions={
           <button
@@ -1387,12 +1414,41 @@ const ownerManagedRoles = new Set<AdminUser["primaryRole"]>([
   "MANAGER",
 ]);
 
-function effectivePermissionLabel(permission: string) {
-  if (permission === "*") return "Full platform and ownership access";
-  if (permission === "admin.*") {
-    return "Administrative platform access (owner-only controls excluded)";
-  }
-  return humanize(permission);
+const permissionCategoryOrder = [
+  "Administration",
+  "Analytics",
+  "Publishing",
+  "Teams",
+  "People",
+  "Moderation",
+  "Support",
+  "Finance",
+  "Commerce",
+  "Operations",
+  "Platform",
+  "Community",
+  "Security",
+] as const;
+
+function groupEffectivePermissions(permissions: string[]) {
+  const enabled = new Set(permissions);
+  return permissionCategoryOrder
+    .map((category) => {
+      const categoryPermissions = ADMIN_PERMISSION_REGISTRY.filter(
+        ([, registryCategory]) => registryCategory === category,
+      ).map(([capability, , label]) => ({
+        capability,
+        label,
+        enabled: enabled.has(capability),
+      }));
+      return {
+        category,
+        permissions: categoryPermissions,
+        activeCount: categoryPermissions.filter((permission) => permission.enabled)
+          .length,
+        totalCount: categoryPermissions.length,
+      };
+    });
 }
 
 function recentAdminActivityLabel(
@@ -1512,7 +1568,7 @@ function UsersManager({
   }
 
   const visible = users.filter((user) =>
-    `${user.displayName} ${user.email} ${user.roles.join(" ")} ${user.status}`
+    `${user.displayName} ${user.email} ${user.roles.join(" ")} ${user.status} ${(user.teamNames ?? []).join(" ")}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -1521,8 +1577,9 @@ function UsersManager({
     <section className="control-panel">
       <PanelHeader
         icon={<UserGear size={18} />}
+        breadcrumbs={["Community", "Users & Roles"]}
         kicker="Access control"
-        title="Users and roles"
+        title="Users & Roles"
         description={
           ownerActor
             ? "Search accounts, assign the minimum required roles, and suspend access. Every change is server-authorized and written to the audit log."
@@ -1535,7 +1592,7 @@ function UsersManager({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, email, or role"
+              placeholder="Search name, email, role, or team"
             />
           </label>
         }
@@ -1560,6 +1617,9 @@ function UsersManager({
             const protectedForActor = !ownerActor && protectedRole;
             const accessDisabled =
               isSelf || protectedForActor || busy === user.id;
+            const permissionGroups = groupEffectivePermissions(
+              user.effectivePermissions ?? [],
+            );
             return (
               <details className="user-admin-record" key={user.id}>
                 <summary>
@@ -1590,7 +1650,17 @@ function UsersManager({
                   <dl>
                     <div>
                       <dt>Team access</dt>
-                      <dd>{Number(user.teamCount)} assignment{Number(user.teamCount) === 1 ? "" : "s"}</dd>
+                      <dd>
+                        {(user.teamNames ?? []).length ? (
+                          <ul className="user-team-assignments" aria-label={`Team assignments for ${user.displayName}`}>
+                            {user.teamNames.map((teamName) => (
+                              <li key={teamName}>{teamName}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          "No active team assignment"
+                        )}
+                      </dd>
                     </div>
                     <div>
                       <dt>Email verification</dt>
@@ -1648,12 +1718,37 @@ function UsersManager({
                   </fieldset>
                   <section className="user-effective-permissions">
                     <span>Effective permissions</span>
-                    <div>
-                      {(user.effectivePermissions ?? []).map((permission) => (
-                        <i key={permission} title={permission}>
-                          <Check size={13} aria-hidden="true" />
-                          {effectivePermissionLabel(permission)}
-                        </i>
+                    <div aria-label={`Permission categories for ${user.displayName}`}>
+                      {permissionGroups.map((group) => (
+                        <details
+                          key={group.category}
+                          className="user-permission-category"
+                        >
+                          <summary>
+                            <strong>{group.category}</strong>
+                            <small>
+                              {group.activeCount}/{group.totalCount} enabled
+                            </small>
+                            <CaretDown size={15} aria-hidden="true" />
+                          </summary>
+                          <ul>
+                            {group.permissions.map((permission) => (
+                              <li
+                                key={permission.capability}
+                                data-enabled={permission.enabled ? "true" : "false"}
+                              >
+                                <span aria-hidden="true">
+                                  {permission.enabled ? <Check size={13} /> : null}
+                                </span>
+                                <span>
+                                  <strong>{permission.label}</strong>
+                                  <code>{permission.capability}</code>
+                                </span>
+                                <em>{permission.enabled ? "Enabled" : "Not enabled"}</em>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
                       ))}
                     </div>
                   </section>
@@ -1751,6 +1846,13 @@ type UsersControlPayload = {
     purchasedChapters: number;
   };
   rows: Array<Record<string, unknown>>;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+  activityResults?: string[];
   balanceSummary?: {
     onyxBalance: number;
     shardsBalance: number;
@@ -1809,18 +1911,95 @@ function userActivityPresentation(row: Record<string, unknown>) {
   };
 }
 
+function activityDayLabel(value: unknown) {
+  const date = new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const key = date.toLocaleDateString();
+  if (key === today.toLocaleDateString()) return "Today";
+  if (key === yesterday.toLocaleDateString()) return "Yesterday";
+  return new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(date);
+}
+
+function UserActivityTable({ rows }: { rows: Array<Record<string, unknown>> }) {
+  return (
+    <div className="users-control-table-wrap">
+      <table className="users-control-table" data-view="activity">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Activity</th>
+            <th>Result</th>
+            <th><span className="sr-only">Technical details</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => {
+            const activity = userActivityPresentation(row);
+            const reference = String(row.targetId ?? row.id ?? "—");
+            return (
+              <tr key={String(row.id ?? index)}>
+                <td>
+                  {row.createdAt
+                    ? new Date(String(row.createdAt)).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—"}
+                </td>
+                <td>
+                  <span className="user-activity-copy">
+                    <i aria-hidden="true">{activity.icon}</i>
+                    <span>
+                      <strong>{activity.text}</strong>
+                      <small>{String(row.email ?? "")}</small>
+                    </span>
+                  </span>
+                </td>
+                <td>{humanize(String(row.result ?? "Recorded"))}</td>
+                <td>
+                  <details className="technical-reference is-inline">
+                    <summary>View technical details</summary>
+                    <div>
+                      <code>{reference}</code>
+                      <button
+                        type="button"
+                        aria-label="Copy activity reference"
+                        title="Copy activity reference"
+                        onClick={() => void navigator.clipboard.writeText(reference)}
+                      >
+                        <Copy size={15} />
+                      </button>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function UsersControlPanel({
   view,
   actorRoles,
+  embedded = false,
 }: {
   view: UsersControlView;
   actorRoles: string[];
+  embedded?: boolean;
 }) {
   const { settings: commercial } = useCommercialSettings();
   const coinPlural = commercial.economy.coinPlural;
   const [payload, setPayload] = useState<UsersControlPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [activityResult, setActivityResult] = useState("ALL");
+  const [activityPage, setActivityPage] = useState(1);
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
   const [adjustingUser, setAdjustingUser] = useState<Record<string, unknown> | null>(
@@ -1854,7 +2033,11 @@ function UsersControlPanel({
 
   async function load(
     search = query,
-    options: { clearMessage?: boolean } = {},
+    options: {
+      clearMessage?: boolean;
+      activityPage?: number;
+      activityResult?: string;
+    } = {},
   ) {
     const sequence = loadSequenceRef.current + 1;
     loadSequenceRef.current = sequence;
@@ -1864,8 +2047,14 @@ function UsersControlPanel({
     setLoading(true);
     if (options.clearMessage !== false) setMessage("");
     try {
+      const searchParams = new URLSearchParams({ view, query: search });
+      if (view === "activity") {
+        searchParams.set("page", String(options.activityPage ?? activityPage));
+        searchParams.set("limit", "25");
+        searchParams.set("result", options.activityResult ?? activityResult);
+      }
       const response = await fetch(
-        `/api/v1/admin/user-control?view=${view}&query=${encodeURIComponent(search)}`,
+        `/api/v1/admin/user-control?${searchParams.toString()}`,
         { cache: "no-store", signal: controller.signal },
       );
       const next = await readJson<UsersControlPayload>(response);
@@ -2069,8 +2258,8 @@ function UsersControlPanel({
       "Account health, engagement, chapter purchases, and the readers who need attention.",
     ],
     activity: [
-      "User activity",
-      "Audited account, publishing, moderation, and economy events in one timeline.",
+      "Activity Log",
+      "Human-readable account, publishing, moderation, and economy events in one timeline.",
     ],
     purchases: [
       "Transactions",
@@ -2112,32 +2301,70 @@ function UsersControlPanel({
           ["Suspended", payload.summary.suspendedUsers],
         ]
       : [];
+  const activityResults = useMemo(
+    () => [
+      "ALL",
+      ...new Set(
+        payload?.activityResults ??
+          (payload?.rows ?? []).map((row) => String(row.result ?? "RECORDED")),
+      ),
+    ],
+    [payload?.activityResults, payload?.rows],
+  );
+  const activityResultOptions = useMemo(
+    () =>
+      activityResults.map((result) => ({
+        value: result,
+        label: result === "ALL" ? "All results" : humanize(result),
+      })),
+    [activityResults],
+  );
+  const visibleActivityRows = useMemo(
+    () => payload?.rows ?? [],
+    [payload?.rows],
+  );
+  const activityPageCount = payload?.pagination?.pages ?? 1;
+  const activityTotal = payload?.pagination?.total ?? visibleActivityRows.length;
+  const activityGroups = useMemo(() => {
+    const groups = new Map<string, Array<Record<string, unknown>>>();
+    for (const row of visibleActivityRows) {
+      const label = activityDayLabel(row.createdAt);
+      groups.set(label, [...(groups.get(label) ?? []), row]);
+    }
+    return [...groups.entries()];
+  }, [visibleActivityRows]);
+  const searchControl = (
+    <form
+      className="control-search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setActivityPage(1);
+        void load(query, { activityPage: 1, activityResult });
+      }}
+    >
+      <MagnifyingGlass size={17} />
+      <input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search users or references"
+      />
+      <button type="submit" disabled={loading}>Search</button>
+    </form>
+  );
 
   return (
     <section className="control-panel users-control-panel">
-      <PanelHeader
-        icon={view === "activity" ? <Pulse size={18} /> : <Database size={18} />}
-        kicker="Users Control"
-        title={title}
-        description={description}
-        actions={
-          <form
-            className="control-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void load(query);
-            }}
-          >
-            <MagnifyingGlass size={17} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search users or references"
-            />
-            <button type="submit" disabled={loading}>Search</button>
-          </form>
-        }
-      />
+      {embedded ? (
+        <div className="activity-log-embedded-toolbar">{searchControl}</div>
+      ) : (
+        <PanelHeader
+          icon={view === "activity" ? <Pulse size={18} /> : <Database size={18} />}
+          kicker="Users Control"
+          title={title}
+          description={description}
+          actions={searchControl}
+        />
+      )}
       {payload ? (
         <div className="users-control-metrics">
           {metricCards.map(([label, value]) => (
@@ -2148,6 +2375,28 @@ function UsersControlPanel({
               </strong>
             </article>
           ))}
+        </div>
+      ) : null}
+      {view === "activity" && payload ? (
+        <div className="control-section-heading">
+          <div>
+            <span>Timeline filter</span>
+            <h3>Human-readable activity by day</h3>
+          </div>
+          <label>
+            <span className="sr-only">Filter activity result</span>
+            <AdminCombobox
+              ariaLabel="Filter activity result"
+              value={activityResult}
+              options={activityResultOptions}
+              placeholder="Search result states…"
+              onChange={(result) => {
+                setActivityResult(result);
+                setActivityPage(1);
+                void load(query, { activityPage: 1, activityResult: result });
+              }}
+            />
+          </label>
         </div>
       ) : null}
       {adjustingUser ? (
@@ -2369,7 +2618,60 @@ function UsersControlPanel({
       ) : null}
       {loading ? (
         <LoadingPanel />
-      ) : payload === null ? null : payload.rows.length ? (
+      ) : payload === null ? null : view === "activity" ? (
+        visibleActivityRows.length ? (
+          <>
+            <div className="control-activity">
+              {activityGroups.map(([day, rows]) => (
+                <section key={day} aria-labelledby={`activity-${day.replaceAll(" ", "-")}`}>
+                  <div className="control-section-heading">
+                    <div>
+                      <span>Activity day</span>
+                      <h3 id={`activity-${day.replaceAll(" ", "-")}`}>{day}</h3>
+                    </div>
+                    <small>{rows.length} event{rows.length === 1 ? "" : "s"}</small>
+                  </div>
+                  <UserActivityTable rows={rows} />
+                </section>
+              ))}
+            </div>
+            {activityPageCount > 1 ? (
+              <div className="admin-pagination" aria-label="User activity pages">
+                <button
+                  type="button"
+                  disabled={activityPage <= 1}
+                  onClick={() => {
+                    const next = Math.max(1, activityPage - 1);
+                    setActivityPage(next);
+                    void load(query, { activityPage: next, activityResult });
+                  }}
+                >
+                  <CaretLeft size={15} /> Previous
+                </button>
+                <span>
+                  Page {activityPage} of {activityPageCount} · {activityTotal} events
+                </span>
+                <button
+                  type="button"
+                  disabled={activityPage >= activityPageCount}
+                  onClick={() => {
+                    const next = Math.min(activityPageCount, activityPage + 1);
+                    setActivityPage(next);
+                    void load(query, { activityPage: next, activityResult });
+                  }}
+                >
+                  Next <CaretRight size={15} />
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <EmptyPanel
+            title="No activity matches this result filter"
+            body="Choose another result or change the user search."
+          />
+        )
+      ) : payload.rows.length ? (
         <div className="users-control-table-wrap">
           <table className="users-control-table" data-view={view}>
             <thead>
@@ -2389,13 +2691,6 @@ function UsersControlPanel({
                     <th>Spins</th>
                     <th>Chapters read</th>
                     <th>Purchases</th>
-                  </>
-                ) : view === "activity" ? (
-                  <>
-                    <th>Time</th>
-                    <th>Activity</th>
-                    <th>Result</th>
-                    <th><span className="sr-only">Technical details</span></th>
                   </>
                 ) : (
                   <>
@@ -2452,42 +2747,6 @@ function UsersControlPanel({
                       <td>{Number(row.chaptersRead ?? 0).toLocaleString()}</td>
                       <td>{Number(row.purchases ?? 0).toLocaleString()}</td>
                     </>
-                  ) : view === "activity" ? (
-                    (() => {
-                      const activity = userActivityPresentation(row);
-                      const reference = String(row.targetId ?? row.id ?? "—");
-                      return (
-                        <>
-                          <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
-                          <td>
-                            <span className="user-activity-copy">
-                              <i aria-hidden="true">{activity.icon}</i>
-                              <span>
-                                <strong>{activity.text}</strong>
-                                <small>{String(row.email ?? "")}</small>
-                              </span>
-                            </span>
-                          </td>
-                          <td>{humanize(String(row.result ?? "Recorded"))}</td>
-                          <td>
-                            <details className="technical-reference is-inline">
-                              <summary>Details</summary>
-                              <div>
-                                <code>{reference}</code>
-                                <button
-                                  type="button"
-                                  aria-label="Copy activity reference"
-                                  title="Copy activity reference"
-                                  onClick={() => void navigator.clipboard.writeText(reference)}
-                                >
-                                  <Copy size={15} />
-                                </button>
-                              </div>
-                            </details>
-                          </td>
-                        </>
-                      );
-                    })()
                   ) : (
                     (() => {
                       const reference = String(row.targetId ?? row.id ?? "—");
@@ -2534,12 +2793,23 @@ function UsersControlPanel({
 }
 
 type PayoutReportPayload = {
+  readiness: {
+    featureEnabled: boolean;
+    integrationReady: boolean;
+    financiallyClear: boolean;
+    debtOnyx: number;
+    openDisputes: number;
+    ready: boolean;
+    reason: string | null;
+    currency: string | null;
+    minorPerOnyx: number | null;
+  };
   summary: {
     totalReceivedOnyx: number;
     postedBalanceOnyx: number;
-    pendingOnyx: null;
-    withdrawnOnyx: null;
-    teamsWithBalances: number;
+    pendingOnyx: number;
+    approvedOnyx: number;
+    paidOnyx: number;
     payoutRecordCount: number;
   };
   teams: Array<{
@@ -2549,47 +2819,134 @@ type PayoutReportPayload = {
     verificationStatus: string;
     totalReceivedOnyx: number;
     postedBalanceOnyx: number;
+    reservedOnyx: number;
+    availableOnyx: number;
+    paidOnyx: number;
     lastEarnedAt: string | null;
+    provider: string | null;
+    providerAccountId: string | null;
+    accountRevision: number | null;
   }>;
   records: Array<{
     id: string;
-    kind: string;
-    referenceType: string;
-    referenceId: string;
-    memo: string;
-    createdAt: string;
     teamId: string;
     teamName: string;
+    requestedByName: string;
+    reviewedByName: string | null;
     amountOnyx: number;
+    amountMinor: number;
+    currency: string;
+    status: "PENDING" | "APPROVED" | "PROCESSING" | "PAID" | "REJECTED";
+    providerTransferId: string | null;
+    reason: string;
+    revision: number;
+    reviewedAt: string | null;
+    paidAt: string | null;
+    createdAt: string;
+    updatedAt: string;
   }>;
-  payoutsEnabled: boolean;
-  payoutLifecycleAvailable: false;
+  pagination: { page: number; limit: number; total: number; totalPages: number };
 };
+
+type PaymentRiskPayload = {
+  summary: {
+    debtOnyx: number;
+    reversedOnyx: number;
+    refundedMinor: number;
+    openDisputes: number;
+    affectedPayments: number;
+  };
+  states: Array<{
+    id: string;
+    orderId: string;
+    userName: string;
+    email: string;
+    currency: string;
+    refundedMinor: number;
+    reversedOnyx: number;
+    debtOnyx: number;
+    disputeRiskMinor: number;
+    updatedAt: string;
+  }>;
+  adjustments: Array<{
+    id: string;
+    kind: string;
+    orderId: string;
+    userName: string;
+    atRiskMinorAfter: number;
+    onyxDelta: number;
+    createdAt: string;
+  }>;
+};
+
+const payoutStatuses = ["ALL", "PENDING", "APPROVED", "PROCESSING", "PAID", "REJECTED"] as const;
+
+function payoutTone(status: PayoutReportPayload["records"][number]["status"]) {
+  if (status === "PAID") return "success" as const;
+  if (status === "REJECTED") return "danger" as const;
+  if (status === "PENDING") return "warning" as const;
+  return "info" as const;
+}
 
 function PayoutsPanel() {
   const { settings: commercial } = useCommercialSettings();
   const coinPlural = commercial.economy.coinPlural;
   const [payload, setPayload] = useState<PayoutReportPayload | null>(null);
+  const [paymentRisk, setPaymentRisk] = useState<PaymentRiskPayload | null>(null);
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<(typeof payoutStatuses)[number]>("ALL");
+  const [page, setPage] = useState(1);
+  const [accountTeamId, setAccountTeamId] = useState("");
+  const [requestTeamId, setRequestTeamId] = useState("");
+  const [providerAccountId, setProviderAccountId] = useState("");
+  const [accountReason, setAccountReason] = useState("");
+  const [requestAmount, setRequestAmount] = useState("");
+  const [requestReason, setRequestReason] = useState("");
+  const [reviewReasons, setReviewReasons] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const loadControllerRef = useRef<AbortController | null>(null);
 
-  async function load(search = query) {
+  async function load(
+    search = query,
+    nextStatus: (typeof payoutStatuses)[number] = status,
+    nextPage = page,
+  ) {
     loadControllerRef.current?.abort();
     const controller = new AbortController();
     loadControllerRef.current = controller;
     setLoading(true);
     setMessage("");
     try {
-      const response = await fetch(
-        `/api/v1/admin/payouts?query=${encodeURIComponent(search)}`,
-        { cache: "no-store", signal: controller.signal },
-      );
-      const next = await readJson<PayoutReportPayload>(response);
-      if (!controller.signal.aborted) setPayload(next);
+      const [response, riskResponse] = await Promise.all([
+        fetch(
+          `/api/v1/admin/team-payouts?q=${encodeURIComponent(search)}&status=${nextStatus}&page=${nextPage}&limit=25`,
+          { cache: "no-store", signal: controller.signal },
+        ),
+        fetch(
+          `/api/v1/admin/payment-risk?q=${encodeURIComponent(search)}&page=1&limit=10`,
+          { cache: "no-store", signal: controller.signal },
+        ),
+      ]);
+      const [next, nextRisk] = await Promise.all([
+        readJson<PayoutReportPayload>(response),
+        readJson<PaymentRiskPayload>(riskResponse),
+      ]);
+      if (!controller.signal.aborted) {
+        setPayload(next);
+        setPaymentRisk(nextRisk);
+        const verified = next.teams.find((team) => team.verificationStatus === "VERIFIED");
+        if (!accountTeamId && verified) {
+          setAccountTeamId(verified.id);
+          setProviderAccountId(verified.providerAccountId ?? "");
+        }
+        if (!requestTeamId && verified) setRequestTeamId(verified.id);
+      }
     } catch (reason) {
       if (controller.signal.aborted) return;
+      setMessageKind("error");
       setMessage(
         reason instanceof Error
           ? reason.message
@@ -2614,12 +2971,86 @@ function PayoutsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function mutate(body: Record<string, unknown>, label: string) {
+    setBusy(`${String(body.action)}:${String(body.requestId ?? body.teamId ?? "new")}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/v1/admin/team-payouts", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const next = await readJson<PayoutReportPayload>(response);
+      setPayload(next);
+      setPage(1);
+      setStatus("ALL");
+      setQuery("");
+      setMessageKind("success");
+      setMessage(label);
+      return true;
+    } catch (reason) {
+      const failureMessage = reason instanceof Error
+        ? reason.message
+        : "The payout action failed.";
+      try {
+        const refreshed = await fetch(
+          `/api/v1/admin/team-payouts?q=${encodeURIComponent(query)}&status=${status}&page=${page}&limit=25`,
+          { cache: "no-store" },
+        );
+        setPayload(await readJson<PayoutReportPayload>(refreshed));
+      } catch {
+        // Preserve the actionable mutation error even when the refresh also fails.
+      }
+      setMessageKind("error");
+      setMessage(failureMessage);
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const verifiedTeams = useMemo(
+    () =>
+      (payload?.teams ?? []).filter(
+        (team) => team.verificationStatus === "VERIFIED",
+      ),
+    [payload?.teams],
+  );
+  const verifiedTeamOptions = useMemo(
+    () =>
+      verifiedTeams.map((team) => ({
+        value: team.id,
+        label: team.name,
+        description: `/${team.slug}`,
+      })),
+    [verifiedTeams],
+  );
+  const payoutRequestTeamOptions = useMemo(
+    () =>
+      verifiedTeams.map((team) => ({
+        value: team.id,
+        label: team.name,
+        description: `${team.availableOnyx.toLocaleString()} ${coinPlural} available`,
+      })),
+    [coinPlural, verifiedTeams],
+  );
+  const accountTeam =
+    verifiedTeams.find((team) => team.id === accountTeamId) ?? null;
+  const requestTeam =
+    verifiedTeams.find((team) => team.id === requestTeamId) ?? null;
+  const availableOnyx = Math.max(
+    0,
+    Number(payload?.summary.postedBalanceOnyx ?? 0) -
+      Number(payload?.summary.pendingOnyx ?? 0) -
+      Number(payload?.summary.approvedOnyx ?? 0),
+  );
+
   const metrics: Array<[string, number | string]> = payload
     ? [
         ["Total received", payload.summary.totalReceivedOnyx],
-        ["Posted balance", payload.summary.postedBalanceOnyx],
-        ["Pending", "Not tracked"],
-        ["Withdrawn", "Not tracked"],
+        ["Available", availableOnyx],
+        ["Pending / approved", payload.summary.pendingOnyx + payload.summary.approvedOnyx],
+        ["Paid", payload.summary.paidOnyx],
       ]
     : [];
 
@@ -2629,13 +3060,14 @@ function PayoutsPanel() {
         icon={<Wallet size={18} />}
         kicker="Finance"
         title="Payouts"
-        description="Canonical team inflows and posted ledger balances. The current data model does not persist a payout lifecycle."
+        description="Verified destinations, reserved balances, reviewed requests, idempotent Stripe transfers, and balanced payout ledger entries."
         actions={
           <form
             className="control-search"
             onSubmit={(event) => {
               event.preventDefault();
-              void load(query);
+              setPage(1);
+              void load(query, status, 1);
             }}
           >
             <MagnifyingGlass size={17} aria-hidden="true" />
@@ -2645,6 +3077,18 @@ function PayoutsPanel() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search team name or slug"
             />
+            <select
+              aria-label="Filter payout status"
+              value={status}
+              onChange={(event) => {
+                const next = event.target.value as (typeof payoutStatuses)[number];
+                setStatus(next);
+                setPage(1);
+                void load(query, next, 1);
+              }}
+            >
+              {payoutStatuses.map((entry) => <option key={entry} value={entry}>{humanize(entry)}</option>)}
+            </select>
             <button type="submit" disabled={loading}>Search</button>
           </form>
         }
@@ -2659,43 +3103,226 @@ function PayoutsPanel() {
                   {typeof value === "number" ? value.toLocaleString() : value}
                 </strong>
                 <small>
-                  {typeof value === "number"
-                    ? coinPlural
-                    : "No persisted payout lifecycle"}
+                  {typeof value === "number" ? coinPlural : "Lifecycle state"}
                 </small>
               </article>
             ))}
           </div>
-          <div className="payout-report-note" data-enabled={payload.payoutsEnabled}>
+          <div className="payout-report-note" data-enabled={payload.readiness.ready}>
             <ShieldCheck size={18} aria-hidden="true" />
             <span>
               <strong>
-                {payload.payoutsEnabled
-                  ? "Payout flag enabled · lifecycle unavailable"
-                  : "Payout requests disabled"}
+                {payload.readiness.ready
+                  ? "Team payouts active · Stripe Connect ready"
+                  : payload.readiness.featureEnabled
+                    ? "Payout integration needs configuration"
+                    : "Team payouts disabled"}
               </strong>
               <small>
-                Total received comes from Onyx chapter unlock and team-support
-                receipts. Posted team balance uses the existing EARNED and
-                SUPPORT ledger accounts; Pending and Withdrawn are not stored.
+                {payload.readiness.ready
+                  ? `${payload.readiness.minorPerOnyx} ${payload.readiness.currency} minor units per Onyx. Transfers are idempotent and post a balanced payout ledger entry.`
+                  : `Readiness: ${humanize(payload.readiness.reason ?? "not ready")}. ${payload.readiness.debtOnyx.toLocaleString()} Onyx debt · ${payload.readiness.openDisputes.toLocaleString()} open disputes. Existing records remain visible and auditable; already-processing transfers stay resumable.`}
               </small>
             </span>
           </div>
+          <div className="control-overview-grid">
+            <AdminSectionCard
+              icon={<ShieldCheck />}
+              title="Stripe destination"
+              summary="Verified Connect account for the selected team"
+            >
+              <form
+                className="admin-form-section"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const saved = await mutate(
+                    {
+                      action: "SET_ACCOUNT",
+                      teamId: accountTeamId,
+                      providerAccountId: providerAccountId.trim(),
+                      expectedRevision: accountTeam?.accountRevision ?? 0,
+                      reason: accountReason,
+                    },
+                    "The verified Stripe destination was saved and audited.",
+                  );
+                  if (saved) setAccountReason("");
+                }}
+              >
+                <div className="admin-form-grid">
+                  <label>
+                    Team
+                    <AdminCombobox
+                      ariaLabel="Search and choose a verified payout team"
+                      value={accountTeamId}
+                      options={verifiedTeamOptions}
+                      emptyLabel="Select a verified team"
+                      placeholder="Search verified teams…"
+                      onChange={(teamId) => {
+                        setAccountTeamId(teamId);
+                        setProviderAccountId(
+                          payload.teams.find((team) => team.id === teamId)?.providerAccountId ?? "",
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Stripe account
+                    <input
+                      value={providerAccountId}
+                      onChange={(event) => setProviderAccountId(event.target.value)}
+                      placeholder="acct_…"
+                      pattern="acct_[A-Za-z0-9]{8,80}"
+                      required
+                    />
+                  </label>
+                </div>
+                <label>
+                  Audit reason
+                  <input
+                    value={accountReason}
+                    onChange={(event) => setAccountReason(event.target.value)}
+                    minLength={10}
+                    maxLength={1000}
+                    placeholder="Why this payout destination is being set"
+                    required
+                  />
+                </label>
+                <button
+                  className="button"
+                  type="submit"
+                  disabled={!payload.readiness.integrationReady || Boolean(busy) || !accountTeamId}
+                >
+                  {busy.startsWith("SET_ACCOUNT") ? "Verifying…" : "Verify and save account"}
+                </button>
+              </form>
+            </AdminSectionCard>
+            <AdminSectionCard
+              icon={<Coins />}
+              title="New payout request"
+              summary="Reserves real available Onyx before review"
+            >
+              <form
+                className="admin-form-section"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const saved = await mutate(
+                    {
+                      action: "REQUEST",
+                      teamId: requestTeamId,
+                      amountOnyx: Number(requestAmount),
+                      clientMutationId: crypto.randomUUID(),
+                      reason: requestReason,
+                    },
+                    "The payout request was reserved and added to review.",
+                  );
+                  if (saved) {
+                    setRequestAmount("");
+                    setRequestReason("");
+                  }
+                }}
+              >
+                <div className="admin-form-grid">
+                  <label>
+                    Team
+                    <AdminCombobox
+                      ariaLabel="Search and choose a team for a payout request"
+                      value={requestTeamId}
+                      options={payoutRequestTeamOptions}
+                      emptyLabel="Select a verified team"
+                      placeholder="Search verified teams…"
+                      onChange={setRequestTeamId}
+                    />
+                  </label>
+                  <label>
+                    Amount ({coinPlural})
+                    <input
+                      type="number"
+                      min={1}
+                      max={requestTeam?.availableOnyx ?? 1}
+                      value={requestAmount}
+                      onChange={(event) => setRequestAmount(event.target.value)}
+                      required
+                    />
+                  </label>
+                </div>
+                <label>
+                  Audit reason
+                  <input
+                    value={requestReason}
+                    onChange={(event) => setRequestReason(event.target.value)}
+                    minLength={10}
+                    maxLength={1000}
+                    placeholder="Why this team payout is being requested"
+                    required
+                  />
+                </label>
+                <button
+                  className="button"
+                  type="submit"
+                  disabled={!payload.readiness.ready || Boolean(busy) || !requestTeam?.providerAccountId}
+                >
+                  {busy.startsWith("REQUEST") ? "Reserving…" : "Request payout"}
+                </button>
+              </form>
+            </AdminSectionCard>
+          </div>
+          {paymentRisk ? (
+            <AdminSectionCard
+              icon={<ShieldWarning />}
+              title="Refunds, disputes, and payment debt"
+              summary="Verified Stripe events mapped to immutable order snapshots"
+              collapsible
+              defaultOpen={paymentRisk.summary.debtOnyx > 0 || paymentRisk.summary.openDisputes > 0}
+            >
+              <div className="admin-summary-grid">
+                <div><span>Payment debt</span><strong>{paymentRisk.summary.debtOnyx.toLocaleString()} {coinPlural}</strong></div>
+                <div><span>Open disputes</span><strong>{paymentRisk.summary.openDisputes.toLocaleString()}</strong></div>
+                <div><span>Reversed</span><strong>{paymentRisk.summary.reversedOnyx.toLocaleString()} {coinPlural}</strong></div>
+                <div><span>Affected payments</span><strong>{paymentRisk.summary.affectedPayments.toLocaleString()}</strong></div>
+              </div>
+              {paymentRisk.states.length ? (
+                <div className="users-control-table-wrap">
+                  <table className="users-control-table" data-view="payment-risk">
+                    <thead><tr><th>Account</th><th>Order</th><th>Refund / dispute</th><th>Onyx impact</th><th>Updated</th></tr></thead>
+                    <tbody>
+                      {paymentRisk.states.map((state) => (
+                        <tr key={state.id}>
+                          <td><strong>{state.userName}</strong><small>{state.email}</small></td>
+                          <td><code>{state.orderId}</code></td>
+                          <td>
+                            <strong>{state.refundedMinor.toLocaleString()} {state.currency} minor units refunded</strong>
+                            <small>{state.disputeRiskMinor.toLocaleString()} at dispute risk</small>
+                          </td>
+                          <td>
+                            <strong>{state.reversedOnyx.toLocaleString()} reversed</strong>
+                            <small>{state.debtOnyx.toLocaleString()} debt</small>
+                          </td>
+                          <td>{new Date(state.updatedAt).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="payout-records-empty">No verified refund, dispute, or payment debt matches this filter.</p>
+              )}
+            </AdminSectionCard>
+          ) : null}
         </>
       ) : null}
       {loading ? (
         <LoadingPanel />
       ) : payload?.teams.length ? (
         <div className="users-control-table-wrap">
-          <table className="users-control-table payout-team-table" data-view="payouts">
+          <table className="users-control-table payout-team-table" data-view="team-payout-balances">
             <thead>
               <tr>
                 <th>Team</th>
                 <th>Total received</th>
-                <th>Posted balance</th>
-                <th>Pending</th>
-                <th>Withdrawn</th>
-                <th>Last earning</th>
+                <th>Available</th>
+                <th>Reserved</th>
+                <th>Paid</th>
+                <th>Destination</th>
               </tr>
             </thead>
             <tbody>
@@ -2708,13 +3335,11 @@ function PayoutsPanel() {
                     </small>
                   </td>
                   <td>{Number(team.totalReceivedOnyx).toLocaleString()} {coinPlural}</td>
-                  <td>{Number(team.postedBalanceOnyx).toLocaleString()} {coinPlural}</td>
-                  <td>Not tracked</td>
-                  <td>Not tracked</td>
+                  <td>{Number(team.availableOnyx).toLocaleString()} {coinPlural}</td>
+                  <td>{Number(team.reservedOnyx).toLocaleString()} {coinPlural}</td>
+                  <td>{Number(team.paidOnyx).toLocaleString()} {coinPlural}</td>
                   <td>
-                    {team.lastEarnedAt
-                      ? new Date(team.lastEarnedAt).toLocaleString()
-                      : "No earnings yet"}
+                    {team.providerAccountId ? <code>{team.providerAccountId}</code> : "Not configured"}
                   </td>
                 </tr>
               ))}
@@ -2724,54 +3349,110 @@ function PayoutsPanel() {
       ) : payload ? (
         <EmptyPanel
           title="No team payout balances"
-          body="No team inflows match this search. A team appears here only from real Onyx unlock/support receipts or posted EARNED/SUPPORT balances."
+          body="No teams match this search. Payouts remain unavailable until a verified team has real Onyx balance and a verified Stripe destination."
         />
       ) : null}
       {!loading && payload ? (
         <section className="payout-records-section">
           <header>
             <div>
-              <span>Posted ledger history</span>
-              <h3>Recent posted ledger entries</h3>
+              <span>Lifecycle and audit controls</span>
+              <h3>Payout requests</h3>
             </div>
             <strong>{payload.summary.payoutRecordCount.toLocaleString()}</strong>
           </header>
           {payload.records.length ? (
-            <div className="payout-record-list">
-              {payload.records.map((record) => (
-                <article key={`${record.id}:${record.teamId}`}>
-                  <span>
-                    <strong>{record.teamName}</strong>
-                    <small>{humanize(record.kind)} · {new Date(record.createdAt).toLocaleString()}</small>
-                  </span>
-                  <b>{Number(record.amountOnyx).toLocaleString()} {coinPlural}</b>
-                  <details className="technical-reference is-inline">
-                    <summary>Details</summary>
-                    <div>
-                      <code>{record.id}</code>
-                      <button
-                        type="button"
-                        aria-label={`Copy payout reference for ${record.teamName}`}
-                        title="Copy payout reference"
-                        onClick={() => void navigator.clipboard.writeText(record.id)}
-                      >
-                        <Copy size={15} />
-                      </button>
-                    </div>
-                  </details>
-                </article>
-              ))}
+            <div className="users-control-table-wrap">
+              <table className="users-control-table" data-view="payout-records">
+                <thead><tr><th>Status</th><th>Team</th><th>Amount</th><th>Requested</th><th>Review action</th></tr></thead>
+                <tbody>
+                  {payload.records.map((record) => {
+                    const actionBusy = busy.endsWith(`:${record.id}`);
+                    return (
+                      <tr key={record.id}>
+                        <td><AdminStatusBadge tone={payoutTone(record.status)} label={humanize(record.status)} /></td>
+                        <td>
+                          <strong>{record.teamName}</strong>
+                          <small>{record.reason}</small>
+                          <details className="technical-reference is-inline">
+                            <summary>Technical details</summary>
+                            <div>
+                              <code>{record.id}</code>
+                              <button type="button" aria-label={`Copy payout reference for ${record.teamName}`} onClick={() => void navigator.clipboard.writeText(record.id)}><Copy size={15} /></button>
+                              {record.providerTransferId ? <code>{record.providerTransferId}</code> : null}
+                            </div>
+                          </details>
+                        </td>
+                        <td>
+                          <strong>{record.amountOnyx.toLocaleString()} {coinPlural}</strong>
+                          <small>{record.amountMinor.toLocaleString()} {record.currency} minor units</small>
+                        </td>
+                        <td>
+                          <span>{record.requestedByName}</span>
+                          <small>{new Date(record.createdAt).toLocaleString()}</small>
+                        </td>
+                        <td>
+                          {record.status === "PAID" || record.status === "REJECTED" ? (
+                            <small>{record.status === "PAID" && record.paidAt ? `Paid ${new Date(record.paidAt).toLocaleString()}` : "Closed"}</small>
+                          ) : (
+                            <div className="admin-inline-field">
+                              <label>
+                                Audit reason
+                                <input
+                                  value={reviewReasons[record.id] ?? ""}
+                                  onChange={(event) => setReviewReasons((current) => ({ ...current, [record.id]: event.target.value }))}
+                                  minLength={10}
+                                  maxLength={1000}
+                                  placeholder="Required for each transition"
+                                />
+                              </label>
+                              {record.status === "PENDING" ? (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy || (reviewReasons[record.id]?.trim().length ?? 0) < 10}
+                                  onClick={() => void mutate({ action: "APPROVE", requestId: record.id, expectedRevision: record.revision, reason: reviewReasons[record.id] }, "The payout was approved and remains reserved.")}
+                                >Approve</button>
+                              ) : null}
+                              {record.status === "PENDING" || record.status === "APPROVED" ? (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy || (reviewReasons[record.id]?.trim().length ?? 0) < 10}
+                                  onClick={() => void mutate({ action: "REJECT", requestId: record.id, expectedRevision: record.revision, reason: reviewReasons[record.id] }, "The payout was rejected and its reservation released.")}
+                                >Reject</button>
+                              ) : null}
+                              {record.status === "APPROVED" || record.status === "PROCESSING" ? (
+                                <button
+                                  className="button"
+                                  type="button"
+                                  disabled={actionBusy || (reviewReasons[record.id]?.trim().length ?? 0) < 10}
+                                  onClick={() => void mutate({ action: "PAY", requestId: record.id, expectedRevision: record.revision, reason: reviewReasons[record.id] }, "The Stripe transfer and balanced payout ledger entry were completed.")}
+                                >{record.status === "PROCESSING" ? "Resume safely" : "Pay"}</button>
+                              ) : null}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
             <p className="payout-records-empty">
-              No payout lifecycle is persisted in the current ledger. The
-              balances above are posted team inflows only; no availability,
-              pending state, or withdrawal is inferred.
+              No payout request matches these filters. Create one only from a
+              verified team’s real, unreserved Onyx ledger balance.
             </p>
           )}
+          {payload.pagination.totalPages > 1 ? (
+            <div className="control-panel-actions">
+              <button type="button" disabled={page <= 1 || loading} onClick={() => { const next = page - 1; setPage(next); void load(query, status, next); }}><CaretLeft /> Previous</button>
+              <span>Page {payload.pagination.page} of {payload.pagination.totalPages}</span>
+              <button type="button" disabled={page >= payload.pagination.totalPages || loading} onClick={() => { const next = page + 1; setPage(next); void load(query, status, next); }}>Next <CaretRight /></button>
+            </div>
+          ) : null}
         </section>
       ) : null}
-      {message ? <PanelMessage kind="error">{message}</PanelMessage> : null}
+      {message ? <PanelMessage kind={messageKind}>{message}</PanelMessage> : null}
     </section>
   );
 }
@@ -2801,6 +3482,11 @@ function ReviewQueue({ admin }: { admin: boolean }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
+  const [pendingTransition, setPendingTransition] = useState<{
+    chapter: ReviewChapter;
+    action: "SUBMIT" | "PUBLISH" | "RETURN";
+    approvalDecision?: "APPROVE" | "UNDER_SCOPE" | "REJECT";
+  } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -2823,24 +3509,19 @@ function ReviewQueue({ admin }: { admin: boolean }) {
     }
   }
 
-  async function transition(
+  function transition(
     chapter: ReviewChapter,
     action: "SUBMIT" | "PUBLISH" | "RETURN",
     approvalDecision?: "APPROVE" | "UNDER_SCOPE" | "REJECT",
   ) {
-    const reason = window.prompt(
-      action === "PUBLISH"
-        ? "Publication note"
-        : action === "RETURN"
-          ? "Explain what must be corrected"
-          : "Review submission note",
-      action === "PUBLISH"
-        ? "Validated ordered pages and release metadata"
-        : action === "RETURN"
-          ? "Return for required release corrections"
-          : "Ready for editorial and page-order review",
-    );
-    if (!reason) return;
+    setPendingTransition({ chapter, action, approvalDecision });
+  }
+
+  async function executeTransition(
+    transitionIntent: NonNullable<typeof pendingTransition>,
+    reason: string,
+  ) {
+    const { chapter, action, approvalDecision } = transitionIntent;
     setBusy(chapter.id);
     setMessage("");
     try {
@@ -2888,8 +3569,9 @@ function ReviewQueue({ admin }: { admin: boolean }) {
     <section className="control-panel">
       <PanelHeader
         icon={<CheckCircle size={18} />}
+        breadcrumbs={["Publishing Queue", "Chapter Review"]}
         kicker="Publishing QA"
-        title="Review queue"
+        title="Chapter Review"
         description="Inspect chapter sources by validation state. Only processed, ordered pages should move into publication."
         actions={
           <button type="button" onClick={() => void load()}>
@@ -2990,6 +3672,38 @@ function ReviewQueue({ admin }: { admin: boolean }) {
           body="New chapter sources will appear here after upload."
         />
       )}
+      <PromptActionDialog
+        open={Boolean(pendingTransition)}
+        title={
+          pendingTransition?.action === "PUBLISH"
+            ? "Add publication note"
+            : pendingTransition?.action === "RETURN"
+              ? "Explain required corrections"
+              : "Add review submission note"
+        }
+        description="This note is saved with the audited chapter review transition."
+        label="Review note"
+        initialValue={
+          pendingTransition?.action === "PUBLISH"
+            ? "Validated ordered pages and release metadata"
+            : pendingTransition?.action === "RETURN"
+              ? "Return for required release corrections"
+              : "Ready for editorial and page-order review"
+        }
+        confirmLabel="Continue review action"
+        busy={Boolean(busy)}
+        minLength={1}
+        onCancel={() => {
+          if (!busy) setPendingTransition(null);
+        }}
+        onConfirm={(reason) => {
+          const transitionIntent = pendingTransition;
+          setPendingTransition(null);
+          if (transitionIntent) {
+            void executeTransition(transitionIntent, reason);
+          }
+        }}
+      />
     </section>
   );
 }
@@ -3009,6 +3723,8 @@ function ChapterAccessPanel() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [pages, setPages] = useState<AdminChapterPage[]>([]);
   const [comments, setComments] = useState<AdminChapterComment[]>([]);
+  const [removeCommentTarget, setRemoveCommentTarget] =
+    useState<AdminChapterComment | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [kind, setKind] = useState<"success" | "error">("success");
@@ -3252,15 +3968,13 @@ function ChapterAccessPanel() {
     }
   }
 
-  async function removeComment(comment: AdminChapterComment) {
+  function removeComment(comment: AdminChapterComment) {
     if (!selected) return;
-    if (
-      !window.confirm(
-        `Remove ${comment.authorName}'s comment from this chapter?`,
-      )
-    ) {
-      return;
-    }
+    setRemoveCommentTarget(comment);
+  }
+
+  async function executeCommentRemoval(comment: AdminChapterComment) {
+    if (!selected) return;
     try {
       await fetch(
         `/api/v1/discussion-comments?id=${encodeURIComponent(comment.id)}`,
@@ -3283,8 +3997,9 @@ function ChapterAccessPanel() {
     <section className="control-panel">
       <PanelHeader
         icon={<LockKey size={18} />}
+        breadcrumbs={["Catalog", "Chapters"]}
         kicker="Chapter operations"
-        title="Chapter management"
+        title="Chapters"
         description="Edit release metadata, publication, page order, access, price, and chapter moderation from one audited workspace."
         actions={
           <button type="button" onClick={() => void load(selectedId)}>
@@ -3747,14 +4462,16 @@ function ChapterAccessPanel() {
                   access, an active entitlement, or administrator preview.
                 </span>
               </div>
-              <button
-                className="button button-primary"
-                type="submit"
-                disabled={busy}
-              >
-                <LockKey size={17} />
-                {busy ? "Saving chapter…" : "Save chapter changes"}
-              </button>
+              <div className="admin-sticky-actions chapter-access-actions">
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={busy}
+                >
+                  <LockKey size={17} />
+                  {busy ? "Saving chapter…" : "Save chapter changes"}
+                </button>
+              </div>
             </form>
           ) : null}
         </div>
@@ -3765,11 +4482,33 @@ function ChapterAccessPanel() {
         />
       )}
       {message ? <PanelMessage kind={kind}>{message}</PanelMessage> : null}
+      <ConfirmActionDialog
+        open={Boolean(removeCommentTarget)}
+        title="Remove this chapter comment?"
+        description={`${removeCommentTarget?.authorName ?? "This reader"}'s comment will be removed from the chapter and the moderation action will be audited.`}
+        confirmLabel="Remove comment"
+        destructive
+        busy={busy}
+        onCancel={() => {
+          if (!busy) setRemoveCommentTarget(null);
+        }}
+        onConfirm={() => {
+          const comment = removeCommentTarget;
+          setRemoveCommentTarget(null);
+          if (comment) void executeCommentRemoval(comment);
+        }}
+      />
     </section>
   );
 }
 
-function AnalyticsPanel() {
+function AnalyticsPanel({
+  onNavigate,
+  actorRole,
+}: {
+  onNavigate: (section: string, subsection?: string) => void;
+  actorRole: string;
+}) {
   const { settings: commercial } = useCommercialSettings();
   const [range, setRange] = useState<AnalyticsData["range"]>("24h");
   const [customEnd, setCustomEnd] = useState(
@@ -3784,6 +4523,38 @@ function AnalyticsPanel() {
   const [region, setRegion] = useState("ALL");
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [overview, setOverview] = useState<AdminSummary | null>(null);
+  const [health, setHealth] = useState<HealthData | null>(null);
+  const [overviewError, setOverviewError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetch("/api/v1/admin/summary", {
+        cache: "no-store",
+        signal: controller.signal,
+      }).then((response) => readJson<AdminSummary>(response)),
+      fetch("/api/v1/health", {
+        cache: "no-store",
+        signal: controller.signal,
+      }).then((response) => readJson<HealthData>(response)),
+    ])
+      .then(([nextOverview, nextHealth]) => {
+        setOverview(nextOverview);
+        setHealth(nextHealth);
+        setOverviewError("");
+      })
+      .catch((reason: unknown) => {
+        if ((reason as Error).name !== "AbortError") {
+          setOverviewError(
+            reason instanceof Error
+              ? reason.message
+              : "Dashboard service checks could not be loaded.",
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [refreshKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3875,14 +4646,26 @@ function AnalyticsPanel() {
     const delta = Math.round(((current - previous) / previous) * 100);
     return `${delta >= 0 ? "+" : ""}${delta}% vs previous period`;
   };
+  const regionOptions = useMemo(
+    () => [
+      { value: "ALL", label: "All countries" },
+      ...(data?.regions ?? []).map((entry) => ({
+        value: entry.regionCode,
+        label: entry.regionCode,
+        description: `${entry.views.toLocaleString()} views`,
+      })),
+    ],
+    [data?.regions],
+  );
 
   return (
     <section className="control-panel">
       <PanelHeader
         icon={<Pulse size={18} />}
-        kicker="Near-real-time activity"
-        title="Reader analytics"
-        description="Privacy-minimal session activity refreshes every 15 seconds while this tab is visible. Purchases, unlocks, and comments come from their canonical database records."
+        breadcrumbs={["Dashboard", "Home"]}
+        kicker="Live Control Room"
+        title="Home"
+        description="Real platform activity, publishing workload, service checks, quick actions, and recent administrator actions."
         actions={
           <>
             <span className="analytics-updated">
@@ -3900,6 +4683,123 @@ function AnalyticsPanel() {
           </>
         }
       />
+      {overviewError ? (
+        <PanelMessage kind="error">{overviewError}</PanelMessage>
+      ) : null}
+      {overview ? (
+        <>
+          <div className="control-metrics" aria-label="Platform snapshot">
+            {([
+              { label: "Registered users", value: overview.metrics.users, detail: "Accounts in D1", icon: <UsersThree size={21} /> },
+              { label: "Series", value: overview.metrics.series, detail: "Draft and published", icon: <Books size={21} /> },
+              { label: "Review queue", value: overview.metrics.reviewQueue, detail: `${overview.metrics.processingUploads} imports processing`, icon: <CheckCircle size={21} /> },
+              { label: "Open reports", value: overview.metrics.openReports, detail: `${overview.metrics.visibleComments} visible comments`, icon: <ShieldWarning size={21} /> },
+            ] as Array<{ label: string; value: number; detail: string; icon: ReactNode }>).map((card) => (
+              <article key={card.label}>
+                {card.icon}
+                <span>{card.label}</span>
+                <strong>{card.value.toLocaleString("en-US")}</strong>
+                <small>{card.detail}</small>
+              </article>
+            ))}
+          </div>
+          <div className="control-overview-grid">
+            <section className="control-quick-actions">
+              <div>
+                <span>Quick actions</span>
+                <h3>Common operational tasks</h3>
+              </div>
+              {[
+                {
+                  label: "Upload chapters",
+                  destination: "Chapters",
+                  subsection: "single",
+                  icon: CloudArrowUp,
+                },
+                {
+                  label: "Edit existing series",
+                  destination: "Series",
+                  icon: Books,
+                },
+                {
+                  label: "Control teams",
+                  destination: "Directory",
+                  icon: UsersThree,
+                },
+                {
+                  label: "Review support tickets",
+                  destination: "Support Tickets",
+                  icon: ChatCircle,
+                },
+              ].map(({ label, destination, subsection, icon: Icon }) => (
+                <button
+                  type="button"
+                  key={destination}
+                  onClick={() => onNavigate(destination, subsection)}
+                >
+                  <Icon size={20} />
+                  <span>{label}</span>
+                  <ArrowRight size={17} />
+                </button>
+              ))}
+            </section>
+            <section className="control-health-card">
+              <div>
+                <span>Service checks</span>
+                <strong>
+                  {health?.status === "ok" ? "All connected" : "Needs attention"}
+                </strong>
+              </div>
+              {[
+                ["Database", health?.checks.database ?? "checking"],
+                ["Private media", health?.checks.objectStorage ?? "checking"],
+                ["Recorded storage", formatBytes(overview.metrics.storageBytes)],
+                ["Readers active · 7 days", overview.metrics.activeReaders7d.toLocaleString("en-US")],
+              ].map(([label, status]) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <em className={["ok", "checking"].includes(status) ? "is-ok" : ""}>
+                    {status}
+                  </em>
+                </div>
+              ))}
+            </section>
+          </div>
+          <section className="control-activity">
+            <div className="control-section-heading">
+              <div>
+                <span>Audit trail</span>
+                <h3>Recent administrator actions</h3>
+              </div>
+              {actorRole === "OWNER" ? (
+                <button type="button" onClick={() => onNavigate("Audit log")}>
+                  Open audit log <ArrowRight size={16} />
+                </button>
+              ) : (
+                <span className="control-status status-ready">Owner-only detail</span>
+              )}
+            </div>
+            {overview.activity.length ? (
+              overview.activity.map((entry) => (
+                <article key={entry.id}>
+                  <span><Check size={15} /></span>
+                  <div>
+                    <strong>{humanize(entry.action)}</strong>
+                    <small>
+                      {entry.actorName ?? "System"} · {entry.targetType} · {formatDate(entry.createdAt)}
+                    </small>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <EmptyPanel
+                title="No administrator actions yet"
+                body="Administrative changes will appear here after they are audited."
+              />
+            )}
+          </section>
+        </>
+      ) : null}
       <div className="analytics-range-tabs" role="group" aria-label="Analytics range">
         {[
           ["24h", "Day"],
@@ -3919,14 +4819,13 @@ function AnalyticsPanel() {
         ))}
         <label className="analytics-region-filter">
           <span>Country</span>
-          <select value={region} onChange={(event) => setRegion(event.target.value)}>
-            <option value="ALL">All countries</option>
-            {(data?.regions ?? []).map((entry) => (
-              <option key={entry.regionCode} value={entry.regionCode}>
-                {entry.regionCode}
-              </option>
-            ))}
-          </select>
+          <AdminCombobox
+            ariaLabel="Filter dashboard analytics by country"
+            value={region}
+            options={regionOptions}
+            placeholder="Search countries…"
+            onChange={setRegion}
+          />
         </label>
       </div>
       {range === "custom" ? (
@@ -4431,8 +5330,9 @@ function SecurityPanel() {
     <section className="control-panel">
       <PanelHeader
         icon={<LockKey size={18} />}
+        breadcrumbs={["Settings", "Security"]}
         kicker="Security posture"
-        title="Security and service checks"
+        title="Security"
         description="Visible controls reflect protections that are actually implemented. Launch requirements that still need an operator remain clearly marked."
       />
       {error ? <PanelMessage kind="error">{error}</PanelMessage> : null}
@@ -4524,6 +5424,89 @@ function SecurityPanel() {
         </span>
       </div>
     </section>
+  );
+}
+
+function ActivityLogWorkspace({
+  subsection,
+  actorRole,
+  actorRoles,
+  capabilities,
+  onNavigate,
+}: {
+  subsection?: string;
+  actorRole: string;
+  actorRoles: string[];
+  capabilities: readonly string[];
+  onNavigate: PanelProps["onNavigate"];
+}) {
+  const ownerActor = actorRole === "OWNER" || actorRoles.includes("OWNER");
+  const canViewTechnicalAudit =
+    ownerActor && capabilities.includes("admin.audit.read");
+  const activeView =
+    subsection === "technical" && canViewTechnicalAudit
+      ? "technical"
+      : "readable";
+
+  return (
+    <AdminPageScaffold
+      breadcrumbs={["Administration", "Activity Log"]}
+      kicker="Operations record"
+      title="Activity Log"
+      description="Switch between a readable operational timeline and the owner-only technical audit record without leaving this page."
+    >
+      <div
+        className="admin-subnav"
+        role="tablist"
+        aria-label="Activity Log view"
+      >
+        <button
+          id="activity-log-readable-tab"
+          type="button"
+          role="tab"
+          aria-controls="activity-log-readable-panel"
+          aria-selected={activeView === "readable"}
+          onClick={() => onNavigate("activity-log", "readable")}
+        >
+          Readable
+        </button>
+        <button
+          id="activity-log-technical-tab"
+          type="button"
+          role="tab"
+          aria-controls="activity-log-technical-panel"
+          aria-selected={activeView === "technical"}
+          disabled={!canViewTechnicalAudit}
+          title={
+            canViewTechnicalAudit
+              ? "Open immutable technical audit events"
+              : "Technical audit events require Owner access"
+          }
+          onClick={() => onNavigate("activity-log", "technical")}
+        >
+          Technical
+        </button>
+      </div>
+      <div
+        id={`activity-log-${activeView}-panel`}
+        role="tabpanel"
+        aria-labelledby={`activity-log-${activeView}-tab`}
+      >
+        {activeView === "technical" ? (
+          <OwnerAuditLogPanel
+            actorRole="OWNER"
+            embedded
+            displayTitle="Activity Log"
+          />
+        ) : (
+          <UsersControlPanel
+            view="activity"
+            actorRoles={actorRoles}
+            embedded
+          />
+        )}
+      </div>
+    </AdminPageScaffold>
   );
 }
 
@@ -4620,14 +5603,33 @@ function AuditLogPanel() {
   );
 }
 
+type CommentModerationAction =
+  | "EDIT"
+  | "HIDE"
+  | "RESTORE"
+  | "DELETE"
+  | "PIN"
+  | "UNPIN"
+  | "BAN_SERIES"
+  | "UNBAN_SERIES"
+  | "SUSPEND_USER";
+
+type PendingCommentModeration = {
+  record: Record<string, unknown>;
+  action: CommentModerationAction;
+  reason: string;
+};
+
 function WorkspacePanel({
   section,
   onNavigate,
   canRequestSeries,
+  embedded = false,
 }: {
   section: string;
   onNavigate: (section: string) => void;
   canRequestSeries: boolean;
+  embedded?: boolean;
 }) {
   const endpoint = {
     Workspace: "overview",
@@ -4655,6 +5657,10 @@ function WorkspacePanel({
     null,
   );
   const [editedCommentBody, setEditedCommentBody] = useState("");
+  const [moderationPrompt, setModerationPrompt] =
+    useState<PendingCommentModeration | null>(null);
+  const [moderationConfirmation, setModerationConfirmation] =
+    useState<PendingCommentModeration | null>(null);
   const [workspaceAnalyticsRange, setWorkspaceAnalyticsRange] = useState<
     "24h" | "7d" | "30d" | "custom"
   >("30d");
@@ -4763,20 +5769,10 @@ function WorkspacePanel({
     }
   }
 
-  async function moderateComment(
+  function moderateComment(
     record: Record<string, unknown>,
-    action:
-      | "EDIT"
-      | "HIDE"
-      | "RESTORE"
-      | "DELETE"
-      | "PIN"
-      | "UNPIN"
-      | "BAN_SERIES"
-      | "UNBAN_SERIES"
-      | "SUSPEND_USER",
+    action: CommentModerationAction,
   ) {
-    const commentId = String(record.id);
     const needsReason = [
       "EDIT",
       "HIDE",
@@ -4784,26 +5780,17 @@ function WorkspacePanel({
       "BAN_SERIES",
       "SUSPEND_USER",
     ].includes(action);
-    const reason = needsReason
-      ? window.prompt(
-          action === "EDIT"
-            ? "Why is this moderator edit necessary?"
-            : "Enter the moderation reason:",
-        )
-      : "";
-    if (needsReason && (!reason || reason.trim().length < 6)) return;
-    if (
-      ["DELETE", "BAN_SERIES", "SUSPEND_USER"].includes(action) &&
-      !window.confirm(
-        action === "DELETE"
-          ? "Permanently delete this comment?"
-          : action === "BAN_SERIES"
-            ? "Ban this user from this series discussion?"
-            : "Suspend this user across NyaScans?",
-      )
-    ) {
+    const intent = { record, action, reason: "" };
+    if (needsReason) {
+      setModerationPrompt(intent);
       return;
     }
+    void executeModeration(intent);
+  }
+
+  async function executeModeration(intent: PendingCommentModeration) {
+    const { record, action, reason } = intent;
+    const commentId = String(record.id);
     setCommentBusy(commentId);
     setError("");
     try {
@@ -4897,12 +5884,14 @@ function WorkspacePanel({
 
   return (
     <section className="control-panel">
-      <PanelHeader
-        icon={<ShieldCheck size={18} />}
-        kicker="Team operations"
-        title={title}
-        description={description}
-      />
+      {!embedded ? (
+        <PanelHeader
+          icon={<ShieldCheck size={18} />}
+          kicker="Team operations"
+          title={title}
+          description={description}
+        />
+      ) : null}
       {loading ? (
         <div className="control-loading">
           <Pulse size={22} /> Loading live workspace data…
@@ -5036,27 +6025,49 @@ function WorkspacePanel({
       ) : section === "Comments" ? (
         <div className="workspace-comments">
           <div className="workspace-comments-toolbar">
-            <label>
-              <span>Series discussion</span>
-              <select
-                value={commentSeries}
-                onChange={(event) => {
-                  setCommentSeries(event.target.value);
-                  setCommentPage(1);
-                  setEditingCommentId(null);
-                }}
-              >
-                <option value="">Choose a series</option>
-                {commentSeriesOptions.map((seriesRecord) => (
-                  <option
-                    value={String(seriesRecord.slug)}
-                    key={String(seriesRecord.id)}
-                  >
-                    {String(seriesRecord.title)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {embedded ? (
+              <div className="workspace-comments-series-field">
+                <span>Series discussion</span>
+                <AdminCombobox
+                  value={commentSeries}
+                  options={commentSeriesOptions.map((seriesRecord) => ({
+                    value: String(seriesRecord.slug),
+                    label: String(seriesRecord.title),
+                    description: String(seriesRecord.slug),
+                  }))}
+                  onChange={(value) => {
+                    setCommentSeries(value);
+                    setCommentPage(1);
+                    setEditingCommentId(null);
+                  }}
+                  ariaLabel="Search and choose a series discussion"
+                  placeholder="Search series…"
+                  emptyLabel="Choose a series"
+                />
+              </div>
+            ) : (
+              <label>
+                <span>Series discussion</span>
+                <select
+                  value={commentSeries}
+                  onChange={(event) => {
+                    setCommentSeries(event.target.value);
+                    setCommentPage(1);
+                    setEditingCommentId(null);
+                  }}
+                >
+                  <option value="">Choose a series</option>
+                  {commentSeriesOptions.map((seriesRecord) => (
+                    <option
+                      value={String(seriesRecord.slug)}
+                      key={String(seriesRecord.id)}
+                    >
+                      {String(seriesRecord.title)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {commentSeries ? (
               <span>
                 Newest first · {Number(commentPagination.total ?? 0)} comment
@@ -5510,6 +6521,73 @@ function WorkspacePanel({
           </button>
         </form>
       )}
+      <PromptActionDialog
+        open={Boolean(moderationPrompt)}
+        title={
+          moderationPrompt?.action === "EDIT"
+            ? "Explain this moderator edit"
+            : "Add a moderation reason"
+        }
+        description="The reason is required and will be saved in the moderation audit trail."
+        label="Moderation reason"
+        placeholder="Describe the policy or safety reason for this action"
+        confirmLabel="Continue"
+        minLength={6}
+        maxLength={1000}
+        busy={Boolean(commentBusy)}
+        onCancel={() => {
+          if (!commentBusy) setModerationPrompt(null);
+        }}
+        onConfirm={(reason) => {
+          const intent = moderationPrompt;
+          setModerationPrompt(null);
+          if (!intent) return;
+          const nextIntent = { ...intent, reason };
+          if (
+            ["DELETE", "BAN_SERIES", "SUSPEND_USER"].includes(
+              nextIntent.action,
+            )
+          ) {
+            setModerationConfirmation(nextIntent);
+          } else {
+            void executeModeration(nextIntent);
+          }
+        }}
+      />
+      <ConfirmActionDialog
+        open={Boolean(moderationConfirmation)}
+        title={
+          moderationConfirmation?.action === "DELETE"
+            ? "Permanently delete this comment?"
+            : moderationConfirmation?.action === "BAN_SERIES"
+              ? "Ban this user from this series?"
+              : "Suspend this user across NyaScans?"
+        }
+        description={
+          moderationConfirmation?.action === "DELETE"
+            ? "The comment will be permanently removed. This action and its reason remain in the audit trail."
+            : moderationConfirmation?.action === "BAN_SERIES"
+              ? "The user will lose the ability to participate in this series discussion until the ban is removed."
+              : "The account will be suspended across NyaScans until an authorized administrator restores it."
+        }
+        confirmLabel={
+          moderationConfirmation?.action === "DELETE"
+            ? "Delete comment"
+            : moderationConfirmation?.action === "BAN_SERIES"
+              ? "Ban from series"
+              : "Suspend account"
+        }
+        destructive
+        busy={Boolean(commentBusy)}
+        onCancel={() => {
+          if (!commentBusy) setModerationConfirmation(null);
+        }}
+        onConfirm={() => {
+          const intent = moderationConfirmation;
+          setModerationConfirmation(null);
+          if (intent) void executeModeration(intent);
+        }}
+      />
     </section>
   );
 }
@@ -5520,13 +6598,19 @@ export function OperationsControlPanel({
   subsection,
   actorRole,
   actorRoles,
+  capabilities,
   canUpload,
   canRequestSeries,
   canManageTeam,
   onNavigate,
   initialUploadMode,
 }: PanelProps) {
-  if (section === "Upload center") {
+  const sectionKey = admin
+    ? (findAdminNavigationDestination(section)?.item.slug ??
+      normalizeAdminNavigationKey(section))
+    : normalizeAdminNavigationKey(section);
+
+  if (sectionKey === "upload-center") {
     return (
       <UploadCenter
         admin={admin}
@@ -5538,8 +6622,10 @@ export function OperationsControlPanel({
       />
     );
   }
-  if (section === "Review queue") return <ReviewQueue admin={admin} />;
-  if (!admin && section === "My teams") return <TeamCommunityPanel />;
+  if (["chapter-review", "review-queue"].includes(sectionKey)) {
+    return <ReviewQueue admin={admin} />;
+  }
+  if (!admin && sectionKey === "my-teams") return <TeamCommunityPanel />;
   if (!admin) {
     return (
       <WorkspacePanel
@@ -5549,46 +6635,126 @@ export function OperationsControlPanel({
       />
     );
   }
-  if (section === "Overview") {
-    return <AdminOverview onNavigate={onNavigate} actorRole={actorRole} />;
+  if (["home", "dashboard", "overview", "analytics"].includes(sectionKey)) {
+    return <AnalyticsPanel onNavigate={onNavigate} actorRole={actorRole} />;
   }
-  if (section === "Series") return <SeriesManagementPanel />;
-  if (section === "Categories & genres") return <TaxonomyManager />;
-  if (section === "Series Reports" || section === "series-reports") {
-    return <SeriesReportsPanel />;
-  }
-  if (section === "New Series Queue") return <NewSeriesQueuePanel />;
-  if (section === "Chapter access") return <ChapterAccessPanel />;
-  if (section === "Access decisions") return <ChapterAccessDecisionPanel />;
-  if (section === "Teams") {
-    return <TeamManagementPanel />;
-  }
-  if (section === "Team requests") return <TeamRequestsPanel />;
-  if (section === "Users & roles") {
-    return <UsersManager actorRole={actorRole} actorRoles={actorRoles} />;
-  }
-  if (section === "Permissions") return <RolePermissionsPanel />;
-  if (section === "User activity") {
-    return <UsersControlPanel view="activity" actorRoles={actorRoles} />;
-  }
-  if (section === "Transactions" || section === "Purchases") {
-    return <UsersControlPanel view="purchases" actorRoles={actorRoles} />;
-  }
-  if (section === "Balances") {
-    return <UsersControlPanel view="balances" actorRoles={actorRoles} />;
-  }
-  if (section === "Payouts") return <PayoutsPanel />;
-  if (section === "Support tickets") return <SupportTicketsAdminPanel />;
-  if (section === "Analytics") return <AnalyticsPanel />;
-  if (section === "Commerce") {
+  if (sectionKey === "discussions") {
     return (
-      <CommerceOfferManager
-        settingsPanel={<CommercialSettingsPanel actorRole={actorRole} />}
+      <ReactionLibraryPanel
+        moderationPanel={
+          <WorkspacePanel
+            section="Comments"
+            onNavigate={onNavigate}
+            canRequestSeries={false}
+            embedded
+          />
+        }
+        settingsPanel={<DiscussionSettingsPanel />}
       />
     );
   }
-  if (section === "Store Management") {
+  if (sectionKey === "series") {
+    return (
+      <SeriesManagementPanel
+        initialMode={subsection === "new" ? "create" : "browse"}
+        onNavigateToCreate={() => onNavigate("series", "new")}
+      />
+    );
+  }
+  if (sectionKey === "genres-tags") return <TaxonomyManager />;
+  if (sectionKey === "reports") {
+    return <SeriesReportsPanel />;
+  }
+  if (section === "Series Submissions" || sectionKey === "series-submissions") {
+    return <NewSeriesQueuePanel />;
+  }
+  if (
+    sectionKey === "chapters" &&
+    !capabilities.includes("content.chapters.manage") &&
+    capabilities.includes("uploads.review")
+  ) {
+    return (
+      <UploadCenterWorkspace
+        admin={admin}
+        initialMode={initialUploadMode}
+        initialSection={subsection || "dashboard"}
+        canUpload={canUpload}
+        canRequestSeries={canRequestSeries}
+        canManageTeam={canManageTeam}
+      />
+    );
+  }
+  if (sectionKey === "chapters" && subsection === "add-series") {
+    return (
+      <SeriesManagementPanel
+        initialMode="create"
+        onNavigateToCreate={() => onNavigate("series", "new")}
+      />
+    );
+  }
+  if (
+    sectionKey === "chapters" &&
+    [
+      "dashboard",
+      "series-requests",
+      "series",
+      "single",
+      "multi",
+      "drafts",
+      "history",
+      "review-status",
+      "rights",
+      "rules",
+    ].includes(subsection ?? "")
+  ) {
+    return (
+      <UploadCenterWorkspace
+        admin={admin}
+        initialMode={initialUploadMode}
+        initialSection={subsection}
+        canUpload={canUpload}
+        canRequestSeries={canRequestSeries}
+        canManageTeam={canManageTeam}
+      />
+    );
+  }
+  if (sectionKey === "chapters") return <ChapterAccessPanel />;
+  if (sectionKey === "access-decisions") return <ChapterAccessDecisionPanel />;
+  if (sectionKey === "content-access-control") {
+    return <ContentVisibilityPanel onNavigate={onNavigate} />;
+  }
+  if (sectionKey === "team-directory") {
+    return <TeamManagementPanel />;
+  }
+  if (sectionKey === "team-requests") return <TeamRequestsPanel />;
+  if (sectionKey === "users-roles") {
+    return <UsersManager actorRole={actorRole} actorRoles={actorRoles} />;
+  }
+  if (sectionKey === "permissions") return <RolePermissionsPanel />;
+  if (sectionKey === "activity-log") {
+    return (
+      <ActivityLogWorkspace
+        subsection={subsection}
+        actorRole={actorRole}
+        actorRoles={actorRoles}
+        capabilities={capabilities}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+  if (sectionKey === "transactions") {
+    return <UsersControlPanel view="purchases" actorRoles={actorRoles} />;
+  }
+  if (sectionKey === "wallet-balances") {
+    return <UsersControlPanel view="balances" actorRoles={actorRoles} />;
+  }
+  if (section === "Payouts" || sectionKey === "payouts") {
+    return <PayoutsPanel />;
+  }
+  if (sectionKey === "support-tickets") return <SupportTicketsAdminPanel />;
+  if (sectionKey === "store") {
     const category = [
+      "offers",
       "coins",
       "memberships",
       "banners",
@@ -5596,26 +6762,47 @@ export function OperationsControlPanel({
       "logo-effects",
     ].includes(subsection ?? "")
       ? (subsection as StoreAdminCategory)
-      : "coins";
+      : "offers";
     return (
       <StoreManagementWorkspace
         initialCategory={category}
+        actorRole={actorRole}
+        capabilities={capabilities}
         onCategoryChange={(next, confirmedDiscard) =>
-          onNavigate("Store Management", next, confirmedDiscard)
+          onNavigate("store", next, confirmedDiscard)
         }
       />
     );
   }
-  if (section === "Editorial") return <EditorialManagementPanel />;
-  if (section === "Sliders") return <SliderManagementPanel />;
-  if (section === "Pinned Series") return <PinnedSeriesPanel />;
-  if (section === "Discounts") return <DiscountsPanel />;
-  if (section === "Announcements & ads") return <HomePromotionsPanel />;
-  if (section === "API Control") return <ApiControlPanel />;
-  if (section === "Security") return <SecurityPanel />;
-  if (section === "Site coverage") return <SiteCoveragePanel />;
-  if (section === "Audit log") {
-    return <OwnerAuditLogPanel actorRole={actorRole} />;
+  if (sectionKey === "editorial-picks") return <EditorialManagementPanel />;
+  if (sectionKey === "sliders") return <SliderManagementPanel />;
+  if (sectionKey === "pinned-series") return <PinnedSeriesPanel />;
+  if (sectionKey === "discounts") return <DiscountsPanel />;
+  if (sectionKey === "announcements-ads") return <HomePromotionsPanel />;
+  if (sectionKey === "integrations-api") return <ApiControlPanel />;
+  if (sectionKey === "security") return <SecurityPanel />;
+  if (sectionKey === "feature-flags") {
+    const siteCoverageTab = [
+      "registry",
+      "community",
+      "moderation",
+      "access",
+      "security",
+    ].includes(subsection ?? "")
+      ? (subsection as
+          | "registry"
+          | "community"
+          | "moderation"
+          | "access"
+          | "security")
+      : "registry";
+    return (
+      <SiteCoveragePanel
+        key={siteCoverageTab}
+        initialTab={siteCoverageTab}
+        onTabNavigate={(next) => onNavigate("feature-flags", next)}
+      />
+    );
   }
-  return <AdminOverview onNavigate={onNavigate} actorRole={actorRole} />;
+  return <AnalyticsPanel onNavigate={onNavigate} actorRole={actorRole} />;
 }

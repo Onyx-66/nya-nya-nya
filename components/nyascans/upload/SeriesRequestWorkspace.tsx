@@ -17,6 +17,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  AdminCombobox,
+  ConfirmActionDialog,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
@@ -38,6 +42,7 @@ type RequestRecord = {
   description: string;
   seriesType: "MANGA" | "MANHWA" | "MANHUA";
   publicationStatus: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  publicationYear: number | null;
   authors: Array<{ id?: string; name: string }>;
   artists: Array<{ id?: string; name: string }>;
   publisherName: string;
@@ -83,6 +88,7 @@ type RequestForm = {
   description: string;
   seriesType: "MANGA" | "MANHWA" | "MANHUA";
   publicationStatus: "ONGOING" | "COMPLETED" | "HIATUS" | "UPCOMING";
+  publicationYear: string;
   authors: string;
   artists: string;
   publisherName: string;
@@ -105,6 +111,7 @@ const emptyForm: RequestForm = {
   description: "",
   seriesType: "MANGA",
   publicationStatus: "ONGOING",
+  publicationYear: "",
   authors: "",
   artists: "",
   publisherName: "",
@@ -141,7 +148,10 @@ type MetadataPreview = {
     countryCode?: string;
     languageCode?: string;
     type?: RequestForm["seriesType"];
-    status?: RequestForm["publicationStatus"];
+    status?: RequestForm["publicationStatus"] | "CANCELLED";
+    publicationYear?: number | null;
+    publisher?: { name: string };
+    coverReferenceUrl?: string | null;
     genres?: Array<{ name: string }>;
   };
 };
@@ -168,6 +178,8 @@ type ImportField =
   | "languageCode"
   | "seriesType"
   | "publicationStatus"
+  | "publicationYear"
+  | "publisherName"
   | "genres";
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -217,6 +229,9 @@ function requestData(form: RequestForm, teamId: string) {
     description: form.description,
     seriesType: form.seriesType,
     publicationStatus: form.publicationStatus,
+    publicationYear: form.publicationYear
+      ? Number.parseInt(form.publicationYear, 10)
+      : null,
     authors: splitValues(form.authors).map((name) => ({ name })),
     artists: splitValues(form.artists).map((name) => ({ name })),
     publisherName: form.publisherName,
@@ -245,6 +260,7 @@ function formFromRequest(record: RequestRecord): RequestForm {
     description: record.description,
     seriesType: record.seriesType,
     publicationStatus: record.publicationStatus,
+    publicationYear: record.publicationYear ? String(record.publicationYear) : "",
     authors: (record.authors ?? []).map((entry) => entry.name).join(", "),
     artists: (record.artists ?? []).map((entry) => entry.name).join(", "),
     publisherName: record.publisherName ?? "",
@@ -281,6 +297,8 @@ const importFieldLabels: Record<ImportField, string> = {
   languageCode: "Original language",
   seriesType: "Series type",
   publicationStatus: "Publication status",
+  publicationYear: "Original publication year",
+  publisherName: "Publishing studio",
   genres: "Genres",
 };
 
@@ -307,6 +325,10 @@ function importFieldValue(preview: MetadataPreview, field: ImportField) {
       return fields.type ?? "";
     case "publicationStatus":
       return fields.status ?? "";
+    case "publicationYear":
+      return fields.publicationYear ? String(fields.publicationYear) : "";
+    case "publisherName":
+      return fields.publisher?.name ?? "";
     case "genres":
       return fields.genres?.map((genre) => genre.name).join(", ") ?? "";
   }
@@ -323,7 +345,11 @@ function availableImportFields(preview: MetadataPreview) {
   if (fields.countryCode) available.push("countryCode");
   if (fields.languageCode) available.push("languageCode");
   if (fields.type) available.push("seriesType");
-  if (fields.status) available.push("publicationStatus");
+  if (fields.status && fields.status !== "CANCELLED") {
+    available.push("publicationStatus");
+  }
+  if (fields.publicationYear) available.push("publicationYear");
+  if (fields.publisher?.name) available.push("publisherName");
   if (fields.genres?.length) available.push("genres");
   return available;
 }
@@ -349,6 +375,15 @@ export function AddSeriesRequestPanel() {
     typeof window === "undefined"
       ? ""
       : new URLSearchParams(window.location.search).get("id") ?? "";
+  const submittingTeamOptions = useMemo(
+    () =>
+      teams.map((team) => ({
+        value: team.id,
+        label: team.name,
+        description: `${team.slug} · ${team.membershipRole}`,
+      })),
+    [teams],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -532,9 +567,19 @@ export function AddSeriesRequestPanel() {
           ? fields.type
           : current.seriesType,
       publicationStatus:
-        acceptedImportFields.has("publicationStatus") && fields.status
+        acceptedImportFields.has("publicationStatus") &&
+        fields.status &&
+        fields.status !== "CANCELLED"
           ? fields.status
           : current.publicationStatus,
+      publicationYear:
+        acceptedImportFields.has("publicationYear") && fields.publicationYear
+          ? String(fields.publicationYear)
+          : current.publicationYear,
+      publisherName:
+        acceptedImportFields.has("publisherName") && fields.publisher?.name
+          ? fields.publisher.name
+          : current.publisherName,
       genres:
         acceptedImportFields.has("genres") && fields.genres
           ? fields.genres.map((genre) => genre.name).join(", ")
@@ -735,22 +780,18 @@ export function AddSeriesRequestPanel() {
         <fieldset disabled={!editable || busy}>
           <legend>Title and team</legend>
           <div className="upload-form-grid">
-            <label>
+            <div className="upload-combobox-field">
               <span>Submitting team</span>
-              <select
+              <AdminCombobox
                 value={teamId}
                 disabled={Boolean(requestRecord)}
-                onChange={(event) => setTeamId(event.target.value)}
-                required
-              >
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
+                options={submittingTeamOptions}
+                onChange={setTeamId}
+                ariaLabel="Search eligible submitting teams"
+                placeholder="Search eligible teams…"
+              />
               <small>You cannot submit on behalf of an ineligible team.</small>
-            </label>
+            </div>
             <label>
               <span>Primary title</span>
               <input
@@ -834,6 +875,22 @@ export function AddSeriesRequestPanel() {
                 <option value="HIATUS">Hiatus</option>
                 <option value="UPCOMING">Upcoming</option>
               </select>
+            </label>
+            <label>
+              <span>Original publication year</span>
+              <input
+                type="number"
+                min={1800}
+                max={2200}
+                value={form.publicationYear}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    publicationYear: event.target.value,
+                  }))
+                }
+                placeholder="Optional"
+              />
             </label>
             <label>
               <span>Authors</span>
@@ -1090,6 +1147,15 @@ export function AddSeriesRequestPanel() {
                   ).
                 </div>
               ) : null}
+              {metadataPreview.data.fields.status === "CANCELLED" ? (
+                <div className="upload-alert" role="status">
+                  <WarningCircle size={19} />
+                  MangaDex reports this title as cancelled. Community requests
+                  keep their current publication status; an administrator can
+                  apply Cancelled when creating or reviewing the canonical
+                  series.
+                </div>
+              ) : null}
               <div className="request-import-fields">
                 {availableImportFields(metadataPreview.data).map((field) => (
                   <label key={field}>
@@ -1213,6 +1279,9 @@ export function SeriesRequestsPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [reason, setReason] = useState("");
+  const [pendingMutation, setPendingMutation] = useState<
+    "WITHDRAW" | "DELETE_DRAFT" | null
+  >(null);
   const requestSequence = useRef(0);
   const requestController = useRef<AbortController | null>(null);
 
@@ -1310,16 +1379,6 @@ export function SeriesRequestsPanel() {
 
   async function mutate(action: "WITHDRAW" | "DELETE_DRAFT" | "CLONE_TO_DRAFT") {
     if (!selected) return;
-    if (
-      ["WITHDRAW", "DELETE_DRAFT"].includes(action) &&
-      !window.confirm(
-        action === "WITHDRAW"
-          ? "Withdraw this request from review?"
-          : "Delete this private draft and its temporary media?",
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     setError("");
     try {
@@ -1346,6 +1405,7 @@ export function SeriesRequestsPanel() {
       );
     } finally {
       setBusy(false);
+      setPendingMutation(null);
     }
   }
 
@@ -1518,7 +1578,7 @@ export function SeriesRequestsPanel() {
                     type="button"
                     className="button button-secondary"
                     disabled={busy || reason.trim().length < 8}
-                    onClick={() => void mutate("WITHDRAW")}
+                    onClick={() => setPendingMutation("WITHDRAW")}
                   >
                     Withdraw request
                   </button>
@@ -1529,7 +1589,7 @@ export function SeriesRequestsPanel() {
                   type="button"
                   className="button button-secondary"
                   disabled={busy}
-                  onClick={() => void mutate("DELETE_DRAFT")}
+                  onClick={() => setPendingMutation("DELETE_DRAFT")}
                 >
                   Delete draft
                 </button>
@@ -1557,6 +1617,27 @@ export function SeriesRequestsPanel() {
         </aside>
         ) : null}
       </div>
+      <ConfirmActionDialog
+        open={pendingMutation !== null}
+        title={
+          pendingMutation === "WITHDRAW"
+            ? "Withdraw this request?"
+            : "Delete this private draft?"
+        }
+        description={
+          pendingMutation === "WITHDRAW"
+            ? "Withdraw this request from review? Your withdrawal reason will be included with the request history."
+            : "Delete this private draft and its temporary media?"
+        }
+        confirmLabel={
+          pendingMutation === "WITHDRAW" ? "Withdraw request" : "Delete draft"
+        }
+        busy={busy}
+        onCancel={() => setPendingMutation(null)}
+        onConfirm={() => {
+          if (pendingMutation) void mutate(pendingMutation);
+        }}
+      />
     </section>
   );
 }

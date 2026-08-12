@@ -6,6 +6,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 import { requireActor } from "@/lib/server/policy";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
 
@@ -89,9 +90,14 @@ export async function GET(request: Request) {
         "Notifications are temporarily unavailable.",
       );
     }
-    const commercial = await getCommercialSettingsDocument();
-    const premiumEconomyPublic =
-      commercial.settings.economy.premiumEconomyPublic;
+    const [commercial, featureStates] = await Promise.all([
+      getCommercialSettingsDocument(),
+      getFeatureStates(env.DB),
+    ]);
+    const premiumEconomyPublic = Boolean(
+      commercial.settings.economy.premiumEconomyPublic &&
+        featureStates.premium_unlocks.effective,
+    );
     await env.DB.prepare(
       `INSERT INTO notifications
        (id, user_id, kind, title, body, dedupe_key, action_url, metadata_json)
@@ -149,7 +155,7 @@ export async function GET(request: Request) {
     )
       .bind(
         actor.id,
-        premiumEconomyPublic || actor.roles.includes("OWNER") ? 1 : 0,
+        premiumEconomyPublic ? 1 : 0,
         actor.id,
         actor.id,
         actor.id,

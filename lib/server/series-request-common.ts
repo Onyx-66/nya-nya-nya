@@ -378,6 +378,8 @@ export function mapRequestRow(row: Record<string, unknown>) {
     description: String(row.description),
     seriesType: String(row.seriesType),
     publicationStatus: String(row.publicationStatus),
+    publicationYear:
+      row.publicationYear == null ? null : Number(row.publicationYear),
     authors: parseArray<{ id?: string; name: string }>(
       row.authorsJson as string,
     ),
@@ -471,6 +473,7 @@ export const requestSelect = `
          r.description,
          r.series_type AS seriesType,
          r.publication_status AS publicationStatus,
+         r.publication_year AS publicationYear,
          r.authors_json AS authorsJson,
          r.artists_json AS artistsJson,
          r.publisher_name AS publisherName,
@@ -570,7 +573,7 @@ export function requestNotificationStatements(
           input.title,
           input.body,
           dedupe,
-          `/onyx/admin/access/new-series-queue?id=${encodeURIComponent(input.requestId)}`,
+          `/onyx/admin/access/series-submissions?id=${encodeURIComponent(input.requestId)}`,
           JSON.stringify({ requestId: input.requestId }),
           dedupe,
         ),

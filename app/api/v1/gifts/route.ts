@@ -25,6 +25,7 @@ import {
   requirePaidEconomyPublic,
 } from "@/lib/server/commercial-settings";
 import { randomId } from "@/lib/server/random-id";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -130,9 +131,14 @@ async function mapGiftCard(row: GiftCardRow) {
 }
 
 async function responseData(userId: string) {
-  const commercial = await getCommercialSettingsDocument();
-  const premiumEconomyPublic =
-    commercial.settings.economy.premiumEconomyPublic;
+  const [commercial, featureStates] = await Promise.all([
+    getCommercialSettingsDocument(),
+    getFeatureStates(database()),
+  ]);
+  const premiumEconomyPublic = Boolean(
+    commercial.settings.economy.premiumEconomyPublic &&
+      featureStates.premium_unlocks.effective,
+  );
   const [cards, teams, teamSeries, followedReaders, balances] =
     await Promise.all([
       database()

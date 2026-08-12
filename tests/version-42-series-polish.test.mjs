@@ -46,8 +46,7 @@ test("Version 42 chapter disclosures keep compact identity and honest Paid state
   assert.match(titleView, /: "Paid";/u);
   assert.doesNotMatch(titleView, /"Unavailable"/u);
   assert.match(titleView, /className="chapter-credit-chip"/u);
-  assert.match(titleView, /Show all details/u);
-  assert.match(titleView, /Hide all details/u);
+  assert.match(titleView, /allChapterDetailsCollapsed \? "Show" : "Hide"/u);
   assert.match(
     css,
     /\.chapter-release-compact > button \{[\s\S]*grid-template-columns: 50px minmax\(0, 1fr\) auto 20px/u,
@@ -115,7 +114,7 @@ test("Version 42 galleries, flags, title, comments, and branding use the compact
   assert.match(panel, /1:2, 1:1, or 2:1 PNG or WebP/u);
 });
 
-test("Version 42 Latest Updates carries language and team for at most four chapters", async () => {
+test("Version 42 Latest Updates keeps four directory chapters, two home chapters, and fifteen release-list rows", async () => {
   const [api, app] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
@@ -130,9 +129,10 @@ test("Version 42 Latest Updates carries language and team for at most four chapt
   );
 
   assert.match(latestApi, /t\.slug AS teamSlug/u);
-  assert.match(latestApi, /presentation === "table" \? 12 : 4/u);
+  assert.match(latestApi, /if \(presentation === "table"\)[\s\S]*const resultPageSize = 15/u);
+  assert.match(latestApi, /const chapterPresentationLimit = 4/u);
   assert.match(latestApi, /LIMIT \$\{chapterPresentationLimit\}/u);
-  assert.match(latestView, /update\.chapters\.slice\(0, 4\)/u);
+  assert.match(latestView, /update\.chapters\.slice\(0, heading && !pagination \? 2 : 4\)/u);
   assert.match(latestView, /language=\{chapter\.language\}/u);
   assert.match(latestView, /chapter\.teamSlug/u);
   assert.match(latestView, /Independent release/u);

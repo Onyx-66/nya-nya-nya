@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/admin-utils";
 import { actorHasCapability, getActor, requireActor, requireAdminCapability } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { publicPaidSeriesPredicate } from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,12 @@ export async function GET(request: Request) {
     const { db, bucket } = dependencies();
     const id = z.string().trim().min(3).max(160).parse(new URL(request.url).searchParams.get("id"));
     const row = await db.prepare(
-      "SELECT image_key AS imageKey, is_active AS isActive FROM homepage_sliders WHERE id = ? LIMIT 1",
+      `SELECT hs.image_key AS imageKey, hs.is_active AS isActive
+         FROM homepage_sliders hs
+         LEFT JOIN series s ON s.id = hs.series_id
+        WHERE hs.id = ?
+          AND (hs.series_id IS NULL OR ${publicPaidSeriesPredicate("s")})
+        LIMIT 1`,
     ).bind(id).first<{ imageKey: string | null; isActive: number }>();
     if (!row?.imageKey) throw new ApiError(404, "MEDIA_NOT_FOUND", "This slider image is not available.");
     if (!row.isActive) {
@@ -44,7 +50,7 @@ export async function GET(request: Request) {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set("content-disposition", "inline");
-    headers.set("cache-control", row.isActive ? "public, max-age=300" : "private, no-store");
+    headers.set("cache-control", "private, no-store");
     headers.set("etag", object.httpEtag);
     headers.set("x-request-id", requestId);
     return new Response(object.body, { headers });

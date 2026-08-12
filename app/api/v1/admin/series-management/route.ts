@@ -7,6 +7,7 @@ import {
   seriesManagementSchema,
   type SeriesManagementInput,
 } from "@/lib/admin-metadata";
+import { mangaUpdatesExternalIdAliases } from "@/lib/mangaupdates-identifiers";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import {
   assertSameOrigin,
@@ -631,27 +632,77 @@ async function validateTeamsAndSources(
     }
   }
   for (const source of input.externalSources) {
-    const duplicate = await db
-      .prepare(
+    const externalIdAliases =
+      source.source === "MANGAUPDATES"
+        ? mangaUpdatesExternalIdAliases(source.externalId, source.sourceUrl)
+        : [source.externalId];
+    const compatibleExternalId =
+      externalIdAliases[1] ?? source.externalId;
+    const [duplicate, reservedRequest] = await Promise.all([
+      db.prepare(
         `SELECT ses.series_id AS seriesId, s.title
          FROM series_external_sources ses
          JOIN series s ON s.id = ses.series_id
-         WHERE ses.source = ? AND ses.external_id = ?
+         WHERE ses.source = ?
+           AND (
+             ses.external_id = ?
+             OR (? = 'MANGAUPDATES' AND ses.external_id = ?)
+           )
            AND (? IS NULL OR ses.series_id <> ?)
          LIMIT 1`,
       )
       .bind(
         source.source,
         source.externalId,
+        source.source,
+        compatibleExternalId,
         input.id ?? null,
         input.id ?? null,
       )
-      .first<{ seriesId: string; title: string }>();
+      .first<{ seriesId: string; title: string }>(),
+      db.prepare(
+        `SELECT id, primary_title AS title
+           FROM series_requests
+          WHERE (
+            (? = 'MANGADEX' AND mangadex_id = ?)
+            OR
+            (? = 'MANGAUPDATES' AND (
+              mangaupdates_id = ? OR mangaupdates_id = ?
+            ))
+          )
+            AND status IN (
+              'SUBMITTED',
+              'UNDER_REVIEW',
+              'CHANGES_REQUESTED',
+              'APPROVED'
+            )
+            AND (? IS NULL OR approved_series_id IS NULL OR approved_series_id <> ?)
+          ORDER BY submitted_at DESC, id
+          LIMIT 1`,
+      )
+      .bind(
+        source.source,
+        source.externalId,
+        source.source,
+        source.externalId,
+        compatibleExternalId,
+        input.id ?? null,
+        input.id ?? null,
+      )
+      .first<{ id: string; title: string }>(),
+    ]);
     if (duplicate) {
       throw new ApiError(
         409,
         "EXTERNAL_SOURCE_DUPLICATE",
         `That external source is already linked to ${duplicate.title}.`,
+      );
+    }
+    if (reservedRequest) {
+      throw new ApiError(
+        409,
+        "EXTERNAL_SOURCE_RESERVED",
+        `That external source is reserved by the active submission “${reservedRequest.title}”. Review or close that submission first.`,
       );
     }
   }

@@ -3,7 +3,7 @@
 
 import { Check, ImageSquare, Plus, SpinnerGap, Trash, X } from "@phosphor-icons/react";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { AdminCombobox, AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 
 type Slider = {
   id: string;
@@ -195,7 +195,7 @@ export function SliderManagementPanel() {
       <section className="v46-slider-create">
         <header><div><span>New slider</span><h3>Create from a series or custom campaign</h3></div></header>
         <div className="v46-slider-form">
-          <label><span>Attach series</span><select value={draft.seriesId} onChange={(event) => selectSeries(event.target.value)}><option value="">Custom slider</option>{payload.series.map((series) => <option key={series.id} value={series.id}>{series.title}</option>)}</select></label>
+          <label><span>Attach series</span><AdminCombobox ariaLabel="Attach series" value={draft.seriesId} emptyLabel="Custom slider" options={payload.series.map((series) => ({ value: series.id, label: series.title, description: series.slug }))} onChange={selectSeries} /></label>
           <label><span>Title</span><input value={draft.title} maxLength={140} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /></label>
           <label><span>Label</span><input value={draft.categoryLabel} maxLength={60} onChange={(event) => setDraft((current) => ({ ...current, categoryLabel: event.target.value }))} /></label>
           <label className="v46-span-two"><span>Description</span><textarea rows={3} value={draft.shortDescription} maxLength={320} onChange={(event) => setDraft((current) => ({ ...current, shortDescription: event.target.value }))} /></label>

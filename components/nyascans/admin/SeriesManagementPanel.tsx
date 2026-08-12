@@ -8,8 +8,10 @@ import {
   CaretRight,
   Check,
   DownloadSimple,
+  ImageSquare,
   MagnifyingGlass,
   Plus,
+  SlidersHorizontal,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -17,11 +19,16 @@ import {
   type KeyboardEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
 import {
+  AdminCombobox,
+  AdminFormField,
   AdminPageScaffold,
+  AdminSectionCard,
+  ConfirmActionDialog,
   useUnsavedChanges,
 } from "@/components/nyascans/admin/AdminPageScaffold";
 import { TaxonomyManager } from "@/components/nyascans/admin/TaxonomyManager";
@@ -37,7 +44,13 @@ type SeriesRecord = {
   alternativeTitles: string[];
   synopsis: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+  status:
+    | "ONGOING"
+    | "COMPLETED"
+    | "HIATUS"
+    | "PAUSED"
+    | "CANCELLED"
+    | "UPCOMING";
   publicationYear: number | null;
   authors: Entity[];
   artists: Entity[];
@@ -98,7 +111,13 @@ type ImportedData = {
     countryCode?: string;
     languageCode?: string;
     type?: "MANGA" | "MANHWA" | "MANHUA";
-    status?: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+    status?:
+      | "ONGOING"
+      | "COMPLETED"
+      | "HIATUS"
+      | "PAUSED"
+      | "CANCELLED"
+      | "UPCOMING";
     publicationYear?: number | null;
     genres?: Entity[];
     coverReferenceUrl?: string | null;
@@ -136,6 +155,21 @@ type FormState = {
   removeSlider: boolean;
 };
 
+const seriesEditorTabs = [
+  { key: "basic", label: "Basic Information" },
+  { key: "titles", label: "Titles & Synopsis" },
+  { key: "credits", label: "Credits & Publishing" },
+  { key: "origin", label: "Origin & Classification" },
+  { key: "teams", label: "Publishing Teams" },
+  { key: "taxonomy", label: "Taxonomy" },
+  { key: "artwork", label: "Cover, Banner & Slider Artwork" },
+  { key: "import", label: "External Metadata Import" },
+  { key: "visibility", label: "Visibility & Publication" },
+  { key: "review", label: "Review & Save" },
+] as const;
+
+type SeriesEditorTab = (typeof seriesEditorTabs)[number]["key"];
+
 const emptyForm: FormState = {
   title: "",
   slug: "",
@@ -164,6 +198,26 @@ const emptyForm: FormState = {
   removeBanner: false,
   removeSlider: false,
 };
+
+function freshEmptyForm(): FormState {
+  return {
+    ...emptyForm,
+    alternativeTitles: [],
+    authors: [],
+    artists: [],
+    genres: [],
+    teamIds: [],
+    externalSources: [],
+  };
+}
+
+function slugFromTitle(title: string) {
+  return title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 async function api<T>(response: Response) {
   const responseText = await response.text();
@@ -413,11 +467,24 @@ function EntityInput({
   );
 }
 
-export function SeriesManagementPanel() {
+export function SeriesManagementPanel({
+  initialMode = "browse",
+  onNavigateToCreate,
+}: {
+  initialMode?: "browse" | "create";
+  onNavigateToCreate?: () => void;
+}) {
+  const [mode, setMode] = useState<"browse" | "create">(initialMode);
+  const modeRef = useRef<"browse" | "create">(initialMode);
+  const previousInitialModeRef = useRef(initialMode);
+  const [creationEntry, setCreationEntry] = useState<
+    ImportedData["source"] | "SCRATCH" | null
+  >(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [records, setRecords] = useState<SeriesRecord[]>([]);
   const [options, setOptions] = useState<Options | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [savedForm, setSavedForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(() => freshEmptyForm());
+  const [savedForm, setSavedForm] = useState<FormState>(() => freshEmptyForm());
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -440,16 +507,107 @@ export function SeriesManagementPanel() {
     useState<"MANGADEX" | "MANGAUPDATES">("MANGADEX");
   const [importInput, setImportInput] = useState("");
   const [imported, setImported] = useState<ImportedData | null>(null);
+  const [pendingImportedCover, setPendingImportedCover] =
+    useState<ImportedData | null>(null);
+  const [importPreviews, setImportPreviews] = useState<
+    Partial<Record<ImportedData["source"], ImportedData>>
+  >({});
   const [importDuplicate, setImportDuplicate] = useState<string | null>(null);
+  const [importPreviewDuplicates, setImportPreviewDuplicates] = useState<
+    Partial<Record<ImportedData["source"], string>>
+  >({});
+  const [importConflictChoices, setImportConflictChoices] = useState<
+    Record<string, ImportedData["source"]>
+  >({});
   const [forceRefresh, setForceRefresh] = useState(false);
   const [importFields, setImportFields] = useState<Set<string>>(new Set());
   const [importApplied, setImportApplied] = useState(false);
+  const [activeEditorTab, setActiveEditorTab] =
+    useState<SeriesEditorTab>("basic");
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    destructive?: boolean;
+    run(): void;
+  } | null>(null);
   const metadataDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
   const mediaDirty = Boolean(coverFile || bannerFile || sliderFile);
   const dirty =
     metadataDirty || mediaDirty ||
     Boolean(imported && importApplied);
   useUnsavedChanges(dirty, "series changes");
+
+  function clearTransientState() {
+    setAltDraft("");
+    setAltEditIndex(null);
+    setAltEditValue("");
+    setTeamDraft("");
+    setTeamSearch("");
+    setTeamSearchResults([]);
+    setCoverFile(null);
+    setBannerFile(null);
+    setSliderFile(null);
+    setCreationEntry(null);
+    setImportSource("MANGADEX");
+    setImportInput("");
+    setImported(null);
+    setPendingImportedCover(null);
+    setImportPreviews({});
+    setImportDuplicate(null);
+    setImportPreviewDuplicates({});
+    setImportConflictChoices({});
+    setForceRefresh(false);
+    setImportFields(new Set());
+    setImportApplied(false);
+    setActiveEditorTab("basic");
+  }
+
+  function beginCreate(
+    notifyNavigation = false,
+    entry: ImportedData["source"] | "SCRATCH" | null = null,
+    confirmedDiscard = false,
+  ) {
+    if (dirty && !confirmedDiscard) {
+      setPendingConfirmation({
+        title: "Discard unsaved series changes?",
+        description:
+          "The current series edits and selected media will be cleared before the new draft opens.",
+        confirmLabel: "Discard and add series",
+        run: () => beginCreate(notifyNavigation, entry, true),
+      });
+      return;
+    }
+    const next = freshEmptyForm();
+    modeRef.current = "create";
+    setMode("create");
+    setForm(next);
+    setSavedForm(freshEmptyForm());
+    clearTransientState();
+    setCreationEntry(entry);
+    setMessage(null);
+    if (notifyNavigation) onNavigateToCreate?.();
+  }
+
+  function returnToBrowse(confirmedDiscard = false) {
+    if (dirty && !confirmedDiscard) {
+      setPendingConfirmation({
+        title: "Discard this new series draft?",
+        description:
+          "All unsaved metadata, provider choices, and selected artwork in this draft will be cleared.",
+        confirmLabel: "Discard draft",
+        run: () => returnToBrowse(true),
+      });
+      return;
+    }
+    modeRef.current = "browse";
+    setMode("browse");
+    const next = records[0] ? fromRecord(records[0]) : freshEmptyForm();
+    setForm(next);
+    setSavedForm(records[0] ? fromRecord(records[0]) : freshEmptyForm());
+    clearTransientState();
+    setMessage(null);
+  }
 
   async function load(search = query, requestedPage = page) {
     setLoading(true);
@@ -469,7 +627,11 @@ export function SeriesManagementPanel() {
         ),
       ]);
       setRecords(seriesPayload.data);
-      if (!form.id && seriesPayload.data[0]) {
+      if (
+        modeRef.current === "browse" &&
+        !form.id &&
+        seriesPayload.data[0]
+      ) {
         const next = fromRecord(seriesPayload.data[0]);
         setForm(next);
         setSavedForm(next);
@@ -518,6 +680,31 @@ export function SeriesManagementPanel() {
   }, []);
 
   useEffect(() => {
+    if (previousInitialModeRef.current === initialMode) return;
+    previousInitialModeRef.current = initialMode;
+    const timer = window.setTimeout(() => {
+      if (initialMode === "create") {
+        const next = freshEmptyForm();
+        modeRef.current = "create";
+        setMode("create");
+        setForm(next);
+        setSavedForm(freshEmptyForm());
+      } else {
+        const next = records[0] ? fromRecord(records[0]) : freshEmptyForm();
+        modeRef.current = "browse";
+        setMode("browse");
+        setForm(next);
+        setSavedForm(records[0] ? fromRecord(records[0]) : freshEmptyForm());
+      }
+      clearTransientState();
+      setMessage(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // The navigation prop is the trigger; records intentionally use the current snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMode]);
+
+  useEffect(() => {
     if (!teamSearch.trim()) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
@@ -551,23 +738,23 @@ export function SeriesManagementPanel() {
       controller.abort();
     };
   }, [teamSearch]);
-  const displayedTeamSearchResults = teamSearch.trim()
-    ? teamSearchResults
-    : [];
-
-  function selectRecord(record: SeriesRecord) {
-    if (dirty && !window.confirm("Discard the unsaved series changes?")) return;
+  function selectRecord(record: SeriesRecord, confirmedDiscard = false) {
+    if (dirty && !confirmedDiscard) {
+      setPendingConfirmation({
+        title: "Discard unsaved series changes?",
+        description: `Open ${record.title} and clear the current unsaved edits and selected media.`,
+        confirmLabel: "Discard and open",
+        run: () => selectRecord(record, true),
+      });
+      return;
+    }
     const next = fromRecord(record);
+    modeRef.current = "browse";
+    setMode("browse");
     setForm(next);
     setSavedForm(next);
-    setCoverFile(null);
-    setBannerFile(null);
-    setSliderFile(null);
-    setImported(null);
-    setImportDuplicate(null);
-    setImportApplied(false);
-    setAltEditIndex(null);
-    setAltEditValue("");
+    clearTransientState();
+    setMessage(null);
   }
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -607,12 +794,31 @@ export function SeriesManagementPanel() {
     setAltEditValue("");
   }
 
-  async function save(event?: FormEvent) {
+  async function save(event?: FormEvent, publishOverride?: boolean) {
     event?.preventDefault();
-    if (!form.id) {
+    const creating = !form.id;
+    const workingForm =
+      publishOverride === undefined
+        ? form
+        : { ...form, isPublished: publishOverride };
+    if (
+      modeRef.current === "create" &&
+      unresolvedImportConflicts.length > 0
+    ) {
       setMessage({
         kind: "error",
-        text: "Choose an existing series before editing it.",
+        text: `Choose a MangaDex or MangaUpdates value for all ${unresolvedImportConflicts.length.toLocaleString()} unresolved provider ${unresolvedImportConflicts.length === 1 ? "difference" : "differences"} before saving or publishing.`,
+      });
+      return;
+    }
+    if (
+      !workingForm.title.trim() ||
+      !workingForm.slug.trim() ||
+      workingForm.synopsis.trim().length < 20
+    ) {
+      setMessage({
+        kind: "error",
+        text: "Complete the required title, slug, and synopsis before saving.",
       });
       return;
     }
@@ -620,7 +826,7 @@ export function SeriesManagementPanel() {
     setMessage(null);
     let persistedRecord: SeriesRecord | null = null;
     let metadataPersisted = false;
-    let mediaAttempted = mediaDirty;
+    let mediaAttempted = false;
     let saveStage = "series metadata";
     const applyPersistedRecord = (record: SeriesRecord) => {
       const next = fromRecord(record);
@@ -633,35 +839,42 @@ export function SeriesManagementPanel() {
     };
     try {
       const importedCover =
-        imported &&
+        pendingImportedCover &&
         importApplied &&
-        importFields.has("coverReferenceUrl") &&
-        imported.fields.coverReferenceUrl &&
+        pendingImportedCover.fields.coverReferenceUrl &&
         !coverFile
-          ? imported
+          ? pendingImportedCover
           : null;
-      const selectedRecord = records.find((record) => record.id === form.id);
-      if (!selectedRecord) {
+      const selectedRecord = form.id
+        ? records.find((record) => record.id === form.id) ?? null
+        : null;
+      if (!creating && !selectedRecord) {
         throw new Error("Reload this series before saving changes.");
       }
-      let current = selectedRecord;
+      let current: SeriesRecord | null = selectedRecord;
+      const metadataNeedsSave =
+        creating ||
+        JSON.stringify(workingForm) !== JSON.stringify(savedForm);
       if (metadataDirty) {
+        saveStage = creating ? "new series metadata" : "series metadata";
+      }
+      if (metadataNeedsSave) {
         const requestId = crypto.randomUUID();
         const saved = await fetch("/api/v1/admin/series-management", {
-          method: "PUT",
+          method: form.id ? "PUT" : "POST",
           headers: {
             "content-type": "application/json",
             "x-request-id": requestId,
           },
           body: JSON.stringify({
-            ...form,
-            publicationYear: form.publicationYear
-              ? Number(form.publicationYear)
+            ...workingForm,
+            publicationYear: workingForm.publicationYear
+              ? Number(workingForm.publicationYear)
               : null,
             coverUrl: undefined,
             bannerUrl: undefined,
             sliderUrl: undefined,
-            externalSources: form.externalSources,
+            externalSources: workingForm.externalSources,
             importApplied,
           }),
         }).then((response) =>
@@ -671,8 +884,11 @@ export function SeriesManagementPanel() {
         persistedRecord = current;
         metadataPersisted = true;
         applyPersistedRecord(current);
-        setImportApplied(false);
+        if (creating) {
+          setTotal((value) => value + 1);
+        }
       }
+      if (!current) throw new Error("Save the series metadata before adding artwork.");
       if (importedCover) {
         mediaAttempted = true;
         saveStage = "imported cover";
@@ -700,6 +916,7 @@ export function SeriesManagementPanel() {
         };
         persistedRecord = current;
         applyPersistedRecord(current);
+        setPendingImportedCover(null);
       }
       for (const [slot, file] of [
         ["cover", coverFile] as const,
@@ -707,6 +924,7 @@ export function SeriesManagementPanel() {
         ["slider", sliderFile] as const,
       ]) {
         if (!file) continue;
+        mediaAttempted = true;
         saveStage = `${slot} upload`;
         const upload = new FormData();
         upload.set("seriesId", current.id);
@@ -738,9 +956,24 @@ export function SeriesManagementPanel() {
         else setSliderFile(null);
       }
       setImportApplied(false);
+      setImported(null);
+      setPendingImportedCover(null);
+      setImportPreviews({});
+      setImportDuplicate(null);
+      setImportPreviewDuplicates({});
+      setImportConflictChoices({});
+      setImportFields(new Set());
+      setImportInput("");
+      setCreationEntry(null);
+      if (modeRef.current === "create") {
+        modeRef.current = "browse";
+        setMode("browse");
+      }
       setMessage({
         kind: "success",
-        text: `${current.title} was saved successfully.`,
+        text: workingForm.isPublished
+          ? `${current.title} was published successfully.`
+          : `${current.title} was saved as a draft.`,
       });
     } catch (error) {
       if (persistedRecord || mediaAttempted) {
@@ -801,7 +1034,24 @@ export function SeriesManagementPanel() {
         }>(response),
       );
       setImported(payload.data);
+      setImportPreviews((current) => ({
+        ...current,
+        [payload.data.source]: payload.data,
+      }));
+      // A refreshed provider preview can change the disagreement set. Require
+      // an explicit choice for every current conflict instead of carrying a
+      // stale choice forward from an older response.
+      setImportConflictChoices({});
       setImportDuplicate(payload.duplicate?.title ?? null);
+      setImportPreviewDuplicates((current) => {
+        const next = { ...current };
+        if (payload.duplicate?.title) {
+          next[payload.data.source] = payload.duplicate.title;
+        } else {
+          delete next[payload.data.source];
+        }
+        return next;
+      });
       setImportFields(
         new Set(
           Object.entries(payload.data.fields)
@@ -828,13 +1078,21 @@ export function SeriesManagementPanel() {
     }
   }
 
-  function applyImported() {
-    if (!imported || importDuplicate) return;
-    const fields = imported.fields;
+  function applyImported(
+    candidate: ImportedData | null = imported,
+    selectedFields: Set<string> = importFields,
+    duplicateTitle: string | null = importDuplicate,
+    updateCoverSelection = true,
+  ) {
+    if (!candidate || duplicateTitle) return;
+    const fields = candidate.fields;
     setForm((current) => {
       const next = { ...current };
-      for (const field of importFields) {
-        if (field === "title" && fields.title) next.title = fields.title;
+      for (const field of selectedFields) {
+        if (field === "title" && fields.title) {
+          next.title = fields.title;
+          if (!next.slug) next.slug = slugFromTitle(fields.title);
+        }
         if (field === "alternativeTitles" && fields.alternativeTitles) {
           const unique = new Map(
             [...next.alternativeTitles, ...fields.alternativeTitles].map(
@@ -866,23 +1124,55 @@ export function SeriesManagementPanel() {
       }
       next.externalSources = [
         ...current.externalSources.filter(
-          (source) => source.source !== imported.source,
+          (source) => source.source !== candidate.source,
         ),
         {
-          source: imported.source,
-          externalId: imported.externalId,
-          sourceUrl: imported.sourceUrl,
-          responseHash: imported.responseHash,
+          source: candidate.source,
+          externalId: candidate.externalId,
+          sourceUrl: candidate.sourceUrl,
+          responseHash: candidate.responseHash,
         },
       ];
       return next;
     });
+    setImported(candidate);
+    if (updateCoverSelection) {
+      setPendingImportedCover(
+        selectedFields.has("coverReferenceUrl") &&
+          candidate.fields.coverReferenceUrl
+          ? candidate
+          : null,
+      );
+    }
+    setImportDuplicate(null);
+    setImportFields(new Set(selectedFields));
     setMessage({
       kind: "success",
-      text: "Selected import values were applied locally. Save the series to publish them.",
+      text: `${candidate.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} values were applied locally. Review them, then save as a draft or publish.`,
     });
-    setImportDuplicate(null);
     setImportApplied(true);
+  }
+
+  function applyImportPreview(candidate: ImportedData) {
+    const conflictingFields = new Set(importConflicts.map(({ field }) => field));
+    const fields = new Set(
+      Object.entries(candidate.fields)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key]) => key)
+        .filter((field) => !conflictingFields.has(field)),
+    );
+    applyImported(
+      candidate,
+      fields,
+      importPreviewDuplicates[candidate.source] ?? null,
+      !conflictingFields.has("coverReferenceUrl"),
+    );
+    if (conflictingFields.size) {
+      setMessage({
+        kind: "neutral",
+        text: "Non-conflicting values were applied. Compare the provider differences below and choose each value before publishing.",
+      });
+    }
   }
 
   const selectedTeams = useMemo(
@@ -892,6 +1182,105 @@ export function SeriesManagementPanel() {
         .filter((team): team is TeamOption => Boolean(team)),
     [form.teamIds, options],
   );
+  const assignableTeamOptions = useMemo(() => {
+    const candidates =
+      teamSearch.trim() && teamSearchResults.length
+        ? teamSearchResults
+        : options?.teams ?? [];
+    return candidates
+      .filter((team) => !form.teamIds.includes(team.id))
+      .map((team) => ({
+        value: team.id,
+        label: team.name,
+        description: team.verificationStatus,
+      }));
+  }, [form.teamIds, options, teamSearch, teamSearchResults]);
+
+  function chooseTeamDraft(teamId: string) {
+    setTeamDraft(teamId);
+    if (teamId) {
+      setTeamSearch("");
+      setTeamSearchResults([]);
+    }
+  }
+
+  function captureTeamSearch(event: FormEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement &&
+      target.getAttribute("role") === "combobox"
+    ) {
+      setTeamDraft("");
+      setTeamSearch(target.value);
+    }
+  }
+
+  function chooseImportSource(source: ImportedData["source"]) {
+    setCreationEntry(source);
+    setImportSource(source);
+    setImportInput("");
+    const preview = importPreviews[source] ?? null;
+    setImported(preview);
+    setImportDuplicate(importPreviewDuplicates[source] ?? null);
+    setImportFields(
+      new Set(
+        preview
+          ? Object.entries(preview.fields)
+              .filter(([, value]) => value !== undefined && value !== null)
+              .map(([key]) => key)
+          : [],
+      ),
+    );
+    window.setTimeout(() => importInputRef.current?.focus(), 0);
+  }
+
+  function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
+    const submitter = (event.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
+    void save(event, submitter?.value === "publish");
+  }
+
+  const visibleImportPreviews = (
+    ["MANGADEX", "MANGAUPDATES"] as const
+  )
+    .map((source) => importPreviews[source])
+    .filter((candidate): candidate is ImportedData => Boolean(candidate));
+  const mangaDexPreview = importPreviews.MANGADEX;
+  const mangaUpdatesPreview = importPreviews.MANGAUPDATES;
+  const importConflicts =
+    mangaDexPreview && mangaUpdatesPreview
+      ? Object.keys(mangaDexPreview.fields)
+          .filter((field) => {
+            const mangaDexValue = (
+              mangaDexPreview.fields as Record<string, unknown>
+            )[field];
+            const mangaUpdatesValue = (
+              mangaUpdatesPreview.fields as Record<string, unknown>
+            )[field];
+            return (
+              mangaDexValue !== undefined &&
+              mangaDexValue !== null &&
+              mangaUpdatesValue !== undefined &&
+              mangaUpdatesValue !== null &&
+              JSON.stringify(mangaDexValue) !==
+                JSON.stringify(mangaUpdatesValue)
+            );
+          })
+          .map((field) => ({
+            field,
+            mangaDexValue: (
+              mangaDexPreview.fields as Record<string, unknown>
+            )[field],
+            mangaUpdatesValue: (
+              mangaUpdatesPreview.fields as Record<string, unknown>
+            )[field],
+          }))
+      : [];
+  const unresolvedImportConflicts = importConflicts.filter(
+    ({ field }) => !importConflictChoices[field],
+  );
+  const hasUnresolvedProviderConflicts =
+    mode === "create" && unresolvedImportConflicts.length > 0;
 
   const state = loading
     ? ({ kind: "loading", message: "Loading series and canonical lookups…" } as const)
@@ -906,13 +1295,793 @@ export function SeriesManagementPanel() {
 
   return (
     <AdminPageScaffold
-      breadcrumbs={["Administration", "Catalogue", "Series"]}
-      kicker="Catalogue control"
-      title="Series management"
-      description="Select and edit an existing series, including canonical credits, publishing teams, media, and external metadata. New titles enter through the reviewed series-request queue."
+      breadcrumbs={
+        mode === "create"
+          ? ["Catalog", "Series", "Add Series"]
+          : ["Catalog", "Series"]
+      }
+      kicker={mode === "create" ? "Catalog creation" : "Catalog control"}
+      title={mode === "create" ? "Add Series" : "Series"}
+      description={
+        mode === "create"
+          ? "Import a trusted match or enter the essentials manually, then review everything on this page before saving."
+          : "Select and edit an existing series, including canonical credits, publishing teams, media, and external metadata."
+      }
+      primaryAction={
+        mode === "create" ? (
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={() => returnToBrowse()}
+          >
+            <CaretLeft size={16} /> Back to series
+          </button>
+        ) : (
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={() => beginCreate(true)}
+          >
+            + Add Series
+          </button>
+        )
+      }
       state={state}
       message={message}
     >
+      {mode === "create" ? (
+        <form className="series-create-page" onSubmit={handleCreateSubmit}>
+          <AdminSectionCard
+            icon={<DownloadSimple size={16} />}
+            title="Choose how to begin"
+            summary="Find a provider match first, or clear the page for a fully manual entry. Importing never publishes automatically."
+          >
+            <div className="series-create-entry-grid">
+              <button
+                className="series-create-entry-card"
+                type="button"
+                aria-pressed={creationEntry === "MANGADEX"}
+                onClick={() => chooseImportSource("MANGADEX")}
+              >
+                <DownloadSimple size={20} />
+                <strong>Import from MangaDex</strong>
+                <span>Search by title or use an official title URL.</span>
+              </button>
+              <button
+                className="series-create-entry-card"
+                type="button"
+                aria-pressed={creationEntry === "MANGAUPDATES"}
+                onClick={() => chooseImportSource("MANGAUPDATES")}
+              >
+                <DownloadSimple size={20} />
+                <strong>Import from MangaUpdates</strong>
+                <span>Search by title or use an official series URL.</span>
+              </button>
+              <button
+                className="series-create-entry-card"
+                type="button"
+                aria-pressed={creationEntry === "SCRATCH"}
+                onClick={() => beginCreate(false, "SCRATCH")}
+              >
+                <Plus size={20} />
+                <strong>Start from scratch</strong>
+                <span>Clear imported and entered values for manual creation.</span>
+              </button>
+            </div>
+
+            {creationEntry === "MANGADEX" ||
+            creationEntry === "MANGAUPDATES" ? (
+            <div className="series-create-import-search">
+              <label>
+                <span>
+                  {importSource === "MANGADEX"
+                    ? "MangaDex title or URL"
+                    : "MangaUpdates title or URL"}
+                </span>
+                <div className="admin-inline-field">
+                  <input
+                    ref={importInputRef}
+                    value={importInput}
+                    placeholder={
+                      importSource === "MANGADEX"
+                        ? "Search by title or paste a MangaDex URL"
+                        : "Search by title or paste a MangaUpdates URL"
+                    }
+                    onChange={(event) => setImportInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        if (importInput.trim() && !saving) void previewImport();
+                      }
+                    }}
+                  />
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={!importInput.trim() || saving}
+                    onClick={() => void previewImport()}
+                  >
+                    <MagnifyingGlass size={16} />
+                    {saving ? "Searching…" : "Find match"}
+                  </button>
+                </div>
+              </label>
+            </div>
+            ) : null}
+
+            {visibleImportPreviews.length ? (
+              <div className="series-create-result-grid" aria-live="polite">
+                {visibleImportPreviews.map((candidate) => {
+                  const duplicateTitle =
+                    importPreviewDuplicates[candidate.source] ?? null;
+                  return (
+                    <article
+                      className="series-create-result-card"
+                      key={`${candidate.source}-${candidate.externalId}`}
+                    >
+                      <span className="series-create-result-cover">
+                        {candidate.fields.coverReferenceUrl ? (
+                          <img
+                            src={candidate.fields.coverReferenceUrl}
+                            alt=""
+                          />
+                        ) : (
+                          <Books size={20} />
+                        )}
+                      </span>
+                      <div>
+                        <small>
+                          {candidate.source === "MANGADEX"
+                            ? "MangaDex"
+                            : "MangaUpdates"}
+                          {candidate.cached ? " · Cached" : " · Fresh"}
+                        </small>
+                        <strong>
+                          {candidate.fields.title ?? candidate.externalId}
+                        </strong>
+                        <span>
+                          {candidate.fields.status
+                            ? candidate.fields.status.replaceAll("_", " ")
+                            : "Status not supplied"}
+                        </span>
+                      </div>
+                      <button
+                        className="button button-primary"
+                        type="button"
+                        disabled={Boolean(duplicateTitle)}
+                        onClick={() => applyImportPreview(candidate)}
+                      >
+                        Use this
+                      </button>
+                      {duplicateTitle ? (
+                        <p className="admin-disabled-reason">
+                          Already linked to {duplicateTitle}.
+                        </p>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {importConflicts.length ? (
+              <section className="series-create-conflicts">
+                <header>
+                  <strong>Resolve provider differences</strong>
+                  <p>
+                    Both sources supplied different values. Choose each field
+                    explicitly; no conflicting value is applied silently.
+                  </p>
+                </header>
+                <p
+                  id="series-create-conflict-status"
+                  className={`series-create-conflict-status ${
+                    unresolvedImportConflicts.length ? "is-pending" : "is-resolved"
+                  }`}
+                  role="status"
+                >
+                  {unresolvedImportConflicts.length
+                    ? `${unresolvedImportConflicts.length.toLocaleString()} of ${importConflicts.length.toLocaleString()} provider ${importConflicts.length === 1 ? "difference still needs" : "differences still need"} an explicit choice before this series can be saved or published.`
+                    : `All ${importConflicts.length.toLocaleString()} provider ${importConflicts.length === 1 ? "difference is" : "differences are"} resolved.`}
+                </p>
+                <div>
+                  {importConflicts.map(
+                    ({ field, mangaDexValue, mangaUpdatesValue }) => (
+                      <article key={field}>
+                        <span>{field.replace(/([A-Z])/g, " $1")}</span>
+                        <button
+                          type="button"
+                          aria-pressed={
+                            importConflictChoices[field] === "MANGADEX"
+                          }
+                          disabled={Boolean(
+                            importPreviewDuplicates.MANGADEX,
+                          )}
+                          onClick={() => {
+                            if (!mangaDexPreview) return;
+                            applyImported(
+                              mangaDexPreview,
+                              new Set([field]),
+                              importPreviewDuplicates.MANGADEX ?? null,
+                              field === "coverReferenceUrl",
+                            );
+                            setImportConflictChoices((current) => ({
+                              ...current,
+                              [field]: "MANGADEX",
+                            }));
+                          }}
+                        >
+                          <small>MangaDex</small>
+                          <strong>
+                            {field === "coverReferenceUrl"
+                              ? "Use MangaDex cover"
+                              : displayImportValue(mangaDexValue)}
+                          </strong>
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={
+                            importConflictChoices[field] === "MANGAUPDATES"
+                          }
+                          disabled={Boolean(
+                            importPreviewDuplicates.MANGAUPDATES,
+                          )}
+                          onClick={() => {
+                            if (!mangaUpdatesPreview) return;
+                            applyImported(
+                              mangaUpdatesPreview,
+                              new Set([field]),
+                              importPreviewDuplicates.MANGAUPDATES ?? null,
+                              field === "coverReferenceUrl",
+                            );
+                            setImportConflictChoices((current) => ({
+                              ...current,
+                              [field]: "MANGAUPDATES",
+                            }));
+                          }}
+                        >
+                          <small>MangaUpdates</small>
+                          <strong>
+                            {field === "coverReferenceUrl"
+                              ? "Use MangaUpdates cover"
+                              : displayImportValue(mangaUpdatesValue)}
+                          </strong>
+                        </button>
+                      </article>
+                    ),
+                  )}
+                </div>
+              </section>
+            ) : null}
+          </AdminSectionCard>
+
+          <div className="series-create-columns">
+            <div className="series-create-column">
+              <AdminSectionCard
+                icon={<ImageSquare size={16} />}
+                title="Artwork & at a glance"
+                summary="The visual identity and facts an editor needs to scan quickly."
+              >
+                <AdminMediaField
+                  label="Main cover"
+                  helperText="Portrait artwork used in cards and listings. JPEG, PNG, or WebP; up to 8 MB."
+                  recommendedDimensions="1200 × 1800 px (2:3)"
+                  currentUrl={form.removeCover ? null : form.coverUrl}
+                  file={coverFile}
+                  accept="image/jpeg,image/png,image/webp"
+                  cropProfile={{
+                    aspect: 2 / 3,
+                    outputWidth: 1200,
+                    outputHeight: 1800,
+                    maxBytes: 3_000_000,
+                  }}
+                  busy={saving}
+                  onSelect={(file) => {
+                    setCoverFile(file);
+                    setField("removeCover", false);
+                  }}
+                  onRemove={() => {
+                    if (coverFile) {
+                      setCoverFile(null);
+                      setField("removeCover", false);
+                    } else {
+                      setField("removeCover", true);
+                    }
+                  }}
+                />
+                <AdminMediaField
+                  label="Series banner"
+                  helperText="Wide artwork for the public series header and promotional placements; up to 12 MB."
+                  recommendedDimensions="2400 × 900 px"
+                  currentUrl={form.removeBanner ? null : form.bannerUrl}
+                  file={bannerFile}
+                  accept="image/jpeg,image/png,image/webp"
+                  cropProfile={{
+                    aspect: 8 / 3,
+                    outputWidth: 2400,
+                    outputHeight: 900,
+                    maxBytes: 4_000_000,
+                  }}
+                  busy={saving}
+                  onSelect={(file) => {
+                    setBannerFile(file);
+                    setField("removeBanner", false);
+                  }}
+                  onRemove={() => {
+                    if (bannerFile) {
+                      setBannerFile(null);
+                      setField("removeBanner", false);
+                    } else {
+                      setField("removeBanner", true);
+                    }
+                  }}
+                />
+                <div className="series-create-fact-grid">
+                  <label>
+                    <span>Status</span>
+                    <select
+                      value={form.status}
+                      onChange={(event) =>
+                        setField(
+                          "status",
+                          event.target.value as FormState["status"],
+                        )
+                      }
+                    >
+                      <option value="ONGOING">Ongoing</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="HIATUS">Hiatus</option>
+                      <option value="PAUSED">Paused</option>
+                      <option value="CANCELLED">Cancelled</option>
+                      <option value="UPCOMING">Upcoming</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Type</span>
+                    <select
+                      value={form.type}
+                      onChange={(event) =>
+                        setField(
+                          "type",
+                          event.target.value as FormState["type"],
+                        )
+                      }
+                    >
+                      <option value="MANGA">Manga</option>
+                      <option value="MANHWA">Manhwa</option>
+                      <option value="MANHUA">Manhua</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Original language</span>
+                    <AdminCombobox
+                      ariaLabel="Original language"
+                      value={form.languageCode}
+                      options={(options?.languages ?? []).map((language) => ({
+                        value: language.code,
+                        label: language.name,
+                        description: language.code,
+                      }))}
+                      onChange={(languageCode) =>
+                        setField("languageCode", languageCode)
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Country of origin</span>
+                    <AdminCombobox
+                      ariaLabel="Country of origin"
+                      value={form.countryCode}
+                      options={(options?.countries ?? []).map((country) => ({
+                        value: country.code,
+                        label: country.name,
+                        description: country.code,
+                      }))}
+                      onChange={(countryCode) => {
+                        const suggested =
+                          options?.countryLanguageDefaults[countryCode];
+                        setForm((current) => ({
+                          ...current,
+                          countryCode,
+                          languageCode:
+                            suggested && !current.languageCode
+                              ? suggested
+                              : current.languageCode,
+                          }));
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>Original publication year</span>
+                    <input
+                      type="number"
+                      min="1800"
+                      max="2200"
+                      value={form.publicationYear}
+                      onChange={(event) =>
+                        setField("publicationYear", event.target.value)
+                      }
+                    />
+                  </label>
+                </div>
+              </AdminSectionCard>
+            </div>
+
+            <div className="series-create-column">
+              <AdminSectionCard
+                icon={<Books size={16} />}
+                title="Core metadata"
+                summary="The public title, description, classification, credits, and responsible team."
+              >
+                <div className="series-create-identity-grid">
+                  <label>
+                    <span>Primary title <b>Required</b></span>
+                    <input
+                      required
+                      value={form.title}
+                      onChange={(event) => {
+                        const title = event.target.value;
+                        setForm((current) => ({
+                          ...current,
+                          title,
+                          slug: current.slug
+                            ? current.slug
+                            : slugFromTitle(title),
+                        }));
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>URL slug <b>Required</b></span>
+                    <input
+                      required
+                      pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                      value={form.slug}
+                      onChange={(event) =>
+                        setField("slug", event.target.value.toLowerCase())
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="admin-entity-field">
+                  <label>
+                    <span>Alternative titles</span>
+                    <div className="admin-inline-field">
+                      <input
+                        value={altDraft}
+                        placeholder="Type titles separated by commas"
+                        onChange={(event) => setAltDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addAlternativeTitles();
+                          }
+                        }}
+                        onBlur={() => altDraft && addAlternativeTitles()}
+                      />
+                      <button
+                        className="button button-secondary"
+                        type="button"
+                        onClick={() => addAlternativeTitles()}
+                      >
+                        <Plus size={15} /> Add
+                      </button>
+                    </div>
+                  </label>
+                  <ChipList
+                    values={form.alternativeTitles.map((name) => ({ name }))}
+                    onRemove={(index) =>
+                      setField(
+                        "alternativeTitles",
+                        form.alternativeTitles.filter(
+                          (_, item) => item !== index,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+
+                <label>
+                  <span>Synopsis <b>Required</b></span>
+                  <textarea
+                    required
+                    minLength={20}
+                    maxLength={10_000}
+                    rows={10}
+                    value={form.synopsis}
+                    onChange={(event) =>
+                      setField("synopsis", event.target.value)
+                    }
+                  />
+                  <small>{form.synopsis.length.toLocaleString()} / 10,000</small>
+                </label>
+
+                <EntityInput
+                  label="Genres & Tags"
+                  values={form.genres}
+                  suggestions={options?.genres ?? []}
+                  suggestionKind="genres"
+                  onChange={(genres) => setField("genres", genres)}
+                />
+                <div className="series-create-credit-grid">
+                  <EntityInput
+                    label="Authors"
+                    values={form.authors}
+                    suggestions={options?.creators ?? []}
+                    suggestionKind="creators"
+                    onChange={(authors) => setField("authors", authors)}
+                  />
+                  <EntityInput
+                    label="Artists"
+                    values={form.artists}
+                    suggestions={options?.creators ?? []}
+                    suggestionKind="creators"
+                    onChange={(artists) => setField("artists", artists)}
+                  />
+                </div>
+                <EntityInput
+                  label="Original publisher or studio"
+                  values={form.publisher ? [form.publisher] : []}
+                  suggestions={options?.publishers ?? []}
+                  suggestionKind="publishers"
+                  multiple={false}
+                  createLabel="Select"
+                  onChange={(publishers) =>
+                    setField("publisher", publishers[0] ?? null)
+                  }
+                />
+
+                <div className="series-create-team-picker">
+                  <AdminFormField label="Assigned publishing team">
+                    <div
+                      className="admin-inline-field"
+                      onChangeCapture={captureTeamSearch}
+                    >
+                      <AdminCombobox
+                        value={teamDraft}
+                        options={assignableTeamOptions}
+                        ariaLabel="Search and choose a publishing team"
+                        placeholder="Search eligible teams…"
+                        onChange={chooseTeamDraft}
+                      />
+                      <button
+                        className="button button-secondary"
+                        type="button"
+                        disabled={!teamDraft}
+                        onClick={() => {
+                          if (
+                            !teamDraft ||
+                            form.teamIds.includes(teamDraft)
+                          ) return;
+                          setField("teamIds", [
+                            ...form.teamIds,
+                            teamDraft,
+                          ]);
+                          setTeamDraft("");
+                        }}
+                      >
+                        <Plus size={15} /> Assign
+                      </button>
+                    </div>
+                  </AdminFormField>
+                  <div className="admin-team-selection admin-team-picker">
+                    {selectedTeams.length ? (
+                      selectedTeams.map((team) => (
+                        <article className="admin-team-row" key={team.id}>
+                          <div className="admin-team-identity">
+                            <strong>{team.name}</strong>
+                            <small>{team.verificationStatus}</small>
+                          </div>
+                          <label className="admin-team-primary">
+                            <input
+                              type="radio"
+                              name="new-primary-team"
+                              checked={form.primaryTeamId === team.id}
+                              onChange={() =>
+                                setField("primaryTeamId", team.id)
+                              }
+                            />
+                            Primary
+                          </label>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${team.name}`}
+                            onClick={() => {
+                              setField(
+                                "teamIds",
+                                form.teamIds.filter(
+                                  (id) => id !== team.id,
+                                ),
+                              );
+                              if (form.primaryTeamId === team.id) {
+                                setField("primaryTeamId", null);
+                              }
+                            }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </article>
+                      ))
+                    ) : (
+                      <p className="admin-inline-empty">
+                        No publishing teams assigned.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </AdminSectionCard>
+            </div>
+          </div>
+
+          <details className="admin-section-card is-collapsible series-create-advanced">
+            <summary>
+              <span className="admin-section-card-heading">
+                <span aria-hidden="true">
+                  <SlidersHorizontal size={16} />
+                </span>
+                <span>
+                  <strong>Advanced details</strong>
+                  <small>
+                    Rights, access defaults, provider attribution, and optional
+                    featured artwork.
+                  </small>
+                </span>
+              </span>
+            </summary>
+            <div className="admin-section-card-content">
+            <div className="series-create-advanced-grid">
+              <label>
+                <span>Reading direction</span>
+                <select
+                  value={form.readingDirection}
+                  onChange={(event) =>
+                    setField(
+                      "readingDirection",
+                      event.target.value as FormState["readingDirection"],
+                    )
+                  }
+                >
+                  <option value="VERTICAL">Vertical</option>
+                  <option value="RIGHT_TO_LEFT">Right to left</option>
+                  <option value="LEFT_TO_RIGHT">Left to right</option>
+                </select>
+              </label>
+              <label>
+                <span>Default chapter access</span>
+                <select
+                  value={form.accessType}
+                  onChange={(event) =>
+                    setField(
+                      "accessType",
+                      event.target.value as FormState["accessType"],
+                    )
+                  }
+                >
+                  <option value="FREE">Free</option>
+                  <option value="PAID">Paid</option>
+                </select>
+              </label>
+              <label>
+                <span>Rights status</span>
+                <select
+                  value={form.rightsStatus}
+                  onChange={(event) =>
+                    setField(
+                      "rightsStatus",
+                      event.target.value as FormState["rightsStatus"],
+                    )
+                  }
+                >
+                  {[
+                    "PENDING_REVIEW",
+                    "LICENSED",
+                    "AUTHORIZED",
+                    "DEMO_ORIGINAL",
+                    "TEST_ORIGINAL",
+                    "EXPIRED",
+                    "REVOKED",
+                    "TAKEDOWN",
+                  ].map((value) => (
+                    <option key={value} value={value}>
+                      {value.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {form.externalSources.length ? (
+              <div className="admin-source-list">
+                {form.externalSources.map((source) => (
+                  <article key={source.source}>
+                    <strong>{source.source}</strong>
+                    <span>{source.externalId}</span>
+                    <a href={source.sourceUrl} target="_blank" rel="noreferrer">
+                      Open attributed source
+                    </a>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="admin-inline-empty">
+                No external metadata source is attached to this draft.
+              </p>
+            )}
+
+            <AdminMediaField
+              label="Featured slider image"
+              helperText="Optional square artwork for homepage features. The main cover is used when this is empty."
+              recommendedDimensions="1200 × 1200 px (1:1)"
+              currentUrl={form.removeSlider ? null : form.sliderUrl}
+              file={sliderFile}
+              accept="image/jpeg,image/png,image/webp"
+              cropProfile={{
+                aspect: 1,
+                outputWidth: 1200,
+                outputHeight: 1200,
+                maxBytes: 3_000_000,
+              }}
+              busy={saving}
+              onSelect={(file) => {
+                setSliderFile(file);
+                setField("removeSlider", false);
+              }}
+              onRemove={() => {
+                if (sliderFile) {
+                  setSliderFile(null);
+                  setField("removeSlider", false);
+                } else {
+                  setField("removeSlider", true);
+                }
+              }}
+            />
+            </div>
+          </details>
+
+          <footer className="admin-sticky-actions series-create-actions">
+            <button
+              className="button button-secondary"
+              type="submit"
+              name="series-create-action"
+              value="draft"
+              aria-describedby={
+                importConflicts.length ? "series-create-conflict-status" : undefined
+              }
+              disabled={
+                saving ||
+                !dirty ||
+                hasUnresolvedProviderConflicts ||
+                !form.title.trim() ||
+                !form.slug.trim() ||
+                form.synopsis.trim().length < 20
+              }
+            >
+              {saving ? "Saving…" : "Save as draft"}
+            </button>
+            <button
+              className="button button-primary"
+              type="submit"
+              name="series-create-action"
+              value="publish"
+              aria-describedby={
+                importConflicts.length ? "series-create-conflict-status" : undefined
+              }
+              disabled={
+                saving ||
+                !dirty ||
+                hasUnresolvedProviderConflicts ||
+                !form.title.trim() ||
+                !form.slug.trim() ||
+                form.synopsis.trim().length < 20
+              }
+            >
+              {saving ? "Publishing…" : "Publish now"}
+            </button>
+          </footer>
+        </form>
+      ) : (
+        <>
       <SeriesGalleryModerationPanel />
       <div className="admin-master-detail">
         <aside className="admin-record-browser">
@@ -994,8 +2163,34 @@ export function SeriesManagementPanel() {
         </aside>
         {form.id ? (
         <form className="admin-editor-form" onSubmit={save}>
-          <details className="admin-editor-box" open>
-            <summary>Basic information</summary>
+          <nav
+            className="admin-subnav"
+            role="tablist"
+            aria-label="Series editor sections"
+          >
+            {seriesEditorTabs.map((tab) => (
+              <button
+                id={`series-editor-tab-${tab.key}`}
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-controls={`series-editor-panel-${tab.key}`}
+                aria-selected={activeEditorTab === tab.key}
+                tabIndex={activeEditorTab === tab.key ? 0 : -1}
+                onClick={() => setActiveEditorTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+
+          <div
+            id="series-editor-panel-basic"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-basic"
+            hidden={activeEditorTab !== "basic"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Basic information</h3>
@@ -1060,6 +2255,7 @@ export function SeriesManagementPanel() {
                     <option value="COMPLETED">Completed</option>
                     <option value="HIATUS">Hiatus</option>
                     <option value="PAUSED">Paused</option>
+                    <option value="CANCELLED">Cancelled</option>
                     <option value="UPCOMING">Upcoming</option>
                   </select>
                 </label>
@@ -1093,10 +2289,15 @@ export function SeriesManagementPanel() {
                 </label>
               </div>
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box" open>
-            <summary>Titles &amp; synopsis</summary>
+          <div
+            id="series-editor-panel-titles"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-titles"
+            hidden={activeEditorTab !== "titles"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Titles and synopsis</h3>
@@ -1192,10 +2393,15 @@ export function SeriesManagementPanel() {
                 <small>{form.synopsis.length.toLocaleString()} / 10,000</small>
               </label>
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box">
-            <summary>Credits &amp; publishing</summary>
+          <div
+            id="series-editor-panel-credits"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-credits"
+            hidden={activeEditorTab !== "credits"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Credits and publishing</h3>
@@ -1227,10 +2433,15 @@ export function SeriesManagementPanel() {
                 }
               />
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box">
-            <summary>Origin &amp; classification</summary>
+          <div
+            id="series-editor-panel-origin"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-origin"
+            hidden={activeEditorTab !== "origin"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Origin and classification</h3>
@@ -1239,57 +2450,55 @@ export function SeriesManagementPanel() {
               <div className="admin-form-grid">
                 <label>
                   <span>Country of origin</span>
-                  <select
+                  <AdminCombobox
+                    ariaLabel="Country of origin"
                     value={form.countryCode}
-                    onChange={(event) => {
-                      const countryCode = event.target.value;
+                    options={(options?.countries ?? []).map((country) => ({
+                      value: country.code,
+                      label: country.name,
+                      description: country.code,
+                    }))}
+                    onChange={(countryCode) => {
                       const suggested =
                         options?.countryLanguageDefaults[countryCode];
-                      setForm((current) => {
-                        if (!suggested || suggested === current.languageCode) {
-                          return { ...current, countryCode };
-                        }
-                        if (!current.languageCode) {
-                          return {
-                            ...current,
-                            countryCode,
-                            languageCode: suggested,
-                          };
-                        }
-                        const replace = window.confirm(
-                          "This country usually uses a different original language. Apply the suggestion?",
-                        );
-                        return {
-                          ...current,
-                          countryCode,
-                          languageCode: replace
-                            ? suggested
-                            : current.languageCode,
-                        };
+                      const currentLanguage = form.languageCode;
+                      setField("countryCode", countryCode);
+                      if (!suggested || suggested === currentLanguage) return;
+                      if (!currentLanguage) {
+                        setField("languageCode", suggested);
+                        return;
+                      }
+                      const languageName = options?.languages.find(
+                        (language) => language.code === suggested,
+                      )?.name;
+                      setPendingConfirmation({
+                        title: "Apply the usual original language?",
+                        description: `${
+                          options?.countries.find(
+                            (country) => country.code === countryCode,
+                          )?.name ?? countryCode
+                        } usually uses ${languageName ?? suggested}. The country change is already applied; keep the current language or apply this suggestion.`,
+                        confirmLabel: "Apply language",
+                        destructive: false,
+                        run: () => setField("languageCode", suggested),
                       });
                     }}
-                  >
-                    {options?.countries.map((country) => (
-                      <option key={country.code} value={country.code}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 <label>
                   <span>Original language</span>
-                  <select
+                  <AdminCombobox
+                    ariaLabel="Original language"
                     value={form.languageCode}
-                    onChange={(event) =>
-                      setField("languageCode", event.target.value)
+                    options={(options?.languages ?? []).map((language) => ({
+                      value: language.code,
+                      label: language.name,
+                      description: language.code,
+                    }))}
+                    onChange={(languageCode) =>
+                      setField("languageCode", languageCode)
                     }
-                  >
-                    {options?.languages.map((language) => (
-                      <option key={language.code} value={language.code}>
-                        {language.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <small>This field remains independently selectable.</small>
                 </label>
               </div>
@@ -1301,39 +2510,32 @@ export function SeriesManagementPanel() {
                 onChange={(genres) => setField("genres", genres)}
               />
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box">
-            <summary>Publishing teams</summary>
+          <div
+            id="series-editor-panel-teams"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-teams"
+            hidden={activeEditorTab !== "teams"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>NyaScans publishing teams</h3>
                 <p>Assign multiple scanlation teams without confusing them with the original publisher.</p>
               </header>
-              <label>
-                <span>Find an eligible team</span>
-                <div className="admin-inline-field">
-                  <input
-                    value={teamSearch}
-                    placeholder="Search teams"
-                    onChange={(event) => setTeamSearch(event.target.value)}
-                  />
-                  <select
+              <AdminFormField label="Find an eligible team">
+                <div
+                  className="admin-inline-field"
+                  onChangeCapture={captureTeamSearch}
+                >
+                  <AdminCombobox
                     value={teamDraft}
-                    onChange={(event) => setTeamDraft(event.target.value)}
-                  >
-                    <option value="">Choose team…</option>
-                    {(displayedTeamSearchResults.length
-                      ? displayedTeamSearchResults
-                      : options?.teams ?? []
-                    )
-                      .filter((team) => !form.teamIds.includes(team.id))
-                      .map((team) => (
-                        <option key={team.id} value={team.id}>
-                          {team.name}
-                        </option>
-                      ))}
-                  </select>
+                    options={assignableTeamOptions}
+                    ariaLabel="Search and choose a publishing team"
+                    placeholder="Search eligible teams…"
+                    onChange={chooseTeamDraft}
+                  />
                   <button
                     className="button button-secondary"
                     type="button"
@@ -1347,7 +2549,7 @@ export function SeriesManagementPanel() {
                     <Plus size={15} /> Assign
                   </button>
                 </div>
-              </label>
+              </AdminFormField>
               <div className="admin-team-selection admin-team-picker">
                 {selectedTeams.length ? (
                   selectedTeams.map((team) => (
@@ -1387,17 +2589,27 @@ export function SeriesManagementPanel() {
                 )}
               </div>
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box">
-            <summary>Taxonomy</summary>
+          <div
+            id="series-editor-panel-taxonomy"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-taxonomy"
+            hidden={activeEditorTab !== "taxonomy"}
+          >
             <section className="admin-form-section">
               <TaxonomyManager />
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box" open>
-            <summary>Cover, banner &amp; slider</summary>
+          <div
+            id="series-editor-panel-artwork"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-artwork"
+            hidden={activeEditorTab !== "artwork"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Cover, banner, and slider artwork</h3>
@@ -1485,10 +2697,15 @@ export function SeriesManagementPanel() {
                 }}
               />
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box" open>
-            <summary>External metadata import</summary>
+          <div
+            id="series-editor-panel-import"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-import"
+            hidden={activeEditorTab !== "import"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>External metadata import</h3>
@@ -1598,7 +2815,7 @@ export function SeriesManagementPanel() {
                     className="button button-primary"
                     type="button"
                     disabled={!importFields.size || Boolean(importDuplicate)}
-                    onClick={applyImported}
+                    onClick={() => applyImported()}
                   >
                     Apply selected fields
                   </button>
@@ -1624,10 +2841,15 @@ export function SeriesManagementPanel() {
                 </div>
               ) : null}
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box">
-            <summary>Visibility &amp; publication</summary>
+          <div
+            id="series-editor-panel-visibility"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-visibility"
+            hidden={activeEditorTab !== "visibility"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Visibility and publication</h3>
@@ -1693,10 +2915,15 @@ export function SeriesManagementPanel() {
                 </span>
               </label>
             </section>
-          </details>
+          </div>
 
-          <details className="admin-editor-box" open>
-            <summary>Review &amp; save</summary>
+          <div
+            id="series-editor-panel-review"
+            className="admin-editor-box"
+            role="tabpanel"
+            aria-labelledby="series-editor-tab-review"
+            hidden={activeEditorTab !== "review"}
+          >
             <section className="admin-form-section">
               <header>
                 <h3>Review and save</h3>
@@ -1730,7 +2957,7 @@ export function SeriesManagementPanel() {
                 </div>
               ) : null}
             </section>
-          </details>
+          </div>
 
           <footer className="admin-sticky-actions">
             <div className="admin-save-state">
@@ -1749,6 +2976,16 @@ export function SeriesManagementPanel() {
                 setForm(savedForm);
                 setCoverFile(null);
                 setBannerFile(null);
+                setSliderFile(null);
+                setImported(null);
+                setPendingImportedCover(null);
+                setImportPreviews({});
+                setImportDuplicate(null);
+                setImportPreviewDuplicates({});
+                setImportConflictChoices({});
+                setImportFields(new Set());
+                setImportApplied(false);
+                setImportInput("");
               }}
             >
               Reset changes
@@ -1780,12 +3017,27 @@ export function SeriesManagementPanel() {
             <Books size={28} />
             <h2>No series selected</h2>
             <p>
-              Choose an existing series from the catalogue browser. New series
-              are created only after an approved request.
+              Choose an existing series from the catalog browser, or use Add
+              Series to create one from a provider match or from scratch.
             </p>
           </section>
         )}
       </div>
+        </>
+      )}
+      <ConfirmActionDialog
+        open={Boolean(pendingConfirmation)}
+        title={pendingConfirmation?.title ?? "Confirm action"}
+        description={pendingConfirmation?.description ?? ""}
+        confirmLabel={pendingConfirmation?.confirmLabel ?? "Confirm"}
+        destructive={pendingConfirmation?.destructive ?? true}
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={() => {
+          const action = pendingConfirmation?.run;
+          setPendingConfirmation(null);
+          action?.();
+        }}
+      />
     </AdminPageScaffold>
   );
 }

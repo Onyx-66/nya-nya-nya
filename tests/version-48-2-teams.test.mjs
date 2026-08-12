@@ -53,16 +53,19 @@ function addMembership(database, teamId, userId, role, status) {
     .run(teamId, userId, role, status);
 }
 
-test("fresh migrations 0000 through 0044 install the community team model without foreign-key damage", async () => {
+test("fresh migrations 0000 through 0051 install the community team model without foreign-key damage", async () => {
   const names = await migrationNames();
   assert.deepEqual(
     names.map((name) => name.slice(0, 4)),
-    Array.from({ length: 45 }, (_, index) => String(index).padStart(4, "0")),
+    Array.from({ length: 52 }, (_, index) => String(index).padStart(4, "0")),
   );
-  assert.equal(names.at(-4), "0041_remarkable_salo.sql");
-  assert.equal(names.at(-3), "0042_repair_chapter_reaction_slots.sql");
-  assert.equal(names.at(-2), "0043_pinned-home-discovery.sql");
-  assert.equal(names.at(-1), "0044_dapper_misty_knight.sql");
+  assert.deepEqual(names.slice(-5), [
+    "0047_slow_tigra.sql",
+    "0048_strong_leo.sql",
+    "0049_cold_union_jack.sql",
+    "0050_remove_revised_release_labels.sql",
+    "0051_nasty_morg.sql",
+  ]);
 
   const database = await migratedDatabase();
   try {

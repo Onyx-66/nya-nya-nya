@@ -132,9 +132,11 @@ async function api<T>(input: RequestInfo | URL, init?: RequestInit) {
 export function CommerceOfferManager({
   settingsPanel,
   initialKind = "ALL",
+  embedded = false,
 }: {
   settingsPanel?: ReactNode;
   initialKind?: OfferKind | "ALL";
+  embedded?: boolean;
 }) {
   const { settings: commercial } = useCommercialSettings();
   const coinName = commercial.economy.coinName;
@@ -159,6 +161,10 @@ export function CommerceOfferManager({
     icon: false,
   });
   const [archiveTarget, setArchiveTarget] = useState<Offer | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    description: string;
+    run: () => void;
+  } | null>(null);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">(
     "desktop",
   );
@@ -266,8 +272,15 @@ export function CommerceOfferManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, page, query, status]);
 
-  function select(offer: Offer) {
-    if (dirty && !window.confirm("Discard unsaved offer changes?")) return;
+  function requestDraftDiscard(description: string, run: () => void) {
+    if (dirty) {
+      setPendingNavigation({ description, run });
+      return;
+    }
+    run();
+  }
+
+  function applySelection(offer: Offer) {
     const next = { ...offer, purchaseCount: offer.purchaseCount };
     setDraft(next);
     setSaved(next);
@@ -277,23 +290,33 @@ export function CommerceOfferManager({
     setRemoveMedia({ primary: false, banner: false, icon: false });
   }
 
+  function select(offer: Offer) {
+    requestDraftDiscard(
+      "The current offer draft and selected media changes will be discarded before another offer opens.",
+      () => applySelection(offer),
+    );
+  }
+
   function createOffer() {
-    if (dirty && !window.confirm("Discard unsaved offer changes?")) return;
-    setDraft({
-      ...emptyDraft,
-      kind:
-        kind === "ALL"
-          ? "CURRENCY_PACKAGE"
-          : kind,
-      sortOrder:
-        offers.reduce((maximum, offer) => Math.max(maximum, offer.sortOrder), 0) +
-        10,
-    });
-    setSaved(emptyDraft);
-    setPrimaryFile(null);
-    setBannerFile(null);
-    setIconFile(null);
-    setRemoveMedia({ primary: false, banner: false, icon: false });
+    requestDraftDiscard(
+      "The current offer draft and selected media changes will be discarded before a new offer is created.",
+      () => {
+        setDraft({
+          ...emptyDraft,
+          kind: kind === "ALL" ? "CURRENCY_PACKAGE" : kind,
+          sortOrder:
+            offers.reduce(
+              (maximum, offer) => Math.max(maximum, offer.sortOrder),
+              0,
+            ) + 10,
+        });
+        setSaved(emptyDraft);
+        setPrimaryFile(null);
+        setBannerFile(null);
+        setIconFile(null);
+        setRemoveMedia({ primary: false, banner: false, icon: false });
+      },
+    );
   }
 
   async function upload(
@@ -497,6 +520,7 @@ export function CommerceOfferManager({
         kicker="Revenue & entitlements"
         title="Commerce management"
         description="Manage immutable-price offers, lifecycle scheduling, customer previews, and global economy rules."
+        embedded={embedded}
         tabs={[
           { key: "offers", label: "Offers", count: offers.length },
           { key: "economy", label: "Economy & announcement" },
@@ -656,13 +680,10 @@ export function CommerceOfferManager({
                     type="button"
                     disabled={page <= 1}
                     onClick={() => {
-                      if (
-                        dirty &&
-                        !window.confirm("Discard unsaved offer changes?")
-                      ) {
-                        return;
-                      }
-                      setPage((value) => Math.max(1, value - 1));
+                      requestDraftDiscard(
+                        "The current offer draft and selected media changes will be discarded before the previous page opens.",
+                        () => setPage((value) => Math.max(1, value - 1)),
+                      );
                     }}
                   >
                     <CaretLeft size={15} /> Previous
@@ -671,13 +692,10 @@ export function CommerceOfferManager({
                     type="button"
                     disabled={page * 25 >= total}
                     onClick={() => {
-                      if (
-                        dirty &&
-                        !window.confirm("Discard unsaved offer changes?")
-                      ) {
-                        return;
-                      }
-                      setPage((value) => value + 1);
+                      requestDraftDiscard(
+                        "The current offer draft and selected media changes will be discarded before the next page opens.",
+                        () => setPage((value) => value + 1),
+                      );
                     }}
                   >
                     Next <CaretRight size={15} />
@@ -1217,6 +1235,22 @@ export function CommerceOfferManager({
         busy={saving}
         onCancel={() => setArchiveTarget(null)}
         onConfirm={() => void archive()}
+      />
+      <ConfirmActionDialog
+        open={Boolean(pendingNavigation)}
+        title="Discard unsaved offer changes?"
+        description={pendingNavigation?.description ?? ""}
+        confirmLabel="Discard and continue"
+        destructive
+        busy={saving}
+        onCancel={() => {
+          if (!saving) setPendingNavigation(null);
+        }}
+        onConfirm={() => {
+          const navigation = pendingNavigation;
+          setPendingNavigation(null);
+          navigation?.run();
+        }}
       />
     </>
   );

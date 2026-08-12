@@ -13,13 +13,18 @@ import {
   type Actor,
 } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import {
+  assertFeatureCanEnable,
+  FEATURE_KEYS,
+  getFeatureStates,
+} from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("FEATURE_FLAG"),
-    key: z.string().trim().min(2).max(120),
+    key: z.enum(FEATURE_KEYS),
     enabled: z.boolean(),
     expectedUpdatedAt: z.string().min(1).max(80),
     reason: z.string().trim().min(10).max(1_000),
@@ -137,11 +142,10 @@ async function snapshot(
   const offset = (page - 1) * limit;
   const fetchLimit = limit + 1;
   const pattern = `%${query}%`;
-  const [featureFlagsRaw, achievementsRaw, reviewsRaw, teamPostsRaw, entitlementsRaw, giftCardsRaw, notificationsRaw, sessionsRaw, loginEventsRaw] = await Promise.all([
+  const [runtimeFeatures, featureFlagsRaw, achievementsRaw, reviewsRaw, teamPostsRaw, entitlementsRaw, giftCardsRaw, notificationsRaw, sessionsRaw, loginEventsRaw] = await Promise.all([
+    getFeatureStates(),
     rows<Record<string, unknown>>(area === "registry",
-      `SELECT key, enabled, description,
-              CASE WHEN key = 'team_payouts' THEN 1 ELSE 0 END AS wired,
-              updated_at AS updatedAt
+      `SELECT key, enabled, description, updated_at AS updatedAt
          FROM feature_flags
         WHERE (? = '' OR key LIKE ? COLLATE NOCASE OR description LIKE ? COLLATE NOCASE)
         ORDER BY key`, query, pattern, pattern),
@@ -215,7 +219,17 @@ async function snapshot(
   return {
     area,
     permissions,
-    featureFlags: featureFlagsRaw.map((entry) => ({ ...entry, enabled: Boolean(entry.enabled), wired: Boolean(entry.wired) })),
+    featureFlags: featureFlagsRaw.map((entry) => {
+      const runtime = runtimeFeatures[String(entry.key) as keyof typeof runtimeFeatures];
+      return {
+        ...entry,
+        enabled: Boolean(entry.enabled),
+        wired: runtime?.wired ?? false,
+        available: runtime?.available ?? false,
+        effective: runtime?.effective ?? false,
+        readinessReason: runtime?.reason ?? "FEATURE_UNKNOWN",
+      };
+    }),
     achievements: visiblePage(achievementsRaw, limit).map((entry) => ({ ...entry, isActive: Boolean(entry.isActive) })),
     reviews: visiblePage(reviewsRaw, limit),
     teamPosts: visiblePage(teamPostsRaw, limit),
@@ -271,8 +285,11 @@ export async function POST(request: Request) {
     const followUpStatements: D1PreparedStatement[] = [];
 
     if (payload.action === "FEATURE_FLAG") {
-      if (payload.key !== "team_payouts") {
-        throw new ApiError(409, "FEATURE_FLAG_NOT_CONNECTED", "This legacy flag is not connected to the runtime and cannot be changed here.");
+      const runtimeState = (await getFeatureStates(db))[payload.key];
+      if (payload.enabled) {
+        await assertFeatureCanEnable(payload.key, db);
+      } else if (!runtimeState.wired && !runtimeState.enabled) {
+        throw new ApiError(409, "FEATURE_FLAG_NOT_CONNECTED", "This legacy flag is not connected to the runtime and is already disabled.");
       }
       const current = await db.prepare("SELECT enabled, description, updated_at AS updatedAt FROM feature_flags WHERE key = ? LIMIT 1").bind(payload.key).first<Record<string, unknown>>();
       if (!current) throw new ApiError(404, "FEATURE_FLAG_NOT_FOUND", "This feature flag no longer exists.");

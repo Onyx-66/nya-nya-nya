@@ -10,12 +10,16 @@ import {
   requestIdFor,
   writeAudit,
 } from "@/lib/server/admin-utils";
-import { requireActor, requireAdminCapability } from "@/lib/server/policy";
+import {
+  actorHasCapability,
+  requireActor,
+} from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
 const inputSchema = metadataPreviewSchema.extend({
   seriesId: z.string().trim().min(3).max(160).optional(),
+  seriesRequestId: z.string().trim().min(3).max(160).optional(),
 });
 
 function database() {
@@ -34,7 +38,16 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
-    requireAdminCapability(actor, "content.series.manage");
+    if (
+      !actorHasCapability(actor, "content.series.manage") &&
+      !actorHasCapability(actor, "admin.series-requests.review")
+    ) {
+      throw new ApiError(
+        403,
+        "ADMIN_CAPABILITY_REQUIRED",
+        "Series management or submission-review access is required.",
+      );
+    }
     const payload = inputSchema.parse(await request.json());
     const preview = await previewExternalMetadata(database(), {
       actorUserId: actor.id,
@@ -43,6 +56,7 @@ export async function POST(request: Request) {
       input: payload.input,
       refresh: payload.refresh,
       seriesId: payload.seriesId,
+      seriesRequestId: payload.seriesRequestId,
       action: "PREVIEW",
     });
     await writeAudit(actor, requestId, {
@@ -73,6 +87,7 @@ export async function POST(request: Request) {
         data: preview.data,
         duplicate: preview.duplicate,
         duplicateRequest: preview.duplicateRequest,
+        matches: preview.matches,
       },
       { headers: { "cache-control": "private, no-store" } },
     );

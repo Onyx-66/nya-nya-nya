@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   type ReactNode,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -269,9 +270,17 @@ function FeatureHeading({
 function PinnedSeriesCard({
   record,
   featured = false,
+  active = false,
+  index,
+  position = 0,
+  onActivate,
 }: {
   record: PinnedSeriesRecord;
   featured?: boolean;
+  active?: boolean;
+  index?: number;
+  position?: -1 | 0 | 1;
+  onActivate?: () => void;
 }) {
   const imageUrl = featured
     ? record.bannerUrl || record.coverUrl
@@ -281,12 +290,21 @@ function PinnedSeriesCard({
       className={`v481-pin-card ${featured ? "is-featured" : "is-small"}`}
       href={record.href}
       aria-label={`Open ${record.title}`}
+      data-active={active ? "true" : "false"}
+      data-pin-index={index}
+      data-pin-position={position}
+      onClick={(event) => {
+        if (active || !onActivate) return;
+        event.preventDefault();
+        onActivate();
+      }}
     >
       <CoverArtwork src={imageUrl} title={record.title} eager={featured} />
       <span className="v481-pin-shade" aria-hidden="true" />
+      {featured ? <span className="v481-featured-badge">Featured Pin</span> : null}
       <span className="v481-pin-copy">
         <small>
-          {featured ? "Featured pin" : record.type} · {record.chapterCount}{" "}
+          {record.type} · {record.chapterCount}{" "}
           {record.chapterCount === 1 ? "chapter" : "chapters"}
         </small>
         <strong>{record.title}</strong>
@@ -300,9 +318,9 @@ function PinnedSeriesCard({
 
 function PinnedLoading() {
   return (
-    <div className="v481-pinned-bento is-loading" aria-label="Loading Pinned Series">
-      {Array.from({ length: 5 }, (_, index) => (
-        <span key={index} className={index === 0 ? "is-featured" : "is-small"} />
+    <div className="v481-pinned-carousel is-loading" aria-label="Loading Pinned Series">
+      {Array.from({ length: 4 }, (_, index) => (
+        <span key={index} />
       ))}
     </div>
   );
@@ -313,30 +331,43 @@ export function PinnedSeriesSection({
   allHref = "/pinned-series",
 }: PinnedSeriesSectionProps = {}) {
   const { records, loading, error } = usePinnedSeries(initialRecords);
-  const [featuredIndex, setFeaturedIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const swipeStartRef = useRef<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const featuredRecords = useMemo(() => {
     return records.filter((record) => record.featured).slice(0, 9);
   }, [records]);
-  const activeFeatured = featuredRecords.length
-    ? featuredRecords[featuredIndex % featuredRecords.length]
-    : null;
-  const surroundingRecords = useMemo(() => {
-    if (!activeFeatured) return [];
-    return featuredRecords
-      .filter((record) => record.id !== activeFeatured.id)
-      .slice(0, 4);
-  }, [activeFeatured, featuredRecords]);
+  const safeActiveIndex = featuredRecords.length
+    ? activeIndex % featuredRecords.length
+    : 0;
+  const goToPinnedSeries = useCallback((index: number) => {
+    if (!featuredRecords.length) return;
+    setActiveIndex(
+      (index + featuredRecords.length) % featuredRecords.length,
+    );
+  }, [featuredRecords.length]);
 
-  useEffect(() => {
-    if (paused || featuredRecords.length < 2) return;
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        setFeaturedIndex((current) => (current + 1) % featuredRecords.length);
-      }
-    }, 6_000);
-    return () => window.clearInterval(interval);
-  }, [featuredRecords.length, paused]);
+  function movePinnedSeries(direction: -1 | 1) {
+    goToPinnedSeries(safeActiveIndex + direction);
+  }
+
+  const visiblePinnedSlots = useMemo(() => {
+    if (!featuredRecords.length) return [];
+    if (featuredRecords.length === 1) {
+      return [{ position: 0 as const, index: 0, record: featuredRecords[0]! }];
+    }
+    if (featuredRecords.length === 2) {
+      const otherIndex = (safeActiveIndex + 1) % 2;
+      return [
+        { position: 0 as const, index: safeActiveIndex, record: featuredRecords[safeActiveIndex]! },
+        { position: 1 as const, index: otherIndex, record: featuredRecords[otherIndex]! },
+      ];
+    }
+    return ([-1, 0, 1] as const).map((position) => {
+      const index =
+        (safeActiveIndex + position + featuredRecords.length) % featuredRecords.length;
+      return { position, index, record: featuredRecords[index]! };
+    });
+  }, [featuredRecords, safeActiveIndex]);
 
   if (!loading && (error || !records.length)) return null;
   return (
@@ -349,35 +380,65 @@ export function PinnedSeriesSection({
       />
       {loading ? (
         <PinnedLoading />
-      ) : activeFeatured ? (
-        <div
-          className="v481-pinned-bento"
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
-          onFocusCapture={() => setPaused(true)}
-          onBlurCapture={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setPaused(false);
-          }}
-        >
-          <span className="v481-feature-slot" key={activeFeatured.id}>
-            <PinnedSeriesCard record={activeFeatured} featured />
-            {featuredRecords.length > 1 ? (
-              <span className="v481-feature-dots" aria-label="Featured pin position">
-                {featuredRecords.map((record, index) => (
-                  <button
-                    type="button"
-                    key={record.id}
-                    aria-label={`Show ${record.title}`}
-                    aria-current={index === featuredIndex % featuredRecords.length}
-                    onClick={() => setFeaturedIndex(index)}
-                  />
-                ))}
-              </span>
-            ) : null}
-          </span>
-          {surroundingRecords.map((record) => (
-            <PinnedSeriesCard key={record.id} record={record} />
-          ))}
+      ) : featuredRecords.length ? (
+        <div className="v481-pinned-stage">
+          {featuredRecords.length > 1 ? (
+            <button
+              className="v481-pinned-arrow is-previous"
+              type="button"
+              aria-label="Previous Pinned Series"
+              onClick={() => movePinnedSeries(-1)}
+            >
+              <CaretLeft size={21} />
+            </button>
+          ) : null}
+          <div
+            className="v481-pinned-carousel"
+            aria-label="Pinned Series carousel"
+            tabIndex={0}
+            data-count={featuredRecords.length}
+            onPointerDown={(event) => {
+              if (event.pointerType !== "mouse") swipeStartRef.current = event.clientX;
+            }}
+            onPointerUp={(event) => {
+              const start = swipeStartRef.current;
+              swipeStartRef.current = null;
+              if (start === null || Math.abs(event.clientX - start) < 48) return;
+              movePinnedSeries(event.clientX < start ? 1 : -1);
+            }}
+            onPointerCancel={() => { swipeStartRef.current = null; }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                movePinnedSeries(-1);
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                movePinnedSeries(1);
+              }
+            }}
+          >
+            {visiblePinnedSlots.map(({ record, index, position }) => (
+              <PinnedSeriesCard
+                key={`${record.id}:${position}`}
+                record={record}
+                featured
+                active={position === 0}
+                index={index}
+                position={position}
+                onActivate={() => goToPinnedSeries(index)}
+              />
+            ))}
+          </div>
+          {featuredRecords.length > 1 ? (
+            <button
+              className="v481-pinned-arrow is-next"
+              type="button"
+              aria-label="Next Pinned Series"
+              onClick={() => movePinnedSeries(1)}
+            >
+              <CaretRight size={21} />
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -617,9 +678,24 @@ const HOME_FEATURE_CSS = `
   .v481-feature-heading .latest-all-action { display:inline-flex; min-height:2.45rem; align-items:center; gap:.35rem; padding-inline:.9rem; border-radius:var(--site-button-radius,var(--radius-small)); }
   .v481-rail-controls button { display:grid; width:2.35rem; height:2.35rem; place-items:center; border:1px solid var(--line); border-radius:var(--site-button-radius,var(--radius-small)); background:var(--surface); color:var(--text); cursor:pointer; }
   .v481-rail-controls button:is(:hover,:focus-visible) { border-color:var(--accent); color:var(--accent); }
+  .v481-pinned-section .v481-feature-heading > div:first-child > span { border-color:rgb(255 216 119 / 58%); background:rgb(67 45 7 / 48%); color:#ffd877; box-shadow:0 0 1.15rem rgb(225 166 28 / 22%); }
+  .v481-pinned-stage { position:relative; overflow:hidden; isolation:isolate; }
+  .v481-pinned-carousel { display:grid; min-width:0; grid-template-columns:minmax(6rem,.32fr) minmax(0,1fr) minmax(6rem,.32fr); align-items:stretch; gap:.8rem; padding:.25rem 3.8rem .8rem; outline:none; }
+  .v481-pinned-carousel > .v481-pin-card { min-height:24rem; }
+  .v481-pinned-carousel > .v481-pin-card[data-pin-position='-1'] { grid-column:1; }
+  .v481-pinned-carousel > .v481-pin-card[data-pin-position='0'] { grid-column:2; }
+  .v481-pinned-carousel > .v481-pin-card[data-pin-position='1'] { grid-column:3; }
+  .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) { opacity:.58; transform:scale(.9); filter:saturate(.72); }
+  .v481-pinned-arrow { position:absolute; z-index:8; top:50%; display:grid; width:2.8rem; height:2.8rem; place-items:center; padding:0; transform:translateY(-50%); border:1px solid color-mix(in srgb,#f5c451 62%,var(--line)); border-radius:50%; background:color-mix(in srgb,var(--bg) 82%,transparent); color:#ffd877; box-shadow:0 .8rem 2rem rgb(0 0 0 / 35%); cursor:pointer; backdrop-filter:blur(.8rem); }
+  .v481-pinned-arrow.is-previous { left:.75rem; }
+  .v481-pinned-arrow.is-next { right:.75rem; }
+  .v481-pinned-arrow:is(:hover,:focus-visible) { border-color:#ffd877; background:color-mix(in srgb,#d79c18 18%,var(--bg)); }
   .v481-pinned-bento { display:grid; min-height:31rem; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:.8rem; }
   .v481-feature-slot { position:relative; display:block; min-width:0; grid-column:span 2; grid-row:span 2; animation:v481-pin-fade .48s ease both; }
-  .v481-pin-card { position:relative; display:block; min-width:0; height:100%; overflow:hidden; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:var(--surface-strong); color:#fff; isolation:isolate; }
+  .v481-pin-card { position:relative; display:block; min-width:0; height:100%; overflow:hidden; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:var(--surface-strong); color:#fff; isolation:isolate; transition:border-color .24s ease,box-shadow .24s ease,transform .24s ease; }
+  .v481-pinned-carousel > .v481-pin-card[data-active='true'] { border-color:transparent; box-shadow:0 0 0 1px rgb(247 198 77 / 35%),0 0 2.2rem rgb(226 166 30 / 28%),0 1.4rem 3rem rgb(0 0 0 / 34%); transform:scale(.985); }
+  .v481-pinned-carousel > .v481-pin-card[data-active='true']::after { position:absolute; z-index:6; inset:0; padding:2px; border-radius:inherit; background:conic-gradient(from var(--v487-pin-angle),transparent 0 56%,#fff0a8 64%,#e4a91d 74%,transparent 82%); content:''; pointer-events:none; -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; animation:v487-pin-orbit 2.8s linear infinite; }
+  .v481-featured-badge { position:absolute; z-index:5; top:.85rem; left:.85rem; display:inline-flex; min-height:1.85rem; align-items:center; padding:.32rem .62rem; border:1px solid rgb(255 216 119 / 72%); border-radius:.48rem; background:rgb(42 29 5 / 78%); color:#ffd877; font-size:.64rem; font-weight:900; letter-spacing:.08em; text-transform:uppercase; box-shadow:0 0 1.15rem rgb(225 166 28 / 24%); backdrop-filter:blur(.7rem); }
   .v481-pin-card > img,.v481-pin-card > .v481-art-placeholder { position:absolute; z-index:-2; inset:0; width:100%; height:100%; object-fit:cover; transition:transform .45s ease; }
   .v481-pin-card:hover > img { transform:scale(1.035); }
   .v481-pin-shade { position:absolute; z-index:-1; inset:0; background:linear-gradient(180deg,transparent 24%,rgb(2 9 20 / 22%) 48%,rgb(2 9 20 / 94%) 100%); }
@@ -632,7 +708,8 @@ const HOME_FEATURE_CSS = `
   .v481-feature-dots button { width:.5rem; height:.5rem; padding:0; border:0; border-radius:999px; background:rgb(255 255 255 / 42%); cursor:pointer; }
   .v481-feature-dots button[aria-current='true'] { width:1.25rem; background:var(--accent); }
   .v481-art-placeholder { display:grid; place-items:center; background:linear-gradient(135deg,var(--surface-strong),color-mix(in srgb,var(--accent) 16%,var(--surface-2))); color:var(--muted); }
-  .v481-pinned-bento.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span { display:block; min-height:12rem; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:linear-gradient(100deg,var(--surface) 25%,var(--surface-2) 42%,var(--surface) 62%); background-size:300% 100%; animation:v481-skeleton 1.4s ease infinite; }
+  .v481-pinned-bento.is-loading > span,.v481-pinned-carousel.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span { display:block; min-height:12rem; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:linear-gradient(100deg,var(--surface) 25%,var(--surface-2) 42%,var(--surface) 62%); background-size:300% 100%; animation:v481-skeleton 1.4s ease infinite; }
+  .v481-pinned-carousel.is-loading > span { min-height:24rem; scroll-snap-align:start; }
   .v481-pinned-bento.is-loading > span:first-child { grid-column:span 2; grid-row:span 2; }
   .v481-discounts-section { padding-block:clamp(1rem,2.3vw,1.6rem); border:1px solid color-mix(in srgb,var(--warning) 24%,var(--line)); border-radius:calc(var(--site-card-radius,var(--radius)) + .25rem); background:color-mix(in srgb,var(--warning) 6%,var(--surface)); }
   .v481-discount-rail { display:grid; grid-auto-columns:minmax(20rem,25rem); grid-auto-flow:column; gap:.8rem; overflow-x:auto; overscroll-behavior-inline:contain; padding:.1rem .1rem .55rem; scroll-snap-type:inline mandatory; scrollbar-width:thin; }
@@ -666,10 +743,12 @@ const HOME_FEATURE_CSS = `
   .v481-empty-state { display:grid; min-height:16rem; place-content:center; justify-items:center; gap:.4rem; border:1px dashed var(--line); border-radius:var(--site-card-radius,var(--radius)); color:var(--muted); text-align:center; }
   .v481-empty-state h2,.v481-empty-state p { margin:0; }
   @keyframes v481-pin-fade { from { opacity:.15; transform:translateY(.3rem); } to { opacity:1; transform:none; } }
+  @property --v487-pin-angle { syntax:'<angle>'; initial-value:0deg; inherits:false; }
+  @keyframes v487-pin-orbit { to { --v487-pin-angle:360deg; } }
   @keyframes v481-skeleton { 0% { background-position:100% 0; } 100% { background-position:0 0; } }
-  @media (prefers-reduced-motion:reduce) { .v481-feature-slot,.v481-pinned-bento.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span { animation:none; } .v481-pin-card > img { transition:none; } }
+  @media (prefers-reduced-motion:reduce) { .v481-feature-slot,.v481-pinned-bento.is-loading > span,.v481-pinned-carousel.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span,.v481-pinned-carousel > .v481-pin-card[data-active='true']::after { animation:none; } .v481-pin-card,.v481-pin-card > img { transition:none; } }
   @media (max-width:850px) { .v481-pinned-bento { min-height:26rem; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:14rem repeat(2,10rem); } .v481-feature-slot,.v481-pinned-bento.is-loading > span:first-child { grid-column:1 / -1; grid-row:span 1; } .v481-discount-grid { grid-template-columns:1fr; } }
-  @media (max-width:600px) { .v481-feature-heading { align-items:flex-start; } .v481-heading-actions { flex-wrap:wrap; justify-content:flex-end; } .v481-rail-controls { display:none; } .v481-pinned-bento { min-height:0; grid-template-rows:14rem repeat(2,8.5rem); gap:.55rem; } .v481-pin-copy { padding:.72rem; } .v481-pin-copy small { font-size:.58rem; } .v481-pin-copy strong { font-size:.9rem; } .v481-feature-slot .v481-pin-copy strong { font-size:1.15rem; } .v481-discount-rail { grid-auto-columns:min(88vw,22rem); } .v481-ticket { grid-template-columns:6.5rem .65rem minmax(0,1fr); } .v481-ticket-cover { min-height:11rem; } .v481-directory-header { grid-template-columns:auto minmax(0,1fr); align-items:start; } .v481-directory-header > .v481-sort-control { grid-column:1 / -1; width:100%; } .v481-sort-control select { width:100%; } .v481-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .v481-directory-grid .v481-pin-card { min-height:14rem; } }
+  @media (max-width:600px) { .v481-feature-heading { align-items:flex-start; } .v481-heading-actions { flex-wrap:wrap; justify-content:flex-end; } .v481-rail-controls button { width:2.2rem; height:2.2rem; } .v481-pinned-carousel { grid-template-columns:minmax(3.25rem,.24fr) minmax(0,1fr) minmax(3.25rem,.24fr); gap:.4rem; padding:.2rem 1.7rem .65rem; } .v481-pinned-carousel > .v481-pin-card,.v481-pinned-carousel.is-loading > span { min-height:17rem; } .v481-pinned-arrow { width:2.4rem; height:2.4rem; } .v481-pinned-arrow.is-previous { left:.35rem; } .v481-pinned-arrow.is-next { right:.35rem; } .v481-featured-badge { top:.65rem; left:.65rem; } .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) .v481-pin-copy { display:none; } .v481-pinned-bento { min-height:0; grid-template-rows:14rem repeat(2,8.5rem); gap:.55rem; } .v481-pin-copy { padding:.9rem; } .v481-pin-copy small { font-size:.58rem; } .v481-pin-copy strong { font-size:1.15rem; } .v481-feature-slot .v481-pin-copy strong { font-size:1.15rem; } .v481-discount-rail { grid-auto-columns:min(88vw,22rem); } .v481-ticket { grid-template-columns:6.5rem .65rem minmax(0,1fr); } .v481-ticket-cover { min-height:11rem; } .v481-directory-header { grid-template-columns:auto minmax(0,1fr); align-items:start; } .v481-directory-header > .v481-sort-control { grid-column:1 / -1; width:100%; } .v481-sort-control select { width:100%; } .v481-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .v481-directory-grid .v481-pin-card { min-height:14rem; } }
 `;
 
 function HomeFeatureStyles() {

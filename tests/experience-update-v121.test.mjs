@@ -113,7 +113,7 @@ test("notifications are actor-scoped, filterable, persisted, and rendered withou
   assert.doesNotMatch(app, /Neon Ronin chapter 48 is ready/);
 });
 
-test("Latest Updates requests twenty series and exposes Previous and Next pagination", async () => {
+test("Latest Updates requests twelve classic series, fifteen list releases, and exposes pagination", async () => {
   const [app, api] = await Promise.all([
     read("components/nyascans/NyaScansApp.tsx"),
     read("app/api/v1/[...resource]/route.ts"),
@@ -123,9 +123,11 @@ test("Latest Updates requests twenty series and exposes Previous and Next pagina
     app.indexOf("function TrendingShowcase"),
   );
 
-  assert.match(latest, /pageSize=\{20\}/);
-  assert.match(latest, /> Previous/);
-  assert.match(latest, /Next <CaretRight/);
+  assert.match(latest, /pageSize=\{12\}/);
+  assert.match(latest, /pageSize=\$\{useHomeTable \? 15 : pageSize\}/);
+  assert.match(latest, /aria-label="Previous latest updates page"/);
+  assert.match(latest, /aria-label="Next latest updates page"/);
+  assert.match(latest, /className="latest-page-dots"/);
   assert.match(api, /if \(path === "latest-releases"\)/);
   assert.match(api, /\.max\(24\)/);
   assert.match(api, /LIMIT \? OFFSET \?/);

@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import {
+  AdminCombobox,
   AdminPageScaffold,
   ConfirmActionDialog,
   useUnsavedChanges,
@@ -314,6 +315,27 @@ export function DiscountsPanel({
     [draft?.targetType, payload.targets],
   );
 
+  const targetComboboxOptions = useMemo(() => {
+    const options = visibleTargets.map((target) => ({
+      value: targetKey(target),
+      label: targetLabel(target),
+      description: coinLabel(target.originalPrice, settings),
+    }));
+    if (
+      draft?.id &&
+      !visibleTargets.some(
+        (target) => targetKey(target) === draftTargetKey(draft),
+      )
+    ) {
+      options.unshift({
+        value: draftTargetKey(draft),
+        label: `${draft.seriesTitle} · ${draft.targetLabel}`,
+        description: coinLabel(draft.originalPrice, settings),
+      });
+    }
+    return options;
+  }, [draft, settings, visibleTargets]);
+
   const visibleDiscounts = useMemo(() => {
     const normalized = listQuery.trim().toLocaleLowerCase("en-US");
     if (!normalized) return payload.discounts;
@@ -591,21 +613,15 @@ export function DiscountsPanel({
                 </label>
                 <label className="v481-span-two">
                   Content
-                  <select
+                  <AdminCombobox
                     value={draft.seriesId ? draftTargetKey(draft) : ""}
                     disabled={Boolean(draft.id)}
-                    onChange={(event) => selectTarget(event.target.value)}
-                  >
-                    <option value="">Select content…</option>
-                    {draft.id && !visibleTargets.some((target) => targetKey(target) === draftTargetKey(draft)) ? (
-                      <option value={draftTargetKey(draft)}>{draft.seriesTitle} · {draft.targetLabel}</option>
-                    ) : null}
-                    {visibleTargets.map((target) => (
-                      <option key={targetKey(target)} value={targetKey(target)}>
-                        {targetLabel(target)} · {coinLabel(target.originalPrice, settings)}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel="Discount content target"
+                    placeholder="Search paid content"
+                    emptyLabel="Select content…"
+                    options={targetComboboxOptions}
+                    onChange={selectTarget}
+                  />
                 </label>
                 <label>
                   Reduction type
@@ -664,7 +680,7 @@ export function DiscountsPanel({
                 </div>
               </aside>
             </div>
-            <footer className="v481-editor-actions">
+            <footer className="admin-sticky-actions v481-editor-actions">
               <button className="button button-secondary" type="button" disabled={busy} onClick={closeEditor}>Cancel</button>
               <button className="button button-primary" type="button" disabled={busy || !draftIsValid} onClick={() => void saveDraft()}>
                 {busy ? <SpinnerGap className="spin" /> : <Tag />}

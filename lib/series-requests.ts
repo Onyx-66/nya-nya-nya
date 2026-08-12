@@ -37,6 +37,7 @@ export const seriesRequestMetadataSchema = z
       "HIATUS",
       "UPCOMING",
     ]),
+    publicationYear: z.number().int().min(1800).max(2200).nullable().default(null),
     authors: z.array(lookupEntitySchema).max(30).default([]),
     artists: z.array(lookupEntitySchema).max(30).default([]),
     publisherName: z.string().trim().max(180).default(""),

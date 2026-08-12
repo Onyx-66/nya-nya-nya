@@ -39,8 +39,16 @@ test("publishing-team aggregates count unique public followers and releases", as
     );
     CREATE TABLE chapters (
       id TEXT PRIMARY KEY, series_id TEXT, team_id TEXT,
-      state TEXT, visibility TEXT, published_at TEXT, language TEXT
+      state TEXT, visibility TEXT, published_at TEXT, language TEXT,
+      access_type TEXT, free_at TEXT
     );
+    CREATE TABLE content_visibility_overrides (
+      chapter_id TEXT, access_type TEXT, auto_free_exempt INTEGER
+    );
+    CREATE TABLE commercial_settings (
+      id TEXT, revision INTEGER, settings_json TEXT
+    );
+    CREATE TABLE feature_flags (key TEXT, enabled INTEGER);
     CREATE TABLE follows (user_id TEXT, series_id TEXT);
     CREATE TABLE analytics_events (
       id TEXT PRIMARY KEY, event_type TEXT, series_slug TEXT
@@ -69,14 +77,18 @@ test("publishing-team aggregates count unique public followers and releases", as
       ('reader-c', 'series-draft'),
       ('reader-d', 'series-revoked');
     INSERT INTO chapters VALUES
-      ('chapter-public', 'series-1', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en'),
-      ('chapter-future', 'series-2', 'team-1', 'PUBLISHED', 'PUBLIC', '2999-01-01T00:00:00Z', 'en'),
-      ('chapter-draft-series', 'series-draft', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en'),
-      ('chapter-revoked', 'series-revoked', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en'),
-      ('chapter-private', 'series-1', 'team-1', 'PUBLISHED', 'PRIVATE', '2020-01-01T00:00:00Z', 'en');
+      ('chapter-public', 'series-1', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en', 'FREE', NULL),
+      ('chapter-future', 'series-2', 'team-1', 'PUBLISHED', 'PUBLIC', '2999-01-01T00:00:00Z', 'en', 'FREE', NULL),
+      ('chapter-draft-series', 'series-draft', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en', 'FREE', NULL),
+      ('chapter-revoked', 'series-revoked', 'team-1', 'PUBLISHED', 'PUBLIC', '2020-01-01T00:00:00Z', 'en', 'FREE', NULL),
+      ('chapter-private', 'series-1', 'team-1', 'PUBLISHED', 'PRIVATE', '2020-01-01T00:00:00Z', 'en', 'FREE', NULL);
   `);
 
-  const row = database.prepare(query).get(10);
+  const executableQuery = query.replace(
+    /\$\{publicPaidChapterPredicate\("c", "visibility_override"\)\}/u,
+    "1 = 1",
+  );
+  const row = database.prepare(executableQuery).get(10);
   assert.equal(Number(row.publicSeriesCount), 2);
   assert.equal(Number(row.releaseCount), 2);
   assert.equal(Number(row.followerCount), 3);

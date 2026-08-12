@@ -2,6 +2,10 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +26,8 @@ export async function GET(request: Request) {
       `SELECT c.thumbnail_key AS thumbnailKey
          FROM chapters c
          JOIN series s ON s.id = c.series_id
+         LEFT JOIN content_visibility_overrides visibility_override
+           ON visibility_override.chapter_id = c.id
         WHERE c.id = ?
           AND c.thumbnail_key IS NOT NULL
           AND c.state = 'PUBLISHED'
@@ -30,6 +36,8 @@ export async function GET(request: Request) {
           AND datetime(c.published_at) <= datetime('now')
           AND s.is_published = 1
           AND s.archived_at IS NULL
+          AND ${publicPaidSeriesPredicate("s")}
+          AND ${publicPaidChapterPredicate("c", "visibility_override")}
           AND s.rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
         LIMIT 1`,
@@ -54,7 +62,7 @@ export async function GET(request: Request) {
     return new Response(object.body, {
       headers: {
         "content-type": object.httpMetadata?.contentType ?? "image/webp",
-        "cache-control": "public, max-age=300, stale-while-revalidate=3600",
+        "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         "x-request-id": requestId,
       },

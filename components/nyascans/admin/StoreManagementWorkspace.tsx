@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CommercialSettingsPanel } from "@/components/nyascans/CommercialSettingsPanel";
 import { StoreManagementPanel } from "@/components/nyascans/StoreManagementPanel";
 import { CommerceOfferManager } from "@/components/nyascans/admin/CommerceOfferManager";
+import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 
 export type StoreAdminCategory =
+  | "offers"
   | "coins"
   | "memberships"
   | "banners"
@@ -27,6 +30,12 @@ const categories: Array<{
   summary: string;
   tools: string[];
 }> = [
+  {
+    key: "offers",
+    label: "Offers & Pricing",
+    summary: "All offers, checkout pricing, and commercial availability",
+    tools: ["Offer catalog", "Pricing & lifecycle", "Checkout settings"],
+  },
   {
     key: "coins",
     label: "Coins",
@@ -70,7 +79,7 @@ const categoryGroups: Array<{
     label: "Revenue and access",
     summary:
       "Customer-facing packages, recurring plans, pricing, and availability.",
-    categories: ["coins", "memberships"],
+    categories: ["offers", "coins", "memberships"],
   },
   {
     key: "personalization",
@@ -82,21 +91,35 @@ const categoryGroups: Array<{
 ];
 
 export function StoreManagementWorkspace({
-  initialCategory = "coins",
+  initialCategory = "offers",
+  actorRole,
+  capabilities,
   onCategoryChange,
 }: {
   initialCategory?: StoreAdminCategory;
+  actorRole: string;
+  capabilities: readonly string[];
   onCategoryChange?: (
     category: StoreAdminCategory,
     confirmedDiscard: boolean,
   ) => void;
 }) {
+  const canManageCommerce = capabilities.includes("commerce.manage");
+  const canManageStore = capabilities.includes("store.manage");
+  const availableCategories = categories.filter((item) =>
+    ["offers", "coins", "memberships"].includes(item.key)
+      ? canManageCommerce
+      : canManageStore,
+  );
   const [category, setCategory] = useState<StoreAdminCategory>(initialCategory);
+  const [pendingCategory, setPendingCategory] =
+    useState<StoreAdminCategory | null>(null);
   const [dirtyState, setDirtyState] = useState({
     dirty: false,
     label: "Store changes",
   });
   const [counts, setCounts] = useState<Record<StoreAdminCategory, number>>({
+    offers: 0,
     coins: 0,
     memberships: 0,
     banners: 0,
@@ -154,26 +177,40 @@ export function StoreManagementWorkspace({
       });
   }, []);
 
-  function open(next: StoreAdminCategory) {
-    if (next === category) return;
-    const confirmedDiscard =
-      dirtyState.dirty &&
-      window.confirm(`Discard unsaved ${dirtyState.label}?`);
-    if (dirtyState.dirty && !confirmedDiscard) return;
+  function applyCategory(
+    next: StoreAdminCategory,
+    confirmedDiscard: boolean,
+  ) {
     setCategory(next);
     window.sessionStorage.setItem("nyascans-admin-store-category", next);
     onCategoryChange?.(next, confirmedDiscard);
   }
 
+  function open(next: StoreAdminCategory) {
+    if (next === category) return;
+    if (dirtyState.dirty) {
+      setPendingCategory(next);
+      return;
+    }
+    applyCategory(next, false);
+  }
+
+  const effectiveCategory = availableCategories.some(
+    (item) => item.key === category,
+  )
+    ? category
+    : (availableCategories[0]?.key ?? "offers");
   const selectedCategory =
-    categories.find((item) => item.key === category) ?? categories[0]!;
+    availableCategories.find((item) => item.key === effectiveCategory) ??
+    categories[0]!;
 
   return (
+    <>
     <section className="store-management-workspace">
       <header className="store-management-heading">
         <div>
-          <span className="ops-kicker">Marketplace inventory</span>
-          <h2>Store Management</h2>
+          <span className="ops-kicker">Monetization</span>
+          <h1>Store</h1>
           <p>
             Each Store category has isolated tools, queries, media, statuses,
             and customer-facing previews.
@@ -181,7 +218,15 @@ export function StoreManagementWorkspace({
         </div>
       </header>
       <div className="store-management-groups">
-        {categoryGroups.map((group) => (
+        {categoryGroups
+          .map((group) => ({
+            ...group,
+            categories: group.categories.filter((categoryKey) =>
+              availableCategories.some((item) => item.key === categoryKey),
+            ),
+          }))
+          .filter((group) => group.categories.length > 0)
+          .map((group) => (
           <section key={group.key} className="store-management-group">
             <header>
               <span>{group.label}</span>
@@ -192,7 +237,7 @@ export function StoreManagementWorkspace({
                 const item = categories.find(
                   (candidate) => candidate.key === categoryKey,
                 )!;
-                const active = category === item.key;
+                const active = effectiveCategory === item.key;
                 return (
                   <button
                     key={item.key}
@@ -207,7 +252,9 @@ export function StoreManagementWorkspace({
                       <strong>{item.label}</strong>
                       <em>
                         {countsLoaded
-                          ? `${counts[item.key]} live`
+                          ? item.key === "offers"
+                            ? "All offers"
+                            : `${counts[item.key]} live`
                           : "Count unavailable"}
                       </em>
                     </span>
@@ -238,23 +285,31 @@ export function StoreManagementWorkspace({
         <small>{selectedCategory.summary}</small>
       </div>
       <div className="store-management-active-panel">
-        {category === "coins" ? (
+        {effectiveCategory === "offers" ? (
+          <CommerceOfferManager
+            key="offers"
+            embedded
+            settingsPanel={<CommercialSettingsPanel actorRole={actorRole} />}
+          />
+        ) : effectiveCategory === "coins" ? (
           <CommerceOfferManager
             key="coins"
+            embedded
             initialKind="CURRENCY_PACKAGE"
           />
-        ) : category === "memberships" ? (
+        ) : effectiveCategory === "memberships" ? (
           <CommerceOfferManager
             key="memberships"
+            embedded
             initialKind="MEMBERSHIP"
           />
-        ) : category === "banners" ? (
+        ) : effectiveCategory === "banners" ? (
           <StoreManagementPanel
             title="Banner Management"
             categoryFilter={bannerCategories}
             defaultCategory="PROFILE_BANNER"
           />
-        ) : category === "cosmetics" ? (
+        ) : effectiveCategory === "cosmetics" ? (
           <StoreManagementPanel
             title="Cosmetics Management"
             categoryFilter={cosmeticCategories}
@@ -269,5 +324,19 @@ export function StoreManagementWorkspace({
         )}
       </div>
     </section>
+      <ConfirmActionDialog
+        open={Boolean(pendingCategory)}
+        title={`Discard unsaved ${dirtyState.label}?`}
+        description="The current store editor draft will be discarded before another category opens. Existing saved offers and settings will not change."
+        confirmLabel="Discard and switch category"
+        destructive
+        onCancel={() => setPendingCategory(null)}
+        onConfirm={() => {
+          const next = pendingCategory;
+          setPendingCategory(null);
+          if (next) applyCategory(next, true);
+        }}
+      />
+    </>
   );
 }

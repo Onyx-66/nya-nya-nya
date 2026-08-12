@@ -191,20 +191,24 @@ test("support, slider artwork, analytics, and mobile Upload Center are functiona
     supportAdminRoute,
     supportView,
     supportAdminView,
+    navigation,
     app,
     seriesAdmin,
     analytics,
     styles,
+    adminStyles,
   ] =
     await Promise.all([
       read("app/api/v1/support-tickets/route.ts"),
       read("app/api/v1/admin/support-tickets/route.ts"),
       read("components/nyascans/SupportTicketPanel.tsx"),
       read("components/nyascans/admin/SupportTicketsAdminPanel.tsx"),
+      read("lib/admin-navigation.ts"),
       read("components/nyascans/NyaScansApp.tsx"),
       read("components/nyascans/admin/SeriesManagementPanel.tsx"),
       read("components/nyascans/OperationsControlPanel.tsx"),
       read("app/globals.css"),
+      read("app/admin.css"),
     ]);
 
   assert.match(supportRoute, /requireActor/u);
@@ -218,14 +222,15 @@ test("support, slider artwork, analytics, and mobile Upload Center are functiona
   assert.match(supportView, /id="support-ticket-form"/u);
   assert.match(supportView, /Ticket history/u);
   assert.match(supportView, /Reply to support/u);
-  assert.match(supportAdminView, /Support tickets/u);
+  assert.match(supportAdminView, /Support [Tt]ickets/u);
   assert.match(supportAdminView, /Send reply/u);
-  assert.match(app, /\["Support tickets", Lifebuoy\]/u);
+  assert.match(navigation, /slug: "support-tickets"[\s\S]+label: "Support Tickets"/u);
   assert.match(seriesAdmin, /label="Featured slider image"/u);
   assert.match(seriesAdmin, /1200 × 1200 px \(1:1\)/u);
   assert.match(app, /item\.slider \?\? item\.cover/u);
   assert.match(styles, /data-featured-slider-style="kakao-panels"[\s\S]+aspect-ratio:\s*1/u);
   assert.match(analytics, /analytics-data-fallback/u);
   assert.match(analytics, /<title>/u);
-  assert.match(styles, /\.ops-shell\.is-upload-center \.ops-sidebar/u);
+  assert.match(adminStyles, /\.admin-subnav/u);
+  assert.match(adminStyles, /@media \(max-width: 1023px\)[\s\S]+transform: translateX\(-100%\)/u);
 });

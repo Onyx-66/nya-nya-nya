@@ -37,6 +37,7 @@ type RequestMutationRow = {
   description: string;
   seriesType: string;
   publicationStatus: string;
+  publicationYear: number | null;
   authorsJson: string;
   artistsJson: string;
   publisherName: string;
@@ -68,6 +69,7 @@ function mutationSelect() {
            description,
            series_type AS seriesType,
            publication_status AS publicationStatus,
+           publication_year AS publicationYear,
            authors_json AS authorsJson,
            artists_json AS artistsJson,
            publisher_name AS publisherName,
@@ -125,6 +127,7 @@ function requestWriteValues(metadata: SeriesRequestMetadata) {
     metadata.description,
     metadata.seriesType,
     metadata.publicationStatus,
+    metadata.publicationYear,
     JSON.stringify(metadata.authors),
     JSON.stringify(metadata.artists),
     metadata.publisherName,
@@ -198,6 +201,7 @@ function changedFields(
       current.publicationStatus,
       metadata.publicationStatus,
     ],
+    ["publicationYear", current.publicationYear, metadata.publicationYear],
     ["authors", current.authorsJson, JSON.stringify(metadata.authors)],
     ["artists", current.artistsJson, JSON.stringify(metadata.artists)],
     ["publisherName", current.publisherName, metadata.publisherName],
@@ -242,13 +246,13 @@ export async function createSeriesRequestDraft(
         `INSERT INTO series_requests
          (id, submitting_team_id, submitter_user_id, status,
           primary_title, normalized_title, alternative_titles_json,
-          description, series_type, publication_status, authors_json,
+          description, series_type, publication_status, publication_year, authors_json,
           artists_json, publisher_name, origin_country, original_language,
           reading_direction, genres_json, mangadex_id, mangadex_url,
           mangaupdates_id, mangaupdates_url, canonical_source_url,
           submitter_notes, duplicate_confirmation, duplicate_explanation)
          SELECT ?, ?, ?, 'DRAFT',
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE ${auth.sql}`,
       )
       .bind(
@@ -412,6 +416,7 @@ export async function updateSeriesRequest(
               description = ?,
               series_type = ?,
               publication_status = ?,
+              publication_year = ?,
               authors_json = ?,
               artists_json = ?,
               publisher_name = ?,
@@ -860,6 +865,7 @@ export async function cloneSeriesRequestToDraft(
     seriesType: current.seriesType as SeriesRequestMetadata["seriesType"],
     publicationStatus:
       current.publicationStatus as SeriesRequestMetadata["publicationStatus"],
+    publicationYear: current.publicationYear,
     authors: JSON.parse(current.authorsJson),
     artists: JSON.parse(current.artistsJson),
     publisherName: current.publisherName,

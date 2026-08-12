@@ -56,6 +56,7 @@ type TeamRow = {
   updatedAt: string;
   memberCount: number;
   seriesCount: number;
+  releaseCount: number;
   membersJson: string;
   seriesJson: string;
   activityJson: string;
@@ -134,6 +135,7 @@ function mapTeam(row: TeamRow) {
     revision: Number(row.revision),
     memberCount: Number(row.memberCount),
     seriesCount: Number(row.seriesCount),
+    releaseCount: Number(row.releaseCount),
     members: parseArray(row.membersJson),
     series: parseArray(row.seriesJson),
     activity: parseArray(row.activityJson),
@@ -158,6 +160,8 @@ const teamSelect = `
            WHERE tm.team_id = t.id AND tm.status = 'ACTIVE') AS memberCount,
          (SELECT COUNT(*) FROM series_team_assignments sta
            WHERE sta.team_id = t.id) AS seriesCount,
+         (SELECT COUNT(*) FROM chapters c
+           WHERE c.team_id = t.id) AS releaseCount,
          COALESCE((
            SELECT json_group_array(json_object(
              'userId', u.id,
@@ -180,7 +184,16 @@ const teamSelect = `
              'slug', s.slug,
              'canUpload', sta.can_upload,
              'canPublish', sta.can_publish,
-             'isPrimary', sta.is_primary
+             'isPrimary', sta.is_primary,
+             'chapterCount', (SELECT COUNT(*) FROM chapters chapter_count
+               WHERE chapter_count.series_id = s.id AND chapter_count.team_id = t.id),
+             'publishedCount', (SELECT COUNT(*) FROM chapters published_count
+               WHERE published_count.series_id = s.id
+                 AND published_count.team_id = t.id
+                 AND published_count.state = 'PUBLISHED'),
+             'latestReleaseAt', (SELECT MAX(COALESCE(latest_release.published_at, latest_release.updated_at))
+               FROM chapters latest_release
+               WHERE latest_release.series_id = s.id AND latest_release.team_id = t.id)
            ))
            FROM series_team_assignments sta
            JOIN series s ON s.id = sta.series_id

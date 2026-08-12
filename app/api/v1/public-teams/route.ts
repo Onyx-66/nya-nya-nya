@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import { publicPaidChapterPredicate } from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
                 LOWER(c.language) AS language
            FROM chapters c
            JOIN series s ON s.id = c.series_id
+           LEFT JOIN content_visibility_overrides visibility_override
+             ON visibility_override.chapter_id = c.id
           WHERE c.team_id IS NOT NULL
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
@@ -51,6 +54,7 @@ export async function GET(request: Request) {
             AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
             AND s.rights_status IN
               ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+            AND ${publicPaidChapterPredicate("c", "visibility_override")}
        ),
        public_team_followers AS (
          SELECT release.teamId,
@@ -121,7 +125,7 @@ export async function GET(request: Request) {
     return json(
       requestId,
       {
-        data: records.results.map((record) => ({
+        data: records.results.map((record, index) => ({
           id: record.id,
           slug: record.slug,
           name: record.name,
@@ -135,6 +139,7 @@ export async function GET(request: Request) {
             .filter(Boolean),
           totalViews: Number(record.totalViews),
           commentCount: Number(record.commentCount),
+          rank: index + 1,
           logoUrl: publicTeamMediaUrl(
             record.id,
             record.logoKey,

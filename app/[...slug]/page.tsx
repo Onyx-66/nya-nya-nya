@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { env } from "cloudflare:workers";
 import {
   getAuthenticatedUser,
   safeAuthReturnPath,
 } from "@/app/chatgpt-auth";
 import { NyaScansApp, type AppView } from "@/components/nyascans/NyaScansApp";
-import { findSeries } from "@/lib/catalog";
 import { ApiError } from "@/lib/server/api";
 import { requirePaidEconomyPublicDocument } from "@/lib/server/commercial-settings";
 import { getActor } from "@/lib/server/policy";
+import { requireFeature } from "@/lib/server/feature-flags";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -61,13 +66,52 @@ function resolveView(slug: string[]): {
   return { view: "generic", resourceSlug: root };
 }
 
+async function publicRouteSeries(
+  view: AppView,
+  seriesSlug?: string,
+  chapterSlug?: string,
+) {
+  if (!env.DB || !seriesSlug || !["title", "reader"].includes(view)) {
+    return null;
+  }
+  const chapterJoin = view === "reader"
+    ? `JOIN chapters c ON c.series_id = s.id
+       LEFT JOIN content_visibility_overrides visibility_override
+         ON visibility_override.chapter_id = c.id`
+    : "";
+  const chapterWhere = view === "reader"
+    ? `AND c.slug = ?
+       AND c.state = 'PUBLISHED'
+       AND c.visibility = 'PUBLIC'
+       AND c.published_at IS NOT NULL
+       AND datetime(c.published_at) <= datetime('now')
+       AND ${publicPaidChapterPredicate("c", "visibility_override")}`
+    : "";
+  return env.DB.prepare(
+    `SELECT s.title, s.synopsis
+       FROM series s
+       ${chapterJoin}
+      WHERE s.slug = ?
+        AND s.is_published = 1
+        AND s.archived_at IS NULL
+        AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
+        AND s.rights_status IN
+          ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
+        AND ${publicPaidSeriesPredicate("s")}
+        ${chapterWhere}
+      LIMIT 1`,
+  )
+    .bind(...(view === "reader" ? [seriesSlug, chapterSlug ?? ""] : [seriesSlug]))
+    .first<{ title: string; synopsis: string }>();
+}
+
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { view, resourceSlug } = resolveView(slug);
+  const { view, resourceSlug, chapterSlug } = resolveView(slug);
   if (view === "title" || view === "reader") {
-    const title = findSeries(resourceSlug ?? "");
+    const title = await publicRouteSeries(view, resourceSlug, chapterSlug);
     if (!title) {
       return {
         title: "Series not found",
@@ -126,9 +170,20 @@ export default async function CatchAllPage({
   const { slug } = await params;
   const query = (await searchParams) ?? {};
   const resolved = resolveView(slug);
+  if (
+    ["title", "reader"].includes(resolved.view) &&
+    !(await publicRouteSeries(
+      resolved.view,
+      resolved.resourceSlug,
+      resolved.chapterSlug,
+    ))
+  ) {
+    notFound();
+  }
   if (resolved.view === "discounts") {
     try {
       await requirePaidEconomyPublicDocument();
+      await requireFeature("payments");
     } catch {
       notFound();
     }

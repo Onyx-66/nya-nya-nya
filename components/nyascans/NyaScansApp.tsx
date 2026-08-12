@@ -56,6 +56,7 @@ import {
   Storefront,
   Sun,
   Tag,
+  ThumbsUp,
   Trash,
   Trophy,
   Translate,
@@ -82,7 +83,6 @@ import {
   type ReactNode,
 } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
-import { DiscussionSettingsPanel } from "@/components/nyascans/DiscussionSettingsPanel";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
 import { HotThisWeek } from "@/components/nyascans/HotThisWeek";
@@ -116,7 +116,6 @@ import { SeriesReportDialog } from "@/components/nyascans/SeriesReportDialog";
 import { UserLeaderboardView } from "@/components/nyascans/UserLeaderboardView";
 import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
-import { ReactionLibraryPanel } from "@/components/nyascans/admin/ReactionLibraryPanel";
 import { RewardSettingsPanel } from "@/components/nyascans/admin/RewardSettingsPanel";
 import {
   defaultReaderSettings,
@@ -132,7 +131,13 @@ import {
   type CommercialSettings,
 } from "@/lib/commercial-settings";
 import { APP_VERSION } from "@/lib/app-version";
-import { ADMIN_SECTION_CAPABILITIES } from "@/lib/admin-permissions";
+import {
+  ADMIN_COMMON_ACTIONS,
+  adminNavigationGroupsForCapabilities,
+  findAdminNavigationDestination,
+  normalizeAdminNavigationKey,
+  type AdminNavigationChild,
+} from "@/lib/admin-navigation";
 import {
   demoSeries,
   type SeriesCard,
@@ -196,6 +201,13 @@ type Actor = {
   canRequestSeries?: boolean;
   canManageTeam?: boolean;
   capabilities?: string[];
+  adminFeatures?: {
+    premiumUnlocks: boolean;
+    payments: boolean;
+    memberships: boolean;
+    adSupportedUnlocks: boolean;
+    teamPayouts: boolean;
+  };
 };
 
 type HeaderNotification = {
@@ -1623,7 +1635,9 @@ function SeriesTypeBadge({
 function SeriesStatusBadge({ status }: { status: string }) {
   const normalized = status.toUpperCase();
   const tone =
-    normalized === "COMPLETED"
+    normalized === "CANCELLED"
+      ? "cancelled"
+      : normalized === "COMPLETED"
       ? "completed"
       : normalized === "HIATUS" || normalized === "PAUSED"
         ? "paused"
@@ -1703,7 +1717,13 @@ type LiveSeriesSummary = {
   nativeTitle: string | null;
   synopsis: string;
   type: "MANHWA" | "MANGA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+  status:
+    | "ONGOING"
+    | "COMPLETED"
+    | "HIATUS"
+    | "PAUSED"
+    | "CANCELLED"
+    | "UPCOMING";
   accessType: "FREE" | "PAID";
   cover: string | null;
   ratingTenths: number;
@@ -1727,9 +1747,11 @@ function liveSeriesCard(item: LiveSeriesSummary): SeriesCard {
         ? "Hiatus"
         : item.status === "PAUSED"
           ? "Paused"
-          : item.status === "UPCOMING"
-            ? "Upcoming"
-            : "Ongoing";
+          : item.status === "CANCELLED"
+            ? "Cancelled"
+            : item.status === "UPCOMING"
+              ? "Upcoming"
+              : "Ongoing";
   return {
     id: item.id,
     slug: item.slug,
@@ -2227,6 +2249,10 @@ type LatestRelease = {
   }>;
 };
 
+type LatestUpdatesStyle = "classic" | "table";
+
+const LATEST_UPDATES_STYLE_STORAGE_KEY = "nyascans:latest-updates-style";
+
 function releaseTime(value: string) {
   const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
   if (Number.isNaN(date.getTime())) return "Recently";
@@ -2246,6 +2272,14 @@ function releaseAbsoluteTime(value: string) {
   });
 }
 
+function sanitizeChapterTitle(value: string | null | undefined) {
+  return (value ?? "")
+    .replace(/\s*(?:[·•\u2014\u2013:-]\s*)?revised release\b/giu, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[·•\u2014\u2013:-]\s*$/u, "")
+    .trim();
+}
+
 function FreshChapterMark({ fresh }: { fresh?: boolean }) {
   if (!fresh) return null;
   return (
@@ -2263,12 +2297,12 @@ function LatestUpdatesGrid({
   heading = true,
   pagination = false,
   period = "all",
-  pageSize = 6,
+  pageSize = 12,
 }: {
   heading?: boolean;
   pagination?: boolean;
   period?: "today" | "week" | "month" | "all";
-  pageSize?: 6 | 20;
+  pageSize?: number;
 }) {
   const [page, setPage] = useState(1);
   const [records, setRecords] = useState<LatestRelease[]>([]);
@@ -2280,13 +2314,47 @@ function LatestUpdatesGrid({
   const [refreshWarning, setRefreshWarning] = useState("");
   const [revision, setRevision] = useState(0);
   const hasRecordsRef = useRef(false);
-  const [homePeriod, setHomePeriod] = useState<
-    "today" | "week"
-  >("week");
+  const pageSwipeStart = useRef<number | null>(null);
   const [releaseLanguages, setReleaseLanguages] = useState<string[]>([]);
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
-  const effectivePeriod =
-    heading && !pagination ? homePeriod : period;
+  const [homeStyle, setHomeStyle] = useState<LatestUpdatesStyle>("classic");
+  const effectivePeriod = period;
+  const useHomeTable = heading && !pagination && homeStyle === "table";
+
+  useEffect(() => {
+    if (!heading || pagination) return;
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const stored = window.localStorage.getItem(
+          LATEST_UPDATES_STYLE_STORAGE_KEY,
+        );
+        if (stored === "classic" || stored === "table") {
+          setHomeStyle(stored);
+        }
+      } catch {
+        // The classic view remains available when browser storage is disabled.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [heading, pagination]);
+
+  function chooseHomeStyle(nextStyle: LatestUpdatesStyle) {
+    if (nextStyle === homeStyle) return;
+    hasRecordsRef.current = false;
+    setRecords([]);
+    setLoading(true);
+    setError("");
+    setHomeStyle(nextStyle);
+    setPage(1);
+    try {
+      window.localStorage.setItem(
+        LATEST_UPDATES_STYLE_STORAGE_KEY,
+        nextStyle,
+      );
+    } catch {
+      // The current-session choice still works when persistence is unavailable.
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2300,7 +2368,7 @@ function LatestUpdatesGrid({
       setRefreshWarning("");
       try {
         const response = await fetch(
-          `/api/v1/latest-releases?page=${page}&pageSize=${heading && !pagination ? 20 : pageSize}&period=${effectivePeriod}&mode=${heading && !pagination ? "table" : "cards"}${releaseLanguages.length ? `&languages=${encodeURIComponent(releaseLanguages.join(","))}` : ""}`,
+          `/api/v1/latest-releases?page=${page}&pageSize=${useHomeTable ? 15 : pageSize}&period=${effectivePeriod}&mode=${useHomeTable ? "table" : "cards"}${releaseLanguages.length ? `&languages=${encodeURIComponent(releaseLanguages.join(","))}` : ""}`,
           { signal: controller.signal, cache: "no-store" },
         );
         const payload = (await response.json()) as {
@@ -2358,7 +2426,7 @@ function LatestUpdatesGrid({
       window.removeEventListener("focus", refreshVisible);
       controller.abort();
     };
-  }, [effectivePeriod, heading, page, pageSize, pagination, releaseLanguages, revision]);
+  }, [effectivePeriod, page, pageSize, releaseLanguages, revision, useHomeTable]);
 
   const pageNumbers = useMemo(() => {
     const start = Math.max(1, Math.min(page - 2, pageCount - 4));
@@ -2382,38 +2450,59 @@ function LatestUpdatesGrid({
             Date.parse(right.chapter.publishedAt) -
             Date.parse(left.chapter.publishedAt),
         )
-        .slice(0, 12),
+        .slice(0, 15),
     [effectivePeriod, records],
   );
 
+  function movePage(direction: -1 | 1) {
+    setPage((current) =>
+      Math.max(1, Math.min(pageCount, current + direction)),
+    );
+  }
+
+  function beginPageSwipe(event: ReactPointerEvent<HTMLElement>) {
+    if (event.pointerType === "mouse") return;
+    pageSwipeStart.current = event.clientX;
+  }
+
+  function finishPageSwipe(event: ReactPointerEvent<HTMLElement>) {
+    const start = pageSwipeStart.current;
+    pageSwipeStart.current = null;
+    if (start === null) return;
+    const distance = event.clientX - start;
+    if (Math.abs(distance) < 56) return;
+    if (distance < 0 && hasNext) movePage(1);
+    if (distance > 0 && hasPrevious) movePage(-1);
+  }
+
   return (
-    <section className="latest-updates-block">
+    <section className="latest-updates-block" data-latest-style={homeStyle}>
       {heading ? (
         <div className="section-heading latest-updates-heading">
           <div>
             <h2>Latest Updates</h2>
           </div>
           <div className="latest-updates-actions">
-            <div className="latest-home-periods" aria-label="Latest updates period">
+            <div className="latest-style-choices" role="group" aria-label="Latest Updates layout">
               <button
+                className="latest-style-toggle"
                 type="button"
-                aria-pressed={homePeriod === "today"}
-                onClick={() => {
-                  setPage(1);
-                  setHomePeriod("today");
-                }}
+                aria-label="Card view"
+                aria-pressed={homeStyle === "classic"}
+                title="Card view"
+                onClick={() => chooseHomeStyle("classic")}
               >
-                Today
+                <SquaresFour size={18} aria-hidden="true" />
               </button>
               <button
+                className="latest-style-toggle"
                 type="button"
-                aria-pressed={homePeriod === "week"}
-                onClick={() => {
-                  setPage(1);
-                  setHomePeriod("week");
-                }}
+                aria-label="Release list view"
+                aria-pressed={homeStyle === "table"}
+                title="Release list view"
+                onClick={() => chooseHomeStyle("table")}
               >
-                This Week
+                <List size={18} aria-hidden="true" />
               </button>
             </div>
             <details className="latest-language-filter">
@@ -2467,8 +2556,8 @@ function LatestUpdatesGrid({
         </div>
       ) : null}
       {loading ? (
-        <div className="latest-grid latest-loading-grid" aria-busy="true">
-          {Array.from({ length: 6 }, (_, index) => (
+        <div className={`latest-grid latest-loading-grid${useHomeTable ? " is-list" : ""}`} aria-busy="true">
+          {Array.from({ length: useHomeTable ? 15 : pageSize }, (_, index) => (
             <span key={index}>
               <i />
               <b />
@@ -2490,9 +2579,14 @@ function LatestUpdatesGrid({
             Try again
           </button>
         </div>
-      ) : records.length && (pagination || feedRows.length) ? (
-        heading && !pagination ? (
-          <div className="latest-release-table-shell">
+      ) : records.length && (!useHomeTable || feedRows.length) ? (
+        useHomeTable ? (
+          <div
+            key="latest-table"
+            className="latest-release-table-shell"
+            onPointerDown={beginPageSwipe}
+            onPointerUp={finishPageSwipe}
+          >
             <table className="latest-release-table">
               <caption className="sr-only">
                 Latest series releases, newest first
@@ -2502,6 +2596,7 @@ function LatestUpdatesGrid({
                   <th scope="col">Series</th>
                   <th scope="col">Chapter</th>
                   <th scope="col">Releaser</th>
+                  <th scope="col">Status</th>
                   <th scope="col">Date</th>
                 </tr>
               </thead>
@@ -2532,7 +2627,6 @@ function LatestUpdatesGrid({
                           </span>
                           <span>
                             <strong>{update.title}</strong>
-                            <small><SeriesTypeBadge type={update.type} flagOnly /> {update.status.toLowerCase()}</small>
                           </span>
                         </a>
                       </th>
@@ -2541,23 +2635,12 @@ function LatestUpdatesGrid({
                           className="latest-feed-chapter"
                           href={`/title/${update.slug}/chapter/${chapter.slug}`}
                         >
-                          <span
-                            className={`latest-age-dot${chapter.isFresh ? " is-new" : " is-old"}`}
-                            aria-label={chapter.isFresh ? "Released within 24 hours" : "Released more than 24 hours ago"}
-                          />
                           <span>
                             <strong>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</strong>
-                            {chapter.title ? <small>{chapter.title}</small> : null}
+                            {sanitizeChapterTitle(chapter.title) ? (
+                              <small>{sanitizeChapterTitle(chapter.title)}</small>
+                            ) : null}
                           </span>
-                          <span
-                            className={`latest-read-state${chapter.isRead ? " is-read" : ""}`}
-                            aria-label={chapter.isRead ? "Chapter already read" : "Chapter not read yet"}
-                          >
-                            <Eye size={15} weight={chapter.isRead ? "fill" : "regular"} aria-hidden="true" />
-                          </span>
-                          <ChapterAccessBadge
-                            accessType={chapter.effectiveAccessType ?? chapter.accessType}
-                          />
                         </a>
                       </td>
                       <td data-label="Releaser">
@@ -2572,11 +2655,17 @@ function LatestUpdatesGrid({
                           )}
                         </span>
                       </td>
+                      <td data-label="Status" className="latest-feed-status">
+                        <ChapterAccessBadge
+                          accessType={chapter.effectiveAccessType ?? chapter.accessType}
+                        />
+                      </td>
                       <td data-label="Date">
                         <time
                           dateTime={chapter.publishedAt}
                           title={releaseAbsoluteTime(chapter.publishedAt)}
                         >
+                          <Clock size={14} aria-hidden="true" />
                           {releaseTime(chapter.publishedAt)} ago
                         </time>
                       </td>
@@ -2587,7 +2676,12 @@ function LatestUpdatesGrid({
             </table>
           </div>
         ) : (
-        <div className="latest-grid">
+        <div
+          key="latest-cards"
+          className="latest-grid"
+          onPointerDown={beginPageSwipe}
+          onPointerUp={finishPageSwipe}
+        >
           {records.map((update) => (
               <article className="latest-card" key={update.slug}>
                 <a className="latest-cover" href={`/title/${update.slug}`}>
@@ -2624,7 +2718,7 @@ function LatestUpdatesGrid({
                     </span>
                   </div>
                   <ul className="latest-chapters">
-                    {update.chapters.slice(0, 4).map((chapter) => (
+                    {update.chapters.slice(0, heading && !pagination ? 2 : 4).map((chapter) => (
                       <li
                         className={(chapter.effectiveAccessType ?? chapter.accessType) !== "FREE" ? "is-paid" : undefined}
                         key={chapter.slug}
@@ -2683,8 +2777,8 @@ function LatestUpdatesGrid({
         )
       ) : (
         <EmptyState
-          title="No releases in this period"
-          body="Try another period or language. New verified chapter releases will appear automatically."
+          title="No releases found"
+          body="Try another language. New verified chapter releases will appear automatically."
           compact
         />
       )}
@@ -2694,34 +2788,42 @@ function LatestUpdatesGrid({
           {refreshWarning}
         </p>
       ) : null}
-      {pagination && !loading && !error && records.length ? (
-        <nav className="latest-pagination" aria-label="Latest updates pages">
+      {(pagination || heading) && !loading && !error && records.length ? (
+        <nav
+          className={`latest-pagination${heading ? " is-home" : ""}`}
+          aria-label="Latest updates pages"
+        >
           <button
             type="button"
             disabled={!hasPrevious}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            aria-label="Previous latest updates page"
+            onClick={() => movePage(-1)}
           >
-            <CaretLeft size={15} /> Previous
+            <CaretLeft size={17} />
+            {!heading ? <span>Previous</span> : null}
           </button>
-          <span>{page} / {pageCount}</span>
-          {pageNumbers.map((pageNumber) => (
-            <button
-              type="button"
-              key={pageNumber}
-              aria-current={page === pageNumber ? "page" : undefined}
-              onClick={() => setPage(pageNumber)}
-            >
-              {pageNumber}
-            </button>
-          ))}
+          {!heading ? <span>{page} / {pageCount}</span> : null}
+          <span className="latest-page-dots" aria-label={`Page ${page} of ${pageCount}`}>
+            {pageNumbers.map((pageNumber) => (
+              <button
+                type="button"
+                key={pageNumber}
+                aria-label={`Go to latest updates page ${pageNumber}`}
+                aria-current={page === pageNumber ? "page" : undefined}
+                onClick={() => setPage(pageNumber)}
+              >
+                {!heading ? pageNumber : <span className="sr-only">{pageNumber}</span>}
+              </button>
+            ))}
+          </span>
           <button
             type="button"
             disabled={!hasNext}
-            onClick={() =>
-              setPage((current) => Math.min(pageCount, current + 1))
-            }
+            aria-label="Next latest updates page"
+            onClick={() => movePage(1)}
           >
-            Next <CaretRight size={15} />
+            {!heading ? <span>Next</span> : null}
+            <CaretRight size={17} />
           </button>
         </nav>
       ) : null}
@@ -2733,7 +2835,7 @@ function LatestUpdatesView() {
   const { settings: commercial } = useCommercialSettings();
   const [period, setPeriod] = useState<
     "today" | "week" | "month" | "all"
-  >("week");
+  >("all");
   return (
     <main className="page-main latest-page">
       <header className="latest-hero page-wrap">
@@ -2773,7 +2875,7 @@ function LatestUpdatesView() {
           key={period}
           heading={false}
           pagination
-          pageSize={20}
+          pageSize={12}
           period={period}
         />
       </div>
@@ -3835,6 +3937,7 @@ function EditorsPickSection({
   return (
     <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
       <div className="editors-pick-heading">
+        <span className="editors-pick-fleur" aria-hidden="true">⚜</span>
         <div>
           <p className="eyebrow">Curated by NyaScans</p>
           <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
@@ -4138,13 +4241,17 @@ function HomeView({
   actor: Actor | null;
   showToast: (text: string) => void;
 }) {
-  const { settings: commercialSettings } = useCommercialSettings();
+  const {
+    settings: commercialSettings,
+    runtimeFeatures,
+  } = useCommercialSettings();
   const premiumEconomyPublic =
     commercialSettings.economy.premiumEconomyPublic;
   const [promotions, setPromotions] = useState<{
     announcements: HomeAnnouncement[];
-    floatingAd: { id: string; eyebrow: string; title: string; body: string; actionLabel: string; infoBlocks: Array<{ icon: string; title: string; body: string }>; destinationUrl: string; imageUrl: string | null; effect: "WAVE" | "PULSE" | "GLOW"; resetKey: string } | null;
-  }>({ announcements: [], floatingAd: null });
+    floatingAds: FloatingCampaign[];
+    floatingAd: FloatingCampaign | null;
+  }>({ announcements: [], floatingAds: [], floatingAd: null });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -4157,7 +4264,15 @@ function HomeView({
 
   return (
     <>
-      <FloatingHomeAd campaign={promotions.floatingAd} />
+      <FloatingHomeAds
+        campaigns={
+          promotions.floatingAds?.length
+            ? promotions.floatingAds
+            : promotions.floatingAd
+              ? [promotions.floatingAd]
+              : []
+        }
+      />
 
       <FeaturedSeriesSlider />
 
@@ -4168,7 +4283,9 @@ function HomeView({
 
         <PinnedSeriesSection />
 
-        <DiscountsSection enabled={premiumEconomyPublic} />
+        <DiscountsSection
+          enabled={premiumEconomyPublic && runtimeFeatures.payments}
+        />
 
         <section className="updates-section">
           <div className="page-wrap">
@@ -4202,20 +4319,49 @@ type FloatingCampaign = {
   imageUrl: string | null;
   effect: "WAVE" | "PULSE" | "GLOW";
   resetKey: string;
+  displaySlot: number;
+  primaryColor: string;
+  secondaryColor: string;
+  backgroundColor: string;
 };
 
-function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
+function FloatingHomeAds({ campaigns }: { campaigns: FloatingCampaign[] }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const finishCampaign = useCallback(() => {
+    setActiveIndex((current) => current + 1);
+  }, []);
+  const campaign = campaigns[activeIndex] ?? null;
+  if (!campaign) return null;
+  return (
+    <FloatingHomeAd
+      key={campaign.id}
+      campaign={campaign}
+      revealDelay={activeIndex === 0 ? 450 : 2_000}
+      onFinished={finishCampaign}
+    />
+  );
+}
+
+function FloatingHomeAd({
+  campaign,
+  revealDelay,
+  onFinished,
+}: {
+  campaign: FloatingCampaign;
+  revealDelay: number;
+  onFinished: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [doNotShowToday, setDoNotShowToday] = useState(false);
   const doNotShowTodayRef = useRef(false);
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const finishedRef = useRef(false);
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const storageKey = campaign
-    ? `nyascans:floating-ad:${campaign.id}:${campaign.resetKey}:${today}`
-    : "";
+  const storageKey = `nyascans:floating-ad:${campaign.id}:${campaign.resetKey}:${today}`;
   const persistDismissal = useCallback(() => {
     if (storageKey && doNotShowTodayRef.current) {
       try {
@@ -4226,13 +4372,18 @@ function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
     }
   }, [storageKey]);
   const dismiss = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
     persistDismissal();
     setOpen(false);
-  }, [persistDismissal]);
+    onFinished();
+  }, [onFinished, persistDismissal]);
   useEffect(() => {
-    if (!campaign) return;
     try {
-      if (window.localStorage.getItem(storageKey)) return;
+      if (window.localStorage.getItem(storageKey)) {
+        const skipTimer = window.setTimeout(onFinished, 0);
+        return () => window.clearTimeout(skipTimer);
+      }
     } catch {
       // A blocked storage API must not block the campaign itself.
     }
@@ -4241,9 +4392,9 @@ function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
       doNotShowTodayRef.current = false;
       setDoNotShowToday(false);
       setOpen(true);
-    }, 450);
+    }, revealDelay);
     return () => window.clearTimeout(timer);
-  }, [campaign, storageKey]);
+  }, [campaign, onFinished, revealDelay, storageKey]);
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
@@ -4283,7 +4434,7 @@ function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
       }
     };
   }, [dismiss, open]);
-  if (!open || !campaign) return null;
+  if (!open) return null;
   return (
     <div className="event-campaign-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget) dismiss();
@@ -4293,23 +4444,33 @@ function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
         tabIndex={-1}
         className="floating-home-ad event-campaign-modal"
         data-effect={campaign.effect.toLowerCase()}
+        data-slot={campaign.displaySlot}
+        style={{
+          "--campaign-primary": campaign.primaryColor || "#65B5FF",
+          "--campaign-secondary": campaign.secondaryColor || "#8B5CF6",
+          "--campaign-background": campaign.backgroundColor || "#07111C",
+        } as CSSProperties}
         role="dialog"
         aria-modal="true"
         aria-labelledby="event-campaign-title"
       >
-        {campaign.imageUrl && !imageFailed ? (
-          <img className="event-campaign-art" src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} />
-        ) : (
-          <span className="event-campaign-art event-campaign-placeholder"><ImageIcon size={44} weight="duotone" /></span>
-        )}
-        <div className="event-campaign-shade" />
-        <button className="event-campaign-close" type="button" onClick={dismiss} aria-label="Close event">
-          <X size={19} />
-        </button>
+        <div className="event-campaign-visual">
+          {campaign.imageUrl && !imageFailed ? (
+            <img className="event-campaign-art" src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} />
+          ) : (
+            <span className="event-campaign-art event-campaign-placeholder"><ImageIcon size={44} weight="duotone" /></span>
+          )}
+          <div className="event-campaign-shade" />
+          <small className="event-campaign-eyebrow">{campaign.eyebrow}</small>
+          <button className="event-campaign-close" type="button" onClick={dismiss} aria-label="Close event">
+            <X size={20} />
+          </button>
+        </div>
         <div className="event-campaign-content">
-          <small>{campaign.eyebrow}</small>
-          <h2 id="event-campaign-title">{campaign.title}</h2>
-          {campaign.body ? <p>{campaign.body}</p> : null}
+          <div className="event-campaign-copy">
+            <h2 id="event-campaign-title">{campaign.title}</h2>
+            {campaign.body ? <p>{campaign.body}</p> : null}
+          </div>
           {campaign.infoBlocks?.length ? (
             <div className="event-campaign-info">
               {campaign.infoBlocks.slice(0, 4).map((block, index) => (
@@ -4320,24 +4481,28 @@ function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign | null }) {
               ))}
             </div>
           ) : null}
-          <a
-            className="event-campaign-action"
-            href={campaign.destinationUrl || "/browse?sort=latest"}
-            onClick={persistDismissal}
-          >
-            {campaign.actionLabel || "Explore event"} <ArrowRight size={17} />
-          </a>
-          <label className="event-campaign-dismiss">
-            <input
-              type="checkbox"
-              checked={doNotShowToday}
-              onChange={(event) => {
-                doNotShowTodayRef.current = event.target.checked;
-                setDoNotShowToday(event.target.checked);
-              }}
-            />
-            <span>Do not show again today</span>
-          </label>
+          <footer className="event-campaign-footer">
+            <a
+              className="event-campaign-action"
+              href={campaign.destinationUrl || "/browse?sort=latest"}
+              onClick={persistDismissal}
+            >
+              <Sparkle size={18} weight="fill" aria-hidden="true" />
+              {campaign.actionLabel || "Explore event"}
+              <ArrowRight size={18} aria-hidden="true" />
+            </a>
+            <label className="event-campaign-dismiss">
+              <input
+                type="checkbox"
+                checked={doNotShowToday}
+                onChange={(event) => {
+                  doNotShowTodayRef.current = event.target.checked;
+                  setDoNotShowToday(event.target.checked);
+                }}
+              />
+              <span>Do not show again today</span>
+            </label>
+          </footer>
         </div>
       </aside>
     </div>
@@ -4351,7 +4516,13 @@ type CatalogResult = {
   nativeTitle: string | null;
   synopsis: string;
   type: "MANHWA" | "MANGA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+  status:
+    | "ONGOING"
+    | "COMPLETED"
+    | "HIATUS"
+    | "PAUSED"
+    | "CANCELLED"
+    | "UPCOMING";
   accessType: "FREE" | "PAID";
   cover: string | null;
   ratingTenths: number;
@@ -4495,7 +4666,14 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           : "All",
       );
       setStatus(
-        ["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"].includes(nextStatus)
+        [
+          "ONGOING",
+          "COMPLETED",
+          "HIATUS",
+          "PAUSED",
+          "CANCELLED",
+          "UPCOMING",
+        ].includes(nextStatus)
           ? nextStatus
           : "All",
       );
@@ -4774,6 +4952,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
             ["COMPLETED", "Completed"],
             ["HIATUS", "Hiatus"],
             ["PAUSED", "Paused"],
+            ["CANCELLED", "Cancelled"],
             ["UPCOMING", "Upcoming"],
           ].map(([value, label]) => (
             <button
@@ -5093,9 +5272,10 @@ function StoreView({
 }) {
   const { settings: commercial } = useCommercialSettings();
   const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
+  const lockAndPayVisible = premiumEconomyPublic;
   const requestedCategory = normalizeStoreCategory(category);
   const selectedCategory =
-    !premiumEconomyPublic &&
+    !lockAndPayVisible &&
     ["coins", "memberships", "gifts"].includes(requestedCategory)
       ? "cosmetics"
       : requestedCategory;
@@ -5107,6 +5287,8 @@ function StoreView({
   const [checkoutStatus, setCheckoutStatus] = useState(
     "Checkout is not configured.",
   );
+  const [checkoutReturnStatus, setCheckoutReturnStatus] = useState("");
+  const checkoutReturnHandled = useRef(false);
   const [collections, setCollections] = useState<StoreCollection[]>([]);
   const [cosmetics, setCosmetics] = useState<StoreCosmetic[]>([]);
   const [packages, setPackages] = useState<StoreCoinPackage[]>([]);
@@ -5220,7 +5402,7 @@ function StoreView({
         setStoreError("The cosmetic marketplace could not be loaded.");
         setLoadedStoreRequest(storeRequestKey);
       });
-    if (actor && premiumEconomyPublic) void fetch("/api/v1/wallet", { signal: controller.signal })
+    if (actor && lockAndPayVisible) void fetch("/api/v1/wallet", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Wallet unavailable");
         return (await response.json()) as { balance?: number };
@@ -5230,7 +5412,88 @@ function StoreView({
         if (!controller.signal.aborted) setBalance(null);
       });
     return () => controller.abort();
-  }, [actor, premiumEconomyPublic, selectedCategory, storeRequestKey]);
+  }, [actor, lockAndPayVisible, selectedCategory, storeRequestKey]);
+
+  useEffect(() => {
+    if (!actor || checkoutReturnHandled.current) return;
+    const query = new URLSearchParams(window.location.search);
+    const result = query.get("checkout");
+    const orderId = query.get("order")?.trim() ?? "";
+    if (!result) return;
+    checkoutReturnHandled.current = true;
+    const clearCheckoutQuery = () => {
+      query.delete("checkout");
+      query.delete("order");
+      const next = `${window.location.pathname}${query.size ? `?${query.toString()}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", next);
+    };
+    if (result === "cancelled") {
+      queueMicrotask(() =>
+        setCheckoutReturnStatus("Checkout cancelled. Nothing was charged."),
+      );
+      showToast("Checkout cancelled. Nothing was charged.");
+      clearCheckoutQuery();
+      return;
+    }
+    if (result !== "success" || !orderId) {
+      clearCheckoutQuery();
+      return;
+    }
+    const controller = new AbortController();
+    let attempt = 0;
+    queueMicrotask(() =>
+      setCheckoutReturnStatus(
+        "Payment received. Waiting for secure confirmation…",
+      ),
+    );
+    const poll = async (): Promise<void> => {
+      attempt += 1;
+      try {
+        const response = await fetch("/api/v1/orders", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as {
+          data?: Array<{ id?: string; status?: string }>;
+        };
+        if (!response.ok) throw new Error("Order status is unavailable.");
+        const order = payload.data?.find((entry) => entry.id === orderId);
+        if (order?.status === "PAID") {
+          setCheckoutReturnStatus("Payment confirmed. Your purchase is now active.");
+          showToast("Payment confirmed. Your purchase is now active.");
+          setStoreRevision((value) => value + 1);
+          clearCheckoutQuery();
+          return;
+        }
+        if (["FAILED", "REFUNDED", "DISPUTED"].includes(order?.status ?? "")) {
+          setCheckoutReturnStatus("This payment needs attention. Open Wallet → Orders for details.");
+          showToast("This payment needs attention. Open Wallet → Orders for details.");
+          clearCheckoutQuery();
+          return;
+        }
+        if (attempt < 12) {
+          window.setTimeout(() => void poll(), 1_500);
+          return;
+        }
+        setCheckoutReturnStatus(
+          "Confirmation is still processing. It will appear in Wallet → Orders automatically.",
+        );
+        clearCheckoutQuery();
+      } catch {
+        if (controller.signal.aborted) return;
+        if (attempt < 12) {
+          window.setTimeout(() => void poll(), 1_500);
+          return;
+        }
+        setCheckoutReturnStatus(
+          "Confirmation is still processing. Check Wallet → Orders in a moment.",
+        );
+        clearCheckoutQuery();
+      }
+    };
+    void poll();
+    return () => controller.abort();
+  }, [actor, showToast]);
 
   async function unlockCosmetic(item: StoreCosmetic) {
     if (!actor) {
@@ -5349,7 +5612,10 @@ function StoreView({
     }
   }
 
-  async function buy(productId: string) {
+  async function buy(
+    productId: string,
+    billingCycle: "MONTHLY" | "ANNUAL" = "MONTHLY",
+  ) {
     if (!checkoutEnabled) {
       showToast(checkoutStatus);
       return;
@@ -5367,20 +5633,84 @@ function StoreView({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           productId,
+          billingCycle,
           idempotencyKey: `${productId}:${clientRandomId()}`,
         }),
       });
       const payload = (await response.json()) as {
-        balance?: number;
+        checkoutUrl?: string;
+        orderId?: string;
+        expiresAt?: string | null;
         error?: { message?: string };
       };
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Checkout could not be completed.");
       }
-      if (typeof payload.balance === "number") setBalance(payload.balance);
-      showToast("Order completed and added to your purchase history.");
+      let checkout: URL;
+      try {
+        checkout = new URL(payload.checkoutUrl ?? "");
+      } catch {
+        throw new Error("The payment provider returned an invalid Checkout URL.");
+      }
+      if (
+        checkout.protocol !== "https:" ||
+        (checkout.hostname !== "checkout.stripe.com" &&
+          !checkout.hostname.endsWith(".checkout.stripe.com"))
+      ) {
+        throw new Error("The payment provider returned an invalid Checkout URL.");
+      }
+      window.location.assign(checkout.toString());
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Checkout could not be completed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function manageMembership() {
+    if (!actor) {
+      window.location.assign(
+        authEntryPath("login", "/store/memberships"),
+      );
+      return;
+    }
+    setBusy("billing-portal");
+    try {
+      const response = await fetch("/api/v1/payments/billing-portal", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const payload = (await response.json()) as {
+        data?: { portalUrl?: string };
+        portalUrl?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(
+          payload.error?.message ?? "Membership billing could not be opened.",
+        );
+      }
+      let portal: URL;
+      try {
+        portal = new URL(payload.data?.portalUrl ?? payload.portalUrl ?? "");
+      } catch {
+        throw new Error("The payment provider returned an invalid billing URL.");
+      }
+      if (
+        portal.protocol !== "https:" ||
+        (portal.hostname !== "billing.stripe.com" &&
+          !portal.hostname.endsWith(".billing.stripe.com"))
+      ) {
+        throw new Error("The payment provider returned an invalid billing URL.");
+      }
+      window.location.assign(portal.toString());
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Membership billing could not be opened.",
+      );
     } finally {
       setBusy(null);
     }
@@ -5521,13 +5851,13 @@ function StoreView({
           <p className="eyebrow">NyaScans store</p>
           <h1>Choose what you unlock.</h1>
           <p>
-            {premiumEconomyPublic
+            {lockAndPayVisible
               ? `${commercial.economy.coinPlural}, Shards, memberships, gifts, and cosmetics are shown clearly before confirmation.`
               : "Shard cosmetics and earned rewards are shown clearly before confirmation."}
           </p>
         </div>
         <a className="wallet-chip wallet-chip-multi" href="/wallet">
-          {premiumEconomyPublic ? (
+          {lockAndPayVisible ? (
             <span>
               <ConfiguredCoinMark settings={commercial} size={19} />
               <b>{actor ? (balance ?? "...") : "Sign in"}</b> {commercial.economy.coinPlural}
@@ -5541,8 +5871,18 @@ function StoreView({
         </a>
       </section>
 
+      {checkoutReturnStatus ? (
+        <div className="commerce-unavailable page-wrap" role="status">
+          <ShieldCheck size={19} />
+          <span>
+            <strong>Secure checkout update</strong>
+            {checkoutReturnStatus}
+          </span>
+        </div>
+      ) : null}
+
       <nav className="store-section-nav page-wrap" aria-label="Store sections">
-        {premiumEconomyPublic ? (
+        {lockAndPayVisible ? (
           <>
             <a
               href="/store/coins"
@@ -5621,7 +5961,7 @@ function StoreView({
         </div>
       ) : null}
 
-      {premiumEconomyPublic && selectedCategory === "gifts" ? (
+      {lockAndPayVisible && selectedCategory === "gifts" ? (
         <GiftStorePanel
           signedIn={Boolean(actor)}
           showToast={showToast}
@@ -5815,6 +6155,18 @@ function StoreView({
                 Annual
               </button>
             </div>
+            {actor ? (
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => void manageMembership()}
+                disabled={busy !== null}
+              >
+                {busy === "billing-portal"
+                  ? "Opening billing…"
+                  : "Manage existing membership"}
+              </button>
+            ) : null}
           </div>
           <div className="membership-card-grid">
           {sortedMemberships.map((membership) => (
@@ -5848,7 +6200,9 @@ function StoreView({
               {membership.monthlyCoins > 0 ? (
                 <li>
                   <Check size={18} />{" "}
-                  {coinLabel(membership.monthlyCoins, commercial)} each month
+                  {billing === "monthly"
+                    ? `${coinLabel(membership.monthlyCoins, commercial)} each month`
+                    : `${coinLabel(membership.monthlyCoins * 12, commercial)} granted each membership year`}
                 </li>
               ) : null}
               {membership.benefits.map((benefit) => (
@@ -5856,16 +6210,29 @@ function StoreView({
                   <Check size={18} /> {benefit}
                 </li>
               ))}
-              {commercial.economy.membershipDiscountsEnabled &&
-              membership.chapterDiscountPercent > 0 ? (
-                <li>
-                  <Check size={18} /> {membership.chapterDiscountPercent}%
-                  chapter discount
-                </li>
-              ) : null}
             </ul>
-            <button className="button button-primary" type="button" onClick={() => buy(membership.id)} disabled={!checkoutEnabled || busy !== null}>
-              {checkoutEnabled ? membership.ctaText : "Coming soon"}
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() =>
+                void buy(
+                  membership.id,
+                  billing === "monthly" ? "MONTHLY" : "ANNUAL",
+                )
+              }
+              disabled={
+                !checkoutEnabled ||
+                busy !== null ||
+                (billing === "annual" && membership.annualPriceMinor <= 0)
+              }
+            >
+              {busy === membership.id
+                ? "Preparing…"
+                : billing === "annual" && membership.annualPriceMinor <= 0
+                  ? "Annual plan unavailable"
+                  : checkoutEnabled
+                    ? membership.ctaText
+                    : "Coming soon"}
             </button>
             <small>Benefits are active only while the membership is current.</small>
           </article>
@@ -6537,10 +6904,11 @@ function chapterDisplayLabel(chapter: SeriesChapterAccess) {
     .replace(/^(Chapter|Episode|Issue|Preview)\s*/i, "")
     .trim();
   const sourceNumber = withoutPrefix.match(/^\S+/)?.[0] ?? "";
-  const title = withoutPrefix
-    .slice(sourceNumber.length)
-    .replace(/^\s*[·:-]\s*/, "")
-    .trim();
+  const title = sanitizeChapterTitle(
+    withoutPrefix
+      .slice(sourceNumber.length)
+      .replace(/^\s*[·:-]\s*/, ""),
+  );
   return `Chapter ${number}${title ? ` · ${title}` : ""}`;
 }
 
@@ -6577,7 +6945,13 @@ type PublicSeriesDetail = {
   alternativeTitles: Array<{ title: string; language: string }>;
   synopsis: string;
   type: "MANGA" | "MANHWA" | "MANHUA";
-  status: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+  status:
+    | "ONGOING"
+    | "COMPLETED"
+    | "HIATUS"
+    | "PAUSED"
+    | "CANCELLED"
+    | "UPCOMING";
   publicationYear: number | null;
   authors: Array<{ id: string; name: string }>;
   artists: Array<{ id: string; name: string }>;
@@ -6634,9 +7008,11 @@ function publicDetailCard(detail: PublicSeriesDetail): SeriesCard {
           ? "Hiatus"
         : detail.status === "PAUSED"
           ? "Paused"
-        : detail.status === "UPCOMING"
-          ? "Upcoming"
-          : "Ongoing",
+          : detail.status === "CANCELLED"
+            ? "Cancelled"
+            : detail.status === "UPCOMING"
+              ? "Upcoming"
+              : "Ongoing",
     access: detail.accessType,
     rating: detail.rating,
     followers: String(detail.followerCount),
@@ -7160,19 +7536,29 @@ function TitleView({
                 <span>Choose a language and verified publishing team</span>
               </div>
               <div className="chapter-tools">
-                <label className="chapter-sort">
-                  <span className="sr-only">Sort chapters</span>
-                  <select
-                    value={chapterOrder}
-                    onChange={(event) =>
-                      setChapterOrder(event.target.value as "newest" | "oldest")
-                    }
+                <details className="chapter-sort chapter-sort-menu">
+                  <summary
+                    aria-label={`Sort chapters: ${chapterOrder === "newest" ? "Newest" : "Oldest"}`}
                   >
-                    <option value="newest">Newest</option>
-                    <option value="oldest">Oldest</option>
-                  </select>
-                  <CaretDown size={15} />
-                </label>
+                    <span aria-hidden="true">{chapterOrder === "newest" ? "N" : "O"}</span>
+                    <CaretDown size={15} />
+                  </summary>
+                  <div>
+                    {(["newest", "oldest"] as const).map((order) => (
+                      <button
+                        type="button"
+                        key={order}
+                        aria-pressed={chapterOrder === order}
+                        onClick={(event) => {
+                          setChapterOrder(order);
+                          event.currentTarget.closest("details")?.removeAttribute("open");
+                        }}
+                      >
+                        {order === "newest" ? "Newest" : "Oldest"}
+                      </button>
+                    ))}
+                  </div>
+                </details>
                 <label className="chapter-search">
                   <MagnifyingGlass size={18} />
                   <span className="sr-only">Search chapters</span>
@@ -7190,9 +7576,7 @@ function TitleView({
                   onClick={toggleChapterDetails}
                 >
                   <List size={16} />
-                  {allChapterDetailsCollapsed
-                    ? "Show all details"
-                    : "Hide all details"}
+                  {allChapterDetailsCollapsed ? "Show" : "Hide"}
                 </button>
               </div>
             </div>
@@ -7217,7 +7601,7 @@ function TitleView({
                   className="button button-primary"
                   href={`/title/${item.slug}/chapter/${latestChapter.chapterSlug}`}
                 >
-                  <Play size={16} weight="fill" /> <span className="desktop-action-label">Read Latest</span><span className="mobile-action-label">Latest</span>
+                  <Play size={16} weight="fill" /> <span className="desktop-action-label">Read Latest</span><span className="mobile-action-label">Last</span>
                 </a>
               ) : (
                 <span
@@ -7309,17 +7693,22 @@ function TitleView({
                       (release) =>
                         release.accessType === "PAID" && !release.canRead,
                     );
+                  const groupPaid =
+                    group.releases.length > 0 &&
+                    group.releases.every(
+                      (release) => release.accessType === "PAID",
+                    );
                   return !detailsCollapsed ? (
                     <section
-                      className="chapter-release-group"
+                      className={`chapter-release-group${groupPaid ? " is-paid" : ""}`}
                       key={group.number}
+                      data-paid={groupPaid ? "true" : "false"}
                     >
                       <header>
                         <div>
                           <strong>
                             {groupLocked ? <LockSimple size={15} aria-label="Paid chapter" /> : null}
                             Chapter {group.number}
-                            <Eye size={15} weight={group.releases.some((release) => release.isRead) ? "fill" : "regular"} aria-label={group.releases.some((release) => release.isRead) ? "Viewed" : "Not viewed"} />
                           </strong>
                           <span
                             className="chapter-language-counts"
@@ -7338,6 +7727,16 @@ function TitleView({
                             ))}
                           </span>
                         </div>
+                        <span
+                          className={`chapter-group-read-state${group.releases.some((release) => release.isRead) ? " is-read" : ""}`}
+                          aria-label={group.releases.some((release) => release.isRead) ? "Viewed" : "Not viewed"}
+                        >
+                          <Eye
+                            size={17}
+                            weight={group.releases.some((release) => release.isRead) ? "fill" : "regular"}
+                            aria-hidden="true"
+                          />
+                        </span>
                         <button
                           className="chapter-group-toggle"
                           type="button"
@@ -7361,8 +7760,9 @@ function TitleView({
                           const chapterHref = `/title/${item.slug}/chapter/${chapter.chapterSlug}`;
                           return (
                             <article
-                              className="chapter-variant-row"
+                              className={`chapter-variant-row${chapter.accessType === "PAID" && !groupPaid ? " is-paid" : ""}`}
                               key={`${chapter.chapterId}:${chapter.version}:${chapter.language}`}
+                              data-paid={chapter.accessType === "PAID" ? "true" : "false"}
                             >
                               <a
                                 className="chapter-variant-visual"
@@ -7406,18 +7806,44 @@ function TitleView({
                                       chapter.uploaderName ?? "NyaScans member"
                                     )}
                                   </span>
-                                  <span className="chapter-credit-chip">
-                                    <span>Team</span>
-                                    {chapter.teamSlug ? (
-                                      <a
-                                        href={`/team/${encodeURIComponent(chapter.teamSlug)}`}
-                                      >
-                                        {chapter.teamName ??
-                                          "Publishing team"}
-                                      </a>
-                                    ) : (
-                                      chapter.teamName ?? "Independent release"
-                                    )}
+                                  <span className="chapter-team-status-line">
+                                    <span className="chapter-credit-chip">
+                                      <span>Team</span>
+                                      {chapter.teamSlug ? (
+                                        <a
+                                          href={`/team/${encodeURIComponent(chapter.teamSlug)}`}
+                                        >
+                                          {chapter.teamName ??
+                                            "Publishing team"}
+                                        </a>
+                                      ) : (
+                                        chapter.teamName ?? "Independent release"
+                                      )}
+                                    </span>
+                                    <span
+                                      className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}
+                                    >
+                                      {access === "Free" ? (
+                                        <Check size={14} />
+                                      ) : (
+                                        <LockSimple size={14} />
+                                      )}
+                                      {access}
+                                      {premiumEconomyPublic &&
+                                      chapter.priceOnyx > 0 &&
+                                      access === "Paid" ? (
+                                        <span className="chapter-discount-price">
+                                          {chapter.basePriceOnyx &&
+                                          chapter.basePriceOnyx > chapter.priceOnyx ? (
+                                            <s>{coinLabel(chapter.basePriceOnyx, commercial)}</s>
+                                          ) : null}
+                                          <span>· {coinLabel(chapter.priceOnyx, commercial)}</span>
+                                          {chapter.discountPercentage ? (
+                                            <b>−{chapter.discountPercentage}%</b>
+                                          ) : null}
+                                        </span>
+                                      ) : null}
+                                    </span>
                                   </span>
                                   <time
                                     dateTime={chapter.publishedAt ?? undefined}
@@ -7426,34 +7852,7 @@ function TitleView({
                                       ? `${releaseTime(chapter.publishedAt)} ago`
                                       : "Publication pending"}
                                   </time>
-                                  {chapter.version > 1 ? (
-                                    <span>v{chapter.version}</span>
-                                  ) : null}
                                 </small>
-                              </span>
-                              <span
-                                className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}
-                              >
-                                {access === "Free" ? (
-                                  <Check size={14} />
-                                ) : (
-                                  <LockSimple size={14} />
-                                )}
-                                {access}
-                                {premiumEconomyPublic &&
-                                chapter.priceOnyx > 0 &&
-                                access === "Paid" ? (
-                                  <span className="chapter-discount-price">
-                                    {chapter.basePriceOnyx &&
-                                    chapter.basePriceOnyx > chapter.priceOnyx ? (
-                                      <s>{coinLabel(chapter.basePriceOnyx, commercial)}</s>
-                                    ) : null}
-                                    <span>· {coinLabel(chapter.priceOnyx, commercial)}</span>
-                                    {chapter.discountPercentage ? (
-                                      <b>−{chapter.discountPercentage}%</b>
-                                    ) : null}
-                                  </span>
-                                ) : null}
                               </span>
                               <a className="chapter-read" href={chapterHref}>
                                 {chapter.chapterId === latestChapter?.chapterId
@@ -7468,8 +7867,9 @@ function TitleView({
                     </section>
                   ) : (
                     <section
-                      className="chapter-release-group chapter-release-compact"
+                      className={`chapter-release-group chapter-release-compact${groupPaid ? " is-paid" : ""}`}
                       key={group.number}
+                      data-paid={groupPaid ? "true" : "false"}
                     >
                       <button
                         type="button"
@@ -7568,6 +7968,7 @@ type ChapterAccessData = {
   chapterSlug: string;
   chapterLabel: string;
   accessType: "FREE" | "PAID";
+  accessLevel?: "FREE" | "PAID" | "PREMIUM";
   priceOnyx: number;
   basePriceOnyx?: number;
   discountPercentage?: number | null;
@@ -7578,10 +7979,19 @@ type ChapterAccessData = {
   reason:
     | "FREE"
     | "UNLOCKED"
+    | "MEMBERSHIP"
     | "ADMINISTRATOR_PREVIEW"
     | "SIGN_IN_REQUIRED"
     | "PURCHASE_REQUIRED"
+    | "MEMBERSHIP_REQUIRED"
     | "UNAVAILABLE";
+};
+
+type AdUnlockChallengeData = {
+  challengeId: string;
+  status: "PENDING" | "VERIFIED" | "CLAIMED" | "EXPIRED";
+  expiresAt: string;
+  providerUrl?: string;
 };
 
 type ReaderPageData = {
@@ -7664,6 +8074,7 @@ type ReaderContextData = {
 
 type ChapterReaction = {
   id: string;
+  slug: "upvote" | "heart" | "laugh" | "surprised" | "sad" | "angry";
   name: string;
   accessibleLabel: string;
   emojiFallback: string;
@@ -7671,6 +8082,33 @@ type ChapterReaction = {
   count: number;
   selected: boolean;
 };
+
+const CHAPTER_REACTION_PRESENTATION: Record<
+  ChapterReaction["slug"],
+  { label: string; order: number; emoji?: string }
+> = {
+  upvote: { label: "Like", order: 0 },
+  heart: { label: "Love", order: 1 },
+  laugh: { label: "Laugh", order: 2, emoji: "😆" },
+  surprised: { label: "Wow", order: 3, emoji: "😮" },
+  sad: { label: "Sad", order: 4, emoji: "😢" },
+  angry: { label: "Angry", order: 5, emoji: "😠" },
+};
+
+function ChapterReactionVisual({ slug }: { slug: ChapterReaction["slug"] }) {
+  const presentation = CHAPTER_REACTION_PRESENTATION[slug];
+  return (
+    <span className="chapter-reaction-icon" data-reaction={slug} aria-hidden="true">
+      {slug === "upvote" ? (
+        <ThumbsUp size={34} weight="fill" />
+      ) : slug === "heart" ? (
+        <Heart size={34} weight="fill" />
+      ) : (
+        presentation.emoji
+      )}
+    </span>
+  );
+}
 
 async function fetchReaderResource<T>(
   url: string,
@@ -7879,6 +8317,10 @@ function ReaderView({
     useState<ReaderSettings>(initialReaderSettings);
   const [accessError, setAccessError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [adUnlockAvailable, setAdUnlockAvailable] = useState(false);
+  const [adUnlockBusy, setAdUnlockBusy] = useState(false);
+  const [adChallenge, setAdChallenge] =
+    useState<AdUnlockChallengeData | null>(null);
   const [readerPages, setReaderPages] = useState<ReaderPageData[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [pagesError, setPagesError] = useState("");
@@ -7901,6 +8343,8 @@ function ReaderView({
   const chapterListRequest = useRef<AbortController | null>(null);
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const unlockIdempotencyKey = useRef("");
+  const adUnlockPoll = useRef<AbortController | null>(null);
+  const adUnlockClaiming = useRef(false);
   const readerSeeking = useRef(false);
   useEffect(() => {
     currentReaderPage.current = page;
@@ -7963,6 +8407,9 @@ function ReaderView({
     readerContext,
     routeSeriesSlug,
   ]);
+  const activeChapterRelease = releaseChapters.find(
+    (chapter) => chapter.chapterSlug === routeChapterSlug,
+  );
   const mode = readerSettings.mode;
   const wakeLockSupported =
     typeof navigator !== "undefined" && "wakeLock" in navigator;
@@ -7982,11 +8429,20 @@ function ReaderView({
 
   useEffect(() => {
     unlockIdempotencyKey.current = "";
+    adUnlockPoll.current?.abort();
+    adUnlockPoll.current = null;
+    adUnlockClaiming.current = false;
+    const reset = window.setTimeout(() => {
+      setAdChallenge(null);
+      setAdUnlockBusy(false);
+    }, 0);
+    return () => window.clearTimeout(reset);
   }, [routeChapterSlug, routeSeriesSlug]);
 
   useEffect(
     () => () => {
       chapterListRequest.current?.abort();
+      adUnlockPoll.current?.abort();
     },
     [],
   );
@@ -8517,6 +8973,46 @@ function ReaderView({
 
   useEffect(() => {
     if (
+      !actor ||
+      !premiumEconomyPublic ||
+      access?.reason !== "PURCHASE_REQUIRED" ||
+      access.accessLevel === "PREMIUM"
+    ) {
+      const reset = window.setTimeout(() => setAdUnlockAvailable(false), 0);
+      return () => window.clearTimeout(reset);
+    }
+    const controller = new AbortController();
+    void fetch(
+      `/api/v1/ad-unlocks?seriesSlug=${encodeURIComponent(routeSeriesSlug)}&chapterSlug=${encodeURIComponent(routeChapterSlug)}`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: { available?: boolean };
+        };
+        if (!response.ok) return false;
+        return payload.data?.available === true;
+      })
+      .then((available) => {
+        if (!controller.signal.aborted) setAdUnlockAvailable(available);
+      })
+      .catch((error: unknown) => {
+        if ((error as Error).name !== "AbortError") {
+          setAdUnlockAvailable(false);
+        }
+      });
+    return () => controller.abort();
+  }, [
+    access?.accessLevel,
+    access?.reason,
+    actor,
+    premiumEconomyPublic,
+    routeChapterSlug,
+    routeSeriesSlug,
+  ]);
+
+  useEffect(() => {
+    if (
       !readerSettings.preloadNextChapter ||
       !nextChapter ||
       document.visibilityState !== "visible"
@@ -8790,6 +9286,199 @@ function ReaderView({
     }
   }
 
+  async function claimAdUnlock(challengeId: string) {
+    if (adUnlockClaiming.current) return;
+    adUnlockClaiming.current = true;
+    setAdUnlockBusy(true);
+    setAccessError("");
+    try {
+      const response = await fetch("/api/v1/ad-unlocks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "CLAIM", challengeId }),
+      });
+      const payload = (await response.json()) as {
+        data?: AdUnlockChallengeData & { access?: ChapterAccessData };
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data?.access?.canRead) {
+        throw new Error(
+          payload.error?.message ??
+            "The verified ad reward could not grant chapter access.",
+        );
+      }
+      setAdChallenge((current) =>
+        current
+          ? { ...current, status: "CLAIMED" }
+          : {
+              challengeId,
+              status: "CLAIMED",
+              expiresAt: new Date().toISOString(),
+            },
+      );
+      setAdUnlockAvailable(false);
+      setReaderContext((current) =>
+        current ? { ...current, access: payload.data!.access! } : current,
+      );
+      showToast("Chapter access granted after verified ad completion.");
+    } catch (error) {
+      setAccessError(
+        error instanceof Error
+          ? error.message
+          : "The ad reward could not be claimed.",
+      );
+    } finally {
+      adUnlockClaiming.current = false;
+      setAdUnlockBusy(false);
+    }
+  }
+
+  async function pollAdUnlockChallenge(
+    challengeId: string,
+    maxAttempts = 90,
+  ) {
+    adUnlockPoll.current?.abort();
+    const controller = new AbortController();
+    adUnlockPoll.current = controller;
+    setAdUnlockBusy(true);
+    try {
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const response = await fetch(
+          `/api/v1/ad-unlocks?challengeId=${encodeURIComponent(challengeId)}`,
+          { signal: controller.signal, cache: "no-store" },
+        );
+        const payload = (await response.json()) as {
+          data?: AdUnlockChallengeData;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.data) {
+          throw new Error(
+            payload.error?.message ?? "Ad completion could not be checked.",
+          );
+        }
+        setAdChallenge((current) => ({
+          ...payload.data!,
+          providerUrl: current?.providerUrl,
+        }));
+        if (payload.data.status === "VERIFIED") {
+          controller.abort();
+          adUnlockPoll.current = null;
+          await claimAdUnlock(challengeId);
+          return;
+        }
+        if (payload.data.status === "CLAIMED") {
+          controller.abort();
+          adUnlockPoll.current = null;
+          setAdUnlockBusy(false);
+          setContextRevision((value) => value + 1);
+          return;
+        }
+        if (payload.data.status === "EXPIRED") {
+          throw new Error("This ad unlock attempt expired. Start a new one.");
+        }
+        if (attempt < maxAttempts - 1) {
+          await new Promise<void>((resolve, reject) => {
+            const timeout = window.setTimeout(resolve, 3_000);
+            controller.signal.addEventListener(
+              "abort",
+              () => {
+                window.clearTimeout(timeout);
+                reject(new DOMException("Aborted", "AbortError"));
+              },
+              { once: true },
+            );
+          });
+        }
+      }
+      showToast(
+        "Ad verification is still pending. Use Check ad status when it finishes.",
+      );
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        setAccessError(
+          error instanceof Error
+            ? error.message
+            : "Ad completion could not be checked.",
+        );
+      }
+    } finally {
+      if (adUnlockPoll.current === controller) {
+        adUnlockPoll.current = null;
+        setAdUnlockBusy(false);
+      }
+    }
+  }
+
+  async function startAdUnlock() {
+    if (!actor) {
+      window.location.href = authEntryPath(
+        "login",
+        `/title/${routeSeriesSlug}/chapter/${routeChapterSlug}`,
+      );
+      return;
+    }
+    let providerWindow: Window | null = null;
+    try {
+      providerWindow = window.open(
+        "about:blank",
+        "nyascans-ad-unlock",
+        "popup,width=560,height=760",
+      );
+      if (providerWindow) providerWindow.opener = null;
+    } catch {
+      providerWindow = null;
+    }
+    setAdUnlockBusy(true);
+    setAccessError("");
+    try {
+      const response = await fetch("/api/v1/ad-unlocks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "CREATE",
+          seriesSlug: routeSeriesSlug,
+          chapterSlug: routeChapterSlug,
+        }),
+      });
+      const payload = (await response.json()) as {
+        data?: AdUnlockChallengeData;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data) {
+        throw new Error(
+          payload.error?.message ?? "The ad unlock could not be started.",
+        );
+      }
+      setAdChallenge(payload.data);
+      if (payload.data.status === "VERIFIED") {
+        providerWindow?.close();
+        await claimAdUnlock(payload.data.challengeId);
+        return;
+      }
+      if (!payload.data.providerUrl) {
+        providerWindow?.close();
+        throw new Error("The ad provider did not return a safe destination.");
+      }
+      if (providerWindow) {
+        providerWindow.location.replace(payload.data.providerUrl);
+      }
+      void pollAdUnlockChallenge(payload.data.challengeId);
+    } catch (error) {
+      providerWindow?.close();
+      setAdUnlockBusy(false);
+      setAccessError(
+        error instanceof Error
+          ? error.message
+          : "The ad unlock could not be started.",
+      );
+    }
+  }
+
+  function checkAdUnlockStatus() {
+    if (!adChallenge?.challengeId) return;
+    void pollAdUnlockChallenge(adChallenge.challengeId, 1);
+  }
+
   if (!access) {
     return (
       <main className="reader-access-page">
@@ -8949,7 +9638,53 @@ function ReaderView({
                   <ConfiguredCoinMark settings={commercial} size={18} /> Buy{" "}
                   {commercial.economy.coinPlural}
                 </a>
+                {adUnlockAvailable ? (
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={adUnlockBusy || unlocking}
+                    onClick={() => void startAdUnlock()}
+                  >
+                    {adUnlockBusy ? (
+                      <SpinnerGap size={18} className="is-spinning" />
+                    ) : (
+                      <Play size={18} weight="fill" />
+                    )}
+                    {adUnlockBusy
+                      ? "Waiting for ad verification…"
+                      : "Unlock by watching an ad"}
+                  </button>
+                ) : null}
               </div>
+            ) : null}
+            {adChallenge && adChallenge.status !== "CLAIMED" ? (
+              <>
+                <p role="status">
+                  {adChallenge.status === "VERIFIED"
+                    ? "Ad completion verified. Granting temporary access…"
+                    : "Complete the provider’s ad. Access is granted only after its signed verification arrives."}
+                </p>
+                <div className="reader-unlock-actions">
+                  {adChallenge.providerUrl ? (
+                    <a
+                      className="button button-secondary"
+                      href={adChallenge.providerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Play size={18} weight="fill" /> Resume ad
+                    </a>
+                  ) : null}
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={adUnlockBusy}
+                    onClick={checkAdUnlockStatus}
+                  >
+                    <CheckCircle size={18} /> Check ad status
+                  </button>
+                </div>
+              </>
             ) : null}
             {actor && premiumEconomyPublic ? (
               <a className="reader-wallet-link" href="/wallet">
@@ -8962,46 +9697,48 @@ function ReaderView({
     );
   }
 
-  const chapterReactionPrompt = chapterReactions.length ? (
-      <section className="chapter-reactions-box" aria-labelledby="chapter-reactions-title">
+  const orderedChapterReactions = [...chapterReactions].sort(
+    (left, right) =>
+      CHAPTER_REACTION_PRESENTATION[left.slug].order -
+      CHAPTER_REACTION_PRESENTATION[right.slug].order,
+  );
+  const chapterReactionPrompt = (
+    <>
+      <header className="comments-header chapter-reactions-header">
         <div>
-          <p className="eyebrow">Chapter reactions</p>
-          <h2 id="chapter-reactions-title">What do you think about this chapter?</h2>
-          <span>
-            {chapterReactions.reduce((sum, reaction) => sum + reaction.count, 0).toLocaleString()} reactions
-            {actor ? " · Choose one reaction." : " · Sign in to react."}
-          </span>
+          <h2 id="chapter-reactions-title">Chapter Reactions</h2>
         </div>
-        <div className="chapter-reaction-options">
-          {chapterReactions.map((reaction) => (
-            <button
-              type="button"
-              key={reaction.id}
-              aria-pressed={reaction.selected}
-              disabled={Boolean(reactionBusy)}
-              onClick={() => void toggleChapterReaction(reaction.id)}
-            >
-              {reaction.imageUrl ? (
-                <img src={reaction.imageUrl} alt="" width={48} height={48} />
-              ) : (
-                <span aria-hidden="true">{reaction.emojiFallback || "♡"}</span>
-              )}
-              <small>{reaction.count}</small>
-              <strong>{reaction.name}</strong>
-            </button>
-          ))}
-        </div>
-      </section>
-    ) : (
-      <section className="chapter-reactions-box is-status" aria-labelledby="chapter-reactions-title">
-        <div>
-          <p className="eyebrow">Chapter reactions</p>
-          <h2 id="chapter-reactions-title">What do you think about this chapter?</h2>
-          <span>{chapterReactionsLoading ? "Loading the six reaction slots…" : chapterReactionsError || "Reaction slots are temporarily unavailable."}</span>
-        </div>
-        {!chapterReactionsLoading ? <button className="button button-secondary" type="button" onClick={() => { setChapterReactionsLoading(true); setChapterReactionsError(""); setChapterReactionsReload((value) => value + 1); }}>Retry reactions</button> : null}
-      </section>
-    );
+      </header>
+      {orderedChapterReactions.length ? (
+        <section className="chapter-reactions-box" aria-labelledby="chapter-reactions-title">
+          <div className="chapter-reaction-options">
+            {orderedChapterReactions.map((reaction) => {
+              const presentation = CHAPTER_REACTION_PRESENTATION[reaction.slug];
+              return (
+                <button
+                  type="button"
+                  key={reaction.id}
+                  aria-label={`${presentation.label}: ${reaction.count.toLocaleString()} reactions`}
+                  aria-pressed={reaction.selected}
+                  disabled={Boolean(reactionBusy)}
+                  onClick={() => void toggleChapterReaction(reaction.id)}
+                >
+                  <ChapterReactionVisual slug={reaction.slug} />
+                  <small>{reaction.count.toLocaleString()}</small>
+                  <strong>{presentation.label}</strong>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <section className="chapter-reactions-box is-status" aria-labelledby="chapter-reactions-title">
+          <span>{chapterReactionsLoading ? "Loading reactions…" : chapterReactionsError || "Reactions are temporarily unavailable."}</span>
+          {!chapterReactionsLoading ? <button className="button button-secondary" type="button" onClick={() => { setChapterReactionsLoading(true); setChapterReactionsError(""); setChapterReactionsReload((value) => value + 1); }}>Retry reactions</button> : null}
+        </section>
+      )}
+    </>
+  );
 
   return (
     <main
@@ -9121,9 +9858,16 @@ function ReaderView({
                 <h2 id="reader-chapter-drawer-title">{seriesTitle}</h2>
                 <p>
                   {readerContext ? (
-                    <LanguageFlag language={readerContext.chapter.language} />
+                    <LanguageFlag language={readerContext.chapter.language} showCode={false} />
                   ) : null}
-                  <span>· {teamName}</span>
+                  <span>·</span>
+                  {activeChapterRelease?.teamSlug ? (
+                    <a href={`/team/${encodeURIComponent(activeChapterRelease.teamSlug)}`}>
+                      {activeChapterRelease.teamName ?? teamName}
+                    </a>
+                  ) : (
+                    <span>{teamName}</span>
+                  )}
                 </p>
               </div>
               <button
@@ -9153,13 +9897,13 @@ function ReaderView({
               ) : releaseChapters.length ? (
                 releaseChapters.map((chapter) => {
                   const current = chapter.chapterSlug === routeChapterSlug;
+                  const chapterHref = `/title/${routeSeriesSlug}/chapter/${chapter.chapterSlug}`;
+                  const paid = chapter.accessType === "PAID";
                   return (
-                    <a
+                    <article
                       className={current ? "is-current" : ""}
-                      href={`/title/${routeSeriesSlug}/chapter/${chapter.chapterSlug}`}
                       key={`${chapter.chapterSlug}:${chapter.version}`}
                       aria-current={current ? "page" : undefined}
-                      onClick={() => closeChapterDrawer(false)}
                     >
                       <span>
                         {chapter.canRead ? (
@@ -9169,26 +9913,47 @@ function ReaderView({
                         )}
                       </span>
                       <div>
-                        <strong>
-                          <FreshChapterMark fresh={chapter.isFresh} />
-                          <LanguageFlag language={chapter.language} />
-                          {chapterDisplayLabel(chapter)}
-                        </strong>
+                        <a
+                          className="reader-chapter-primary"
+                          href={chapterHref}
+                          onClick={() => closeChapterDrawer(false)}
+                        >
+                          <strong>
+                            <FreshChapterMark fresh={chapter.isFresh} />
+                            <LanguageFlag language={chapter.language} showCode={false} />
+                            {chapterDisplayLabel(chapter)}
+                          </strong>
+                        </a>
                         <small>
-                          {chapter.teamName ?? "Independent release"}
-                          {" · "}
-                          {chapter.accessType === "PAID" &&
-                          premiumEconomyPublic
-                            ? `${coinLabel(chapter.priceOnyx, commercial)}`
-                            : chapter.accessType === "PAID"
-                              ? "Unavailable"
-                              : "Free"}
-                          {" · "}
-                          Version {chapter.version}
+                          {chapter.teamSlug ? (
+                            <a
+                              className="reader-chapter-team"
+                              href={`/team/${encodeURIComponent(chapter.teamSlug)}`}
+                            >
+                              {chapter.teamName ?? "Publishing team"}
+                            </a>
+                          ) : (
+                            <span>{chapter.teamName ?? "Independent release"}</span>
+                          )}
+                          <span className={`reader-chapter-access is-${paid ? "paid" : "free"}`}>
+                            {paid ? <LockSimple size={12} /> : <Check size={12} />}
+                            {paid ? "Paid" : "Free"}
+                          </span>
                         </small>
                       </div>
-                      {current ? <em>Reading</em> : <CaretRight size={17} />}
-                    </a>
+                      {current ? (
+                        <em>Reading</em>
+                      ) : (
+                        <a
+                          className="reader-chapter-open"
+                          href={chapterHref}
+                          aria-label={`Read ${chapterDisplayLabel(chapter)}`}
+                          onClick={() => closeChapterDrawer(false)}
+                        >
+                          <CaretRight size={17} />
+                        </a>
+                      )}
+                    </article>
                   );
                 })
               ) : (
@@ -9462,20 +10227,13 @@ function ReaderView({
                   key={alternative.chapterId}
                   onClick={() => setContinuityDirection(null)}
                 >
-                  <LanguageFlag language={alternative.language} />
+                  <LanguageFlag language={alternative.language} showCode={false} />
                   <span>
                     <strong>{alternative.chapterLabel}</strong>
-                    <small>
-                      {alternative.teamName ?? "Independent release"} · Version{" "}
-                      {alternative.version}
-                    </small>
+                    <small>{alternative.teamName ?? "Independent release"}</small>
                   </span>
-                  <em>
-                    {alternative.accessType === "FREE"
-                      ? "Free"
-                      : premiumEconomyPublic
-                        ? coinLabel(alternative.priceOnyx, commercial)
-                        : "Unavailable"}
+                  <em className={`reader-chapter-access is-${alternative.accessType === "FREE" ? "free" : "paid"}`}>
+                    {alternative.accessType === "FREE" ? "Free" : "Paid"}
                   </em>
                   <CaretRight size={17} />
                 </a>
@@ -10983,11 +11741,480 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
   );
 }
 
+type OperationsNavigationItem = {
+  slug: string;
+  label: string;
+  icon: PhosphorIcon;
+  aliases: readonly string[];
+  keywords: readonly string[];
+  children?: readonly AdminNavigationChild[];
+};
+
 type OperationsNavigationGroup = {
   id: string;
   label: string;
-  items: ReadonlyArray<readonly [string, PhosphorIcon]>;
+  items: readonly OperationsNavigationItem[];
 };
+
+const ADMIN_NAVIGATION_ICONS: Readonly<Record<string, PhosphorIcon>> = {
+  home: ChartLineUp,
+  series: Books,
+  chapters: LockSimple,
+  "genres-tags": Tag,
+  sliders: SlidersHorizontal,
+  "pinned-series": PushPin,
+  "editorial-picks": Star,
+  "announcements-ads": Megaphone,
+  "series-submissions": FileText,
+  "chapter-review": CheckCircle,
+  "access-decisions": WarningCircle,
+  "team-directory": ShieldCheck,
+  "team-requests": UsersThree,
+  "users-roles": UsersThree,
+  permissions: Key,
+  reports: WarningCircle,
+  discussions: ChatCircle,
+  "support-tickets": Lifebuoy,
+  "wallet-balances": Wallet,
+  payouts: Coins,
+  transactions: Storefront,
+  store: Storefront,
+  discounts: Tag,
+  roulette: Sparkle,
+  "content-access-control": Eye,
+  "branding-appearance": GearSix,
+  "footer-legal": FileText,
+  "keyboard-shortcuts": Key,
+  "feature-flags": SquaresFour,
+  security: Key,
+  "integrations-api": CreditCard,
+  "activity-log": Pulse,
+};
+
+const LEGACY_UPLOAD_SUBSECTIONS = new Set([
+  "dashboard",
+  "series-requests",
+  "series",
+  "single",
+  "multi",
+  "drafts",
+  "history",
+  "review-status",
+  "rights",
+  "rules",
+]);
+
+const LEGACY_UPLOAD_SUBSECTION_ALIASES: Readonly<Record<string, string>> = {
+  "create-new-series": "add-series",
+  "my-series-requests": "series-requests",
+  "single-chapter": "single",
+  "multi-chapter": "multi",
+  "upload-history": "history",
+  "upload-rules": "rules",
+};
+
+function canonicalAdminSubsection(
+  item: OperationsNavigationItem | undefined,
+  subsection: string | undefined,
+) {
+  const normalized = normalizeAdminNavigationKey(subsection);
+  if (!normalized) return "";
+  const child = item?.children?.find((nested) =>
+    [nested.slug, nested.label, ...nested.aliases].some(
+      (candidate) => normalizeAdminNavigationKey(candidate) === normalized,
+    ),
+  );
+  return child?.slug ?? normalized;
+}
+
+function resolveAdminLocation(
+  items: readonly OperationsNavigationItem[],
+  section: string | undefined,
+  subsection: string | undefined,
+  fallbackSection: string,
+) {
+  const normalizedSection = normalizeAdminNavigationKey(section);
+  const normalizedSubsection = normalizeAdminNavigationKey(subsection);
+  const itemForSlug = (slug: string) =>
+    items.find((candidate) => candidate.slug === slug);
+  const location = (
+    item: OperationsNavigationItem | undefined,
+    nextSubsection = normalizedSubsection,
+    unavailableLabel?: string,
+  ) => ({
+    section: item?.label ?? unavailableLabel ?? fallbackSection,
+    subsection: canonicalAdminSubsection(item, nextSubsection),
+  });
+
+  if (["upload-center", "uploads"].includes(normalizedSection)) {
+    const legacySubsection =
+      LEGACY_UPLOAD_SUBSECTION_ALIASES[normalizedSubsection] ??
+      normalizedSubsection;
+    if (legacySubsection === "add-series") {
+      return location(itemForSlug("series"), "new", "Series");
+    }
+    return location(
+      itemForSlug("chapters"),
+      legacySubsection || "dashboard",
+      "Chapters",
+    );
+  }
+
+  if (normalizedSection === "appearance") {
+    if (["footer", "legal"].includes(normalizedSubsection)) {
+      return location(itemForSlug("footer-legal"), normalizedSubsection);
+    }
+    if (normalizedSubsection === "shortcuts") {
+      return location(itemForSlug("keyboard-shortcuts"));
+    }
+    const appearanceSubsection =
+      normalizedSubsection === "reader-assets"
+        ? "reader"
+        : normalizedSubsection === "colors"
+          ? "theme"
+          : normalizedSubsection;
+    return location(itemForSlug("branding-appearance"), appearanceSubsection);
+  }
+
+  if (["footer", "legal"].includes(normalizedSection) && !normalizedSubsection) {
+    return location(itemForSlug("footer-legal"), normalizedSection);
+  }
+  if (["audit", "audit-log"].includes(normalizedSection) && !normalizedSubsection) {
+    return location(itemForSlug("activity-log"), "technical", "Activity Log");
+  }
+  if (["activity", "user-activity"].includes(normalizedSection) && !normalizedSubsection) {
+    return location(itemForSlug("activity-log"), "readable", "Activity Log");
+  }
+  if (["commerce", "offers"].includes(normalizedSection) && !normalizedSubsection) {
+    return location(itemForSlug("store"), "offers", "Store");
+  }
+  if (normalizedSection === "store-management" && !normalizedSubsection) {
+    return location(itemForSlug("store"), "coins", "Store");
+  }
+
+  const destination = findAdminNavigationDestination(normalizedSection);
+  return location(
+    itemForSlug(destination?.item.slug ?? normalizedSection),
+    normalizedSubsection,
+    destination?.item.label,
+  );
+}
+
+function workspaceNavigationItem(
+  label: string,
+  icon: PhosphorIcon,
+): OperationsNavigationItem {
+  return {
+    slug: label.toLowerCase().replaceAll(" ", "-"),
+    label,
+    icon,
+    aliases: [],
+    keywords: [],
+  };
+}
+
+type AdminCommandEntry = {
+  id: string;
+  label: string;
+  description: string;
+  group: string;
+  section: string;
+  subsection?: string;
+  icon: PhosphorIcon;
+  keywords: readonly string[];
+  kind: "page" | "action";
+};
+
+const ADMIN_FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not(:disabled)",
+  "input:not(:disabled)",
+  "select:not(:disabled)",
+  "textarea:not(:disabled)",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function adminFocusableElements(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(ADMIN_FOCUSABLE_SELECTOR),
+  ).filter((element) => {
+    if (element.closest("[hidden], [inert], [aria-hidden='true']")) return false;
+    const style = window.getComputedStyle(element);
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      element.getClientRects().length > 0
+    );
+  });
+}
+
+function restoreAdminFocus(
+  previousFocus: HTMLElement | null,
+  fallbackSelector?: string,
+) {
+  const canReceiveFocus = (element: HTMLElement | null) => {
+    if (
+      !element?.isConnected ||
+      element.closest("[hidden], [inert], [aria-hidden='true']")
+    ) {
+      return false;
+    }
+    const style = window.getComputedStyle(element);
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      element.getClientRects().length > 0
+    );
+  };
+  const fallback = fallbackSelector
+    ? document.querySelector<HTMLElement>(fallbackSelector)
+    : null;
+  const target = canReceiveFocus(previousFocus)
+    ? previousFocus
+    : canReceiveFocus(fallback)
+      ? fallback
+      : null;
+  target?.focus({ preventScroll: true });
+}
+
+function AdminCommandPalette({
+  groups,
+  capabilities,
+  onClose,
+  onChoose,
+}: {
+  groups: readonly OperationsNavigationGroup[];
+  capabilities: readonly string[];
+  onClose(): void;
+  onChoose(section: string, subsection?: string): void;
+}) {
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const granted = useMemo(() => new Set(capabilities), [capabilities]);
+  const entries = useMemo<AdminCommandEntry[]>(() => {
+    const pages = groups.flatMap((group) =>
+      group.items.flatMap((item) => [
+        {
+          id: `page:${item.slug}`,
+          label: item.label,
+          description: `Open ${group.label || item.label}`,
+          group: group.label || "Activity",
+          section: item.label,
+          icon: item.icon,
+          keywords: [item.slug, ...item.aliases, ...item.keywords],
+          kind: "page" as const,
+        },
+        ...(item.children ?? []).map((nested) => ({
+          id: `page:${item.slug}/${nested.slug}`,
+          label: `${item.label} · ${nested.label}`,
+          description: `Open ${nested.label}`,
+          group: group.label || "Activity",
+          section: item.label,
+          subsection: nested.slug,
+          icon: item.icon,
+          keywords: [
+            item.slug,
+            ...item.keywords,
+            nested.slug,
+            ...nested.aliases,
+            ...nested.keywords,
+          ],
+          kind: "page" as const,
+        })),
+      ]),
+    );
+    const actions = ADMIN_COMMON_ACTIONS.filter((action) =>
+      granted.has(action.capability),
+    ).flatMap((action) => {
+      const destination = groups
+        .flatMap((group) => group.items)
+        .find((item) => item.slug === action.sectionSlug);
+      if (!destination) return [];
+      return [
+        {
+          id: `action:${action.id}`,
+          label: action.label,
+          description: action.description,
+          group: "Quick action",
+          section: destination.label,
+          subsection:
+            "subsectionSlug" in action ? action.subsectionSlug : undefined,
+          icon: destination.icon,
+          keywords: action.keywords,
+          kind: "action" as const,
+        },
+      ];
+    });
+    return [...actions, ...pages];
+  }, [granted, groups]);
+  const results = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return entries;
+    return entries.filter((entry) =>
+      [entry.label, entry.description, entry.group, ...entry.keywords]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [entries, query]);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    const keepFocusInside = (event: KeyboardEvent) => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      event.stopPropagation();
+      const focusable = adminFocusableElements(panel);
+      if (!focusable.length) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      const focusInside = panel.contains(document.activeElement);
+      if (event.shiftKey && (!focusInside || document.activeElement === first)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!focusInside || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", keepFocusInside, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", keepFocusInside, true);
+      restoreAdminFocus(
+        previousFocusRef.current,
+        ".ops-admin-mobile-bar button[aria-label='Open admin command palette'], .ops-command-trigger",
+      );
+      previousFocusRef.current = null;
+    };
+  }, []);
+
+  const choose = (entry: AdminCommandEntry | undefined) => {
+    if (!entry) return;
+    onChoose(entry.section, entry.subsection);
+  };
+  return (
+    <div
+      className="admin-command-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="admin-command-title"
+      onKeyDown={(event: ReactKeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveIndex((current) =>
+            results.length ? (current + 1) % results.length : 0,
+          );
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveIndex((current) =>
+            results.length
+              ? (current - 1 + results.length) % results.length
+              : 0,
+          );
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          choose(results[activeIndex]);
+        }
+      }}
+    >
+      <button
+        className="admin-command-backdrop"
+        type="button"
+        tabIndex={-1}
+        aria-label="Close command palette"
+        onClick={onClose}
+      />
+      <section ref={panelRef} className="admin-command-panel" tabIndex={-1}>
+        <header>
+          <MagnifyingGlass size={20} aria-hidden="true" />
+          <div>
+            <h2 id="admin-command-title">Admin command palette</h2>
+            <p>Open any page or run a common action.</p>
+          </div>
+          <kbd>Esc</kbd>
+        </header>
+        <label className="admin-command-input">
+          <span className="sr-only">Search admin pages and actions</span>
+          <MagnifyingGlass size={18} aria-hidden="true" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+            }}
+            placeholder="Search pages and actions…"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="admin-command-results"
+            aria-activedescendant={results[activeIndex]?.id}
+          />
+          <kbd>Ctrl K</kbd>
+        </label>
+        <div
+          className="admin-command-results"
+          id="admin-command-results"
+          role="listbox"
+        >
+          {results.length ? (
+            results.map((entry, index) => {
+              const Icon = entry.icon;
+              return (
+                <button
+                  type="button"
+                  id={entry.id}
+                  role="option"
+                  aria-selected={activeIndex === index}
+                  key={entry.id}
+                  onPointerMove={() => setActiveIndex(index)}
+                  onFocus={() => setActiveIndex(index)}
+                  onClick={() => choose(entry)}
+                >
+                  <span><Icon size={19} aria-hidden="true" /></span>
+                  <span>
+                    <strong>{entry.label}</strong>
+                    <small>{entry.description}</small>
+                  </span>
+                  <em>{entry.kind === "action" ? "Action" : entry.group}</em>
+                </button>
+              );
+            })
+          ) : (
+            <div className="admin-command-empty">
+              <MagnifyingGlass size={24} aria-hidden="true" />
+              <strong>No admin destination found</strong>
+              <span>Try a page name, task, or permission keyword.</span>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
 
 function OperationsView({
   mode,
@@ -11009,7 +12236,10 @@ function OperationsView({
         {
           id: "community",
           label: "Community",
-          items: [["Comments", ChatCircle], ["My teams", UsersThree]] as const,
+          items: [
+            workspaceNavigationItem("Comments", ChatCircle),
+            workspaceNavigationItem("My teams", UsersThree),
+          ],
         },
       ];
     }
@@ -11023,134 +12253,120 @@ function OperationsView({
           id: "publishing",
           label: "Publishing",
           items: [
-            ["Workspace", SquaresFour],
-            ["My teams", UsersThree],
-            ["Upload center", CloudArrowUp],
+            workspaceNavigationItem("Workspace", SquaresFour),
+            workspaceNavigationItem("My teams", UsersThree),
+            workspaceNavigationItem("Upload center", CloudArrowUp),
             ...(canUpload
-              ? ([
-                  ["Series", Books],
-                  ["Review queue", FileText],
-                ] as const)
+              ? [
+                  workspaceNavigationItem("Series", Books),
+                  workspaceNavigationItem("Review queue", FileText),
+                ]
               : []),
-          ] as const,
+          ],
         },
         {
           id: "community",
           label: "Community & insight",
           items: [
             ...(actor.role === "TEAM_LEADER"
-              ? ([
-                  ["Comments", ChatCircle],
-                  ["Analytics", ChartLineUp],
-                ] as const)
+              ? [
+                  workspaceNavigationItem("Comments", ChatCircle),
+                  workspaceNavigationItem("Analytics", ChartLineUp),
+                ]
               : []),
-            ["Rights", ShieldCheck],
-            ["Settings", GearSix],
-          ] as const,
+            workspaceNavigationItem("Rights", ShieldCheck),
+            workspaceNavigationItem("Settings", GearSix),
+          ],
         },
       ];
     }
-    const allGroups: OperationsNavigationGroup[] = [
-      {
-        id: "command",
-        label: "Command center",
-        items: [["Analytics", ChartLineUp], ["Overview", SquaresFour]] as const,
-      },
-      {
-        id: "content",
-        label: "Publishing & content",
-        items: [
-          ["Series", Books],
-          ["Chapter access", LockSimple],
-          ["Teams", ShieldCheck],
-          ["Team requests", UsersThree],
-          ["Sliders", SlidersHorizontal],
-          ["Pinned Series", PushPin],
-          ["Categories & genres", Tag],
-          ["Upload center", CloudArrowUp],
-          ["New Series Queue", FileText],
-          ["Review queue", CheckCircle],
-          ["Access decisions", WarningCircle],
-          ["Editorial", Star],
-        ] as const,
-      },
-      {
-        id: "community",
-        label: "People & trust",
-        items: [
-          ["Users & roles", UsersThree],
-          ["Permissions", Key],
-          ["Series Reports", WarningCircle],
-          ["Discussions", ChatCircle],
-          ["Support tickets", Lifebuoy],
-        ] as const,
-      },
-      {
-        id: "finance",
-        label: "Revenue & balances",
-        items: [
-          ["Balances", Wallet],
-          ["Payouts", Coins],
-          ["Transactions", Storefront],
-          ["Commerce", Coins],
-          ["Discounts", Tag],
-          ["Store Management", Storefront],
-          ["Roulette", Sparkle],
-        ] as const,
-      },
-      {
-        id: "insights",
-        label: "Operations record",
-        items: [
-          ["User activity", Pulse],
-          ["Audit log", FileText],
-        ] as const,
-      },
-      {
-        id: "system",
-        label: "Platform controls",
-        items: [
-          ["Appearance", GearSix],
-          ["Announcements & ads", Megaphone],
-          ["Security", Key],
-          ["Site coverage", SquaresFour],
-          ["API Control", Key],
-        ] as const,
-      },
-    ];
-    const granted = new Set(actor.capabilities ?? []);
-    return allGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter(([label]) => {
-          const slug = String(label).toLowerCase().replaceAll(" ", "-");
-          const capability = ADMIN_SECTION_CAPABILITIES[slug];
-          return Boolean(capability && granted.has(capability));
-        }),
-      }))
-      .filter((group) => group.items.length > 0);
+    return adminNavigationGroupsForCapabilities(actor.capabilities ?? []).map(
+      (group) => ({
+        id: group.id,
+        label: group.label,
+        items: group.items.map((item) => ({
+            slug: item.slug,
+            label: item.label,
+            icon: ADMIN_NAVIGATION_ICONS[item.slug] ?? SquaresFour,
+            aliases: item.aliases,
+            keywords: item.keywords,
+            children: item.children,
+          })),
+      }),
+    ).filter((group) => group.items.length > 0);
   }, [actor.canUpload, actor.capabilities, actor.role, admin]);
+  const publishingQueueVisible =
+    admin && groups.some((group) => group.id === "publishing-queue");
+  const [publishingPendingCount, setPublishingPendingCount] = useState<
+    number | null
+  >(null);
+  useEffect(() => {
+    if (!publishingQueueVisible) return;
+    const controller = new AbortController();
+    void fetch(
+      "/api/v1/admin/series-requests?status=SUBMITTED&page=1&limit=1",
+      { cache: "no-store", signal: controller.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          pagination?: { total?: number };
+        };
+      })
+      .then((payload) => {
+        const total = payload?.pagination?.total;
+        if (typeof total === "number" && Number.isFinite(total)) {
+          setPublishingPendingCount(Math.max(0, total));
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [publishingQueueVisible]);
   const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   const defaultSection =
     !admin && actor.role === "MODERATOR"
       ? "Comments"
       : admin
-        ? String(items[0]?.[0] ?? "Analytics")
+        ? String(items[0]?.label ?? "Dashboard")
         : "Workspace";
-  const sectionFromSlug =
-    items.find(
-      ([label]) =>
-        String(label).toLowerCase().replaceAll(" ", "-") ===
-        initialSectionSlug?.toLowerCase(),
-    )?.[0] ?? defaultSection;
+  const initialAdminLocation = admin
+    ? resolveAdminLocation(
+        items,
+        initialSectionSlug,
+        initialSubsectionSlug,
+        defaultSection,
+      )
+    : null;
+  const sectionFromSlug = (() => {
+    const normalized = normalizeAdminNavigationKey(initialSectionSlug);
+    if (admin) return initialAdminLocation?.section ?? defaultSection;
+    return (
+      items.find(
+        (item) =>
+          item.slug === normalized ||
+          item.aliases.some(
+            (alias) => normalizeAdminNavigationKey(alias) === normalized,
+          ),
+      )?.label ?? defaultSection
+    );
+  })();
   const [activeSection, setActiveSection] = useState(String(sectionFromSlug));
   const [activeSubsection, setActiveSubsection] = useState(
-    initialSubsectionSlug ?? "",
+    initialAdminLocation?.subsection ?? initialSubsectionSlug ?? "",
   );
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(groups.map((group) => group.id)),
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarQuery, setSidebarQuery] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [drawerViewport, setDrawerViewport] = useState(false);
+  const effectiveSidebarCollapsed = sidebarCollapsed && !drawerViewport;
+  const [adminCommandOpen, setAdminCommandOpen] = useState(false);
+  const operationsShellRef = useRef<HTMLElement>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
+  const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
+  const adminCommandOpenRef = useRef(adminCommandOpen);
   const [dirtyState, setDirtyState] = useState({
     dirty: false,
     label: "administrative changes",
@@ -11160,21 +12376,105 @@ function OperationsView({
     subsection?: string;
   } | null>(null);
   const sectionBase = admin ? "/onyx/admin/access" : "/dashboard";
+  const adminPreferenceKey = useMemo(
+    () =>
+      actor.email
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/gu, "-")
+        .replace(/^-|-$/gu, "") || "administrator",
+    [actor.email],
+  );
 
-  const sectionHref = useCallback((section: string, subsection?: string) => {
-    const base =
-      section === defaultSection && !subsection
-        ? sectionBase
-        : `${sectionBase}/${section.toLowerCase().replaceAll(" ", "-")}`;
-    return subsection ? `${base}/${subsection}` : base;
-  }, [defaultSection, sectionBase]);
+  useEffect(() => {
+    adminCommandOpenRef.current = adminCommandOpen;
+  }, [adminCommandOpen]);
+
+  const filteredGroups = useMemo(() => {
+    const query = sidebarQuery.trim().toLowerCase();
+    if (!admin || !query) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+          [
+            item.label,
+            item.slug,
+            ...item.aliases,
+            ...item.keywords,
+            ...(item.children ?? []).flatMap((nested) => [
+              nested.label,
+              nested.slug,
+              ...nested.aliases,
+              ...nested.keywords,
+            ]),
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(query),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [admin, groups, sidebarQuery]);
+  const resolveSectionLabel = useCallback(
+    (section: string) => {
+      if (admin) {
+        const destination = findAdminNavigationDestination(section);
+        return (
+          items.find((item) => item.slug === destination?.item.slug)?.label ??
+          section
+        );
+      }
+      const normalized = normalizeAdminNavigationKey(section);
+      return (
+        items.find(
+          (item) =>
+            item.label === section ||
+            item.slug === normalized ||
+            item.aliases.some(
+              (alias) => normalizeAdminNavigationKey(alias) === normalized,
+            ),
+        )?.label ?? section
+      );
+    },
+    [admin, items],
+  );
+  const activeNavigationItem = items.find(
+    (item) => item.label === activeSection,
+  );
+  const dispatchedSection = admin
+    ? (activeNavigationItem?.slug ?? normalizeAdminNavigationKey(activeSection))
+    : activeSection;
+
+  const sectionHref = useCallback(
+    (section: string, subsection?: string) => {
+      const destination = admin
+        ? findAdminNavigationDestination(section)
+        : undefined;
+      const item = items.find(
+        (candidate) =>
+          candidate.label === section ||
+          candidate.slug ===
+            (destination?.item.slug ?? normalizeAdminNavigationKey(section)),
+      );
+      const slug = item?.slug ?? normalizeAdminNavigationKey(section);
+      const canonicalSubsection = canonicalAdminSubsection(item, subsection);
+      const base =
+        section === defaultSection && !subsection
+          ? sectionBase
+          : `${sectionBase}/${slug}`;
+      return canonicalSubsection ? `${base}/${canonicalSubsection}` : base;
+    },
+    [admin, defaultSection, items, sectionBase],
+  );
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       try {
-        const stored = window.sessionStorage.getItem(
-          `nyascans-${mode}-nav-groups`,
-        );
+        const preferencePrefix = `nyascans-${mode}-${adminPreferenceKey}`;
+        const stored =
+          window.localStorage.getItem(`${preferencePrefix}-nav-groups`) ??
+          window.sessionStorage.getItem(`nyascans-${mode}-nav-groups`);
         if (stored) {
           const parsed = JSON.parse(stored) as unknown;
           if (Array.isArray(parsed)) {
@@ -11184,18 +12484,139 @@ function OperationsView({
           }
         }
         setSidebarCollapsed(
-          window.localStorage.getItem(
-            `nyascans-${mode}-sidebar-collapsed`,
-          ) === "true",
+          (window.localStorage.getItem(`${preferencePrefix}-sidebar-collapsed`) ??
+            window.localStorage.getItem(
+              `nyascans-${mode}-sidebar-collapsed`,
+            )) === "true",
         );
       } catch {
         // Session-only navigation preferences are optional.
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [mode]);
+  }, [adminPreferenceKey, mode]);
 
   const visibleExpandedGroups = expandedGroups;
+
+  useEffect(() => {
+    if (!admin) return;
+    const openCommands = () => setAdminCommandOpen(true);
+    window.addEventListener("nyascans:admin-command-open", openCommands);
+    return () =>
+      window.removeEventListener("nyascans:admin-command-open", openCommands);
+  }, [admin]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)");
+    const sync = () => {
+      setDrawerViewport(media.matches);
+      if (!media.matches) setMobileNavOpen(false);
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (!admin || !drawerViewport || !mobileNavOpen) return;
+    const drawer = mobileNavRef.current;
+    if (!drawer) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : mobileNavTriggerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      drawer
+        .querySelector<HTMLElement>(".ops-sidebar-mobile-close")
+        ?.focus({ preventScroll: true });
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (adminCommandOpenRef.current) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileNavOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = adminFocusableElements(drawer);
+      if (!focusable.length) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      const focusInside = drawer.contains(document.activeElement);
+      if (event.shiftKey && (!focusInside || document.activeElement === first)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!focusInside || document.activeElement === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      if (!adminCommandOpenRef.current) {
+        restoreAdminFocus(previousFocus, ".ops-admin-mobile-bar button");
+      }
+    };
+  }, [admin, drawerViewport, mobileNavOpen]);
+
+  useEffect(() => {
+    if (!admin) return;
+    const root = operationsShellRef.current;
+    if (!root) return;
+    let frame = 0;
+    const enhanceTables = () => {
+      frame = 0;
+      for (const table of root.querySelectorAll<HTMLTableElement>(
+        ".ops-main table",
+      )) {
+        table.dataset.mobileCards = "true";
+        const headings = Array.from(
+          table.querySelectorAll<HTMLTableCellElement>("thead th"),
+          (heading) => heading.textContent?.trim() ?? "",
+        );
+        for (const row of table.querySelectorAll<HTMLTableRowElement>(
+          "tbody tr",
+        )) {
+          const cells = Array.from(
+            row.querySelectorAll<HTMLTableCellElement>(
+              ":scope > th, :scope > td",
+            ),
+          );
+          cells.forEach((cell, index) => {
+            if (!cell.dataset.label && headings[index]) {
+              cell.dataset.label = headings[index];
+            }
+          });
+        }
+      }
+    };
+    const scheduleEnhancement = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(enhanceTables);
+    };
+    scheduleEnhancement();
+    const observer = new MutationObserver(scheduleEnhancement);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["scope"],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    return () => {
+      observer.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [admin]);
 
   useEffect(() => {
     function onDirty(event: Event) {
@@ -11218,25 +12639,39 @@ function OperationsView({
         .replace(/^\/+/, "")
         .split("/")
         .filter(Boolean);
-      const next =
+      const adminLocation = admin
+        ? resolveAdminLocation(
+            items,
+            pathParts[0],
+            pathParts[1],
+            defaultSection,
+          )
+        : null;
+      const next = adminLocation?.section ??
         items.find(
-          ([label]) =>
-            String(label).toLowerCase().replaceAll(" ", "-") === pathParts[0],
-        )?.[0] ?? defaultSection;
-      const nextSubsection = pathParts[1] ?? "";
+          (item) =>
+            item.slug === pathParts[0] ||
+            item.aliases.some(
+              (alias) =>
+                normalizeAdminNavigationKey(alias) === pathParts[0],
+            ),
+        )?.label ?? defaultSection;
+      const nextSubsection =
+        adminLocation?.subsection ?? normalizeAdminNavigationKey(pathParts[1]);
       if (
         dirtyState.dirty &&
         (String(next) !== activeSection ||
-          nextSubsection !== activeSubsection) &&
-        !window.confirm(
-          `Discard unsaved ${dirtyState.label} and leave this section?`,
-        )
+          nextSubsection !== activeSubsection)
       ) {
         window.history.pushState(
           {},
           "",
           sectionHref(activeSection, activeSubsection),
         );
+        setPendingNavigation({
+          section: String(next),
+          subsection: nextSubsection,
+        });
         return;
       }
       setActiveSection(String(next));
@@ -11247,6 +12682,7 @@ function OperationsView({
   }, [
     activeSection,
     activeSubsection,
+    admin,
     defaultSection,
     dirtyState,
     items,
@@ -11255,9 +12691,27 @@ function OperationsView({
   ]);
 
   function commitSection(section: string, subsection?: string) {
-    setActiveSection(section);
-    setActiveSubsection(subsection ?? "");
-    window.history.pushState({}, "", sectionHref(section, subsection));
+    const resolvedSection = resolveSectionLabel(section);
+    const destination = admin
+      ? findAdminNavigationDestination(resolvedSection)
+      : undefined;
+    const item = items.find(
+      (candidate) =>
+        candidate.label === resolvedSection ||
+        candidate.slug === destination?.item.slug,
+    );
+    const resolvedSubsection = admin
+      ? canonicalAdminSubsection(item, subsection)
+      : (subsection ?? "");
+    setActiveSection(resolvedSection);
+    setActiveSubsection(resolvedSubsection);
+    setMobileNavOpen(false);
+    setAdminCommandOpen(false);
+    window.history.pushState(
+      {},
+      "",
+      sectionHref(resolvedSection, resolvedSubsection),
+    );
   }
 
   function openSection(
@@ -11265,16 +12719,33 @@ function OperationsView({
     subsection?: string,
     confirmedDiscard = false,
   ) {
+    const resolvedSection = resolveSectionLabel(section);
+    const destination = admin
+      ? findAdminNavigationDestination(resolvedSection)
+      : undefined;
+    const item = items.find(
+      (candidate) =>
+        candidate.label === resolvedSection ||
+        candidate.slug === destination?.item.slug,
+    );
+    const resolvedSubsection = admin
+      ? canonicalAdminSubsection(item, subsection)
+      : (subsection ?? "");
     if (
       dirtyState.dirty &&
       !confirmedDiscard &&
-      (section !== activeSection ||
-        (subsection ?? "") !== activeSubsection)
+      (resolvedSection !== activeSection ||
+        resolvedSubsection !== activeSubsection)
     ) {
-      setPendingNavigation({ section, subsection });
+      setMobileNavOpen(false);
+      setAdminCommandOpen(false);
+      setPendingNavigation({
+        section: resolvedSection,
+        subsection: resolvedSubsection,
+      });
       return;
     }
-    commitSection(section, subsection);
+    commitSection(resolvedSection, resolvedSubsection);
   }
 
   function toggleGroup(groupId: string) {
@@ -11283,8 +12754,8 @@ function OperationsView({
       if (next.has(groupId)) next.delete(groupId);
       else next.add(groupId);
       try {
-        window.sessionStorage.setItem(
-          `nyascans-${mode}-nav-groups`,
+        window.localStorage.setItem(
+          `nyascans-${mode}-${adminPreferenceKey}-nav-groups`,
           JSON.stringify([...next]),
         );
       } catch {
@@ -11299,7 +12770,7 @@ function OperationsView({
       const next = !current;
       try {
         window.localStorage.setItem(
-          `nyascans-${mode}-sidebar-collapsed`,
+          `nyascans-${mode}-${adminPreferenceKey}-sidebar-collapsed`,
           String(next),
         );
       } catch {
@@ -11311,13 +12782,61 @@ function OperationsView({
 
   return (
     <main
-      className={`ops-shell ${sidebarCollapsed ? "is-sidebar-collapsed" : ""} ${
-        activeSection === "Upload center" ? "is-upload-center" : ""
+      ref={operationsShellRef}
+      className={`ops-shell ${effectiveSidebarCollapsed ? "is-sidebar-collapsed" : ""} ${
+        activeNavigationItem?.slug === "upload-center" ||
+        (dispatchedSection === "chapters" &&
+          LEGACY_UPLOAD_SUBSECTIONS.has(activeSubsection))
+          ? "is-upload-center"
+          : ""
       }`}
       data-operations-mode={mode}
     >
+      {admin ? (
+        <header className="ops-admin-mobile-bar">
+          <button
+            ref={mobileNavTriggerRef}
+            type="button"
+            aria-label="Open administration navigation"
+            aria-expanded={mobileNavOpen}
+            aria-controls="operations-navigation-drawer"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <List size={21} aria-hidden="true" />
+          </button>
+          <span>
+            <strong>{activeSection}</strong>
+            <small>Administration</small>
+          </span>
+          <button
+            type="button"
+            aria-label="Open admin command palette"
+            aria-keyshortcuts="Control+K Meta+K"
+            onClick={() => setAdminCommandOpen(true)}
+          >
+            <MagnifyingGlass size={20} aria-hidden="true" />
+          </button>
+        </header>
+      ) : null}
+      {admin && mobileNavOpen ? (
+        <button
+          className="ops-sidebar-backdrop"
+          type="button"
+          aria-label="Close administration navigation"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      ) : null}
       <aside
-        className="ops-sidebar"
+        ref={mobileNavRef}
+        className={`ops-sidebar ${mobileNavOpen ? "is-mobile-open" : ""}`}
+        id={admin ? "operations-navigation-drawer" : undefined}
+        role={admin && drawerViewport && mobileNavOpen ? "dialog" : undefined}
+        aria-modal={admin && drawerViewport && mobileNavOpen ? true : undefined}
+        tabIndex={admin && drawerViewport && mobileNavOpen ? -1 : undefined}
+        inert={admin && drawerViewport && !mobileNavOpen ? true : undefined}
+        aria-hidden={
+          admin && drawerViewport && !mobileNavOpen ? true : undefined
+        }
         aria-label={admin ? "Administration navigation" : "Workspace navigation"}
       >
         <div className="ops-sidebar-head">
@@ -11325,62 +12844,132 @@ function OperationsView({
           <button
             className="ops-sidebar-collapse"
             type="button"
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!sidebarCollapsed}
+            aria-label={effectiveSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={effectiveSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!effectiveSidebarCollapsed}
             aria-controls="operations-navigation"
             onClick={toggleSidebar}
           >
             <SidebarSimple size={19} />
           </button>
+          {admin ? (
+            <button
+              className="ops-sidebar-mobile-close"
+              type="button"
+              aria-label="Close administration navigation"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
+        {admin ? (
+          <div className="ops-admin-navigation-tools">
+            <button
+              className="ops-command-trigger"
+              type="button"
+              title={effectiveSidebarCollapsed ? "Open command palette" : undefined}
+              aria-label="Open admin command palette"
+              aria-keyshortcuts="Control+K Meta+K"
+              onClick={() => setAdminCommandOpen(true)}
+            >
+              <MagnifyingGlass size={18} aria-hidden="true" />
+              <span>Search pages &amp; actions</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+            <label className="ops-sidebar-search">
+              <span className="sr-only">Filter administration navigation</span>
+              <MagnifyingGlass size={16} aria-hidden="true" />
+              <input
+                type="search"
+                value={sidebarQuery}
+                onChange={(event) => setSidebarQuery(event.target.value)}
+                placeholder="Filter navigation…"
+              />
+              {sidebarQuery ? (
+                <button
+                  type="button"
+                  aria-label="Clear navigation filter"
+                  onClick={() => setSidebarQuery("")}
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              ) : null}
+            </label>
+          </div>
+        ) : null}
         <nav
           className="ops-grouped-nav"
           id="operations-navigation"
           aria-label="Operations sections"
         >
-          {groups.map((group) => (
+          {filteredGroups.map((group) => (
             <section className="ops-nav-group" key={group.id}>
-              <button
-                className="ops-nav-group-toggle"
-                type="button"
-                id={`ops-nav-${mode}-${group.id}-toggle`}
-                aria-expanded={
-                  sidebarCollapsed || visibleExpandedGroups.has(group.id)
-                }
-                aria-controls={`ops-nav-${mode}-${group.id}-items`}
-                onClick={() => toggleGroup(group.id)}
-              >
-                <span>{group.label}</span>
-                <CaretDown size={14} />
-              </button>
+              {group.label ? (
+                <button
+                  className="ops-nav-group-toggle"
+                  type="button"
+                  id={`ops-nav-${mode}-${group.id}-toggle`}
+                  aria-expanded={
+                    effectiveSidebarCollapsed ||
+                    Boolean(sidebarQuery.trim()) ||
+                    visibleExpandedGroups.has(group.id)
+                  }
+                  aria-controls={`ops-nav-${mode}-${group.id}-items`}
+                  onClick={() => toggleGroup(group.id)}
+                >
+                  <span>
+                    {group.label}
+                    {group.id === "publishing-queue" &&
+                    publishingPendingCount !== null ? (
+                      <small
+                        className="ops-nav-group-count"
+                        title={`${publishingPendingCount.toLocaleString()} submitted series requests`}
+                      >
+                        {publishingPendingCount.toLocaleString()}
+                      </small>
+                    ) : null}
+                  </span>
+                  <CaretDown size={14} />
+                </button>
+              ) : null}
               <div
                 className="ops-nav-group-items"
                 id={`ops-nav-${mode}-${group.id}-items`}
-                aria-labelledby={`ops-nav-${mode}-${group.id}-toggle`}
+                aria-labelledby={
+                  group.label ? `ops-nav-${mode}-${group.id}-toggle` : undefined
+                }
                 hidden={
-                  !sidebarCollapsed && !visibleExpandedGroups.has(group.id)
+                  group.label
+                    ? !effectiveSidebarCollapsed &&
+                      !sidebarQuery.trim() &&
+                      !visibleExpandedGroups.has(group.id)
+                    : false
                 }
               >
-                {group.items.map(([label, Icon]) => (
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
                   <a
-                    href={sectionHref(String(label))}
-                    key={String(label)}
-                    title={sidebarCollapsed ? String(label) : undefined}
-                    aria-current={activeSection === label ? "page" : undefined}
+                    href={sectionHref(item.label)}
+                    key={item.slug}
+                    title={effectiveSidebarCollapsed ? item.label : undefined}
+                    aria-current={activeSection === item.label ? "page" : undefined}
                     onClick={(event) => {
                       event.preventDefault();
-                      openSection(String(label));
+                      openSection(item.label);
                     }}
                   >
-                    <Icon size={18} />
-                    <span className="ops-nav-label">{String(label)}</span>
+                    <Icon size={20} />
+                    <span className="ops-nav-label">{item.label}</span>
                   </a>
-                ))}
+                  );
+                })}
               </div>
-              {!sidebarCollapsed &&
+              {!effectiveSidebarCollapsed &&
+              !sidebarQuery.trim() &&
               !visibleExpandedGroups.has(group.id) &&
-              group.items.some(([label]) => label === activeSection) ? (
+              group.items.some((item) => item.label === activeSection) ? (
                 <a
                   className="ops-active-pinned"
                   href={sectionHref(activeSection)}
@@ -11389,15 +12978,22 @@ function OperationsView({
                 >
                   {(() => {
                     const ActiveIcon =
-                      group.items.find(([label]) => label === activeSection)?.[1] ??
+                      group.items.find((item) => item.label === activeSection)?.icon ??
                       SquaresFour;
-                    return <ActiveIcon size={18} />;
+                    return <ActiveIcon size={20} />;
                   })()}
                   <span className="ops-nav-label">{activeSection}</span>
                 </a>
               ) : null}
             </section>
           ))}
+          {admin && filteredGroups.length === 0 ? (
+            <div className="ops-nav-empty" role="status">
+              <MagnifyingGlass size={20} aria-hidden="true" />
+              <strong>No matching page</strong>
+              <span>Try a shorter task or page name.</span>
+            </div>
+          ) : null}
         </nav>
         <div
           className="ops-release-version"
@@ -11422,6 +13018,18 @@ function OperationsView({
             <CaretDown size={14} />
           </summary>
           <div>
+            {admin ? (
+              <>
+                <a href="/account">
+                  <UserCircle size={17} />
+                  <span>Profile</span>
+                </a>
+                <a href="/account?tab=preferences">
+                  <GearSix size={17} />
+                  <span>Preferences</span>
+                </a>
+              </>
+            ) : null}
             <a href="/">
               <House size={17} />
               <span>Reader site</span>
@@ -11434,7 +13042,7 @@ function OperationsView({
         </details>
       </aside>
       <section className="ops-main">
-        <label className="ops-mobile-section">
+        {!admin ? <label className="ops-mobile-section">
           <span>Open section</span>
           <select
             value={activeSection}
@@ -11442,33 +13050,25 @@ function OperationsView({
           >
             {groups.map((group) => (
               <optgroup key={group.id} label={group.label}>
-                {group.items.map(([label]) => (
-                  <option key={String(label)} value={String(label)}>
-                    {String(label)}
+                {group.items.map((item) => (
+                  <option key={item.slug} value={item.label}>
+                    {item.label}
                   </option>
                 ))}
               </optgroup>
             ))}
           </select>
           <CaretDown size={17} />
-        </label>
-        {admin && activeSection === "Roulette" ? (
+        </label> : null}
+        {admin && activeNavigationItem?.slug === "roulette" ? (
           <RewardSettingsPanel />
-        ) : admin && activeSection === "Discussions" ? (
-          <ReactionLibraryPanel
-            settingsPanel={
-              <DiscussionSettingsPanel />
-            }
-          />
-        ) : admin && activeSection === "Appearance" ? (
+        ) : admin && activeNavigationItem?.slug === "branding-appearance" ? (
           <AppearanceWorkspace
+            workspace="branding-appearance"
             initialTab={
               [
                 "branding",
                 "reader",
-                "footer",
-                "legal",
-                "shortcuts",
                 "theme",
                 "palettes",
                 "preview",
@@ -11476,15 +13076,23 @@ function OperationsView({
                 ? (activeSubsection as
                     | "branding"
                     | "reader"
-                    | "footer"
-                    | "legal"
-                    | "shortcuts"
                     | "theme"
                     | "palettes"
                     | "preview")
                 : "branding"
             }
-            onTabChange={(tab) => openSection("Appearance", tab)}
+            onTabChange={(tab) => openSection("branding-appearance", tab)}
+          />
+        ) : admin && activeNavigationItem?.slug === "footer-legal" ? (
+          <AppearanceWorkspace
+            workspace="footer-legal"
+            initialTab={activeSubsection === "legal" ? "legal" : "footer"}
+            onTabChange={(tab) => openSection("footer-legal", tab)}
+          />
+        ) : admin && activeNavigationItem?.slug === "keyboard-shortcuts" ? (
+          <AppearanceWorkspace
+            workspace="keyboard-shortcuts"
+            initialTab="shortcuts"
           />
         ) : (
           <Suspense
@@ -11498,10 +13106,11 @@ function OperationsView({
           >
             <OperationsControlPanel
               admin={admin}
-              section={activeSection}
+              section={dispatchedSection}
               subsection={activeSubsection}
               actorRole={actor.role}
               actorRoles={actor.roles ?? [actor.role]}
+              capabilities={actor.capabilities ?? []}
               canUpload={Boolean(
                 admin ||
                   actor.canUpload ||
@@ -11531,6 +13140,14 @@ function OperationsView({
           if (next) commitSection(next.section, next.subsection);
         }}
       />
+      {admin && adminCommandOpen ? (
+        <AdminCommandPalette
+          groups={groups}
+          capabilities={actor.capabilities ?? []}
+          onClose={() => setAdminCommandOpen(false)}
+          onChoose={openSection}
+        />
+      ) : null}
     </main>
   );
 }
@@ -12209,8 +13826,7 @@ export function NyaScansApp({
   );
   const { settings: commercialSettings } = useCommercialSettings();
   const lockAndPayVisible =
-    commercialSettings.economy.premiumEconomyPublic ||
-    Boolean(actor?.roles?.includes("OWNER") || actor?.role === "OWNER");
+    commercialSettings.economy.premiumEconomyPublic;
   const { notifyText } = useSystemNotifications();
   const showToast = useCallback(
     (message: string) => {
@@ -12256,6 +13872,17 @@ export function NyaScansApp({
         return;
       }
       const key = event.key.toLowerCase();
+      if (
+        view === "admin" &&
+        key === "k" &&
+        (event.ctrlKey || event.metaKey)
+      ) {
+        event.preventDefault();
+        setSearchOpen(false);
+        setShortcutsOpen(false);
+        window.dispatchEvent(new Event("nyascans:admin-command-open"));
+        return;
+      }
       const run = (shortcut: (typeof enabledShortcuts)[number]) => {
         event.preventDefault();
         shortcutPrefixRef.current = null;
@@ -12307,7 +13934,7 @@ export function NyaScansApp({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabledShortcuts]);
+  }, [enabledShortcuts, view]);
 
   useEffect(() => {
     const eventType: AnalyticsEventType | null =

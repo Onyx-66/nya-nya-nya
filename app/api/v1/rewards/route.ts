@@ -12,6 +12,7 @@ import {
   walletSnapshot,
 } from "@/lib/server/economy";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 import { requireActor } from "@/lib/server/policy";
 import { getRewardSettingsDocument } from "@/lib/server/reward-settings";
 
@@ -93,9 +94,14 @@ export async function GET(request: Request) {
     const actor = await requireActor();
     const url = new URL(request.url);
     const chapterId = url.searchParams.get("chapterId")?.trim();
-    const commercial = await getCommercialSettingsDocument();
-    const premiumEconomyPublic =
-      commercial.settings.economy.premiumEconomyPublic;
+    const [commercial, featureStates] = await Promise.all([
+      getCommercialSettingsDocument(),
+      getFeatureStates(database()),
+    ]);
+    const premiumEconomyPublic = Boolean(
+      commercial.settings.economy.premiumEconomyPublic &&
+        featureStates.premium_unlocks.effective,
+    );
     const [document, balances, chapter] = await Promise.all([
       getRewardSettingsDocument(),
       premiumEconomyPublic

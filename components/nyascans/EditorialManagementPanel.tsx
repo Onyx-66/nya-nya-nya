@@ -10,6 +10,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
+import { AdminCombobox } from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type EditorialSeries = {
@@ -43,7 +44,6 @@ async function readJson<T>(response: Response) {
 export function EditorialManagementPanel({ mode = "editorial" }: { mode?: "editorial" | "sliders" }) {
   const [series, setSeries] = useState<EditorialSeries[]>([]);
   const [picks, setPicks] = useState<EditorialPick[]>([]);
-  const [query, setQuery] = useState("");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,13 +92,18 @@ export function EditorialManagementPanel({ mode = "editorial" }: { mode?: "edito
   const available = useMemo(
     () =>
       series.filter(
-        (item) =>
-          !picks.some((pick) => pick.seriesId === item.id) &&
-          `${item.title} ${item.slug}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
+        (item) => !picks.some((pick) => pick.seriesId === item.id),
       ),
-    [picks, query, series],
+    [picks, series],
+  );
+  const availableSeriesOptions = useMemo(
+    () =>
+      available.map((item) => ({
+        value: item.id,
+        label: item.title,
+        description: `${item.type} · /${item.slug}`,
+      })),
+    [available],
   );
 
   function addPick() {
@@ -205,27 +210,15 @@ export function EditorialManagementPanel({ mode = "editorial" }: { mode?: "edito
 
       <div className="editorial-picker">
         <label>
-          Find series
-          <input
-            type="search"
-            value={query}
-            placeholder="Title or slug"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <label>
           Available series
-          <select
+          <AdminCombobox
+            ariaLabel="Search and choose an available editorial series"
             value={selectedSeriesId}
-            onChange={(event) => setSelectedSeriesId(event.target.value)}
-          >
-            <option value="">Choose a series</option>
-            {available.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.title} · {item.type}
-              </option>
-            ))}
-          </select>
+            options={availableSeriesOptions}
+            emptyLabel="Choose a series"
+            placeholder="Search title, slug, or format…"
+            onChange={setSelectedSeriesId}
+          />
         </label>
         <button
           className="button button-secondary"

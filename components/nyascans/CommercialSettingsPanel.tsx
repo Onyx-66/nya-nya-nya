@@ -17,7 +17,10 @@ import {
   type CommercialSettings,
   type MembershipOffer,
 } from "@/lib/commercial-settings";
-import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  ConfirmActionDialog,
+  useUnsavedChanges,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
 type StoredDocument = {
@@ -90,6 +93,7 @@ export function CommercialSettingsPanel({
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [reloadConfirmationOpen, setReloadConfirmationOpen] = useState(false);
   const dirty = JSON.stringify(document.settings) !== JSON.stringify(saved);
   useUnsavedChanges(dirty, "commercial settings");
 
@@ -254,10 +258,8 @@ export function CommercialSettingsPanel({
           <button
             type="button"
             onClick={() => {
-              if (
-                dirty &&
-                !window.confirm("Discard unsaved commercial settings?")
-              ) {
+              if (dirty) {
+                setReloadConfirmationOpen(true);
                 return;
               }
               void load();
@@ -936,6 +938,17 @@ export function CommercialSettingsPanel({
           {busy ? "Saving…" : "Save commercial settings"}
         </button>
       </footer>
+      <ConfirmActionDialog
+        open={reloadConfirmationOpen}
+        title="Discard commercial setting changes?"
+        description="Reloading replaces every unsaved announcement, currency, unlock, and offer setting with the latest saved values."
+        confirmLabel="Discard and reload"
+        onCancel={() => setReloadConfirmationOpen(false)}
+        onConfirm={() => {
+          setReloadConfirmationOpen(false);
+          void load();
+        }}
+      />
     </form>
   );
 }

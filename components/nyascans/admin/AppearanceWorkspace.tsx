@@ -16,38 +16,86 @@ type AppearanceTab =
   | "palettes"
   | "preview";
 
+export type AppearanceWorkspaceKind =
+  | "branding-appearance"
+  | "footer-legal"
+  | "keyboard-shortcuts";
+
+const appearanceTabs: Array<{ key: AppearanceTab; label: string }> = [
+  { key: "branding", label: "Branding" },
+  { key: "reader", label: "Header assets" },
+  { key: "theme", label: "Colors, typography & layout" },
+  { key: "palettes", label: "Ready-to-use palettes" },
+  { key: "preview", label: "Advanced preview" },
+];
+
+const footerLegalTabs: Array<{ key: AppearanceTab; label: string }> = [
+  { key: "footer", label: "Footer & social" },
+  { key: "legal", label: "Legal documents" },
+];
+
 export function AppearanceWorkspace({
-  initialTab = "branding",
+  workspace = "branding-appearance",
+  initialTab,
   onTabChange,
 }: {
+  workspace?: AppearanceWorkspaceKind;
   initialTab?: AppearanceTab;
-  onTabChange(tab: AppearanceTab): void;
+  onTabChange?(tab: AppearanceTab): void;
 }) {
-  const tab = initialTab;
+  const tabs =
+    workspace === "branding-appearance"
+      ? appearanceTabs
+      : workspace === "footer-legal"
+        ? footerLegalTabs
+        : [];
+  const defaultTab =
+    workspace === "footer-legal"
+      ? "footer"
+      : workspace === "keyboard-shortcuts"
+        ? "shortcuts"
+        : "branding";
+  const tab =
+    initialTab &&
+    (initialTab === "shortcuts" || tabs.some((entry) => entry.key === initialTab))
+      ? initialTab
+      : defaultTab;
+  const page =
+    workspace === "footer-legal"
+      ? {
+          kicker: "Public policy",
+          title: "Footer & Legal",
+          description:
+            "Manage footer link groups, social destinations, and the public legal documents readers rely on.",
+        }
+      : workspace === "keyboard-shortcuts"
+        ? {
+            kicker: "Interaction settings",
+            title: "Keyboard Shortcuts",
+            description:
+              "Maintain the site-wide shortcut registry and keep every key assignment discoverable.",
+          }
+        : {
+            kicker: "Brand system",
+            title: "Branding & Appearance",
+            description:
+              "Manage public branding, reader assets, design tokens, palettes, and a safe local preview without exposing raw CSS.",
+          };
 
   function changeTab(value: string) {
     const next = value as AppearanceTab;
     if (next === tab) return;
     window.sessionStorage.setItem("nyascans-admin-appearance-tab", next);
-    onTabChange(next);
+    onTabChange?.(next);
   }
 
   return (
     <AdminPageScaffold
-      breadcrumbs={["Administration", "Appearance"]}
-      kicker="Brand system"
-      title="Appearance"
-      description="Manage public branding, reader assets, social links, design tokens, and an unsaved local preview without exposing raw CSS."
-      tabs={[
-        { key: "branding", label: "Branding" },
-        { key: "reader", label: "Reader assets" },
-        { key: "footer", label: "Footer & social" },
-        { key: "legal", label: "Legal & DMCA" },
-        { key: "shortcuts", label: "Keyboard shortcuts" },
-        { key: "theme", label: "Colors, typography & layout" },
-        { key: "palettes", label: "Ready-to-use palettes" },
-        { key: "preview", label: "Advanced preview" },
-      ]}
+      breadcrumbs={["Administration", "Settings", page.title]}
+      kicker={page.kicker}
+      title={page.title}
+      description={page.description}
+      tabs={tabs}
       activeTab={tab}
       onTabChange={changeTab}
     >

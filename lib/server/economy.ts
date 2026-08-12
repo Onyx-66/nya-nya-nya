@@ -60,22 +60,36 @@ export async function walletSnapshot(
   const [balance, activity] = await Promise.all([
     database
       .prepare(
-        `SELECT COALESCE(SUM(amount), 0) AS balance
-           FROM ledger_entries
-          WHERE account_id = ?`,
+        `SELECT COALESCE(SUM(entry.amount), 0) AS balance
+           FROM ledger_accounts account
+           LEFT JOIN ledger_entries entry ON entry.account_id = account.id
+          WHERE account.owner_type = 'USER'
+            AND account.owner_id = ?
+            AND account.currency = ?
+            AND (
+              account.account_type = 'AVAILABLE'
+              OR (? = 'ONYX' AND account.account_type LIKE 'PAYMENT_DEBT:%')
+            )`,
       )
-      .bind(accountId)
+      .bind(userId, currency, currency)
       .first<{ balance: number }>(),
     database
       .prepare(
         `SELECT t.id, t.kind, t.memo, t.created_at AS createdAt, e.amount
            FROM ledger_entries e
            JOIN ledger_transactions t ON t.id = e.transaction_id
-          WHERE e.account_id = ?
+           JOIN ledger_accounts account ON account.id = e.account_id
+          WHERE account.owner_type = 'USER'
+            AND account.owner_id = ?
+            AND account.currency = ?
+            AND (
+              account.account_type = 'AVAILABLE'
+              OR (? = 'ONYX' AND account.account_type LIKE 'PAYMENT_DEBT:%')
+            )
           ORDER BY t.created_at DESC
           LIMIT 20`,
       )
-      .bind(accountId)
+      .bind(userId, currency, currency)
       .all<WalletActivity>(),
   ]);
   return {

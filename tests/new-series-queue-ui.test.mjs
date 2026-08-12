@@ -9,24 +9,26 @@ async function read(relativePath) {
   return fs.readFile(path.join(root, relativePath), "utf8");
 }
 
-test("administrator navigation exposes a dedicated real New Series Queue", async () => {
-  const [app, panel, queue] = await Promise.all([
-    read("components/nyascans/NyaScansApp.tsx"),
+test("administrator navigation exposes Series Submissions with source cross-check", async () => {
+  const [navigation, panel, queue] = await Promise.all([
+    read("lib/admin-navigation.ts"),
     read("components/nyascans/OperationsControlPanel.tsx"),
     read("components/nyascans/admin/NewSeriesQueuePanel.tsx"),
   ]);
 
   assert.match(
-    app,
-    /\["New Series Queue", FileText\]/,
+    navigation,
+    /slug: "series-submissions"[\s\S]+label: "Series Submissions"/,
     "the administrator catalogue navigation should expose the queue",
   );
   assert.match(panel, /import \{ NewSeriesQueuePanel \}/);
   assert.match(
     panel,
-    /section === "New Series Queue"[\s\S]*<NewSeriesQueuePanel \/>/,
+    /section === "Series Submissions"[\s\S]*<NewSeriesQueuePanel \/>/,
   );
-  assert.match(queue, /title="New Series Queue"/);
+  assert.match(queue, /External metadata cross-check/);
+  assert.match(queue, /MANGADEX/);
+  assert.match(queue, /MANGAUPDATES/);
   assert.match(queue, /\/api\/v1\/admin\/series-requests/);
   assert.doesNotMatch(queue, /href=["']#["']/);
 });

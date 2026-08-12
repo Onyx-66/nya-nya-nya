@@ -4,8 +4,10 @@ import { AdminMfaGate } from "@/components/nyascans/admin/AdminMfaGate";
 import { writeAudit } from "@/lib/server/admin-utils";
 import { actorHasCapability, getActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 import {
   ADMIN_PERMISSION_REGISTRY,
+  ADMIN_SECTION_ALTERNATE_CAPABILITIES,
   ADMIN_SECTION_CAPABILITIES,
 } from "@/lib/admin-permissions";
 import { forbidden } from "next/navigation";
@@ -73,7 +75,13 @@ export default async function AdminPage({ params }: AdminPageProps) {
 
   const requestedSection = slug?.[0] ?? "analytics";
   const requestedCapability = ADMIN_SECTION_CAPABILITIES[requestedSection];
-  if (!requestedCapability || !actorHasCapability(actor, requestedCapability)) {
+  const hasRequestedCapability = requestedCapability
+    ? actorHasCapability(actor, requestedCapability) ||
+      (ADMIN_SECTION_ALTERNATE_CAPABILITIES[requestedSection] ?? []).some(
+        (capability) => actorHasCapability(actor, capability),
+      )
+    : false;
+  if (!requestedCapability || !hasRequestedCapability) {
     await writeAudit(actor, randomId(), {
       action: "admin.section.access.denied",
       category: "AUTHENTICATION_SECURITY",
@@ -85,6 +93,9 @@ export default async function AdminPage({ params }: AdminPageProps) {
     }).catch(() => undefined);
     forbidden();
   }
+  const featureStates = await getFeatureStates().catch(() => null);
+  const premiumUnlocks = featureStates?.premium_unlocks.effective === true;
+  const paymentsActive = featureStates?.payments.effective === true;
   const capabilities = ADMIN_PERMISSION_REGISTRY
     .map(([capability]) => capability)
     .filter((capability) => actorHasCapability(actor, capability));
@@ -102,6 +113,14 @@ export default async function AdminPage({ params }: AdminPageProps) {
         authMethod: actor.authMethod,
         avatarUrl: actor.avatarUrl,
         capabilities,
+        adminFeatures: {
+          premiumUnlocks,
+          payments: paymentsActive,
+          memberships: featureStates?.memberships.effective === true,
+          adSupportedUnlocks:
+            featureStates?.ad_supported_unlocks.effective === true,
+          teamPayouts: featureStates?.team_payouts.effective === true,
+        },
         canUseUploadCenter: true,
         canUpload: actorHasCapability(actor, "upload.create"),
         canRequestSeries: actorHasCapability(actor, "series.create"),

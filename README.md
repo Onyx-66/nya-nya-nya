@@ -101,7 +101,10 @@ launch:
 - Custom domain and DNS for `nyascans.com`
 - Transactional email provider (`EMAIL_PROVIDER=resend`, a verified
   `EMAIL_FROM`, `EMAIL_API_KEY`, and `NEXT_PUBLIC_SITE_URL`)
-- Payment provider and signed webhook secrets
+- Stripe hosted Checkout (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and its
+  signed `/api/v1/payments/stripe/webhook` endpoint
+- Stripe Connect team payouts with an approved fixed currency/Onyx conversion
+- A signed rewarded-ad provider and `/api/v1/ad-unlocks/provider-callback`
 - Tax, refund, and regional price configuration
 - Malware scanning and image transformation worker
 - Audited archive extraction worker before enabling ZIP/CBZ or RAR uploads

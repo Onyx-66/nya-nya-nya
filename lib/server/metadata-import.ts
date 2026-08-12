@@ -6,6 +6,11 @@ import {
   type ImportedSeriesMetadata,
   type LanguageCode,
 } from "@/lib/admin-metadata";
+import {
+  mangaUpdatesExternalIdAliases,
+  mangaUpdatesIdentifierFromProviderId,
+  mangaUpdatesIdentifierFromUrl,
+} from "@/lib/mangaupdates-identifiers";
 import { ApiError } from "@/lib/server/api";
 import { sha256Hex } from "@/lib/server/admin-utils";
 import { randomId } from "@/lib/server/random-id";
@@ -14,6 +19,11 @@ export const metadataPreviewSchema = z.object({
   source: z.enum(["MANGADEX", "MANGAUPDATES"]),
   input: z.string().trim().min(1).max(1_000),
   refresh: z.boolean().default(false),
+});
+
+export const metadataSearchSchema = z.object({
+  source: z.enum(["MANGADEX", "MANGAUPDATES"]),
+  query: z.string().trim().min(2).max(200),
 });
 
 const mangaDexIdSchema = z
@@ -40,6 +50,10 @@ type MangaDexPayload = {
     };
     relationships?: MangaDexRelationship[];
   };
+};
+
+type MangaDexSearchPayload = {
+  data?: Array<NonNullable<MangaDexPayload["data"]>>;
 };
 
 type MangaUpdatesPayload = {
@@ -72,11 +86,56 @@ type MangaUpdatesPayload = {
   };
 };
 
-export function normalizeMangaDexInput(value: string) {
+
+type MangaUpdatesSearchPayload = {
+  results?: Array<
+    | MangaUpdatesPayload
+    | { record?: MangaUpdatesPayload; hit_title?: string }
+  >;
+};
+
+export type MetadataSearchResult = {
+  source: "MANGADEX" | "MANGAUPDATES";
+  externalId: string;
+  sourceUrl: string;
+  title: string;
+  status: string | null;
+  coverReferenceUrl: string | null;
+};
+
+type NormalizedProviderInput = {
+  /** Canonical identifier stored with the series and used for duplicate checks. */
+  id: string;
+  /** Canonical public source URL stored with the series. */
+  url: string;
+  /** Identifier accepted by the provider's detail API. */
+  providerId: string;
+};
+
+type ProviderFetchContext = {
+  db: D1Database;
+  actorUserId: string;
+  requestId: string;
+  seriesId?: string;
+  source: "MANGADEX" | "MANGAUPDATES";
+  externalId: string;
+  operation: "SEARCH" | "DETAIL";
+};
+
+type ProviderActorContext = Pick<
+  ProviderFetchContext,
+  "actorUserId" | "requestId" | "seriesId"
+>;
+
+export function normalizeMangaDexInput(value: string): NormalizedProviderInput {
   const trimmed = value.trim();
   if (/^[0-9a-f-]{36}$/i.test(trimmed)) {
     const id = mangaDexIdSchema.parse(trimmed.toLowerCase());
-    return { id, url: `https://mangadex.org/title/${id}` };
+    return {
+      id,
+      url: `https://mangadex.org/title/${id}`,
+      providerId: id,
+    };
   }
   let url: URL;
   try {
@@ -101,54 +160,34 @@ export function normalizeMangaDexInput(value: string) {
   const parts = url.pathname.split("/").filter(Boolean);
   const titleIndex = parts.indexOf("title");
   const id = mangaDexIdSchema.parse(parts[titleIndex + 1]?.toLowerCase());
-  return { id, url: `https://mangadex.org/title/${id}` };
+  return {
+    id,
+    url: `https://mangadex.org/title/${id}`,
+    providerId: id,
+  };
 }
 
-export function normalizeMangaUpdatesInput(value: string) {
+export function normalizeMangaUpdatesInput(
+  value: string,
+): NormalizedProviderInput {
   const trimmed = value.trim();
-  if (/^\d{1,12}$/.test(trimmed)) {
-    return {
-      id: trimmed,
-      url: `https://www.mangaupdates.com/series/${trimmed}`,
-    };
-  }
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
+  const normalized = /^\d{1,12}$/u.test(trimmed)
+    ? mangaUpdatesIdentifierFromProviderId(trimmed)
+    : mangaUpdatesIdentifierFromUrl(trimmed);
+  if (!normalized) {
     throw new ApiError(
       422,
       "MANGAUPDATES_INPUT_INVALID",
-      "Enter a MangaUpdates series URL or numeric ID.",
+      /^https?:\/\//iu.test(trimmed)
+        ? "Use an official MangaUpdates series URL."
+        : "Enter a MangaUpdates series URL or numeric ID.",
     );
   }
-  if (
-    url.protocol !== "https:" ||
-    !["mangaupdates.com", "www.mangaupdates.com"].includes(url.hostname)
-  ) {
-    throw new ApiError(
-      422,
-      "MANGAUPDATES_INPUT_INVALID",
-      "Use an official MangaUpdates series URL.",
-    );
-  }
-  const token =
-    url.searchParams.get("id") ??
-    url.pathname.split("/").filter(Boolean).at(-1) ??
-    "";
-  let id = token;
-  if (!/^\d{1,12}$/.test(id) && /^[a-z0-9]+$/i.test(id)) {
-    const numeric = Number.parseInt(id, 36);
-    id = Number.isSafeInteger(numeric) ? String(numeric) : "";
-  }
-  if (!/^\d{1,12}$/.test(id)) {
-    throw new ApiError(
-      422,
-      "MANGAUPDATES_INPUT_INVALID",
-      "Enter a MangaUpdates series URL or numeric ID.",
-    );
-  }
-  return { id, url: `https://www.mangaupdates.com/series/${token || id}` };
+  return {
+    id: normalized.externalId,
+    url: normalized.sourceUrl,
+    providerId: normalized.providerId,
+  };
 }
 
 function firstText(record: Record<string, string> | undefined) {
@@ -224,12 +263,17 @@ function mapMangaDex(
     .map((name) => ({ name }));
   const statusMap: Record<
     string,
-    "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING"
+    | "ONGOING"
+    | "COMPLETED"
+    | "HIATUS"
+    | "PAUSED"
+    | "CANCELLED"
+    | "UPCOMING"
   > = {
     ongoing: "ONGOING",
     completed: "COMPLETED",
     hiatus: "HIATUS",
-    cancelled: "PAUSED",
+    cancelled: "CANCELLED",
   };
   const cover = relationships.find(
     (relationship) =>
@@ -299,7 +343,7 @@ function mapMangaUpdates(
         ? ("HIATUS" as const)
         : statusText.includes("discontinued") ||
             statusText.includes("cancel")
-          ? ("PAUSED" as const)
+          ? ("CANCELLED" as const)
           : statusText.includes("not yet") || statusText.includes("upcoming")
             ? ("UPCOMING" as const)
             : ("ONGOING" as const);
@@ -327,7 +371,7 @@ function mapMangaUpdates(
   return {
     source: "MANGAUPDATES",
     externalId: id,
-    sourceUrl: normalizeString(payload.url) ?? sourceUrl,
+    sourceUrl,
     responseHash,
     fetchedAt: new Date().toISOString(),
     cached,
@@ -400,14 +444,82 @@ export function deriveCachedCoverUrl(
   );
 }
 
-async function fetchWithRetry(url: string) {
+async function reserveProviderFetch(context: ProviderFetchContext) {
+  const logId = randomId();
+  const reservation = await context.db
+    .prepare(
+      `INSERT INTO metadata_import_logs
+       (id, actor_user_id, series_id, source, external_id, action, result,
+        safe_message, request_id)
+       SELECT ?, ?, ?, ?, ?, 'PROVIDER_FETCH', 'PENDING', ?, ?
+        WHERE (
+          SELECT COUNT(*)
+            FROM metadata_import_logs
+           WHERE source = ?
+             AND action = 'PROVIDER_FETCH'
+             AND created_at >= datetime('now', '-1 minute')
+        ) < 120`,
+    )
+    .bind(
+      logId,
+      context.actorUserId,
+      context.seriesId ?? null,
+      context.source,
+      context.externalId,
+      `${context.operation === "SEARCH" ? "Search" : "Detail"} provider call reserved.`,
+      context.requestId,
+      context.source,
+    )
+    .run();
+  if (!reservation.meta.changes) {
+    throw new ApiError(
+      429,
+      "IMPORT_RATE_LIMITED",
+      "The metadata provider request budget is temporarily exhausted. Try again shortly.",
+    );
+  }
+  return logId;
+}
+
+async function settleProviderFetch(
+  context: ProviderFetchContext,
+  logId: string,
+  result: "SUCCESS" | "FAILURE",
+) {
+  await context.db
+    .prepare(
+      `UPDATE metadata_import_logs
+          SET result = ?,
+              safe_message = ?
+        WHERE id = ?
+          AND action = 'PROVIDER_FETCH'
+          AND result = 'PENDING'`,
+    )
+    .bind(
+      result,
+      `${context.operation === "SEARCH" ? "Search" : "Detail"} provider call ${result === "SUCCESS" ? "completed" : "failed"}.`,
+      logId,
+    )
+    .run()
+    .catch(() => undefined);
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  context: ProviderFetchContext,
+) {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const providerLogId = await reserveProviderFetch(context);
     try {
       const response = await fetch(url, {
+        ...init,
         headers: {
           accept: "application/json",
           "user-agent": "NyaScans-Metadata/1.2",
+          ...(init.body ? { "content-type": "application/json" } : {}),
+          ...init.headers,
         },
         signal: AbortSignal.timeout(8_000),
       });
@@ -426,8 +538,11 @@ async function fetchWithRetry(url: string) {
         );
       }
       if (!response.ok) throw new Error(`Provider response ${response.status}`);
-      return await response.text();
+      const raw = await response.text();
+      await settleProviderFetch(context, providerLogId, "SUCCESS");
+      return raw;
     } catch (error) {
+      await settleProviderFetch(context, providerLogId, "FAILURE");
       lastError = error;
       if (error instanceof ApiError || attempt === 1) break;
     }
@@ -437,6 +552,200 @@ async function fetchWithRetry(url: string) {
     503,
     "METADATA_PROVIDER_UNAVAILABLE",
     "The metadata provider did not respond in time. Try again.",
+  );
+}
+
+function mangaDexSearchResults(raw: string): MetadataSearchResult[] {
+  let payload: MangaDexSearchPayload;
+  try {
+    payload = JSON.parse(raw) as MangaDexSearchPayload;
+  } catch {
+    throw new ApiError(
+      502,
+      "METADATA_RESPONSE_INVALID",
+      "MangaDex returned an unreadable search response.",
+    );
+  }
+  return (payload.data ?? []).flatMap((entry) => {
+    const id = normalizeString(entry.id);
+    const title = firstText(entry.attributes?.title);
+    if (!id || !title) return [];
+    const cover = (entry.relationships ?? []).find(
+      (relationship) =>
+        relationship.type === "cover_art" &&
+        relationship.attributes?.fileName,
+    );
+    return [{
+      source: "MANGADEX" as const,
+      externalId: id,
+      sourceUrl: `https://mangadex.org/title/${id}`,
+      title,
+      status: normalizeString(entry.attributes?.status) ?? null,
+      coverReferenceUrl: cover?.attributes?.fileName
+        ? `https://uploads.mangadex.org/covers/${id}/${cover.attributes.fileName}.256.jpg`
+        : null,
+    }];
+  });
+}
+
+function mangaUpdatesSearchResults(raw: string): MetadataSearchResult[] {
+  let payload: MangaUpdatesSearchPayload;
+  try {
+    payload = JSON.parse(raw) as MangaUpdatesSearchPayload;
+  } catch {
+    throw new ApiError(
+      502,
+      "METADATA_RESPONSE_INVALID",
+      "MangaUpdates returned an unreadable search response.",
+    );
+  }
+  return (payload.results ?? []).flatMap((result) => {
+    const wrapped = result as { record?: MangaUpdatesPayload };
+    const entry = wrapped.record ?? (result as MangaUpdatesPayload);
+    const idValue = entry.series_id;
+    const id =
+      typeof idValue === "number" || typeof idValue === "string"
+        ? String(idValue)
+        : "";
+    const title = normalizeString(entry.title);
+    const numericIdentifier = mangaUpdatesIdentifierFromProviderId(id);
+    const linkedIdentifier = entry.url
+      ? mangaUpdatesIdentifierFromUrl(entry.url)
+      : null;
+    const identifier =
+      linkedIdentifier?.providerId === numericIdentifier?.providerId
+        ? linkedIdentifier
+        : numericIdentifier;
+    if (!identifier || !title) return [];
+    return [{
+      source: "MANGAUPDATES" as const,
+      externalId: identifier.externalId,
+      sourceUrl: identifier.sourceUrl,
+      title,
+      status: normalizeString(entry.status) ?? null,
+      coverReferenceUrl:
+        normalizeString(entry.image?.url?.thumb) ??
+        normalizeString(entry.image?.thumb) ??
+        normalizeString(entry.image?.url?.original) ??
+        normalizeString(entry.image?.original) ??
+        null,
+    }];
+  });
+}
+
+async function providerSearchRaw(
+  source: "MANGADEX" | "MANGAUPDATES",
+  query: string,
+  context: ProviderFetchContext,
+) {
+  if (source === "MANGADEX") {
+    const params = new URLSearchParams({
+      title: query,
+      limit: "5",
+      "order[relevance]": "desc",
+    });
+    params.append("includes[]", "cover_art");
+    return fetchWithRetry(
+      `https://api.mangadex.org/manga?${params}`,
+      {},
+      context,
+    );
+  }
+  return fetchWithRetry("https://api.mangaupdates.com/v1/series/search", {
+    method: "POST",
+    body: JSON.stringify({ search: query, page: 1, perpage: 5 }),
+  }, context);
+}
+
+async function cachedProviderSearch(
+  db: D1Database,
+  source: "MANGADEX" | "MANGAUPDATES",
+  query: string,
+  actorContext: ProviderActorContext,
+  refresh = false,
+) {
+  const normalizedQuery = query.trim().replace(/\s+/gu, " ");
+  if (/^https?:\/\//iu.test(normalizedQuery)) {
+    throw new ApiError(
+      422,
+      "METADATA_SEARCH_INVALID",
+      `Use an official ${source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} URL, or search by title.`,
+    );
+  }
+  const parsedQuery = metadataSearchSchema.shape.query.parse(normalizedQuery);
+  const queryHash = await sha256Hex(
+    new TextEncoder().encode(parsedQuery.toLocaleLowerCase("en")),
+  );
+  const externalId = `search:${queryHash.slice(0, 40)}`;
+  const cacheKey = `${source}:${externalId}`;
+  let raw = "";
+  let cached = false;
+  if (!refresh) {
+    const cachedRow = await db
+      .prepare(
+        `SELECT response_json AS responseJson
+           FROM metadata_import_cache
+          WHERE cache_key = ?
+            AND datetime(expires_at) > datetime('now')
+          LIMIT 1`,
+      )
+      .bind(cacheKey)
+      .first<{ responseJson: string }>();
+    if (cachedRow) {
+      raw = cachedRow.responseJson;
+      cached = true;
+    }
+  }
+  if (!raw) {
+    raw = await providerSearchRaw(source, parsedQuery, {
+      db,
+      source,
+      externalId,
+      operation: "SEARCH",
+      ...actorContext,
+    });
+  }
+  const results = source === "MANGADEX"
+    ? mangaDexSearchResults(raw)
+    : mangaUpdatesSearchResults(raw);
+  if (!results.length) {
+    throw new ApiError(
+      404,
+      "METADATA_NOT_FOUND",
+      `No ${source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} title matched that search.`,
+    );
+  }
+  if (!cached) {
+    const responseHash = await sha256Hex(new TextEncoder().encode(raw));
+    await db
+      .prepare(
+        `INSERT INTO metadata_import_cache
+         (cache_key, source, external_id, response_json, response_hash,
+          fetched_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+                 datetime('now', '+1 hour'))
+         ON CONFLICT(cache_key) DO UPDATE SET
+           response_json = excluded.response_json,
+           response_hash = excluded.response_hash,
+           fetched_at = excluded.fetched_at,
+           expires_at = excluded.expires_at`,
+      )
+      .bind(cacheKey, source, externalId, raw, responseHash)
+      .run();
+  }
+  return { results, cached, externalId };
+}
+
+export async function searchExternalMetadata(
+  db: D1Database,
+  input: z.infer<typeof metadataSearchSchema>,
+  actorContext: ProviderActorContext,
+) {
+  return cachedProviderSearch(
+    db,
+    input.source,
+    input.query,
+    actorContext,
   );
 }
 
@@ -455,11 +764,24 @@ export async function previewExternalMetadata(
   db: D1Database,
   context: MetadataPreviewContext,
 ) {
-  const normalized =
-    context.source === "MANGADEX"
-      ? normalizeMangaDexInput(context.input)
-      : normalizeMangaUpdatesInput(context.input);
-  const attemptedId = normalized.id;
+  let normalized: NormalizedProviderInput | null = null;
+  try {
+    normalized =
+      context.source === "MANGADEX"
+        ? normalizeMangaDexInput(context.input)
+        : normalizeMangaUpdatesInput(context.input);
+  } catch (error) {
+    if (/^https?:\/\//iu.test(context.input.trim())) throw error;
+  }
+  const searchHash = normalized
+    ? ""
+    : await sha256Hex(
+        new TextEncoder().encode(
+          context.input.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en"),
+        ),
+      );
+  let attemptedId = normalized?.id ?? `search:${searchHash.slice(0, 40)}`;
+  let searchMatches: MetadataSearchResult[] = [];
   const attemptLogId = randomId();
   const reservation = await db
     .prepare(
@@ -495,6 +817,55 @@ export async function previewExternalMetadata(
     );
   }
   try {
+    if (!normalized) {
+      const match = await cachedProviderSearch(
+        db,
+        context.source,
+        context.input,
+        {
+          actorUserId: context.actorUserId,
+          requestId: context.requestId,
+          seriesId: context.seriesId,
+        },
+        context.refresh,
+      );
+      searchMatches = match.results;
+      const first = match.results[0];
+      const mangaUpdatesIdentifier =
+        context.source === "MANGAUPDATES"
+          ? mangaUpdatesIdentifierFromProviderId(first.externalId)
+          : null;
+      if (context.source === "MANGAUPDATES" && !mangaUpdatesIdentifier) {
+        throw new ApiError(
+          502,
+          "MANGAUPDATES_RESPONSE_INVALID",
+          "MangaUpdates returned an invalid series identifier.",
+        );
+      }
+      normalized = {
+        id: first.externalId,
+        url: first.sourceUrl,
+        providerId:
+          context.source === "MANGADEX"
+            ? first.externalId
+            : mangaUpdatesIdentifier!.providerId,
+      };
+      attemptedId = normalized.id;
+      await db
+        .prepare(
+          `UPDATE metadata_import_logs
+              SET external_id = ?,
+                  safe_message = ?
+            WHERE id = ?
+              AND result = 'PENDING'`,
+        )
+        .bind(
+          normalized.id,
+          `Title search matched ${first.title}.`,
+          attemptLogId,
+        )
+        .run();
+    }
     const cacheKey = `${context.source}:${normalized.id}`;
     let raw = "";
     let cached = false;
@@ -517,8 +888,18 @@ export async function previewExternalMetadata(
     if (!raw) {
       raw = await fetchWithRetry(
         context.source === "MANGADEX"
-          ? `https://api.mangadex.org/manga/${normalized.id}?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art`
-          : `https://api.mangaupdates.com/v1/series/${normalized.id}`,
+          ? `https://api.mangadex.org/manga/${normalized.providerId}?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art`
+          : `https://api.mangaupdates.com/v1/series/${normalized.providerId}`,
+        {},
+        {
+          db,
+          actorUserId: context.actorUserId,
+          requestId: context.requestId,
+          seriesId: context.seriesId,
+          source: context.source,
+          externalId: normalized.id,
+          operation: "DETAIL",
+        },
       );
     }
     const responseHash = await sha256Hex(new TextEncoder().encode(raw));
@@ -573,6 +954,19 @@ export async function previewExternalMetadata(
         )
         .run();
     }
+    await db
+      .prepare(
+        `DELETE FROM metadata_import_cache
+          WHERE datetime(expires_at) <= datetime('now')
+            AND datetime(fetched_at) < datetime('now', '-1 day')`,
+      )
+      .run()
+      .catch(() => undefined);
+    const externalIdAliases =
+      context.source === "MANGAUPDATES"
+        ? mangaUpdatesExternalIdAliases(normalized.id, normalized.url)
+        : [normalized.id];
+    const compatibleExternalId = externalIdAliases[1] ?? normalized.id;
     const [duplicateSeries, duplicateRequest] = await db.batch([
       db
         .prepare(
@@ -580,13 +974,18 @@ export async function previewExternalMetadata(
              FROM series_external_sources ses
              JOIN series s ON s.id = ses.series_id
             WHERE ses.source = ?
-              AND ses.external_id = ?
+              AND (
+                ses.external_id = ?
+                OR (? = 'MANGAUPDATES' AND ses.external_id = ?)
+              )
               AND (? IS NULL OR ses.series_id <> ?)
             LIMIT 1`,
         )
         .bind(
           context.source,
           normalized.id,
+          context.source,
+          compatibleExternalId,
           context.seriesId ?? null,
           context.seriesId ?? null,
         ),
@@ -594,7 +993,13 @@ export async function previewExternalMetadata(
         .prepare(
           `SELECT id AS requestId, primary_title AS title, status
              FROM series_requests
-            WHERE mangadex_id = ?
+            WHERE (
+              (? = 'MANGADEX' AND mangadex_id = ?)
+              OR
+              (? = 'MANGAUPDATES' AND (
+                mangaupdates_id = ? OR mangaupdates_id = ?
+              ))
+            )
               AND status IN (
                 'SUBMITTED',
                 'UNDER_REVIEW',
@@ -606,9 +1011,11 @@ export async function previewExternalMetadata(
             LIMIT 1`,
         )
         .bind(
-          context.source === "MANGADEX"
-            ? normalized.id
-            : `unsupported:${normalized.id}`,
+          context.source,
+          normalized.id,
+          context.source,
+          normalized.id,
+          compatibleExternalId,
           context.seriesRequestId ?? null,
           context.seriesRequestId ?? null,
         ),
@@ -632,6 +1039,7 @@ export async function previewExternalMetadata(
       data: imported,
       duplicate: duplicateSeries.results[0] ?? null,
       duplicateRequest: duplicateRequest.results[0] ?? null,
+      matches: searchMatches,
       attemptedId,
     };
   } catch (error) {

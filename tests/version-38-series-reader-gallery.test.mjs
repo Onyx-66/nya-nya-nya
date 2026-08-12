@@ -325,7 +325,7 @@ test("V38 series galleries are moderated, ratio-bound, and fail private before a
   );
   assert.match(mediaRoute, /actor\.id !== asset\.submittedByUserId/u);
   assert.match(mediaRoute, /"private, no-store"/u);
-  assert.match(mediaRoute, /"public, max-age=3600/u);
+  assert.doesNotMatch(mediaRoute, /"public, max-age=3600/u);
 
   assert.match(adminRoute, /requireAdminCapability\(actor, "uploads\.review"\)/u);
   assert.match(adminRoute, /current\.status !== "PENDING"/u);
@@ -430,11 +430,11 @@ test("V38 reader continuity targets the immediate chapter and preserves team plu
   );
   assert.match(
     readerContext,
-    /CAST\(chapter_number AS REAL\) < CAST\(\? AS REAL\)[\s\S]+ORDER BY CAST\(chapter_number AS REAL\) DESC/u,
+    /CAST\(candidate\.chapter_number AS REAL\) < CAST\(\? AS REAL\)[\s\S]+ORDER BY CAST\(candidate\.chapter_number AS REAL\) DESC/u,
   );
   assert.match(
     readerContext,
-    /CAST\(chapter_number AS REAL\) > CAST\(\? AS REAL\)[\s\S]+ORDER BY CAST\(chapter_number AS REAL\) ASC/u,
+    /CAST\(candidate\.chapter_number AS REAL\) > CAST\(\? AS REAL\)[\s\S]+ORDER BY CAST\(candidate\.chapter_number AS REAL\) ASC/u,
   );
   assert.match(readerContext, /c\.chapter_number = \?/u);
   assert.match(readerContext, /selectPreferredRelease\(nextCandidates/u);

@@ -1,6 +1,9 @@
 import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
-import type { Actor } from "@/lib/server/policy";
+import {
+  requireAdminCapability,
+  type Actor,
+} from "@/lib/server/policy";
 
 export type ChapterManagementScope = {
   actorId: string;
@@ -99,6 +102,7 @@ export async function requireChapterManagementScope(
   }
   const administrator = isChapterAdministrator(actor);
   if (administrator) {
+    requireAdminCapability(actor, "content.chapters.manage");
     const authorization = chapterManagementAuthorizationClause(actor, {
       chapterAlias: "c",
     });

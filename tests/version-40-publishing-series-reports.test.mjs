@@ -359,8 +359,7 @@ test("V40 chapter rows support per-chapter disclosures and linked attribution", 
   assert.match(title, /collapsedChapterNumbers/u);
   assert.match(title, /toggleChapterGroup\(group\.number\)/u);
   assert.match(title, /aria-controls=\{disclosureId\}/u);
-  assert.match(title, /Show all details/u);
-  assert.match(title, /Hide all details/u);
+  assert.match(title, /allChapterDetailsCollapsed \? "Show" : "Hide"/u);
   assert.match(title, /representativeChapterThumbnail/u);
   assert.match(title, /chapterLanguageCounts/u);
   assert.match(title, /showCode=\{false\}/u);
@@ -385,6 +384,7 @@ test("V40 chapter rows support per-chapter disclosures and linked attribution", 
 test("V40 series reports have a red reader dialog and an administrative moderation page", async () => {
   const [
     app,
+    navigation,
     dialog,
     publicRoute,
     aggregateRoute,
@@ -395,6 +395,7 @@ test("V40 series reports have a red reader dialog and an administrative moderati
   ] =
     await Promise.all([
       read("components/nyascans/NyaScansApp.tsx"),
+      read("lib/admin-navigation.ts"),
       read("components/nyascans/SeriesReportDialog.tsx"),
       read("app/api/v1/series-reports/route.ts"),
       read("app/api/v1/[...resource]/route.ts"),
@@ -404,7 +405,7 @@ test("V40 series reports have a red reader dialog and an administrative moderati
       read("app/globals.css"),
     ]);
 
-  assert.match(app, /\["Series Reports", WarningCircle\]/u);
+  assert.match(navigation, /slug: "reports"[\s\S]+label: "Reports"/u);
   assert.match(app, /className="button button-danger report-link"/u);
   assert.match(app, /<SeriesReportDialog/u);
   assert.match(dialog, /SERIES_REPORT_CATEGORIES\.map/u);
@@ -422,11 +423,12 @@ test("V40 series reports have a red reader dialog and an administrative moderati
   assert.match(adminRoute, /expectedRevision/u);
   assert.match(adminRoute, /series\.report\.status\.updated/u);
   assert.match(adminRoute, /ACTIVE_REPORT_CONFLICT/u);
-  assert.match(panel, /title="Series Reports"/u);
+  assert.match(panel, /breadcrumbs=\{\["Community", "Reports"\]\}/u);
+  assert.match(panel, /title="Reports"/u);
   assert.match(panel, /Mark in review/u);
   assert.match(panel, /Resolve/u);
   assert.match(panel, /Dismiss/u);
-  assert.match(operations, /section === "Series Reports"/u);
+  assert.match(operations, /sectionKey === "reports"/u);
   assert.match(css, /\.series-report-backdrop/u);
   assert.match(
     css,

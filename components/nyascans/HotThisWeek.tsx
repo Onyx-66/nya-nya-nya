@@ -111,7 +111,10 @@ export function HotThisWeek() {
       ) : records.length ? (
         <div className="hot-week-grid">
           {records.map((record) => (
-            <article className="hot-week-card" key={record.id}>
+            <article
+              className={`hot-week-card${record.rank <= 3 ? ` is-top-${record.rank}` : ""}`}
+              key={record.id}
+            >
               <span className={`hot-week-rank rank-${Math.min(record.rank, 4)}`}>
                 {record.rank}
               </span>

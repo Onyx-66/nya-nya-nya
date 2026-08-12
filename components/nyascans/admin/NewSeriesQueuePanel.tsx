@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import {
+  AdminCombobox,
   AdminPageScaffold,
   ConfirmActionDialog,
   useUnsavedChanges,
@@ -69,6 +70,7 @@ type RequestSummary = {
   description: string;
   seriesType: "MANGA" | "MANHWA" | "MANHUA";
   publicationStatus: string;
+  publicationYear: number | null;
   authors: Array<{ id?: string; name: string }>;
   artists: Array<{ id?: string; name: string }>;
   publisherName: string;
@@ -128,10 +130,37 @@ type RequestDetail = RequestSummary & {
   revisions: RevisionRecord[];
 };
 
+type ExternalCrossCheck = {
+  source: "MANGADEX" | "MANGAUPDATES";
+  externalId: string;
+  sourceUrl: string;
+  cached: boolean;
+  fields: {
+    title?: string;
+    alternativeTitles?: string[];
+    synopsis?: string;
+    status?: string;
+    publicationYear?: number | null;
+    languageCode?: string;
+    authors?: Array<{ name: string }>;
+    artists?: Array<{ name: string }>;
+    genres?: Array<{ name: string }>;
+    coverReferenceUrl?: string | null;
+  };
+};
+
 type QueueOptions = {
   teams: Array<{ id: string; name: string }>;
   reviewers: Array<{ id: string; displayName: string }>;
   statuses: RequestStatus[];
+};
+
+type ReviewCapabilities = {
+  canApprove: boolean;
+  canReject: boolean;
+  canRequestChanges: boolean;
+  canReassign: boolean;
+  canAttachExisting: boolean;
 };
 
 type QueueFilters = {
@@ -176,6 +205,11 @@ type PendingAction =
   | "REJECT"
   | "APPROVE"
   | "ATTACH_EXISTING";
+
+type PendingQueueNavigation = {
+  description: string;
+  run: () => void;
+};
 
 const defaultFilters: QueueFilters = {
   query: "",
@@ -402,6 +436,8 @@ export function NewSeriesQueuePanel() {
   const [busyAction, setBusyAction] = useState<PendingAction | null>(null);
   const [pendingAction, setPendingAction] =
     useState<PendingAction | null>(null);
+  const [pendingNavigation, setPendingNavigation] =
+    useState<PendingQueueNavigation | null>(null);
 
   const [reviewerId, setReviewerId] = useState("");
   const [assignmentReason, setAssignmentReason] = useState("");
@@ -423,6 +459,25 @@ export function NewSeriesQueuePanel() {
   const [selectedSeries, setSelectedSeries] =
     useState<ExistingSeries | null>(null);
   const [seriesSearching, setSeriesSearching] = useState(false);
+  const [crossCheckInput, setCrossCheckInput] = useState({
+    MANGADEX: "",
+    MANGAUPDATES: "",
+  });
+  const [crossChecks, setCrossChecks] = useState<
+    Partial<Record<"MANGADEX" | "MANGAUPDATES", ExternalCrossCheck>>
+  >({});
+  const [crossCheckBusy, setCrossCheckBusy] = useState<
+    "MANGADEX" | "MANGAUPDATES" | null
+  >(null);
+  const [crossCheckError, setCrossCheckError] = useState("");
+  const [reviewCapabilities, setReviewCapabilities] =
+    useState<ReviewCapabilities>({
+      canApprove: false,
+      canReject: false,
+      canRequestChanges: false,
+      canReassign: false,
+      canAttachExisting: false,
+    });
 
   const actionDraftDirty = Boolean(
     assignmentReason ||
@@ -546,13 +601,7 @@ export function NewSeriesQueuePanel() {
     const controller = new AbortController();
     void api<{
       data: RequestDetail;
-      capabilities: {
-        canApprove: boolean;
-        canReject: boolean;
-        canRequestChanges: boolean;
-        canReassign: boolean;
-        canAttachExisting: boolean;
-      };
+      capabilities: ReviewCapabilities;
     }>(
       `/api/v1/admin/series-requests?id=${encodeURIComponent(selectedId)}`,
       { cache: "no-store", signal: controller.signal },
@@ -576,9 +625,22 @@ export function NewSeriesQueuePanel() {
           setSeriesQuery("");
           setSeriesResults([]);
           setSelectedSeries(null);
+          setCrossCheckInput({
+            MANGADEX:
+              payload.data.externalSources.find(
+                (source) => source.source === "MANGADEX",
+              )?.sourceUrl ?? payload.data.primaryTitle,
+            MANGAUPDATES:
+              payload.data.externalSources.find(
+                (source) => source.source === "MANGAUPDATES",
+              )?.sourceUrl ?? payload.data.primaryTitle,
+          });
+          setCrossChecks({});
+          setCrossCheckError("");
           setTab("metadata");
         }
         setDetail(payload.data);
+        setReviewCapabilities(payload.capabilities);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError")
@@ -601,14 +663,31 @@ export function NewSeriesQueuePanel() {
         detail.status,
       ),
   );
-  const canDecide = Boolean(
-    detail && ["SUBMITTED", "UNDER_REVIEW"].includes(detail.status),
+  const canApprove = Boolean(
+    reviewCapabilities.canApprove &&
+      detail &&
+      ["SUBMITTED", "UNDER_REVIEW"].includes(detail.status),
   );
   const canReject = Boolean(
-    detail &&
+    reviewCapabilities.canReject &&
+      detail &&
       ["SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUESTED"].includes(
         detail.status,
       ),
+  );
+  const canRequestChanges = Boolean(
+    reviewCapabilities.canRequestChanges &&
+      detail &&
+      ["SUBMITTED", "UNDER_REVIEW"].includes(detail.status),
+  );
+  const canAttachExisting = Boolean(
+    reviewCapabilities.canAttachExisting &&
+      detail &&
+      ["SUBMITTED", "UNDER_REVIEW"].includes(detail.status),
+  );
+  const canStartReview = Boolean(
+    detail?.status === "SUBMITTED" &&
+      (canApprove || canReject || canRequestChanges || canAttachExisting),
   );
   const teamRightsValid =
     teamRights.length > 0 &&
@@ -639,52 +718,97 @@ export function NewSeriesQueuePanel() {
     setSelectedSeries(null);
   }
 
-  function chooseRequest(requestId: string) {
-    if (
-      actionDraftDirty &&
-      !window.confirm(
-        "Discard the unsent review notes and open another request?",
-      )
-    ) {
+  async function runExternalCrossCheck(
+    source: "MANGADEX" | "MANGAUPDATES",
+  ) {
+    if (!detail || crossCheckBusy) return;
+    const input = crossCheckInput[source].trim();
+    if (!input) {
+      setCrossCheckError("Enter a title or official source URL to cross-check.");
+      return;
+    }
+    setCrossCheckBusy(source);
+    setCrossCheckError("");
+    try {
+      const result = await api<{ data: ExternalCrossCheck }>(
+        "/api/v1/admin/metadata-import",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source,
+            input,
+            refresh: false,
+            seriesRequestId: detail.id,
+          }),
+        },
+      );
+      setCrossChecks((current) => ({
+        ...current,
+        [source]: result.data,
+      }));
+    } catch (error) {
+      setCrossCheckError(
+        error instanceof Error
+          ? error.message
+          : "The external metadata match could not be loaded.",
+      );
+    } finally {
+      setCrossCheckBusy(null);
+    }
+  }
+
+  function runQueueNavigation(navigation: PendingQueueNavigation) {
+    if (actionDraftDirty) {
+      setPendingNavigation(navigation);
       return;
     }
     discardActionDrafts();
-    selectedIdRef.current = requestId;
-    setDetailLoading(true);
-    setDetailError("");
-    setSelectedId(requestId);
-    setMessage(null);
+    navigation.run();
   }
 
-  function confirmQueueNavigation() {
-    if (
-      actionDraftDirty &&
-      !window.confirm("Discard the unsent review notes and continue?")
-    ) {
-      return false;
-    }
-    discardActionDrafts();
-    return true;
+  function chooseRequest(requestId: string) {
+    runQueueNavigation({
+      description:
+        "The unsent review notes will be discarded before another request is opened.",
+      run: () => {
+        selectedIdRef.current = requestId;
+        setDetailLoading(true);
+        setDetailError("");
+        setSelectedId(requestId);
+        setMessage(null);
+      },
+    });
   }
 
   function submitFilters(event: FormEvent) {
     event.preventDefault();
-    if (!confirmQueueNavigation()) return;
-    setListLoading(true);
-    setLoadError("");
-    setPage(1);
-    setAppliedFilters(filters);
-    setRefresh((value) => value + 1);
+    runQueueNavigation({
+      description:
+        "The unsent review notes will be discarded before the queue filters change.",
+      run: () => {
+        setListLoading(true);
+        setLoadError("");
+        setPage(1);
+        setAppliedFilters(filters);
+        setRefresh((value) => value + 1);
+      },
+    });
   }
 
   function resetFilters() {
-    if (!confirmQueueNavigation()) return;
-    setListLoading(true);
-    setLoadError("");
-    setFilters(defaultFilters);
-    setAppliedFilters(defaultFilters);
-    setPage(1);
-    setRefresh((value) => value + 1);
+    runQueueNavigation({
+      description:
+        "The unsent review notes will be discarded before the queue filters reset.",
+      run: () => {
+        setListLoading(true);
+        setLoadError("");
+        setFilters(defaultFilters);
+        setAppliedFilters(defaultFilters);
+        setPage(1);
+        setRefresh((value) => value + 1);
+      },
+    });
   }
 
   async function mutate(
@@ -983,9 +1107,9 @@ export function NewSeriesQueuePanel() {
 
   return (
     <AdminPageScaffold
-      breadcrumbs={["Admin", "Catalogue & publishing"]}
+      breadcrumbs={["Publishing Queue", "Series Submissions"]}
       kicker="Title creation approval"
-      title="New Series Queue"
+      title="Series Submissions"
       description="Review team-submitted title requests, compare likely duplicates, record feedback, and create or attach one canonical series."
       message={message}
       primaryAction={
@@ -1043,42 +1167,42 @@ export function NewSeriesQueuePanel() {
         </label>
         <label>
           Team
-          <select
+          <AdminCombobox
+            ariaLabel="Filter by team"
             value={filters.teamId}
-            onChange={(event) =>
+            emptyLabel="All teams"
+            options={options.teams.map((team) => ({
+              value: team.id,
+              label: team.name,
+            }))}
+            onChange={(teamId) =>
               setFilters((current) => ({
                 ...current,
-                teamId: event.target.value,
+                teamId,
               }))
             }
-          >
-            <option value="">All teams</option>
-            {options.teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label>
           Reviewer
-          <select
+          <AdminCombobox
+            ariaLabel="Filter by reviewer"
             value={filters.reviewerId}
-            onChange={(event) =>
+            emptyLabel="All reviewers"
+            options={[
+              { value: "UNASSIGNED", label: "Unassigned" },
+              ...options.reviewers.map((reviewer) => ({
+                value: reviewer.id,
+                label: reviewer.displayName,
+              })),
+            ]}
+            onChange={(reviewerId) =>
               setFilters((current) => ({
                 ...current,
-                reviewerId: event.target.value,
+                reviewerId,
               }))
             }
-          >
-            <option value="">All reviewers</option>
-            <option value="UNASSIGNED">Unassigned</option>
-            {options.reviewers.map((reviewer) => (
-              <option key={reviewer.id} value={reviewer.id}>
-                {reviewer.displayName}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label>
           Series type
@@ -1280,10 +1404,15 @@ export function NewSeriesQueuePanel() {
                 aria-label="Previous queue page"
                 disabled={page <= 1 || listLoading}
                 onClick={() => {
-                  if (!confirmQueueNavigation()) return;
-                  setListLoading(true);
-                  setLoadError("");
-                  setPage((value) => Math.max(1, value - 1));
+                  runQueueNavigation({
+                    description:
+                      "The unsent review notes will be discarded before the previous queue page opens.",
+                    run: () => {
+                      setListLoading(true);
+                      setLoadError("");
+                      setPage((value) => Math.max(1, value - 1));
+                    },
+                  });
                 }}
               >
                 <CaretLeft size={15} />
@@ -1297,12 +1426,17 @@ export function NewSeriesQueuePanel() {
                 aria-label="Next queue page"
                 disabled={page >= pagination.pages || listLoading}
                 onClick={() => {
-                  if (!confirmQueueNavigation()) return;
-                  setListLoading(true);
-                  setLoadError("");
-                  setPage((value) =>
-                    Math.min(pagination.pages, value + 1),
-                  );
+                  runQueueNavigation({
+                    description:
+                      "The unsent review notes will be discarded before the next queue page opens.",
+                    run: () => {
+                      setListLoading(true);
+                      setLoadError("");
+                      setPage((value) =>
+                        Math.min(pagination.pages, value + 1),
+                      );
+                    },
+                  });
                 }}
               >
                 <CaretRight size={15} />
@@ -1431,6 +1565,180 @@ export function NewSeriesQueuePanel() {
                       </div>
                     </section>
 
+                    <section className="admin-form-section nsq-external-cross-check">
+                      <header>
+                        <div>
+                          <h3>External metadata cross-check</h3>
+                          <p>
+                            Search by title or paste an official URL. Results
+                            are cached and shown beside the submitted revision;
+                            they never change or publish it automatically.
+                          </p>
+                        </div>
+                      </header>
+                      <div className="nsq-cross-check-providers">
+                        {(["MANGADEX", "MANGAUPDATES"] as const).map(
+                          (source) => {
+                            const match = crossChecks[source];
+                            const sourceLabel =
+                              source === "MANGADEX"
+                                ? "MangaDex"
+                                : "MangaUpdates";
+                            return (
+                              <article key={source}>
+                                <form
+                                  onSubmit={(event) => {
+                                    event.preventDefault();
+                                    void runExternalCrossCheck(source);
+                                  }}
+                                >
+                                  <label>
+                                    <span>{sourceLabel} title or URL</span>
+                                    <input
+                                      value={crossCheckInput[source]}
+                                      placeholder={`Search ${sourceLabel} by title or paste a URL`}
+                                      onChange={(event) =>
+                                        setCrossCheckInput((current) => ({
+                                          ...current,
+                                          [source]: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <button
+                                    className="button button-secondary"
+                                    type="submit"
+                                    disabled={crossCheckBusy !== null}
+                                  >
+                                    <MagnifyingGlass size={16} />
+                                    {crossCheckBusy === source
+                                      ? "Checking…"
+                                      : "Find match"}
+                                  </button>
+                                </form>
+                                {match ? (
+                                  <div className="nsq-cross-check-match">
+                                    {match.fields.coverReferenceUrl ? (
+                                      <img
+                                        src={match.fields.coverReferenceUrl}
+                                        alt=""
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    ) : (
+                                      <span className="nsq-cross-check-cover">
+                                        <FileText size={32} />
+                                      </span>
+                                    )}
+                                    <div>
+                                      <span>{sourceLabel} match</span>
+                                      <h4>
+                                        {match.fields.title ??
+                                          "Untitled source record"}
+                                      </h4>
+                                      <p>
+                                        {match.fields.status
+                                          ? humanize(match.fields.status)
+                                          : "Status unavailable"}
+                                        {match.fields.publicationYear
+                                          ? ` · ${match.fields.publicationYear}`
+                                          : ""}
+                                      </p>
+                                      <small>
+                                        {match.cached
+                                          ? "Cached provider response"
+                                          : "Fresh provider response"}
+                                        {" · "}Attributed to {sourceLabel}
+                                      </small>
+                                    </div>
+                                    <a
+                                      className="button button-secondary"
+                                      href={match.sourceUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      Verify
+                                      <ArrowSquareOut size={14} />
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <p className="nsq-cross-check-empty">
+                                    No provider data loaded yet.
+                                  </p>
+                                )}
+                              </article>
+                            );
+                          },
+                        )}
+                      </div>
+                      {crossCheckError ? (
+                        <div className="admin-notice admin-notice-danger" role="alert">
+                          <WarningCircle size={18} />
+                          <span>{crossCheckError}</span>
+                        </div>
+                      ) : null}
+                      {crossChecks.MANGADEX && crossChecks.MANGAUPDATES ? (
+                        <div className="nsq-source-comparison">
+                          <header>
+                            <span>Submitted revision</span>
+                            <span>MangaDex</span>
+                            <span>MangaUpdates</span>
+                          </header>
+                          {[
+                            {
+                              label: "Title",
+                              submitted: detail.primaryTitle,
+                              dex: crossChecks.MANGADEX.fields.title,
+                              updates: crossChecks.MANGAUPDATES.fields.title,
+                            },
+                            {
+                              label: "Status",
+                              submitted: humanize(detail.publicationStatus),
+                              dex: crossChecks.MANGADEX.fields.status
+                                ? humanize(crossChecks.MANGADEX.fields.status)
+                                : undefined,
+                              updates: crossChecks.MANGAUPDATES.fields.status
+                                ? humanize(crossChecks.MANGAUPDATES.fields.status)
+                                : undefined,
+                            },
+                            {
+                              label: "Synopsis",
+                              submitted: detail.description,
+                              dex: crossChecks.MANGADEX.fields.synopsis,
+                              updates: crossChecks.MANGAUPDATES.fields.synopsis,
+                            },
+                            {
+                              label: "Creators",
+                              submitted: [
+                                ...detail.authors,
+                                ...detail.artists,
+                              ]
+                                .map((creator) => creator.name)
+                                .join(", "),
+                              dex: [
+                                ...(crossChecks.MANGADEX.fields.authors ?? []),
+                                ...(crossChecks.MANGADEX.fields.artists ?? []),
+                              ]
+                                .map((creator) => creator.name)
+                                .join(", "),
+                              updates: [
+                                ...(crossChecks.MANGAUPDATES.fields.authors ?? []),
+                                ...(crossChecks.MANGAUPDATES.fields.artists ?? []),
+                              ]
+                                .map((creator) => creator.name)
+                                .join(", "),
+                            },
+                          ].map((row) => (
+                            <div key={row.label}>
+                              <strong>{row.label}</strong>
+                              <p>{row.submitted || "Not supplied"}</p>
+                              <p>{row.dex || "Not supplied"}</p>
+                              <p>{row.updates || "Not supplied"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </section>
+
                     <section className="admin-form-section">
                       <header>
                         <div>
@@ -1453,6 +1761,11 @@ export function NewSeriesQueuePanel() {
                         </MetadataValue>
                         <MetadataValue label="Publication status">
                           {humanize(detail.publicationStatus)}
+                        </MetadataValue>
+                        <MetadataValue label="Original publication year">
+                          {detail.publicationYear
+                            ? String(detail.publicationYear)
+                            : "Not provided"}
                         </MetadataValue>
                         <MetadataValue label="Country / language">
                           {detail.countryCode.toUpperCase()} ·{" "}
@@ -1627,7 +1940,7 @@ export function NewSeriesQueuePanel() {
                                       <Eye size={14} />
                                       Open series
                                     </a>
-                                    {canDecide ? (
+                                    {canAttachExisting ? (
                                       <button
                                         className="button button-secondary"
                                         type="button"
@@ -1678,23 +1991,20 @@ export function NewSeriesQueuePanel() {
                           </p>
                         </div>
                       </header>
-                      {mutableReview ? (
+                      {mutableReview && reviewCapabilities.canReassign ? (
                         <div className="nsq-assignment-form">
                           <label>
                             Assigned reviewer
-                            <select
+                            <AdminCombobox
+                              ariaLabel="Assigned reviewer"
                               value={reviewerId}
-                              onChange={(event) =>
-                                setReviewerId(event.target.value)
-                              }
-                            >
-                              <option value="">Unassigned</option>
-                              {options.reviewers.map((reviewer) => (
-                                <option key={reviewer.id} value={reviewer.id}>
-                                  {reviewer.displayName}
-                                </option>
-                              ))}
-                            </select>
+                              emptyLabel="Unassigned"
+                              options={options.reviewers.map((reviewer) => ({
+                                value: reviewer.id,
+                                label: reviewer.displayName,
+                              }))}
+                              onChange={setReviewerId}
+                            />
                           </label>
                           <label>
                             Assignment reason
@@ -1886,7 +2196,7 @@ export function NewSeriesQueuePanel() {
 
                 {tab === "decision" ? (
                   <div className="nsq-detail-content">
-                    {detail.status === "SUBMITTED" ? (
+                    {canStartReview ? (
                       <section className="nsq-start-review">
                         <div>
                           <Clock size={23} />
@@ -1911,9 +2221,9 @@ export function NewSeriesQueuePanel() {
                       </section>
                     ) : null}
 
-                    {canDecide || canReject ? (
+                    {canApprove || canAttachExisting || canRequestChanges || canReject ? (
                       <>
-                        {canDecide ? (
+                        {canApprove || canAttachExisting ? (
                           <section className="admin-form-section">
                             <header>
                               <div>
@@ -2055,9 +2365,9 @@ export function NewSeriesQueuePanel() {
                           </section>
                         ) : null}
 
-                        {canDecide ? (
+                        {canApprove || canAttachExisting ? (
                           <div className="nsq-decision-grid">
-                            <section className="admin-form-section">
+                            {canApprove ? <section className="admin-form-section">
                               <header>
                                 <div>
                                   <h3>Approve new canonical series</h3>
@@ -2101,9 +2411,9 @@ export function NewSeriesQueuePanel() {
                                 <CheckCircle size={17} weight="fill" />
                                 Approve and create
                               </button>
-                            </section>
+                            </section> : null}
 
-                            <section className="admin-form-section">
+                            {canAttachExisting ? <section className="admin-form-section">
                               <header>
                                 <div>
                                   <h3>Attach to an existing series</h3>
@@ -2207,11 +2517,11 @@ export function NewSeriesQueuePanel() {
                                 <LinkSimple size={17} />
                                 Attach and approve
                               </button>
-                            </section>
+                            </section> : null}
                           </div>
                         ) : null}
 
-                        {canDecide ? (
+                        {canRequestChanges ? (
                           <section className="admin-form-section nsq-change-request">
                             <header>
                               <div>
@@ -2428,6 +2738,20 @@ export function NewSeriesQueuePanel() {
           if (!busyAction) setPendingAction(null);
         }}
         onConfirm={() => void confirmPendingAction()}
+      />
+      <ConfirmActionDialog
+        open={Boolean(pendingNavigation)}
+        title="Discard unsent review notes?"
+        description={pendingNavigation?.description ?? ""}
+        confirmLabel="Discard and continue"
+        destructive
+        onCancel={() => setPendingNavigation(null)}
+        onConfirm={() => {
+          const navigation = pendingNavigation;
+          setPendingNavigation(null);
+          discardActionDrafts();
+          navigation?.run();
+        }}
       />
     </AdminPageScaffold>
   );

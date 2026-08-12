@@ -3,7 +3,9 @@
 
 import {
   ArrowDown,
+  ArrowSquareOut,
   ArrowUp,
+  CaretDown,
   FileImage,
   FloppyDisk,
   LinkSimple,
@@ -28,7 +30,11 @@ import {
   type SiteMediaSlot,
   type SiteSocialLink,
 } from "@/lib/site-configuration";
-import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  AdminCombobox,
+  ConfirmActionDialog,
+  useUnsavedChanges,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 
@@ -44,6 +50,21 @@ type SiteConfigurationFailure = {
     fields?: Array<{ path?: string; message?: string }>;
   };
 };
+
+const socialIconOptions: ReadonlyArray<{
+  value: SiteSocialLink["icon"];
+  label: string;
+}> = [
+  { value: "SUPPORT", label: "Support" },
+  { value: "DISCORD", label: "Discord" },
+  { value: "INSTAGRAM", label: "Instagram" },
+  { value: "X", label: "X" },
+  { value: "YOUTUBE", label: "YouTube" },
+  { value: "TIKTOK", label: "TikTok" },
+  { value: "MASTODON", label: "Mastodon" },
+  { value: "BLUESKY", label: "Bluesky" },
+  { value: "LINK", label: "Generic link" },
+];
 
 function linkId(label: string, taken: Set<string>) {
   const base =
@@ -151,16 +172,28 @@ export function SiteConfigurationPanel({
   const [uploading, setUploading] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false);
+  const [activeLegalDocumentSlug, setActiveLegalDocumentSlug] = useState(
+    defaultSiteConfiguration.legalDocuments[0]?.slug ?? "",
+  );
   const [pendingMedia, setPendingMedia] =
     useState<Record<MediaSlot, PendingMedia>>({ ...emptyPendingMedia });
   const pendingMediaRef = useRef(pendingMedia);
   const [pendingRemovals, setPendingRemovals] =
     useState<Record<MediaSlot, boolean>>({ ...emptyPendingRemovals });
+  const [pendingMediaRemoval, setPendingMediaRemoval] =
+    useState<MediaSlot | null>(null);
   const settingsDirty = JSON.stringify(settings) !== JSON.stringify(saved);
   const mediaDirty =
     Object.values(pendingMedia).some(Boolean) ||
     Object.values(pendingRemovals).some(Boolean);
   const dirty = settingsDirty || mediaDirty;
+  const activeLegalDocumentIndex = settings.legalDocuments.findIndex(
+    (document) => document.slug === activeLegalDocumentSlug,
+  );
+  const activeLegalDocument =
+    settings.legalDocuments[activeLegalDocumentIndex] ??
+    settings.legalDocuments[0] ??
+    null;
   useUnsavedChanges(dirty, "appearance configuration");
 
   useEffect(() => {
@@ -201,6 +234,11 @@ export function SiteConfigurationPanel({
       const normalized = parseSiteConfiguration(payload.settings);
       setSettings(normalized);
       setSaved(normalized);
+      setActiveLegalDocumentSlug((current) =>
+        normalized.legalDocuments.some((document) => document.slug === current)
+          ? current
+          : (normalized.legalDocuments[0]?.slug ?? ""),
+      );
       setRevision(Number(payload.revision ?? 0));
       setRecoveredFromInvalid(Boolean(payload.recoveredFromInvalid));
       setFieldErrors({});
@@ -384,9 +422,12 @@ export function SiteConfigurationPanel({
   }
 
   function removeMedia(slot: MediaSlot) {
-    if (!window.confirm("Stage this image for removal?")) {
-      return;
-    }
+    setPendingMediaRemoval(slot);
+  }
+
+  function confirmMediaRemoval() {
+    if (!pendingMediaRemoval) return;
+    const slot = pendingMediaRemoval;
     setPendingMedia((current) => {
       if (current[slot]?.url) URL.revokeObjectURL(current[slot]!.url);
       return { ...current, [slot]: null };
@@ -394,6 +435,7 @@ export function SiteConfigurationPanel({
     setPendingRemovals((current) => ({ ...current, [slot]: true }));
     setStatus("idle");
     setMessage("Image removal staged. Save configuration to publish it.");
+    setPendingMediaRemoval(null);
   }
 
   const media = useMemo(
@@ -530,6 +572,51 @@ export function SiteConfigurationPanel({
     });
   }
 
+  function resetChanges() {
+    setSettings(saved);
+    clearPendingMedia();
+    setStatus("idle");
+    setMessage("Unsaved changes were reset.");
+  }
+
+  function updateActiveLegalDocument(
+    patch: Partial<SiteConfiguration["legalDocuments"][number]>,
+  ) {
+    if (!activeLegalDocument) return;
+    setSettings((current) => ({
+      ...current,
+      legalDocuments: current.legalDocuments.map((document) =>
+        document.slug === activeLegalDocument.slug
+          ? { ...document, ...patch }
+          : document,
+      ),
+    }));
+  }
+
+  function updateActiveLegalSection(
+    sectionIndex: number,
+    patch: Partial<
+      SiteConfiguration["legalDocuments"][number]["sections"][number]
+    >,
+  ) {
+    if (!activeLegalDocument) return;
+    setSettings((current) => ({
+      ...current,
+      legalDocuments: current.legalDocuments.map((document) =>
+        document.slug === activeLegalDocument.slug
+          ? {
+              ...document,
+              sections: document.sections.map((legalSection, index) =>
+                index === sectionIndex
+                  ? { ...legalSection, ...patch }
+                  : legalSection,
+              ),
+            }
+          : document,
+      ),
+    }));
+  }
+
   if (!hasLoaded && status === "error") {
     return (
       <section className="admin-state-card" role="alert">
@@ -577,31 +664,28 @@ export function SiteConfigurationPanel({
                   : "Edit every public footer text, group, legal destination, and social link."}
           </p>
         </div>
-        <div className="admin-header-actions">
-          <button
-            className="button button-secondary"
-            type="button"
-            disabled={!dirty || status === "saving"}
-            onClick={() => {
-              setSettings(saved);
-              clearPendingMedia();
-              setStatus("idle");
-              setMessage("Unsaved changes were reset.");
-            }}
-          >
-            Reset to saved
-          </button>
-          <button
-            className="button button-primary"
-            type="submit"
-            disabled={
-              status === "loading" || status === "saving" || !dirty
-            }
-          >
-            <FloppyDisk size={17} />
-            {status === "saving" ? "Saving…" : "Save configuration"}
-          </button>
-        </div>
+        {section !== "legal" ? (
+          <div className="admin-header-actions">
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={!dirty || status === "saving"}
+              onClick={resetChanges}
+            >
+              Reset to saved
+            </button>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={
+                status === "loading" || status === "saving" || !dirty
+              }
+            >
+              <FloppyDisk size={17} />
+              {status === "saving" ? "Saving…" : "Save configuration"}
+            </button>
+          </div>
+        ) : null}
       </header>
       {recoveredFromInvalid ? (
         <div className="admin-notice is-warning" role="alert">
@@ -821,24 +905,17 @@ export function SiteConfigurationPanel({
                   <LinkSimple size={18} />
                   <label>
                     <span>Icon</span>
-                    <select
+                    <AdminCombobox
+                      ariaLabel={`Choose an icon for ${link.label || `social link ${index + 1}`}`}
                       value={link.icon}
-                      onChange={(event) =>
+                      options={socialIconOptions}
+                      placeholder="Search social icons…"
+                      onChange={(icon) =>
                         updateSocialLink(index, {
-                          icon: event.target.value as SiteSocialLink["icon"],
+                          icon: icon as SiteSocialLink["icon"],
                         })
                       }
-                    >
-                      <option value="SUPPORT">Support</option>
-                      <option value="DISCORD">Discord</option>
-                      <option value="INSTAGRAM">Instagram</option>
-                      <option value="X">X</option>
-                      <option value="YOUTUBE">YouTube</option>
-                      <option value="TIKTOK">TikTok</option>
-                      <option value="MASTODON">Mastodon</option>
-                      <option value="BLUESKY">Bluesky</option>
-                      <option value="LINK">Generic link</option>
-                    </select>
+                    />
                   </label>
                   <label>
                     <span>Label</span>
@@ -973,27 +1050,225 @@ export function SiteConfigurationPanel({
             </section>
           ) : null}
           {section === "legal" ? (
-            <section className="legal-document-admin-list">
-              {settings.legalDocuments.map((document, documentIndex) => (
-                <details key={document.slug} open={documentIndex === 0}>
-                  <summary><span>{document.title}</span><small>/legal/{document.slug}</small></summary>
-                  <div className="legal-document-admin-fields">
-                    <label><span>Page title</span><input value={document.title} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, title: event.target.value } : entry) }))} /></label>
-                    <label><span>Summary</span><textarea rows={3} value={document.summary} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, summary: event.target.value } : entry) }))} /></label>
-                    <label><span>Effective date</span><input value={document.effectiveDate} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, effectiveDate: event.target.value } : entry) }))} /></label>
-                    <label><span>Last updated</span><input value={document.updatedDate} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, updatedDate: event.target.value } : entry) }))} /></label>
-                  </div>
-                  <div className="legal-section-admin-list">
-                    {document.sections.map((legalSection, sectionIndex) => (
-                      <article key={legalSection.id}>
-                        <label><span>Section title</span><input value={legalSection.title} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, sections: entry.sections.map((sectionEntry, innerIndex) => innerIndex === sectionIndex ? { ...sectionEntry, title: event.target.value } : sectionEntry) } : entry) }))} /></label>
-                        <label><span>Paragraphs — one per line</span><textarea rows={Math.max(4, legalSection.paragraphs?.length ?? 0)} value={(legalSection.paragraphs ?? []).join("\n")} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, sections: entry.sections.map((sectionEntry, innerIndex) => innerIndex === sectionIndex ? { ...sectionEntry, paragraphs: event.target.value.split("\n").map((value) => value.trim()).filter(Boolean) } : sectionEntry) } : entry) }))} /></label>
-                        <label><span>Bullet points — one per line</span><textarea rows={Math.max(4, legalSection.bullets?.length ?? 0)} value={(legalSection.bullets ?? []).join("\n")} onChange={(event) => setSettings((current) => ({ ...current, legalDocuments: current.legalDocuments.map((entry, index) => index === documentIndex ? { ...entry, sections: entry.sections.map((sectionEntry, innerIndex) => innerIndex === sectionIndex ? { ...sectionEntry, bullets: event.target.value.split("\n").map((value) => value.trim()).filter(Boolean) } : sectionEntry) } : entry) }))} /></label>
-                      </article>
+            <section className="legal-document-workspace">
+              <div className="legal-document-picker">
+                <label>
+                  <span>Legal document</span>
+                  <select
+                    value={activeLegalDocument?.slug ?? ""}
+                    onChange={(event) =>
+                      setActiveLegalDocumentSlug(event.target.value)
+                    }
+                  >
+                    {settings.legalDocuments.map((document) => (
+                      <option key={document.slug} value={document.slug}>
+                        {document.title}
+                      </option>
                     ))}
+                  </select>
+                </label>
+                {activeLegalDocument ? (
+                  <div className="legal-document-route">
+                    <span>Public route</span>
+                    <a
+                      href={`/legal/${activeLegalDocument.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      /legal/{activeLegalDocument.slug}
+                      <ArrowSquareOut size={16} />
+                    </a>
                   </div>
-                </details>
-              ))}
+                ) : null}
+              </div>
+
+              {activeLegalDocument ? (
+                <>
+                  <section className="legal-document-common-card">
+                    <header>
+                      <div>
+                        <span>Common fields</span>
+                        <h3>{activeLegalDocument.title}</h3>
+                        <p>
+                          Update the public heading, summary, and published
+                          dates. Detailed page copy stays in Advanced.
+                        </p>
+                      </div>
+                      <span className="legal-document-section-count">
+                        {activeLegalDocument.sections.length} sections
+                      </span>
+                    </header>
+                    <div className="legal-document-admin-fields">
+                      <label>
+                        <span>Page title</span>
+                        <input
+                          value={activeLegalDocument.title}
+                          onChange={(event) =>
+                            updateActiveLegalDocument({
+                              title: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Summary</span>
+                        <textarea
+                          rows={4}
+                          value={activeLegalDocument.summary}
+                          onChange={(event) =>
+                            updateActiveLegalDocument({
+                              summary: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Effective date</span>
+                        <input
+                          value={activeLegalDocument.effectiveDate}
+                          onChange={(event) =>
+                            updateActiveLegalDocument({
+                              effectiveDate: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Last updated</span>
+                        <input
+                          value={activeLegalDocument.updatedDate}
+                          onChange={(event) =>
+                            updateActiveLegalDocument({
+                              updatedDate: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <details
+                    className="legal-document-advanced"
+                    key={activeLegalDocument.slug}
+                  >
+                    <summary>
+                      <div>
+                        <strong>Advanced</strong>
+                        <span>
+                          Edit section details, paragraphs, and bullet points.
+                        </span>
+                      </div>
+                      <CaretDown size={18} aria-hidden="true" />
+                    </summary>
+                    <div className="legal-section-admin-list">
+                      {activeLegalDocument.sections.map(
+                        (legalSection, sectionIndex) => (
+                          <article key={legalSection.id}>
+                            <header>
+                              <span>
+                                Section {String(sectionIndex + 1).padStart(2, "0")}
+                              </span>
+                              <strong>
+                                {legalSection.title || "Untitled section"}
+                              </strong>
+                            </header>
+                            <div className="legal-section-admin-fields">
+                              <label>
+                                <span>Section title</span>
+                                <input
+                                  value={legalSection.title}
+                                  onChange={(event) =>
+                                    updateActiveLegalSection(sectionIndex, {
+                                      title: event.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                <span>Paragraphs — one per line</span>
+                                <textarea
+                                  rows={Math.max(
+                                    4,
+                                    legalSection.paragraphs?.length ?? 0,
+                                  )}
+                                  value={(legalSection.paragraphs ?? []).join(
+                                    "\n",
+                                  )}
+                                  onChange={(event) =>
+                                    updateActiveLegalSection(sectionIndex, {
+                                      paragraphs: event.target.value
+                                        .split("\n")
+                                        .map((value) => value.trim())
+                                        .filter(Boolean),
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                <span>Bullet points — one per line</span>
+                                <textarea
+                                  rows={Math.max(
+                                    4,
+                                    legalSection.bullets?.length ?? 0,
+                                  )}
+                                  value={(legalSection.bullets ?? []).join(
+                                    "\n",
+                                  )}
+                                  onChange={(event) =>
+                                    updateActiveLegalSection(sectionIndex, {
+                                      bullets: event.target.value
+                                        .split("\n")
+                                        .map((value) => value.trim())
+                                        .filter(Boolean),
+                                    })
+                                  }
+                                />
+                              </label>
+                            </div>
+                          </article>
+                        ),
+                      )}
+                    </div>
+                  </details>
+
+                  <div className="legal-document-action-bar">
+                    <div className="legal-document-action-state" aria-live="polite">
+                      <strong>
+                        {dirty ? "Unpublished changes" : "Configuration up to date"}
+                      </strong>
+                      <span>
+                        {dirty
+                          ? "Save to publish this document and any other pending footer changes."
+                          : "The saved legal documents are live on the public site."}
+                      </span>
+                    </div>
+                    <div>
+                      <button
+                        className="button button-ghost"
+                        type="button"
+                        disabled={!dirty || status === "saving"}
+                        onClick={resetChanges}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        className="button button-primary"
+                        type="submit"
+                        disabled={status === "saving" || !dirty}
+                      >
+                        <FloppyDisk size={17} />
+                        {status === "saving" ? "Saving…" : "Save configuration"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="admin-empty-state">
+                  <FileImage size={32} />
+                  <strong>No legal documents configured</strong>
+                  <p>Add a document through the existing site configuration data.</p>
+                </div>
+              )}
             </section>
           ) : null}
         </>
@@ -1011,6 +1286,15 @@ export function SiteConfigurationPanel({
           }
         />
       ) : null}
+      <ConfirmActionDialog
+        open={pendingMediaRemoval !== null}
+        title="Stage image removal?"
+        description="The image stays live until you save the configuration. You can reset the form before saving to keep it."
+        confirmLabel="Stage removal"
+        destructive
+        onCancel={() => setPendingMediaRemoval(null)}
+        onConfirm={confirmMediaRemoval}
+      />
     </form>
   );
 }

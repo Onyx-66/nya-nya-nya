@@ -110,7 +110,7 @@ test("chapter shortcut workspace includes metadata, page order, and moderation",
     read("app/api/v1/[...resource]/route.ts"),
   ]);
 
-  assert.match(panel, /Chapter management/);
+  assert.match(panel, /title="Chapters"/);
   assert.match(panel, /Chapter information/);
   assert.match(panel, /Pages &amp; order/);
   assert.match(panel, /Chapter comments &amp; moderation/);

@@ -22,31 +22,26 @@ test("effective role permissions are derived from the authorization source", () 
   assert.equal(new Set(publishing).size, publishing.length);
 });
 
-test("Payouts is a read-only report over canonical receipts and TEAM ledger accounts", async () => {
-  const [route, operations, app] = await Promise.all([
-    read("app/api/v1/[...resource]/route.ts"),
+test("Payouts persists a reviewed Stripe Connect lifecycle over canonical TEAM balances", async () => {
+  const [route, service, operations, navigation] = await Promise.all([
+    read("app/api/v1/admin/team-payouts/route.ts"),
+    read("lib/server/payments/team-payouts.ts"),
     read("components/nyascans/OperationsControlPanel.tsx"),
-    read("components/nyascans/NyaScansApp.tsx"),
+    read("lib/admin-navigation.ts"),
   ]);
-  const payoutRoute = route.slice(
-    route.indexOf('if (path === "admin/payouts")'),
-    route.indexOf('if (path === "admin/user-control")'),
-  );
-  assert.match(payoutRoute, /requireAdminCapability\(actor, capabilityForAdminPath\(path\)\)/u);
-  assert.match(payoutRoute, /chapter_unlock_receipts/u);
-  assert.match(payoutRoute, /team_support_receipts/u);
-  assert.match(payoutRoute, /currency = 'ONYX'/u);
-  assert.match(payoutRoute, /la\.owner_type = 'TEAM'/u);
-  assert.match(payoutRoute, /la\.account_type IN \('EARNED', 'SUPPORT'\)/u);
-  assert.doesNotMatch(payoutRoute, /account_type = '(?:PENDING|WITHDRAWN)'/u);
-  assert.doesNotMatch(payoutRoute, /TEAM_PAYOUT/u);
-  assert.match(payoutRoute, /key = 'team_payouts'/u);
-  assert.doesNotMatch(payoutRoute, /\b(?:INSERT|UPDATE|DELETE)\b/u);
+  assert.match(route, /requireAdminCapability\(actor, "finance\.transactions\.read"\)/u);
+  assert.match(route, /requireAdminCapability\(actor, "finance\.balances\.manage"\)/u);
+  assert.match(route, /assertSameOrigin\(request\)/u);
+  assert.match(service, /chapter_unlock_receipts/u);
+  assert.match(service, /team_support_receipts/u);
+  assert.match(service, /account_type IN \('EARNED', 'SUPPORT'\)/u);
+  assert.match(service, /'TEAM_PAYOUT', 'TEAM_PAYOUT_REQUEST'/u);
+  assert.match(service, /"PENDING",[\s\S]*"APPROVED",[\s\S]*"PROCESSING",[\s\S]*"PAID",[\s\S]*"REJECTED"/u);
   assert.match(operations, /function PayoutsPanel/u);
-  assert.match(operations, /No payout lifecycle is persisted/u);
-  assert.match(operations, /no availability,[\s\S]*pending state, or withdrawal is inferred/u);
+  assert.match(operations, /\/api\/v1\/admin\/team-payouts/u);
+  assert.match(operations, /Resume safely/u);
   assert.match(operations, /section === "Payouts"/u);
-  assert.match(app, /\["Payouts", Coins\]/u);
+  assert.match(navigation, /label: "Payouts"/u);
 });
 
 test("balance summaries expose totals and unavailable lifecycle states without overflow", async () => {

@@ -19,7 +19,7 @@ async function snapshot() {
               u.display_name AS claimantName, u.email AS claimantEmail,
               c.proof_type AS proofType, c.proof_value AS proofValue,
               c.statement, c.status, c.review_reason AS reviewReason,
-              c.revision, c.created_at AS createdAt,
+              c.revision, c.created_at AS createdAt, c.reviewed_at AS reviewedAt,
               (SELECT json_group_array(json_object('label', l.label, 'url', l.url, 'linkType', l.link_type)) FROM team_links l WHERE l.team_id = c.team_id) AS linksJson
          FROM team_ownership_claims c JOIN teams t ON t.id = c.team_id
          JOIN users u ON u.id = c.claimant_user_id
@@ -27,10 +27,11 @@ async function snapshot() {
     ).all<Record<string, unknown>>(),
     db.prepare(
       `SELECT r.id, r.team_id AS teamId, t.name AS currentTitle,
-              r.requested_title AS requestedTitle, r.reason, r.status,
+              r.requested_title AS requestedTitle,
+              r.requested_slug AS requestedSlug, r.reason, r.status,
               r.review_reason AS reviewReason, r.revision,
               u.display_name AS requestedBy, u.email AS requesterEmail,
-              r.created_at AS createdAt
+              r.created_at AS createdAt, r.reviewed_at AS reviewedAt
          FROM team_title_change_requests r JOIN teams t ON t.id = r.team_id
          JOIN users u ON u.id = r.requested_by_user_id
         ORDER BY CASE r.status WHEN 'PENDING' THEN 0 ELSE 1 END, datetime(r.created_at) DESC`,

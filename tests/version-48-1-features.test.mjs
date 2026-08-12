@@ -269,13 +269,14 @@ test("Discount APIs are paid-system gated and expose only authenticated admin mu
 });
 
 test("Discount routes and discovery fail closed when paid content is disabled", async () => {
-  const [page, sitemap, featureSections, app, resourceRoute, chapterAccess] = await Promise.all([
+  const [page, sitemap, featureSections, app, resourceRoute, chapterAccess, publicVisibility] = await Promise.all([
     read("app/[...slug]/page.tsx"),
     read("app/sitemap.ts"),
     read("components/nyascans/HomeFeatureSections.tsx"),
     read("components/nyascans/NyaScansApp.tsx"),
     read("app/api/v1/[...resource]/route.ts"),
     read("lib/server/chapter-access.ts"),
+    read("lib/server/public-content-visibility.ts"),
   ]);
 
   assert.match(page, /root === "discounts"[\s\S]*view: "discounts"/u);
@@ -286,9 +287,12 @@ test("Discount routes and discovery fail closed when paid content is disabled", 
   assert.match(featureSections, /unavailable: !enabled \|\|/u);
   assert.match(featureSections, /if \(unavailable\) return null/u);
   assert.match(app, /view === "discounts"[\s\S]*?<DiscountsDirectory \/>/u);
-  assert.match(resourceRoute, /paidChapterPredicate[\s\S]*?AND c\.access_type = 'FREE'/u);
+  assert.match(resourceRoute, /publicPaidChapterPredicate/u);
   assert.match(resourceRoute, /\$\{paidChapterPredicate\}/u);
-  assert.match(chapterAccess, /chapter\.accessType === "PAID"[\s\S]*?premiumEconomyPublic/u);
+  assert.match(chapterAccess, /paidContentIsPublic\(env\.DB\)/u);
+  assert.match(chapterAccess, /chapter\.accessLevel === "FREE"/u);
+  assert.match(publicVisibility, /publicPaidSeriesPredicate/u);
+  assert.match(publicVisibility, /publicPaidChapterPredicate/u);
   assert.match(chapterAccess, /"CHAPTER_NOT_FOUND"/u);
   assert.match(sitemap, /getCommercialSettingsDocument\(\)\.catch\(\(\) => null\)/u);
   assert.match(sitemap, /!commercial\.recoveredFromInvalid/u);
@@ -454,8 +458,9 @@ test("home and directory contracts place Pinned Series then Discounts before Lat
   );
   assert.match(home, /<DiscountsSection[\s\S]*enabled=\{[\s\S]*premiumEconomyPublic/u);
   assert.match(featureSections, /filter\(\(record\) => record\.featured\)\.slice\(0, 9\)/u);
-  assert.match(featureSections, /\}, 6_000\)/u);
-  assert.match(featureSections, /className="v481-pinned-bento"/u);
+  assert.doesNotMatch(featureSections, /\}, 6_000\)/u);
+  assert.match(featureSections, /className="v481-pinned-carousel"/u);
+  assert.doesNotMatch(featureSections, /className="v481-pinned-bento"/u);
   assert.match(featureSections, /className="v481-discount-rail"/u);
   assert.match(featureSections, /v481-ticket-perforation/u);
   assert.match(featureSections, /v481-ticket-ribbon/u);

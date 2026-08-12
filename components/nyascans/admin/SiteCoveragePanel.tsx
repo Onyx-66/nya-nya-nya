@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AdminCombobox,
   AdminPageScaffold,
   ConfirmActionDialog,
   useUnsavedChanges,
@@ -31,7 +32,16 @@ type GovernanceData = {
     securityRead: boolean;
     sessionsManage: boolean;
   };
-  featureFlags: Array<{ key: string; enabled: boolean; wired: boolean; description: string; updatedAt: string }>;
+  featureFlags: Array<{
+    key: string;
+    enabled: boolean;
+    wired: boolean;
+    available: boolean;
+    effective: boolean;
+    readinessReason: string | null;
+    description: string;
+    updatedAt: string;
+  }>;
   achievements: Array<{ id: string; slug: string; name: string; description: string; rarity: string; iconKey: string | null; isActive: boolean; sortOrder: number; updatedAt: string; awardedCount: number }>;
   reviews: Array<{ id: string; rating: number; body: string; spoiler: number; moderationStatus: "VISIBLE" | "HIDDEN"; createdAt: string; updatedAt: string; authorName: string; authorEmail: string; seriesTitle: string }>;
   teamPosts: Array<{ id: string; body: string; moderationStatus: "VISIBLE" | "HIDDEN" | "DELETED"; revision: number; createdAt: string; authorName: string; authorEmail: string; teamName: string }>;
@@ -88,9 +98,15 @@ function Reference({ id }: { id: string }) {
   return <details className="technical-reference"><summary>Technical reference</summary><code>{id}</code></details>;
 }
 
-export function SiteCoveragePanel() {
+export function SiteCoveragePanel({
+  initialTab = "registry",
+  onTabNavigate,
+}: {
+  initialTab?: Tab;
+  onTabNavigate?: (tab: Tab) => void;
+}) {
   const [data, setData] = useState<GovernanceData | null>(null);
-  const [tab, setTab] = useState<Tab>("registry");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const mutationLock = useRef(false);
@@ -230,18 +246,20 @@ export function SiteCoveragePanel() {
       : { kind: "error" as const, title: "Platform registry unavailable", message: "The durable controls could not be loaded.", onRetry: () => void load() };
 
   return <><AdminPageScaffold
-    breadcrumbs={["Administration", "Platform controls"]}
-    kicker="Operational registry"
-    title="Site coverage"
-    description="Operate the durable systems that do not belong to a publishing, commerce, or account workspace. Every mutation is capability-gated, conflict-safe, reasoned, and audited."
+    breadcrumbs={["Administration", "Settings", "Feature Flags"]}
+    kicker="Platform configuration"
+    title="Feature Flags"
+    description="Control product features and the related operational registries. Every mutation remains capability-gated, conflict-safe, reasoned, and audited."
     tabs={tabs}
     activeTab={tab}
     onTabChange={(key) => {
       if (busy) return;
-      setTab(key as Tab);
+      const next = key as Tab;
+      setTab(next);
       setPage(1);
       setQuery("");
       setAppliedQuery("");
+      onTabNavigate?.(next);
     }}
     message={message}
     state={state}
@@ -260,9 +278,11 @@ export function SiteCoveragePanel() {
         <section className="governance-section">
           <header><SlidersHorizontal /><div><h3>Feature flags</h3><p>Durable platform switches. Provider-dependent capabilities still fail closed when their integration is absent.</p></div></header>
           {data.permissions.features ? <label className="governance-reason"><span>Reason for the next flag change</span><input value={reasons.feature} onChange={(event) => setReasons((current) => ({ ...current, feature: event.target.value }))} placeholder="Why is this production switch changing?" /></label> : <p className="admin-notice"><WarningCircle /> Your role can inspect the registry but cannot change feature flags.</p>}
-          <div className="governance-card-grid">{data.featureFlags.map((flag) => <article key={flag.key}><div><strong>{flag.key.replaceAll("_", " ")}</strong><span>{flag.description}</span><small>{flag.wired ? "Connected to runtime" : "Legacy record · not connected"} · Updated {humanDate(flag.updatedAt)}</small></div><label className="settings-check"><input type="checkbox" checked={flag.enabled} disabled={!data.permissions.features || !flag.wired || Boolean(busy)} onChange={() => {
+          <div className="governance-card-grid">{data.featureFlags.map((flag) => <article key={flag.key}><div><strong>{flag.key.replaceAll("_", " ")}</strong><span>{flag.description}</span><small>{!flag.wired ? "Legacy record · not connected" : flag.effective ? "Enabled and effective" : flag.enabled ? `Enabled · blocked by ${flag.readinessReason ?? "a missing dependency"}` : flag.available ? "Connected · disabled" : `Connected · unavailable (${flag.readinessReason ?? "dependency missing"})`} · Updated {humanDate(flag.updatedAt)}</small></div><label className="settings-check"><input type="checkbox" checked={flag.enabled} disabled={!data.permissions.features || !flag.wired || Boolean(busy) || (!flag.enabled && !flag.available)} onChange={() => {
             if (!requireReason(reasons.feature)) return;
-            void mutate(`flag:${flag.key}`, { action: "FEATURE_FLAG", key: flag.key, enabled: !flag.enabled, expectedUpdatedAt: flag.updatedAt, reason: reasons.feature }, `${flag.key} ${flag.enabled ? "disabled" : "enabled"}.`);
+            void mutate(`flag:${flag.key}`, { action: "FEATURE_FLAG", key: flag.key, enabled: !flag.enabled, expectedUpdatedAt: flag.updatedAt, reason: reasons.feature }, `${flag.key} ${flag.enabled ? "disabled" : "enabled"}.`).then((saved) => {
+              if (saved) window.location.reload();
+            });
           }} /><span>{flag.enabled ? "Enabled" : "Disabled"}</span></label></article>)}</div>
         </section>
         {data.permissions.notifications ? <section className="governance-section">
@@ -295,7 +315,7 @@ export function SiteCoveragePanel() {
         </section>
         <section className="governance-section">
           <header><UsersThree /><div><h3>Award or revoke</h3><p>Target an active account by email. Existing counter relationships are preserved.</p></div></header>
-          <div className="governance-inline-form"><select aria-label="Achievement" value={award.achievementId} onChange={(event) => setAward((current) => ({ ...current, achievementId: event.target.value }))}>{data.achievements.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select><input aria-label="Reader email" type="email" placeholder="reader@example.com" value={award.email} onChange={(event) => setAward((current) => ({ ...current, email: event.target.value }))} /><input aria-label="Award reason" placeholder="Operational reason" value={award.reason} onChange={(event) => setAward((current) => ({ ...current, reason: event.target.value }))} /><button className="button button-primary" type="button" disabled={Boolean(busy)} onClick={() => void changeAward("ACHIEVEMENT_ASSIGN")}>Assign</button><button className="button button-secondary" type="button" disabled={Boolean(busy)} onClick={() => {
+          <div className="governance-inline-form"><AdminCombobox ariaLabel="Achievement" value={award.achievementId} options={data.achievements.map((entry) => ({ value: entry.id, label: entry.name, description: entry.rarity }))} onChange={(achievementId) => setAward((current) => ({ ...current, achievementId }))} /><input aria-label="Reader email" type="email" placeholder="reader@example.com" value={award.email} onChange={(event) => setAward((current) => ({ ...current, email: event.target.value }))} /><input aria-label="Award reason" placeholder="Operational reason" value={award.reason} onChange={(event) => setAward((current) => ({ ...current, reason: event.target.value }))} /><button className="button button-primary" type="button" disabled={Boolean(busy)} onClick={() => void changeAward("ACHIEVEMENT_ASSIGN")}>Assign</button><button className="button button-secondary" type="button" disabled={Boolean(busy)} onClick={() => {
             if (!award.achievementId || !award.email || !requireReason(award.reason)) return;
             setConfirmation({ title: "Revoke this achievement award?", description: `The award will be removed from ${award.email}. The definition and other readers' awards are unchanged.`, confirmLabel: "Revoke award", run: () => changeAward("ACHIEVEMENT_REVOKE") });
           }}>Revoke</button></div>

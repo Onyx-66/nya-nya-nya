@@ -83,10 +83,10 @@ function relatedHref(row: AuditRow) {
     return `/onyx/admin/access/series?record=${encodeURIComponent(row.targetId)}`;
   }
   if (row.targetType === "TEAM") {
-    return `/onyx/admin/access/teams?record=${encodeURIComponent(row.targetId)}`;
+    return `/onyx/admin/access/team-directory?record=${encodeURIComponent(row.targetId)}`;
   }
   if (row.targetType === "PRODUCT") {
-    return `/onyx/admin/access/commerce?record=${encodeURIComponent(row.targetId)}`;
+    return `/onyx/admin/access/store/offers?record=${encodeURIComponent(row.targetId)}`;
   }
   return null;
 }

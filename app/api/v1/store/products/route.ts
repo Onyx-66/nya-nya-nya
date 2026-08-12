@@ -9,6 +9,7 @@ import {
   walletSnapshot,
 } from "@/lib/server/economy";
 import { getActor } from "@/lib/server/policy";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -57,12 +58,30 @@ export async function storeProductsResponse(request: Request) {
       url.searchParams.get("category") ?? "coins",
     );
     const actor = await getActor().catch(() => null);
-    const commercial = await getCommercialSettingsDocument();
+    const [commercial, featureStates] = await Promise.all([
+      getCommercialSettingsDocument(),
+      getFeatureStates(env.DB),
+    ]);
     const premiumEconomyPublic =
       !commercial.recoveredFromInvalid &&
-      commercial.settings.economy.premiumEconomyPublic;
-    const ownerPreview = Boolean(actor?.roles.includes("OWNER"));
-    const lockAndPayVisible = premiumEconomyPublic || ownerPreview;
+      commercial.settings.economy.premiumEconomyPublic &&
+      featureStates.premium_unlocks.effective;
+    const lockAndPayVisible = premiumEconomyPublic;
+    const checkoutEnabled =
+      category === "memberships"
+        ? featureStates.memberships.effective &&
+          featureStates.payments.effective
+        : category === "coins"
+          ? featureStates.onyx_purchases.effective
+          : false;
+    const checkoutReason =
+      category === "memberships"
+        ? !featureStates.memberships.effective
+          ? featureStates.memberships.reason
+          : featureStates.payments.reason
+        : category === "coins"
+          ? featureStates.onyx_purchases.reason
+          : "CHECKOUT_NOT_APPLICABLE";
     const nowClause = `
       active = 1
       AND archived_at IS NULL
@@ -396,11 +415,13 @@ export async function storeProductsResponse(request: Request) {
             : { shards: await walletSnapshot(env.DB, actor.id, "SHARDS") }
           : null,
         premiumEconomyPublic: lockAndPayVisible,
-        checkoutEnabled: false,
+        checkoutEnabled,
         checkoutStatus:
-          lockAndPayVisible
-            ? `Checkout requires a verified payment provider. Cosmetics can be unlocked with an existing ${commercial.settings.economy.coinName} balance.`
-            : "Premium purchases are private. Free Shard rewards remain available.",
+          checkoutEnabled
+            ? "Secure hosted checkout is available. Wallet credit is granted only after the signed provider webhook is verified."
+            : lockAndPayVisible
+              ? `Checkout is unavailable (${checkoutReason ?? "provider not ready"}). Cosmetics can still be unlocked with an existing ${commercial.settings.economy.coinName} balance.`
+              : "Premium purchases are private. Free Shard rewards remain available.",
       },
       {
         headers: {

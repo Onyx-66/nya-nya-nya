@@ -29,8 +29,8 @@ test("admin control room uses real secured management endpoints", async () => {
   assert.match(api, /capabilityForAdminPath/u);
   assert.match(api, /audit_logs/);
   assert.match(api, /SELF_ADMIN_CHANGE_BLOCKED/);
-  assert.match(panel, /Site overview/);
-  assert.match(panel, /Series and roles|Users and roles/);
+  assert.match(panel, /title="Home"/);
+  assert.match(panel, /title="Users & Roles"/);
   assert.doesNotMatch(panel, /record A|record B|record C/);
 });
 

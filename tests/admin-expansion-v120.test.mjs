@@ -1092,10 +1092,11 @@ test("the database rejects assignments to archived or suspended teams atomically
 });
 
 test("owner-only audit capability and protected routes agree", async () => {
-  const [permissions, auditRoute, page, navigation] = await Promise.all([
+  const [permissions, auditRoute, page, navigation, app] = await Promise.all([
     read("lib/permissions.mjs"),
     read("app/api/v1/admin/audit-events/route.ts"),
     read("app/onyx/admin/access/[[...slug]]/page.tsx"),
+    read("lib/admin-navigation.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
   ]);
   assert.equal(can(ROLES.OWNER, "admin.audit.read"), true);
@@ -1105,9 +1106,10 @@ test("owner-only audit capability and protected routes agree", async () => {
   assert.match(auditRoute, /requireOwner/);
   assert.match(auditRoute, /audit\.access\.denied/);
   assert.match(page, /forbidden\(\)/);
-  assert.match(navigation, /const granted = new Set\(actor\.capabilities \?\? \[\]\)/u);
-  assert.match(navigation, /ADMIN_SECTION_CAPABILITIES\[slug\]/u);
-  assert.match(navigation, /granted\.has\(capability\)/u);
+  assert.match(navigation, /slug: "activity-log"[\s\S]+capability: "admin\.activity\.read"/u);
+  assert.match(navigation, /"audit-log": "admin\.audit\.read"/u);
+  assert.match(navigation, /function adminNavigationGroupsForCapabilities/u);
+  assert.match(app, /adminNavigationGroupsForCapabilities\(actor\.capabilities \?\? \[\]\)/u);
   assert.match(page, /actorHasCapability\(actor, requestedCapability\)/u);
 });
 
@@ -1513,13 +1515,29 @@ test("external source records require canonical HTTPS IDs and matching URLs", as
     }).success,
     false,
   );
-  assert.equal(
+  assert.deepEqual(
     externalSourceSchema.parse({
       source: "MANGAUPDATES",
       externalId: "AbC123",
       sourceUrl: "https://www.mangaupdates.com/series/abc123/fixture",
-    }).sourceUrl,
-    "https://www.mangaupdates.com/series/abc123",
+    }),
+    {
+      source: "MANGAUPDATES",
+      externalId: "623698779",
+      sourceUrl: "https://www.mangaupdates.com/series/abc123",
+    },
+  );
+  assert.deepEqual(
+    externalSourceSchema.parse({
+      source: "MANGAUPDATES",
+      externalId: "623698779",
+      sourceUrl: "https://www.mangaupdates.com/series/623698779",
+    }),
+    {
+      source: "MANGAUPDATES",
+      externalId: "623698779",
+      sourceUrl: "https://www.mangaupdates.com/series/abc123",
+    },
   );
   for (const sourceUrl of [
     "http://www.mangaupdates.com/series/abc123",

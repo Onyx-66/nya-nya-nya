@@ -1,7 +1,10 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import {
   ArrowClockwise,
+  Books,
+  CaretDown,
   CaretLeft,
   CaretRight,
   ChatCircle,
@@ -27,7 +30,11 @@ import {
 import Link from "next/link";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
 import {
+  AdminCombobox,
   AdminPageScaffold,
+  AdminStatGrid,
+  AdminStatTile,
+  ConfirmActionDialog,
   useUnsavedChanges,
 } from "@/components/nyascans/admin/AdminPageScaffold";
 
@@ -52,6 +59,7 @@ type TeamRecord = {
   revision: number;
   memberCount: number;
   seriesCount: number;
+  releaseCount: number;
   members: Array<{
     userId: string;
     displayName: string;
@@ -90,6 +98,9 @@ type TeamRecord = {
     canUpload: boolean;
     canPublish: boolean;
     isPrimary: boolean;
+    chapterCount: number;
+    publishedCount: number;
+    latestReleaseAt: string | null;
   }>;
   updatedAt: string;
 };
@@ -109,10 +120,17 @@ type TeamDraft = Pick<
   | "bannerUrl"
   | "staffBadgeUrl"
   | "activity"
+  | "memberCount"
+  | "seriesCount"
+  | "releaseCount"
 > & {
   members: TeamRecord["members"];
   series: TeamRecord["series"];
 };
+
+type TeamConfirmation =
+  | { kind: "DISCARD_CHANGES"; team: TeamRecord }
+  | { kind: "HIDE_CHAPTER"; chapter: TeamRecord["activity"][number] };
 
 const emptyDraft: TeamDraft = {
   id: "",
@@ -133,6 +151,9 @@ const emptyDraft: TeamDraft = {
   logoUrl: null,
   bannerUrl: null,
   staffBadgeUrl: null,
+  memberCount: 0,
+  seriesCount: 0,
+  releaseCount: 0,
   activity: [],
   members: [],
   series: [],
@@ -172,6 +193,7 @@ export function TeamManagementPanel() {
   const [saving, setSaving] = useState(false);
   const [memberBusy, setMemberBusy] = useState("");
   const [memberQuery, setMemberQuery] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState("");
   const [memberResults, setMemberResults] = useState<Array<{
     id: string;
     displayName: string;
@@ -195,10 +217,14 @@ export function TeamManagementPanel() {
     banner: false,
     badge: false,
   });
+  const [confirmation, setConfirmation] =
+    useState<TeamConfirmation | null>(null);
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(saved) ||
     Boolean(logoFile || bannerFile || badgeFile) ||
     Object.values(removeMedia).some(Boolean);
+  const selectedMember =
+    memberResults.find((member) => member.id === selectedMemberId) ?? null;
   useUnsavedChanges(dirty, "team changes");
 
   async function load(preferredId?: string, requestedPage = page) {
@@ -250,8 +276,7 @@ export function TeamManagementPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, query]);
 
-  function select(team: TeamRecord) {
-    if (dirty && !window.confirm("Discard unsaved team changes?")) return;
+  function applySelection(team: TeamRecord) {
     const next = draftFor(team);
     setSelectedId(team.id);
     setDraft(next);
@@ -260,7 +285,18 @@ export function TeamManagementPanel() {
     setBannerFile(null);
     setBadgeFile(null);
     setRemoveMedia({ logo: false, banner: false, badge: false });
+    setMemberQuery("");
+    setMemberResults([]);
+    setSelectedMemberId("");
     setMessage(null);
+  }
+
+  function select(team: TeamRecord) {
+    if (dirty) {
+      setConfirmation({ kind: "DISCARD_CHANGES", team });
+      return;
+    }
+    applySelection(team);
   }
 
   async function updateMember(
@@ -307,6 +343,7 @@ export function TeamManagementPanel() {
         `/api/v1/admin/team-members?teamId=${encodeURIComponent(draft.id)}&query=${encodeURIComponent(memberQuery.trim())}`,
       );
       setMemberResults(result.data);
+      setSelectedMemberId("");
     } catch (error) {
       setMessage({ kind: "error", text: error instanceof Error ? error.message : "Users could not be searched." });
     } finally {
@@ -325,6 +362,7 @@ export function TeamManagementPanel() {
       });
       setMemberQuery("");
       setMemberResults([]);
+      setSelectedMemberId("");
       await load(draft.id, page);
       setMessage({ kind: "success", text: "Team member added with scoped access." });
     } catch (error) {
@@ -344,7 +382,6 @@ export function TeamManagementPanel() {
       }
       return;
     }
-    if (!window.confirm(`Move ${chapter.seriesTitle} chapter ${chapter.chapterNumber} back to draft?`)) return;
     setChapterBusy(chapter.chapterId);
     setMessage(null);
     try {
@@ -366,6 +403,19 @@ export function TeamManagementPanel() {
     } finally {
       setChapterBusy("");
     }
+  }
+
+  function requestChapterHide(chapter: TeamRecord["activity"][number]) {
+    if (!draft.id || chapterBusy || dirty) {
+      if (dirty) {
+        setMessage({
+          kind: "neutral",
+          text: "Save or reset the current team before using chapter quick actions.",
+        });
+      }
+      return;
+    }
+    setConfirmation({ kind: "HIDE_CHAPTER", chapter });
   }
 
   async function uploadMedia(
@@ -544,12 +594,35 @@ export function TeamManagementPanel() {
       }) as CSSProperties,
     [draft.effect.accentColor, draft.effect.intensity],
   );
+  const activityGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        seriesId: string;
+        seriesSlug: string;
+        seriesTitle: string;
+        chapters: TeamRecord["activity"];
+      }
+    >();
+    for (const chapter of draft.activity) {
+      const group = groups.get(chapter.seriesId) ?? {
+        seriesId: chapter.seriesId,
+        seriesSlug: chapter.seriesSlug,
+        seriesTitle: chapter.seriesTitle,
+        chapters: [],
+      };
+      group.chapters.push(chapter);
+      groups.set(chapter.seriesId, group);
+    }
+    return [...groups.values()];
+  }, [draft.activity]);
 
   return (
+    <>
     <AdminPageScaffold
-      breadcrumbs={["Administration", "Teams"]}
+      breadcrumbs={["Teams", "Directory"]}
       kicker="People, permissions & identity"
-      title="Team management"
+      title="Directory"
       description="Manage public identity, active affiliations, series permissions, and safe discussion effects without changing upload authorization."
       state={
         loading
@@ -618,7 +691,6 @@ export function TeamManagementPanel() {
             >
               <span className="admin-list-avatar">
                 {team.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={team.logoUrl} alt="" />
                 ) : (
                   team.name.slice(0, 2).toUpperCase()
@@ -670,56 +742,11 @@ export function TeamManagementPanel() {
         </aside>
 
         <div className="admin-team-editor-stack">
-          <details className="admin-editor-box" open>
-            <summary>Control members</summary>
-            <div className="admin-detail-form admin-team-members">
-              {draft.id ? (
-                <section className="v46-team-member-control">
-                  <div>
-                    <label><span>Find a user</span><div className="v46-member-search"><MagnifyingGlass size={18} /><input type="search" value={memberQuery} placeholder="Name, email, or user ID" onChange={(event) => setMemberQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void searchMembers(); } }} /></div></label>
-                    <label><span>Team role</span><select value={newMemberRole} onChange={(event) => setNewMemberRole(event.target.value as typeof newMemberRole)}><option value="UPLOADER">Uploader</option><option value="LEADER">Leader</option><option value="OWNER">Owner</option></select></label>
-                    <button className="button button-secondary" type="button" disabled={memberQuery.trim().length < 2 || Boolean(memberBusy)} onClick={() => void searchMembers()}>Search</button>
-                  </div>
-                  {memberResults.length ? <div className="v46-member-results">{memberResults.map((user) => <article key={user.id}><span className="admin-list-avatar">{user.displayName.slice(0, 2).toUpperCase()}</span><div><strong>{user.displayName}</strong><small>{user.email}{user.membershipStatus === "ACTIVE" ? " · Already active" : ""}</small></div><button className="button button-primary" type="button" disabled={user.membershipStatus === "ACTIVE" || Boolean(memberBusy)} onClick={() => void addMember(user.id)}><Plus size={15} /> Add</button></article>)}</div> : null}
-                </section>
-              ) : null}
-              {draft.id && draft.members.length ? (
-                draft.members.map((member) => (
-                  <article key={member.userId}>
-                    <span className="admin-list-avatar">{member.displayName.slice(0, 2).toUpperCase()}</span>
-                    <div>
-                      <strong>{member.displayName}</strong>
-                      <small>{member.email}{member.isPrimary ? " · Primary team" : ""}</small>
-                    </div>
-                    <label>
-                      <span className="sr-only">Role for {member.displayName}</span>
-                      <select
-                        value={member.role}
-                        disabled={dirty || Boolean(memberBusy) || saving}
-                        title={dirty ? "Save or reset the team before changing member access." : undefined}
-                        onChange={(event) => void updateMember(member, { role: event.target.value })}
-                      >
-                        <option value="OWNER">Owner</option>
-                        <option value="LEADER">Leader</option>
-                        <option value="UPLOADER">Uploader</option>
-                      </select>
-                    </label>
-                    <button type="button" className="v46-icon-danger" disabled={dirty || Boolean(memberBusy) || saving || member.status !== "ACTIVE"} aria-label={`Remove ${member.displayName} from ${draft.name}`} onClick={() => void updateMember(member, { remove: true })}><Trash size={17} /></button>
-                    {memberBusy === member.userId ? <ArrowClockwise className="is-spinning" size={18} /> : <ShieldCheck size={18} />}
-                  </article>
-                ))
-              ) : (
-                <div className="admin-state-card">
-                  <UsersThree size={24} />
-                  <h3>No team members yet</h3>
-                  <p>Search an existing user above, then assign Owner, Leader, or Uploader.</p>
-                </div>
-              )}
-            </div>
-          </details>
-          <form className="admin-detail-form" onSubmit={saveTeam}>
-          <details className="admin-editor-box" open>
-            <summary>Identity</summary>
+          <form
+            className="admin-detail-form team-editor-page"
+            onSubmit={saveTeam}
+          >
+          <section className="admin-editor-box team-editor-common-section">
             <div className="admin-form-section">
               <div className="admin-section-heading">
                 <span>01</span>
@@ -736,7 +763,8 @@ export function TeamManagementPanel() {
                     minLength={2}
                     maxLength={120}
                     value={draft.name}
-                    disabled={Boolean(draft.id)}
+                    readOnly={Boolean(draft.id)}
+                    aria-readonly={Boolean(draft.id)}
                     onChange={(event) => {
                       const name = event.target.value;
                       setDraft((current) => ({
@@ -785,10 +813,265 @@ export function TeamManagementPanel() {
                 />
               </label>
             </div>
-          </details>
+          </section>
 
-          <details className="admin-editor-box" open>
-            <summary>Logo &amp; banner</summary>
+          <section className="admin-editor-box team-editor-common-section">
+            <div className="admin-form-section">
+              <div className="admin-section-heading">
+                <Eye size={22} />
+                <div>
+                  <h3>Status & visibility</h3>
+                  <p>
+                    Control review state, directory availability, and the
+                    team&apos;s fixed reader-page permission.
+                  </p>
+                </div>
+              </div>
+              <label>
+                Verification status
+                <select
+                  value={draft.verificationStatus}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      verificationStatus: event.target
+                        .value as TeamDraft["verificationStatus"],
+                    }))
+                  }
+                >
+                  <option value="PENDING">Pending review</option>
+                  <option
+                    value="VERIFIED"
+                    disabled={saved.verificationStatus === "PENDING"}
+                  >
+                    Verified
+                    {saved.verificationStatus === "PENDING"
+                      ? " · approve ownership request first"
+                      : ""}
+                  </option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </label>
+              <label className="admin-check-row">
+                <input
+                  type="checkbox"
+                  checked={draft.isArchived}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      isArchived: event.target.checked,
+                    }))
+                  }
+                />
+                Archive this team and remove it from new assignments
+              </label>
+              <label className="admin-check-row">
+                <input
+                  type="checkbox"
+                  checked={draft.canControlFixedReaderPages}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      canControlFixedReaderPages: event.target.checked,
+                    }))
+                  }
+                />
+                Allow this team to choose whether the global first and last
+                reader pages appear on its uploaded chapters
+              </label>
+            </div>
+          </section>
+
+          <section className="admin-editor-box team-editor-common-section">
+            <div className="admin-form-section admin-team-members">
+              <header className="admin-section-heading">
+                <UsersThree size={22} />
+                <div>
+                  <h3>Members</h3>
+                  <p>
+                    Add staff and manage team roles without changing the
+                    permanent team title.
+                  </p>
+                </div>
+              </header>
+              {draft.id ? (
+                <section className="v46-team-member-control">
+                  <div>
+                    <label>
+                      <span>Find a user</span>
+                      <div className="v46-member-search">
+                        <MagnifyingGlass size={18} />
+                        <input
+                          type="search"
+                          value={memberQuery}
+                          placeholder="Name, email, or user ID"
+                          onChange={(event) =>
+                            setMemberQuery(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void searchMembers();
+                            }
+                          }}
+                        />
+                      </div>
+                    </label>
+                    <label>
+                      <span>Team role</span>
+                      <select
+                        value={newMemberRole}
+                        onChange={(event) =>
+                          setNewMemberRole(
+                            event.target.value as typeof newMemberRole,
+                          )
+                        }
+                      >
+                        <option value="UPLOADER">Uploader</option>
+                        <option value="LEADER">Leader</option>
+                        <option value="OWNER">Owner</option>
+                      </select>
+                    </label>
+                    <button
+                      className="button button-secondary"
+                      type="button"
+                      disabled={
+                        memberQuery.trim().length < 2 || Boolean(memberBusy)
+                      }
+                      onClick={() => void searchMembers()}
+                    >
+                      Search
+                    </button>
+                  </div>
+                  {memberResults.length ? (
+                    <div className="v46-member-selection">
+                      <label>
+                        <span>User match</span>
+                        <AdminCombobox
+                          ariaLabel="Choose a user from directory matches"
+                          value={selectedMemberId}
+                          options={memberResults.map((user) => ({
+                            value: user.id,
+                            label: user.displayName,
+                            description: `${user.email}${
+                              user.membershipStatus === "ACTIVE"
+                                ? " · Already active"
+                                : ""
+                            }`,
+                          }))}
+                          placeholder="Choose a matching user…"
+                          onChange={setSelectedMemberId}
+                          disabled={Boolean(memberBusy)}
+                        />
+                      </label>
+                      <button
+                        className="button button-primary"
+                        type="button"
+                        disabled={
+                          !selectedMember ||
+                          selectedMember.membershipStatus === "ACTIVE" ||
+                          Boolean(memberBusy)
+                        }
+                        onClick={() =>
+                          selectedMember
+                            ? void addMember(selectedMember.id)
+                            : undefined
+                        }
+                      >
+                        <Plus size={15} /> Add member
+                      </button>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+              {draft.id && draft.members.length ? (
+                draft.members.map((member) => (
+                  <article key={member.userId}>
+                    <span className="admin-list-avatar">
+                      {member.displayName.slice(0, 2).toUpperCase()}
+                    </span>
+                    <div>
+                      <strong>{member.displayName}</strong>
+                      <small>
+                        {member.email}
+                        {member.isPrimary ? " · Primary team" : ""}
+                      </small>
+                    </div>
+                    <label>
+                      <span className="sr-only">
+                        Role for {member.displayName}
+                      </span>
+                      <select
+                        value={member.role}
+                        disabled={dirty || Boolean(memberBusy) || saving}
+                        title={
+                          dirty
+                            ? "Save or reset the team before changing member access."
+                            : undefined
+                        }
+                        onChange={(event) =>
+                          void updateMember(member, {
+                            role: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="OWNER">Owner</option>
+                        <option value="LEADER">Leader</option>
+                        <option value="UPLOADER">Uploader</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="v46-icon-danger"
+                      disabled={
+                        dirty ||
+                        Boolean(memberBusy) ||
+                        saving ||
+                        member.status !== "ACTIVE"
+                      }
+                      aria-label={`Remove ${member.displayName} from ${draft.name}`}
+                      onClick={() =>
+                        void updateMember(member, { remove: true })
+                      }
+                    >
+                      <Trash size={17} />
+                    </button>
+                    {memberBusy === member.userId ? (
+                      <ArrowClockwise className="is-spinning" size={18} />
+                    ) : (
+                      <ShieldCheck size={18} />
+                    )}
+                  </article>
+                ))
+              ) : (
+                <div className="admin-state-card">
+                  <UsersThree size={24} />
+                  <h3>No team members yet</h3>
+                  <p>
+                    Search an existing user above, then assign Owner, Leader,
+                    or Uploader.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <details className="team-editor-advanced">
+            <summary>
+              <div>
+                <strong>Advanced</strong>
+                <span>
+                  Media, public staff effects, series relationships, and
+                  chapter activity.
+                </span>
+              </div>
+              <CaretDown size={18} aria-hidden="true" />
+            </summary>
+            <div className="team-editor-advanced-content">
+          <section
+            id="team-editor-panel-media"
+            className="admin-editor-box"
+          >
             <div className="admin-media-grid">
               <AdminMediaField
                 label="Team logo"
@@ -827,10 +1110,12 @@ export function TeamManagementPanel() {
                 onRemove={() => removeMediaSlot("banner")}
               />
             </div>
-          </details>
+          </section>
 
-          <details className="admin-editor-box">
-            <summary>Series relationships</summary>
+          <section
+            id="team-editor-panel-series"
+            className="admin-editor-box"
+          >
             <div className="admin-form-section">
               <div className="admin-section-heading">
                 <ShieldCheck size={22} />
@@ -842,28 +1127,51 @@ export function TeamManagementPanel() {
               <div className="admin-data-list">
                 {draft.series.length ? (
                   draft.series.map((series) => (
-                    <article key={series.seriesId}>
-                      <div>
-                        <strong>{series.title}</strong>
-                        <small>/{series.slug}</small>
+                    <details className="admin-team-series-disclosure" key={series.seriesId}>
+                      <summary>
+                        <div>
+                          <strong>{series.title}</strong>
+                          <small>/{series.slug}</small>
+                        </div>
+                        <span>{series.isPrimary ? "Primary" : "Assigned"}</span>
+                        <CaretDown size={17} aria-hidden="true" />
+                      </summary>
+                      <div className="admin-team-series-details">
+                        <dl>
+                          <div><dt>Chapters</dt><dd>{series.chapterCount}</dd></div>
+                          <div><dt>Published</dt><dd>{series.publishedCount}</dd></div>
+                          <div><dt>Latest release</dt><dd>{series.latestReleaseAt ? new Date(series.latestReleaseAt).toLocaleDateString() : "None"}</dd></div>
+                        </dl>
+                        <p>
+                          <span>{series.canUpload ? "Uploads allowed" : "No upload permission"}</span>
+                          <span>{series.canPublish ? "Direct publishing" : "Review required"}</span>
+                        </p>
+                        <footer>
+                          <a className="button button-secondary" href={`/onyx/admin/access/series/${series.seriesId}`}>Manage series</a>
+                          <a className="button button-secondary" href={`/title/${series.slug}`} target="_blank" rel="noreferrer">Public view</a>
+                        </footer>
                       </div>
-                      <span>{series.isPrimary ? "Primary" : "Assigned"}</span>
-                      <em>
-                        {series.canUpload ? "Upload" : "No upload"} ·{" "}
-                        {series.canPublish ? "Publish" : "Review required"}
-                      </em>
-                    </article>
+                    </details>
                   ))
                 ) : (
                   <p>No series are assigned to this team.</p>
                 )}
               </div>
             </div>
-          </details>
+          </section>
 
-          <details className="admin-editor-box">
-            <summary>Staff identity</summary>
+          <section
+            id="team-editor-panel-staff"
+            className="admin-editor-box"
+          >
             <div className="admin-form-section">
+              <header className="admin-section-heading">
+                <ShieldCheck size={22} />
+                <div>
+                  <h3>Staff identity</h3>
+                  <p>Configure the badge and restrained public affiliation treatment.</p>
+                </div>
+              </header>
               <AdminMediaField
                 label="Staff badge"
                 helperText="A compact team-affiliation mark shown only for active eligible members."
@@ -885,11 +1193,13 @@ export function TeamManagementPanel() {
               <div
                 className={`team-effect-preview effect-${draft.effect.type.toLowerCase()}`}
                 style={previewStyle}
+                data-enabled={draft.effect.enabled ? "true" : "false"}
               >
-                <span>{draft.staffBadgeUrl ? "Badge" : "NS"}</span>
+                <span>{draft.staffBadgeUrl ? <img src={draft.staffBadgeUrl} alt={`${draft.name || "Team"} staff badge`} /> : "NS"}</span>
                 <div>
                   <strong>Team member preview</strong>
                   <p>The comment stays readable while the affiliation remains visible.</p>
+                  <small>{draft.effect.enabled ? `${draft.effect.type.toLowerCase()} · ${draft.effect.motion.toLowerCase()} motion · intensity ${draft.effect.intensity}` : "Public comment effect disabled"}</small>
                 </div>
               </div>
               <div className="admin-form-grid">
@@ -977,100 +1287,62 @@ export function TeamManagementPanel() {
                 Enable the comment effect independently from the badge
               </label>
             </div>
-          </details>
+          </section>
 
-          <details className="admin-editor-box">
-            <summary>Visibility</summary>
-            <div className="admin-form-section">
-              <label>
-                Verification status
-                <select
-                  value={draft.verificationStatus}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      verificationStatus: event.target.value as TeamDraft["verificationStatus"],
-                    }))
-                  }
-                >
-                  <option value="PENDING">Pending review</option>
-                  <option value="VERIFIED" disabled={saved.verificationStatus === "PENDING"}>Verified{saved.verificationStatus === "PENDING" ? " · approve ownership request first" : ""}</option>
-                  <option value="SUSPENDED">Suspended</option>
-                </select>
-              </label>
-              <label className="admin-check-row">
-                <input
-                  type="checkbox"
-                  checked={draft.isArchived}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      isArchived: event.target.checked,
-                    }))
-                  }
-                />
-                Archive this team and remove it from new assignments
-              </label>
-              <label className="admin-check-row">
-                <input
-                  type="checkbox"
-                  checked={draft.canControlFixedReaderPages}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      canControlFixedReaderPages: event.target.checked,
-                    }))
-                  }
-                />
-                Allow this team to choose whether the global first and last reader pages appear on its uploaded chapters
-              </label>
-            </div>
-          </details>
-
-          <details className="admin-editor-box">
-            <summary>Activity</summary>
+          <section
+            id="team-editor-panel-activity"
+            className="admin-editor-box"
+          >
             <div className="admin-team-activity">
-              <div className="admin-summary-grid">
-                <article><strong>{draft.members.length}</strong><span>Members</span></article>
-                <article><strong>{draft.series.length}</strong><span>Series</span></article>
-                <article><strong>{draft.activity.length}</strong><span>Recent chapters</span></article>
-              </div>
+              <AdminStatGrid>
+                <AdminStatTile icon={<UsersThree size={19} />} label="Members" value={draft.memberCount} caption="Active staff" />
+                <AdminStatTile icon={<Books size={19} />} label="Series" value={draft.seriesCount} caption="Assigned titles" />
+                <AdminStatTile icon={<Images size={19} />} label="Releases" value={draft.releaseCount} caption="All linked chapters" />
+              </AdminStatGrid>
               {draft.activity.length ? (
                 <div className="admin-team-activity-list">
-                  {draft.activity.map((chapter) => (
-                    <article key={chapter.chapterId}>
-                      <header>
-                        <div>
-                          <strong>{chapter.seriesTitle} · Chapter {chapter.chapterNumber}</strong>
-                          <small>{chapter.chapterTitle || `${chapter.language.toUpperCase()} release`} · v{chapter.version} · {chapter.accessType.toLowerCase()}</small>
-                        </div>
-                        <span className={`admin-release-state is-${chapter.state.toLowerCase()}`}>{chapter.state.replaceAll("_", " ")}</span>
-                      </header>
-                      <div className="admin-team-activity-meta">
-                        <span><Clock size={15} /> {new Date(chapter.publishedAt ?? chapter.createdAt).toLocaleString()}</span>
-                        <span><UsersThree size={15} /> {chapter.uploaderName ?? "System uploader"}</span>
-                        <span><Images size={15} /> {chapter.pageCount} pages</span>
-                        <span><ChatCircle size={15} /> {chapter.commentCount} comments</span>
-                        <span><WarningCircle size={15} /> {chapter.reportCount} reports</span>
-                        <span><Smiley size={15} /> {chapter.reactionCount} reactions</span>
+                  {activityGroups.map((group) => (
+                    <details className="admin-team-activity-series" key={group.seriesId}>
+                      <summary>
+                        <div><strong>{group.seriesTitle}</strong><small>/{group.seriesSlug}</small></div>
+                        <span>{group.chapters.length} recent {group.chapters.length === 1 ? "chapter" : "chapters"}</span>
+                        <CaretDown size={17} aria-hidden="true" />
+                      </summary>
+                      <div>
+                        {group.chapters.map((chapter) => (
+                          <details className="admin-team-chapter-disclosure" key={chapter.chapterId}>
+                            <summary>
+                              <div>
+                                <strong>Chapter {chapter.chapterNumber}</strong>
+                                <small>{chapter.chapterTitle || `${chapter.language.toUpperCase()} release`} · v{chapter.version} · {chapter.accessType.toLowerCase()}</small>
+                              </div>
+                              <span className={`admin-release-state is-${chapter.state.toLowerCase()}`}>{chapter.state.replaceAll("_", " ")}</span>
+                              <CaretDown size={16} aria-hidden="true" />
+                            </summary>
+                            <div className="admin-team-chapter-details">
+                              <div className="admin-team-activity-meta">
+                                <span><Clock size={15} /> {new Date(chapter.publishedAt ?? chapter.createdAt).toLocaleString()}</span>
+                                <span><UsersThree size={15} /> {chapter.uploaderName ?? "System uploader"}</span>
+                                <span><Images size={15} /> {chapter.pageCount} pages</span>
+                                <span><ChatCircle size={15} /> {chapter.commentCount} comments</span>
+                                <span><WarningCircle size={15} /> {chapter.reportCount} reports</span>
+                                <span><Smiley size={15} /> {chapter.reactionCount} reactions</span>
+                              </div>
+                              <footer>
+                                <a className="button button-secondary" href={`/onyx/admin/access/series/${chapter.seriesId}/chapters/${chapter.chapterId}`}><Eye size={16} /> Preview images</a>
+                                {chapter.state === "PUBLISHED" ? <a className="button button-secondary" href={`/title/${chapter.seriesSlug}/chapter/${chapter.chapterSlug}`} target="_blank" rel="noreferrer"><Eye size={16} /> Public view</a> : null}
+                                <button className="button button-secondary" type="button" disabled={dirty || Boolean(chapterBusy) || saving || chapter.state === "DRAFT"} title={dirty ? "Save or reset the team before using chapter quick actions." : undefined} onClick={() => requestChapterHide(chapter)}><EyeSlash size={16} /> {chapterBusy === chapter.chapterId ? "Hiding…" : "Move to draft"}</button>
+                              </footer>
+                            </div>
+                          </details>
+                        ))}
                       </div>
-                      <footer>
-                        <a className="button button-secondary" href={`/onyx/admin/access/series/${chapter.seriesId}/chapters/${chapter.chapterId}`}>
-                          <Eye size={16} /> Preview images
-                        </a>
-                        {chapter.state === "PUBLISHED" ? (
-                          <a className="button button-secondary" href={`/title/${chapter.seriesSlug}/chapter/${chapter.chapterSlug}`} target="_blank" rel="noreferrer">
-                            <Eye size={16} /> Public view
-                          </a>
-                        ) : null}
-                        <button className="button button-secondary" type="button" disabled={dirty || Boolean(chapterBusy) || saving || chapter.state === "DRAFT"} title={dirty ? "Save or reset the team before using chapter quick actions." : undefined} onClick={() => void hideChapter(chapter)}>
-                          <EyeSlash size={16} /> {chapterBusy === chapter.chapterId ? "Hiding…" : "Move to draft"}
-                        </button>
-                      </footer>
-                    </article>
+                    </details>
                   ))}
                 </div>
               ) : <p>No uploaded chapters are linked to this team yet.</p>}
+            </div>
+          </section>
             </div>
           </details>
 
@@ -1109,5 +1381,43 @@ export function TeamManagementPanel() {
         </div>
       </div>
     </AdminPageScaffold>
+      <ConfirmActionDialog
+        open={Boolean(confirmation)}
+        title={
+          confirmation?.kind === "DISCARD_CHANGES"
+            ? "Discard unsaved team changes?"
+            : "Move this chapter to draft?"
+        }
+        description={
+          confirmation?.kind === "DISCARD_CHANGES"
+            ? `Your unpublished edits to ${draft.name || "this team"} will be lost before opening ${confirmation.team.name}.`
+            : confirmation?.kind === "HIDE_CHAPTER"
+              ? `${confirmation.chapter.seriesTitle} chapter ${confirmation.chapter.chapterNumber} will leave the public site and return to a private draft.`
+              : "Confirm this team action."
+        }
+        confirmLabel={
+          confirmation?.kind === "DISCARD_CHANGES"
+            ? "Discard and switch"
+            : "Move to draft"
+        }
+        destructive={confirmation?.kind === "DISCARD_CHANGES"}
+        busy={Boolean(chapterBusy)}
+        onCancel={() => {
+          if (!chapterBusy) setConfirmation(null);
+        }}
+        onConfirm={() => {
+          const pending = confirmation;
+          if (!pending) return;
+          if (pending.kind === "DISCARD_CHANGES") {
+            applySelection(pending.team);
+            setConfirmation(null);
+            return;
+          }
+          void hideChapter(pending.chapter).finally(() =>
+            setConfirmation(null),
+          );
+        }}
+      />
+    </>
   );
 }

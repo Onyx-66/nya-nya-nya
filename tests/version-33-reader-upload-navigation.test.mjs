@@ -114,10 +114,11 @@ test("Upload Center preserves pages, enforces duplicate decisions, and raises li
 });
 
 test("free and paid Roulette pools keep eight rewards and have dedicated admin controls", async () => {
-  const [settings, panel, app, route, view, css] = await Promise.all([
+  const [settings, panel, app, navigation, route, view, css] = await Promise.all([
     read("lib/reward-settings.ts"),
     read("components/nyascans/admin/RewardSettingsPanel.tsx"),
     read("components/nyascans/NyaScansApp.tsx"),
+    read("lib/admin-navigation.ts"),
     read("app/api/v1/admin/reward-settings/route.ts"),
     read("components/nyascans/RouletteView.tsx"),
     read("app/globals.css"),
@@ -139,8 +140,8 @@ test("free and paid Roulette pools keep eight rewards and have dedicated admin c
   assert.ok((freePool.match(/\bid:/gu) ?? []).length >= 8);
   assert.ok((paidPool.match(/\bid:/gu) ?? []).length >= 8);
 
-  assert.match(app, /\["Roulette", Sparkle\]/u);
-  assert.match(app, /activeSection === "Roulette"[\s\S]+<RewardSettingsPanel/u);
+  assert.match(navigation, /slug: "roulette"[\s\S]+label: "Roulette"/u);
+  assert.match(app, /activeNavigationItem\?\.slug === "roulette"[\s\S]+<RewardSettingsPanel/u);
   assert.match(panel, /settings\.rouletteRewards\.length <= 8/u);
   assert.match(panel, /settings\.roulettePaidRewards\.length <= 8/u);
   assert.match(panel, /settings\.rouletteRewards\.length >= 24/u);

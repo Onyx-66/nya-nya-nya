@@ -6,7 +6,13 @@ export type SeriesCard = {
   title: string;
   subtitle: string;
   type: "Manga" | "Manhwa" | "Manhua";
-  status: "Ongoing" | "Completed" | "Hiatus" | "Paused" | "Upcoming";
+  status:
+    | "Ongoing"
+    | "Completed"
+    | "Hiatus"
+    | "Paused"
+    | "Cancelled"
+    | "Upcoming";
   access: AccessType;
   rating: number;
   followers: string;

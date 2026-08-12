@@ -20,34 +20,13 @@ async function assertReactionChapterReadable(
   chapterId: string,
   viewer: Awaited<ReturnType<typeof getActor>>,
 ) {
-  if (viewer) {
-    await requireReadableChapter(viewer, chapterId);
-    return;
-  }
-  const publicChapter = await env.DB!.prepare(
-    `SELECT 1
-       FROM chapters c
-       JOIN series s ON s.id = c.series_id
-      WHERE c.id = ?
-        AND c.state = 'PUBLISHED'
-        AND c.visibility = 'PUBLIC'
-        AND c.access_type = 'FREE'
-        AND c.published_at IS NOT NULL
-        AND datetime(c.published_at) <= CURRENT_TIMESTAMP
-        AND s.is_published = 1
-        AND s.archived_at IS NULL
-        AND s.rights_status IN ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-      LIMIT 1`,
-  ).bind(chapterId).first();
-  if (!publicChapter) {
-    throw new ApiError(404, "CHAPTER_NOT_FOUND", "This chapter is not available for reactions.");
-  }
+  await requireReadableChapter(viewer, chapterId);
 }
 
 async function snapshot(chapterId: string, viewerId: string | null) {
   const viewer = viewerId ?? "";
   const reactions = await env.DB!.prepare(
-    `SELECT cr.id, cr.name, cr.accessible_label AS accessibleLabel,
+    `SELECT cr.id, cr.slug, cr.name, cr.accessible_label AS accessibleLabel,
             cr.emoji_fallback AS emojiFallback, cr.asset_key AS assetKey,
             COUNT(chr.user_id) AS count,
             MAX(CASE WHEN chr.user_id = ? THEN 1 ELSE 0 END) AS selected
@@ -74,11 +53,12 @@ async function snapshot(chapterId: string, viewerId: string | null) {
         )
       GROUP BY cr.id
       ORDER BY CASE cr.slug
-        WHEN 'upvote' THEN 0 WHEN 'laugh' THEN 1 WHEN 'heart' THEN 2
-        WHEN 'surprised' THEN 3 WHEN 'angry' THEN 4 WHEN 'sad' THEN 5
+        WHEN 'upvote' THEN 0 WHEN 'heart' THEN 1 WHEN 'laugh' THEN 2
+        WHEN 'surprised' THEN 3 WHEN 'sad' THEN 4 WHEN 'angry' THEN 5
         ELSE 6 END`,
   ).bind(viewer, chapterId, viewer, viewer, viewer).all<{
-    id: string; name: string; accessibleLabel: string; emojiFallback: string;
+    id: string; slug: "upvote" | "heart" | "laugh" | "surprised" | "sad" | "angry";
+    name: string; accessibleLabel: string; emojiFallback: string;
     assetKey: string | null; count: number; selected: number;
   }>();
   const data = reactions.results.map((reaction) => ({

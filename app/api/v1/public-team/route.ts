@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -166,11 +167,15 @@ export async function GET(request: Request) {
       );
     }
 
-    const commercial = await getCommercialSettingsDocument().catch(() => null);
+    const [commercial, featureStates] = await Promise.all([
+      getCommercialSettingsDocument().catch(() => null),
+      getFeatureStates(env.DB).catch(() => null),
+    ]);
     const premiumEconomyPublic = Boolean(
       commercial &&
         !commercial.recoveredFromInvalid &&
-        commercial.settings.economy.premiumEconomyPublic,
+        commercial.settings.economy.premiumEconomyPublic &&
+        featureStates?.premium_unlocks.effective,
     );
 
     const [

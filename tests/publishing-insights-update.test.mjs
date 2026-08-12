@@ -24,7 +24,7 @@ async function migratedDatabase() {
   return { database, migrationNames };
 }
 
-test("Latest Updates exposes at most four unique chapter numbers with language, team, and access", async () => {
+test("Latest Updates exposes two home chapters, four directory chapters, and fifteen globally newest release rows", async () => {
   const [api, app] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
@@ -43,7 +43,9 @@ test("Latest Updates exposes at most four unique chapter numbers with language, 
     api.indexOf('if (path === "latest-releases")'),
     api.indexOf('if (path === "search")'),
   );
-  assert.match(latestApi, /presentation === "table" \? 12 : 4/u);
+  assert.match(latestApi, /if \(presentation === "table"\)[\s\S]*const resultPageSize = 15/u);
+  assert.match(latestApi, /SELECT COUNT\(\*\) AS count[\s\S]*FROM chapters c/u);
+  assert.match(latestApi, /const chapterPresentationLimit = 4/u);
   assert.match(latestApi, /LIMIT \$\{chapterPresentationLimit\}/u);
   assert.match(latestApi, /t\.slug AS teamSlug/);
   assert.match(latestApi, /isNewInPeriod/);
@@ -53,11 +55,11 @@ test("Latest Updates exposes at most four unique chapter numbers with language, 
     latestMarkup,
     /normalizeChapterNumber\(chapter\.chapterNumber\)/,
   );
-  assert.match(latestMarkup, /update\.chapters\.slice\(0, 4\)/);
+  assert.match(latestMarkup, /update\.chapters\.slice\(0, heading && !pagination \? 2 : 4\)/);
   assert.match(latestMarkup, /language=\{chapter\.language\}/);
   assert.match(latestMarkup, /chapter\.teamSlug/);
   assert.match(latestMarkup, /ChapterAccessBadge/);
-  assert.match(latestMarkup, /chapter\.title \? <small>\{chapter\.title\}<\/small>/u);
+  assert.match(latestMarkup, /sanitizeChapterTitle\(chapter\.title\)/u);
 });
 
 test("Store renders all five sections and preserves data-backed Logo Effects", async () => {

@@ -59,41 +59,10 @@ export const NON_DELEGABLE_CAPABILITIES = new Set<string>([
   "security.sessions.manage",
 ]);
 
-export const ADMIN_SECTION_CAPABILITIES: Record<string, string> = {
-  analytics: "admin.analytics.read",
-  overview: "admin.analytics.read",
-  series: "content.series.manage",
-  "chapter-access": "content.chapters.manage",
-  teams: "content.teams.manage",
-  "team-requests": "content.team-requests.review",
-  sliders: "content.sliders.manage",
-  "pinned-series": "content.pinned.manage",
-  "categories-&-genres": "content.taxonomy.manage",
-  "upload-center": "uploads.review",
-  "new-series-queue": "admin.series-requests.review",
-  "review-queue": "uploads.review",
-  "access-decisions": "content.chapters.manage",
-  editorial: "content.editorial.manage",
-  "users-&-roles": "users.manage",
-  permissions: "roles.manage",
-  "series-reports": "reports.manage",
-  discussions: "comments.moderate.global",
-  "support-tickets": "admin.support.manage",
-  balances: "finance.balances.manage",
-  payouts: "finance.transactions.read",
-  transactions: "finance.transactions.read",
-  commerce: "commerce.manage",
-  discounts: "discounts.manage",
-  "store-management": "store.manage",
-  roulette: "roulette.manage",
-  "user-activity": "admin.activity.read",
-  "audit-log": "admin.audit.read",
-  appearance: "appearance.manage",
-  "announcements-&-ads": "announcements.manage",
-  security: "security.read",
-  "site-coverage": "platform.operations.read",
-  "api-control": "api.manage",
-};
+// Compatibility export: server guards and older callers consume this symbol,
+// while the canonical slug/alias mapping now lives with the navigation model.
+export { ADMIN_SECTION_CAPABILITIES } from "@/lib/admin-navigation";
+export { ADMIN_SECTION_ALTERNATE_CAPABILITIES } from "@/lib/admin-navigation";
 
 export function capabilityForAdminPath(path: string) {
   const suffix = path.replace(/^admin\//u, "");

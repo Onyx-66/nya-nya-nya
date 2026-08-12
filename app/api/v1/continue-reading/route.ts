@@ -7,6 +7,10 @@ import {
 } from "@/lib/server/admin-utils";
 import { requireActor } from "@/lib/server/policy";
 import { seriesReadingProgress } from "@/lib/reading-progress";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +96,8 @@ export async function GET(request: Request) {
                         FROM reading_progress completed
                         JOIN chapters completed_chapter
                           ON completed_chapter.id = completed.chapter_id
+                        LEFT JOIN content_visibility_overrides completed_visibility
+                          ON completed_visibility.chapter_id = completed_chapter.id
                        WHERE completed.user_id = rp.user_id
                          AND completed_chapter.series_id = s.id
                          AND completed_chapter.state = 'PUBLISHED'
@@ -99,6 +105,7 @@ export async function GET(request: Request) {
                          AND completed_chapter.published_at IS NOT NULL
                          AND datetime(completed_chapter.published_at) <=
                            datetime('now')
+                         AND ${publicPaidChapterPredicate("completed_chapter", "completed_visibility")}
                          AND (
                            completed.completed_at IS NOT NULL
                            OR completed.progress_basis_points >= 9200
@@ -107,11 +114,14 @@ export async function GET(request: Request) {
                     (
                       SELECT COUNT(DISTINCT published.chapter_number)
                         FROM chapters published
+                        LEFT JOIN content_visibility_overrides published_visibility
+                          ON published_visibility.chapter_id = published.id
                        WHERE published.series_id = s.id
                          AND published.state = 'PUBLISHED'
                          AND published.visibility IN ('PUBLIC', 'UNLISTED')
                          AND published.published_at IS NOT NULL
                          AND datetime(published.published_at) <= datetime('now')
+                         AND ${publicPaidChapterPredicate("published", "published_visibility")}
                     ) AS chaptersTotal,
                     ROW_NUMBER() OVER (
                       PARTITION BY s.id
@@ -120,13 +130,17 @@ export async function GET(request: Request) {
                FROM reading_progress rp
                JOIN chapters c ON c.id = rp.chapter_id
                JOIN series s ON s.id = c.series_id
+               LEFT JOIN content_visibility_overrides visibility_override
+                 ON visibility_override.chapter_id = c.id
               WHERE rp.user_id = ?
                 AND c.state = 'PUBLISHED'
                 AND c.visibility IN ('PUBLIC', 'UNLISTED')
                 AND c.published_at IS NOT NULL
                 AND datetime(c.published_at) <= datetime('now')
+                AND ${publicPaidChapterPredicate("c", "visibility_override")}
                 AND s.is_published = 1
                 AND s.archived_at IS NULL
+                AND ${publicPaidSeriesPredicate("s")}
                 AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
                 AND s.rights_status IN
                   ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')

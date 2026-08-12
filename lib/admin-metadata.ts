@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  mangaUpdatesIdentifierFromProviderId,
+  mangaUpdatesIdentifierFromToken,
+  mangaUpdatesIdentifierFromUrl,
+} from "./mangaupdates-identifiers.ts";
 
 export const countryOptions = [
   ["AR", "Argentina"],
@@ -251,16 +256,28 @@ export const externalSourceSchema = z
       }
       return { ...value, externalId, sourceUrl: url.toString() };
     }
+    const canonicalIdentifier =
+      mangaUpdatesIdentifierFromProviderId(externalId) ??
+      mangaUpdatesIdentifierFromToken(externalId);
+    const linkedIdentifier = mangaUpdatesIdentifierFromUrl(url.toString());
+    const exactLegacyUrl =
+      segments[0]?.toLocaleLowerCase("en-US") === "series" &&
+      segments[1]?.toLocaleLowerCase("en-US") === externalId;
+    const resolvedIdentifier =
+      exactLegacyUrl && linkedIdentifier
+        ? linkedIdentifier
+        : canonicalIdentifier;
     if (
       url.protocol === "https:" &&
       host === "mangaupdates.com" &&
-      segments[0]?.toLocaleLowerCase("en-US") === "series" &&
-      segments[1]?.toLocaleLowerCase("en-US") === externalId
+      resolvedIdentifier &&
+      (linkedIdentifier?.providerId === canonicalIdentifier?.providerId ||
+        exactLegacyUrl)
     ) {
       return {
         ...value,
-        externalId,
-        sourceUrl: `https://www.mangaupdates.com/series/${externalId}`,
+        externalId: resolvedIdentifier.externalId,
+        sourceUrl: resolvedIdentifier.sourceUrl,
       };
     }
     return { ...value, externalId, sourceUrl: url.toString() };
@@ -301,7 +318,14 @@ export const externalSourceSchema = z
       }
     }
     if (value.source === "MANGAUPDATES") {
-      if (!/^[a-z0-9_-]{1,80}$/.test(value.externalId)) {
+      const expectedIdentifier =
+        mangaUpdatesIdentifierFromProviderId(value.externalId);
+      const linkedIdentifier = mangaUpdatesIdentifierFromUrl(value.sourceUrl);
+      const legacyExactMatch =
+        /^[a-z0-9_-]{1,80}$/u.test(value.externalId) &&
+        segments[0]?.toLocaleLowerCase("en-US") === "series" &&
+        segments[1]?.toLocaleLowerCase("en-US") === value.externalId;
+      if (!expectedIdentifier && !legacyExactMatch) {
         context.addIssue({
           code: "custom",
           path: ["externalId"],
@@ -310,8 +334,8 @@ export const externalSourceSchema = z
       }
       if (
         host !== "mangaupdates.com" ||
-        segments[0]?.toLocaleLowerCase("en-US") !== "series" ||
-        segments[1]?.toLocaleLowerCase("en-US") !== value.externalId
+        (!legacyExactMatch &&
+          linkedIdentifier?.providerId !== expectedIdentifier?.providerId)
       ) {
         context.addIssue({
           code: "custom",
@@ -334,7 +358,14 @@ export const seriesManagementSchema = z
       .default([]),
     synopsis: z.string().trim().min(20).max(10_000),
     type: z.enum(["MANGA", "MANHWA", "MANHUA"]),
-    status: z.enum(["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "UPCOMING"]),
+    status: z.enum([
+      "ONGOING",
+      "COMPLETED",
+      "HIATUS",
+      "PAUSED",
+      "CANCELLED",
+      "UPCOMING",
+    ]),
     publicationYear: z.coerce
       .number()
       .int()
@@ -459,7 +490,13 @@ export type ImportedSeriesMetadata = {
     countryCode?: CountryCode;
     languageCode?: LanguageCode;
     type?: "MANGA" | "MANHWA" | "MANHUA";
-    status?: "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "UPCOMING";
+    status?:
+      | "ONGOING"
+      | "COMPLETED"
+      | "HIATUS"
+      | "PAUSED"
+      | "CANCELLED"
+      | "UPCOMING";
     publicationYear?: number | null;
     genres?: Array<{ name: string }>;
     coverReferenceUrl?: string | null;

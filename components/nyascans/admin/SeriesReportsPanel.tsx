@@ -20,7 +20,10 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
+import {
+  AdminCombobox,
+  AdminPageScaffold,
+} from "@/components/nyascans/admin/AdminPageScaffold";
 import {
   SERIES_REPORT_CATEGORIES,
   SERIES_REPORT_CATEGORY_LABELS,
@@ -82,6 +85,14 @@ type ModerationResponse = ErrorPayload & {
 
 type StatusFilter = "ALL" | SeriesReportStatus;
 type CategoryFilter = "ALL" | SeriesReportCategory;
+
+const reportCategoryOptions = [
+  { value: "ALL", label: "All categories" },
+  ...SERIES_REPORT_CATEGORIES.map((entry) => ({
+    value: entry,
+    label: SERIES_REPORT_CATEGORY_LABELS[entry],
+  })),
+];
 
 const defaultPagination: Pagination = {
   page: 1,
@@ -300,9 +311,9 @@ export function SeriesReportsPanel() {
 
   return (
     <AdminPageScaffold
-      breadcrumbs={["Catalogue & publishing", "Series Reports"]}
+      breadcrumbs={["Community", "Reports"]}
       kicker="Content safety"
-      title="Series Reports"
+      title="Reports"
       description="Review reader concerns about published series, record a clear decision, and preserve every status change in the audit trail."
       state={scaffoldState}
       message={notice}
@@ -373,20 +384,16 @@ export function SeriesReportsPanel() {
         </label>
         <label>
           Category
-          <select
+          <AdminCombobox
+            ariaLabel="Filter reports by category"
             value={category}
-            onChange={(event) => {
-              setCategory(event.target.value as CategoryFilter);
+            options={reportCategoryOptions}
+            placeholder="Search report categories…"
+            onChange={(nextCategory) => {
+              setCategory(nextCategory as CategoryFilter);
               setPagination((current) => ({ ...current, page: 1 }));
             }}
-          >
-            <option value="ALL">All categories</option>
-            {SERIES_REPORT_CATEGORIES.map((entry) => (
-              <option value={entry} key={entry}>
-                {SERIES_REPORT_CATEGORY_LABELS[entry]}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label>
           Results per page

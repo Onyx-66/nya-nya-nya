@@ -56,12 +56,16 @@ test("public commercial settings and icon routes redact hidden premium configura
   );
   assert.match(
     publicSettingsBranch,
-    /settings:\s*sanitizeCommercialSettingsForPublic\(document\.settings\)/u,
+    /const sanitizedSettings = sanitizeCommercialSettingsForPublic\([\s\S]+document\.settings[\s\S]+settings:\s*\{[\s\S]+\.\.\.sanitizedSettings,[\s\S]+premiumEconomyPublic:\s*Boolean\([\s\S]+featureStates\?\.premium_unlocks\.effective/u,
   );
   assert.doesNotMatch(publicSettingsBranch, /\.\.\.document\.settings\.economy/u);
+  assert.match(
+    publicSettingsBranch,
+    /runtimeFeatures:[\s\S]+premiumUnlocks:[\s\S]+featureStates\?\.premium_unlocks\.effective === true/u,
+  );
 
   const visibilityCheck = coinIcon.indexOf(
-    "if (!document.settings.economy.premiumEconomyPublic)",
+    "!document.settings.economy.premiumEconomyPublic",
   );
   const objectRead = coinIcon.indexOf("env.BUCKET.get(key)");
   assert.ok(visibilityCheck >= 0, "coin icon GET must check public visibility");
@@ -71,7 +75,7 @@ test("public commercial settings and icon routes redact hidden premium configura
   );
   assert.match(
     coinIcon.slice(visibilityCheck, objectRead),
-    /404[\s\S]+COIN_ICON_NOT_FOUND/u,
+    /featureStates\?\.premium_unlocks\.effective[\s\S]+404[\s\S]+COIN_ICON_NOT_FOUND/u,
   );
 });
 
@@ -95,11 +99,11 @@ test("hidden economy account endpoints return only Shards-safe data", async () =
 
   assert.match(
     walletBranch,
-    /if \(!commercial\.settings\.economy\.premiumEconomyPublic\)[\s\S]+currencyWalletSnapshot\(env\.DB, actor\.id, "SHARDS"\)[\s\S]+premiumEconomyPublic:\s*false/u,
+    /getFeatureStates\(env\.DB\)[\s\S]+if \(!featureStates\.premium_unlocks\.effective\)[\s\S]+currencyWalletSnapshot\(env\.DB, actor\.id, "SHARDS"\)[\s\S]+premiumEconomyPublic:\s*false/u,
   );
   assert.match(
     ordersBranch,
-    /if \(!commercial\.settings\.economy\.premiumEconomyPublic\)[\s\S]+\{\s*data:\s*\[\],\s*premiumEconomyPublic:\s*false\s*\}/u,
+    /getFeatureStates\(env\.DB\)[\s\S]+if \(!featureStates\.premium_unlocks\.effective\)[\s\S]+\{\s*data:\s*\[\],\s*premiumEconomyPublic:\s*false\s*\}/u,
   );
   assert.match(
     notificationsBranch,
@@ -107,7 +111,7 @@ test("hidden economy account endpoints return only Shards-safe data", async () =
   );
   assert.match(
     notificationsBranch,
-    /commercial\.settings\.economy\.premiumEconomyPublic \? 1 : 0/u,
+    /featureStates\.premium_unlocks\.effective \? 1 : 0/u,
   );
   assert.match(
     notifications,
@@ -116,6 +120,10 @@ test("hidden economy account endpoints return only Shards-safe data", async () =
   assert.match(
     notifications,
     /premiumEconomyPublic \? 1 : 0/u,
+  );
+  assert.match(
+    notifications,
+    /featureStates\.premium_unlocks\.effective/u,
   );
 });
 

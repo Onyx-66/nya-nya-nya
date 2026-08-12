@@ -41,13 +41,14 @@ test("Version 45 connects profile uploads, spoiler media, and preferences", asyn
 });
 
 test("Version 45 connects team activity, fixed pages, sliders, and first-open ad", async () => {
-  const [teamPanel, teamRoute, upload, uploadRoute, schema, app, operations] = await Promise.all([
+  const [teamPanel, teamRoute, upload, uploadRoute, schema, app, navigation, operations] = await Promise.all([
     read("components/nyascans/admin/TeamManagementPanel.tsx"),
     read("app/api/v1/admin/team-management/route.ts"),
     read("components/nyascans/upload/UploadCenterWorkspace.tsx"),
     read("app/api/v1/upload-jobs/route.ts"),
     read("db/schema.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
+    read("lib/admin-navigation.ts"),
     read("components/nyascans/OperationsControlPanel.tsx"),
   ]);
   assert.match(teamPanel, /updateMember/);
@@ -59,7 +60,7 @@ test("Version 45 connects team activity, fixed pages, sliders, and first-open ad
   assert.match(upload, /Add last page/);
   assert.match(uploadRoute, /FIXED_READER_PAGE_CONTROL_FORBIDDEN/);
   assert.match(schema, /canControlFixedReaderPages/);
-  assert.match(app, /\["Sliders", SlidersHorizontal\]/);
+  assert.match(navigation, /slug: "sliders"[\s\S]+label: "Sliders"/u);
   assert.match(operations, /<SliderManagementPanel \/>/);
   assert.match(operations, /<HomePromotionsPanel \/>/);
   assert.match(app, /nyascans:floating-ad:/);

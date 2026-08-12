@@ -45,6 +45,40 @@ export const storePreviewConfigSchema = z.object({
       "COMET",
     ])
     .default("STAR"),
+  bannerPlacement: z
+    .enum(["PROFILE_HEADER", "PROFILE_SHELF", "PROFILE_BACKGROUND"])
+    .optional(),
+  displayDurationDays: z.number().int().min(1).max(3_650).nullable().optional(),
+  targetLink: z
+    .string()
+    .trim()
+    .max(2_048)
+    .refine(
+      (value) => /^https?:\/\//i.test(value) || /^\/(?!\/)/.test(value),
+      "Use an absolute HTTP(S) URL or a site-relative path.",
+    )
+    .nullable()
+    .optional(),
+  rarity: z
+    .enum(["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"])
+    .optional(),
+  unlockMethod: z
+    .enum(["PURCHASE", "ROULETTE", "MEMBERSHIP", "EVENT"])
+    .optional(),
+  cosmeticSlot: z
+    .enum([
+      "PROFILE_BANNER",
+      "PROFILE_FRAME",
+      "USERNAME",
+      "COMMENT",
+      "PROFILE_THEME",
+      "SITE_LOGO",
+    ])
+    .optional(),
+  animationType: z
+    .enum(["GLOW", "PULSE", "SHIMMER", "ORBIT", "GLITCH"])
+    .optional(),
+  animationDurationMs: z.number().int().min(250).max(20_000).optional(),
 });
 
 export const storeCollectionInputSchema = z

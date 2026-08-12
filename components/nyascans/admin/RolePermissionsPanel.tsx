@@ -55,7 +55,7 @@ export function RolePermissionsPanel() {
   }
 
   return (
-    <AdminPageScaffold breadcrumbs={["Administration", "People & trust"]} kicker="Least privilege" title="Role permissions" description="Control the exact capabilities assigned to each existing role. Owner-only controls remain non-delegable, and every override is revisioned and audited." message={message} state={loading ? { kind: "loading", message: "Loading permission registry…" } : data ? { kind: "ready" } : { kind: "error", title: "Permission registry unavailable", message: "The role rules could not be loaded.", onRetry: () => void load() }}>
+    <AdminPageScaffold breadcrumbs={["Community", "Permissions"]} kicker="Least privilege" title="Permissions" description="Control the exact capabilities assigned to each existing role. Owner-only controls remain non-delegable, and every override is revisioned and audited." message={message} state={loading ? { kind: "loading", message: "Loading permission registry…" } : data ? { kind: "ready" } : { kind: "error", title: "Permission registry unavailable", message: "The role rules could not be loaded.", onRetry: () => void load() }}>
       {data ? <div className="role-permission-workspace">
         <label><span>Role to configure</span><select value={role} onChange={(event) => setRole(event.target.value)}>{data.roles.map((entry) => <option key={entry} value={entry}>{entry.replaceAll("_", " ").toLowerCase().replace(/\b\w/gu, (letter) => letter.toUpperCase())}</option>)}</select></label>
         <div className="role-permission-groups">{groups.map(([group, definitions]) => <section key={group}><header><Key /><div><strong>{group}</strong><small>Default policy plus explicit audited overrides</small></div></header>{definitions.map((definition) => {

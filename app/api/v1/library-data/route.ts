@@ -7,6 +7,10 @@ import {
 } from "@/lib/server/admin-utils";
 import { requireActor } from "@/lib/server/policy";
 import { seriesReadingProgress } from "@/lib/reading-progress";
+import {
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +50,14 @@ export async function GET(request: Request) {
                 (
                   SELECT c.chapter_number
                     FROM chapters c
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE c.series_id = s.id
                      AND c.state = 'PUBLISHED'
                      AND c.visibility = 'PUBLIC'
                      AND c.published_at IS NOT NULL
                      AND datetime(c.published_at) <= datetime('now')
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                    ORDER BY datetime(c.published_at) DESC, c.id DESC
                    LIMIT 1
                 ) AS latestChapter,
@@ -58,7 +65,10 @@ export async function GET(request: Request) {
                   SELECT c.chapter_number
                     FROM reading_progress rp
                     JOIN chapters c ON c.id = rp.chapter_id
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE rp.user_id = l.user_id AND c.series_id = l.series_id
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                    ORDER BY datetime(rp.updated_at) DESC, c.id DESC
                    LIMIT 1
                 ) AS lastReadChapter,
@@ -66,7 +76,10 @@ export async function GET(request: Request) {
                   SELECT rp.progress_basis_points
                     FROM reading_progress rp
                     JOIN chapters c ON c.id = rp.chapter_id
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE rp.user_id = l.user_id AND c.series_id = l.series_id
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                    ORDER BY datetime(rp.updated_at) DESC, c.id DESC
                    LIMIT 1
                 ) AS progressBasisPoints,
@@ -74,29 +87,38 @@ export async function GET(request: Request) {
                   SELECT rp.updated_at
                     FROM reading_progress rp
                     JOIN chapters c ON c.id = rp.chapter_id
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE rp.user_id = l.user_id AND c.series_id = l.series_id
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                    ORDER BY datetime(rp.updated_at) DESC, c.id DESC
                    LIMIT 1
                 ) AS lastActivity,
                 (
                   SELECT COUNT(DISTINCT c.chapter_number)
                     FROM chapters c
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE c.series_id = s.id
                      AND c.state = 'PUBLISHED'
                      AND c.visibility IN ('PUBLIC', 'UNLISTED')
                      AND c.published_at IS NOT NULL
                      AND datetime(c.published_at) <= datetime('now')
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                 ) AS chaptersTotal,
                 (
                   SELECT COUNT(DISTINCT c.chapter_number)
                     FROM reading_progress rp
                     JOIN chapters c ON c.id = rp.chapter_id
+                    LEFT JOIN content_visibility_overrides visibility_override
+                      ON visibility_override.chapter_id = c.id
                    WHERE rp.user_id = l.user_id
                      AND c.series_id = l.series_id
                      AND c.state = 'PUBLISHED'
                      AND c.visibility IN ('PUBLIC', 'UNLISTED')
                      AND c.published_at IS NOT NULL
                      AND datetime(c.published_at) <= datetime('now')
+                     AND ${publicPaidChapterPredicate("c", "visibility_override")}
                      AND (
                        rp.completed_at IS NOT NULL
                        OR rp.progress_basis_points >= 9200
@@ -107,6 +129,7 @@ export async function GET(request: Request) {
           WHERE l.user_id = ?
             AND s.is_published = 1
             AND s.archived_at IS NULL
+            AND ${publicPaidSeriesPredicate("s")}
             AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
             AND s.rights_status IN
               ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')

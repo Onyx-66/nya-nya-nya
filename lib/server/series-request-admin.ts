@@ -34,6 +34,7 @@ type AdminRequestRow = {
   description: string;
   seriesType: SeriesRequestMetadata["seriesType"];
   publicationStatus: SeriesRequestMetadata["publicationStatus"];
+  publicationYear: number | null;
   authorsJson: string;
   artistsJson: string;
   publisherName: string;
@@ -70,6 +71,7 @@ function metadataFromRow(row: AdminRequestRow): SeriesRequestMetadata {
     description: row.description,
     seriesType: row.seriesType,
     publicationStatus: row.publicationStatus,
+    publicationYear: row.publicationYear,
     authors: parseArray<{ id?: string; name: string }>(row.authorsJson),
     artists: parseArray<{ id?: string; name: string }>(row.artistsJson),
     publisherName: row.publisherName,
@@ -115,6 +117,7 @@ async function loadAdminRequest(db: Database, requestId: string) {
               description,
               series_type AS seriesType,
               publication_status AS publicationStatus,
+              publication_year AS publicationYear,
               authors_json AS authorsJson,
               artists_json AS artistsJson,
               publisher_name AS publisherName,
@@ -207,9 +210,21 @@ export async function listAdminSeriesRequests(
     conditions.push(
       `(r.primary_title LIKE '%' || ? || '%'
         OR submitter.display_name LIKE '%' || ? || '%'
-        OR t.name LIKE '%' || ? || '%')`,
+        OR t.name LIKE '%' || ? || '%'
+        OR r.mangadex_id LIKE '%' || ? || '%'
+        OR r.mangaupdates_id LIKE '%' || ? || '%'
+        OR r.mangadex_url LIKE '%' || ? || '%'
+        OR r.mangaupdates_url LIKE '%' || ? || '%')`,
     );
-    bindings.push(input.query, input.query, input.query);
+    bindings.push(
+      input.query,
+      input.query,
+      input.query,
+      input.query,
+      input.query,
+      input.query,
+      input.query,
+    );
   }
   if (input.status !== "ALL") {
     conditions.push("r.status = ?");
@@ -567,7 +582,7 @@ export async function assignSeriesRequestReviewer(
           input.reviewerUserId,
           `${current.primaryTitle} was assigned to you.`,
           `SERIES_REQUEST_ASSIGNED:${input.requestId}:${nextRevision}`,
-          `/onyx/admin/access/new-series-queue?id=${encodeURIComponent(input.requestId)}`,
+          `/onyx/admin/access/series-submissions?id=${encodeURIComponent(input.requestId)}`,
           JSON.stringify({ requestId: input.requestId }),
           input.reviewerUserId,
           `SERIES_REQUEST_ASSIGNED:${input.requestId}:${nextRevision}`,
@@ -1159,13 +1174,13 @@ export async function approveSeriesRequest(
     db
       .prepare(
         `INSERT INTO series
-         (id, slug, title, native_title, synopsis, type, status,
+         (id, slug, title, native_title, synopsis, type, status, publication_year,
           origin_country, original_language, reading_direction,
           age_rating, access_type, cover_key, banner_key, rights_status,
           is_published, revision, created_at, updated_at)
          SELECT ?, ?, r.primary_title,
                 json_extract(r.alternative_titles_json, '$[0]'),
-                r.description, r.series_type, r.publication_status,
+                r.description, r.series_type, r.publication_status, r.publication_year,
                 r.origin_country, r.original_language, r.reading_direction,
                 'TEEN', 'FREE', r.cover_key, r.banner_key, 'AUTHORIZED',
                 1, 1, ?, ?

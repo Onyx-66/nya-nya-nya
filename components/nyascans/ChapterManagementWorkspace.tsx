@@ -388,7 +388,7 @@ export function ChapterManagementWorkspace({
   }
 
   const backHref = administration
-    ? "/onyx/admin/access/chapter-access"
+    ? "/onyx/admin/access/chapters"
     : "/dashboard/upload-center/history";
 
   if (loading) {

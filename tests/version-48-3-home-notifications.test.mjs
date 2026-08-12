@@ -132,11 +132,12 @@ test("Version 48.3 home discovery uses trusted onsite activity and a globally ne
   assert.match(hotRoute, /LIMIT 9/u);
   assert.doesNotMatch(hotRoute, /Math\.random/u);
   assert.match(hotSection, /\/browse\?sort=viewed/u);
-  assert.match(app, /<th scope="col">Series<\/th>[\s\S]*<th scope="col">Chapter<\/th>[\s\S]*<th scope="col">Releaser<\/th>[\s\S]*<th scope="col">Date<\/th>/u);
-  assert.match(app, /mode=\$\{heading && !pagination \? "table" : "cards"\}/u);
-  assert.match(latestRoute, /presentation === "table" \? 20 : pageSize/u);
-  assert.match(latestRoute, /presentation === "table" \? 12 : 4/u);
-  assert.match(latestRoute, /chapterPresentationPredicate/u);
+  assert.match(app, /<th scope="col">Series<\/th>[\s\S]*<th scope="col">Chapter<\/th>[\s\S]*<th scope="col">Releaser<\/th>[\s\S]*<th scope="col">Status<\/th>[\s\S]*<th scope="col">Date<\/th>/u);
+  assert.match(app, /mode=\$\{useHomeTable \? "table" : "cards"\}/u);
+  assert.match(latestRoute, /if \(presentation === "table"\)[\s\S]*const resultPageSize = 15/u);
+  assert.match(latestRoute, /SELECT COUNT\(\*\) AS count[\s\S]*FROM chapters c/u);
+  assert.match(latestRoute, /ORDER BY datetime\(c\.published_at\) DESC,[\s\S]*LIMIT \? OFFSET \?/u);
+  assert.match(latestRoute, /const chapterPresentationLimit = 4/u);
   assert.match(teams, />Top Publishing Teams<\/h2>/u);
   assert.match(teams, /Previous publishing team/u);
   assert.match(teams, /No teams publish in this language yet/u);
@@ -146,9 +147,10 @@ test("Version 48.3 home discovery uses trusted onsite activity and a globally ne
 });
 
 test("Version 48.3 weekly ranking and notification reconciliation SQL execute on a fresh database", async () => {
-  const [hotRoute, notificationRoute] = await Promise.all([
+  const [hotRoute, notificationRoute, paidVisibility] = await Promise.all([
     read("app/api/v1/hot-this-week/route.ts"),
     read("app/api/v1/notifications/route.ts"),
+    import("../lib/server/public-content-visibility.ts"),
   ]);
   const hotSql = hotRoute.match(
     /const rows = await env\.DB\.prepare\(\s*`([\s\S]*?)`,\s*\)\.all<HotSeriesRow>/u,
@@ -158,10 +160,20 @@ test("Version 48.3 weekly ranking and notification reconciliation SQL execute on
   )?.[1];
   assert.ok(hotSql, "weekly ranking query must remain directly testable");
   assert.ok(notificationSql, "notification reconciliation query must remain directly testable");
+  const executableHotSql = hotSql
+    .replace(
+      /\$\{publicPaidSeriesPredicate\("([^"]+)"\)\}/gu,
+      (_match, seriesAlias) => paidVisibility.publicPaidSeriesPredicate(seriesAlias),
+    )
+    .replace(
+      /\$\{publicPaidChapterPredicate\("([^"]+)", "([^"]+)"\)\}/gu,
+      (_match, chapterAlias, overrideAlias) =>
+        paidVisibility.publicPaidChapterPredicate(chapterAlias, overrideAlias),
+    );
 
   const database = await migratedDatabase();
   try {
-    assert.deepEqual(database.prepare(hotSql).all(), []);
+    assert.deepEqual(database.prepare(executableHotSql).all(), []);
 
     database.exec(`
       INSERT INTO users (id, email, display_name) VALUES
@@ -192,13 +204,13 @@ test("Version 48.3 weekly ranking and notification reconciliation SQL execute on
         ('usr_import', 'chapter_import', 10000,
          strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour'), NULL);
     `);
-    const hotRows = database.prepare(hotSql).all();
+    const hotRows = database.prepare(executableHotSql).all();
     assert.deepEqual(
       hotRows.map((row) => row.slug),
       ["onsite-hit"],
       "import timestamps must not influence the public weekly ranking",
     );
-    const plan = database.prepare(`EXPLAIN QUERY PLAN ${hotSql}`).all();
+    const plan = database.prepare(`EXPLAIN QUERY PLAN ${executableHotSql}`).all();
     assert.ok(
       plan.some((step) => String(step.detail).includes("reading_progress_onsite_activity_idx")),
       "weekly ranking should use its time-leading onsite activity index",

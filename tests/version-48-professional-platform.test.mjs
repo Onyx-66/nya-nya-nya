@@ -19,8 +19,8 @@ test("Version 48 exposes every published release language without a two-language
   assert.match(latest, /\.max\(languageOptions\.length\)/u);
   assert.match(latest, /\[\.\.\.new Set\(parsedLanguages\)\]/u);
   const latestUi = app.slice(
-    app.indexOf('className="latest-updates-block"'),
-    app.indexOf('className="latest-grid latest-loading-grid"'),
+    app.indexOf("function LatestUpdatesGrid"),
+    app.indexOf("function LatestUpdatesView"),
   );
   assert.doesNotMatch(latestUi, /Select up to two/u);
   assert.doesNotMatch(latestUi, /slice\(0, 2\)/u);
@@ -119,31 +119,32 @@ test("Version 48 keeps media-only saves out of metadata mutation and preserves t
   assert.match(field, /Preview unavailable/u);
 });
 
-test("Version 48 groups functional admin areas and hides technical references by default", async () => {
-  const [app, operations, css, route] = await Promise.all([
+test("Version 48.4 groups every admin function in the rebuilt IA", async () => {
+  const [app, navigation, operations, css, route] = await Promise.all([
     read("components/nyascans/NyaScansApp.tsx"),
+    read("lib/admin-navigation.ts"),
     read("components/nyascans/OperationsControlPanel.tsx"),
-    read("app/globals.css"),
+    read("app/admin.css"),
     read("app/api/v1/[...resource]/route.ts"),
   ]);
-  for (const label of ["Command center", "Publishing & content", "People & trust", "Revenue & balances", "Operations record", "Platform controls"]) {
-    assert.match(app, new RegExp(`label: "${label}"`, "u"));
+  for (const label of ["Dashboard", "Catalog", "Homepage & Marketing", "Publishing Queue", "Teams", "Community", "Monetization", "Settings"]) {
+    assert.equal(navigation.match(new RegExp(`label: "${label}"`, "gu"))?.length, 1);
   }
-  assert.match(app, /\["Categories & genres", Tag\]/u);
-  assert.match(operations, /section === "Categories & genres"[\s\S]*<TaxonomyManager/u);
-  const dispatcher = operations.slice(operations.indexOf("export function OperationsControlPanel"));
-  assert.doesNotMatch(dispatcher, /section === "Overview"[\s\S]{0,240}<AnalyticsPanel/u);
-  assert.match(app, /items: \[\["Analytics", ChartLineUp\], \["Overview", SquaresFour\]\]/u);
+  assert.match(navigation, /slug: "home"[\s\S]+aliases: \["dashboard", "analytics", "overview", "summary"\]/u);
+  assert.match(navigation, /slug: "genres-tags"[\s\S]+label: "Genres & Tags"/u);
+  assert.match(operations, /sectionKey === "genres-tags"[\s\S]*<TaxonomyManager/u);
+  assert.match(app, /adminNavigationGroupsForCapabilities/u);
+  assert.doesNotMatch(app, /const allGroups: OperationsNavigationGroup/u);
   assert.match(operations, /className="user-admin-record"/u);
   assert.match(operations, /className="technical-reference"/u);
   assert.match(operations, /loadFailed && users\.length === 0 \? null/u);
-  assert.match(operations, /payload === null \? null : payload\.rows\.length/u);
+  assert.match(operations, /payload\?\.rows \?\? \[\]/u);
   assert.match(operations, /aria-label="Copy transaction reference"/u);
   assert.match(operations, /Recent adjustments/u);
   assert.match(operations, /balanceSummary\?\.fundedAccounts/u);
-  assert.match(operations, /section === "Transactions"/u);
-  assert.match(app, /\["Transactions", Storefront\]/u);
+  assert.match(operations, /sectionKey === "transactions"/u);
+  assert.match(navigation, /slug: "transactions"[\s\S]+label: "Transactions"/u);
   assert.match(route, /WITH user_balances AS/u);
   assert.match(route, /const \[result, totals, history\] = await Promise\.all/u);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.ops-shell\[data-operations-mode="admin"\][\s\S]*display: block/u);
+  assert.match(css, /@media \(max-width: 1023px\)[\s\S]*\.ops-sidebar\.is-mobile-open/u);
 });

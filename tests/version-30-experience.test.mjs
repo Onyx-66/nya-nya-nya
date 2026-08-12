@@ -147,7 +147,7 @@ test("pagination and the operations sidebar expose aligned, accessible controls"
 
   assert.match(app, /label="Show"/u);
   assert.match(styles, /\.catalog-pagination\s*\{[\s\S]*align-items:\s*end/u);
-  assert.match(app, /aria-label=\{sidebarCollapsed \? "Expand sidebar"/u);
+  assert.match(app, /aria-label=\{effectiveSidebarCollapsed \? "Expand sidebar"/u);
   assert.match(app, /aria-controls="operations-navigation"/u);
   assert.match(app, /nyascans-\$\{mode\}-sidebar-collapsed/u);
   assert.match(app, /className="ops-nav-label"/u);

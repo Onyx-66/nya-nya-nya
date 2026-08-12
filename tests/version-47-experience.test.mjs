@@ -81,10 +81,10 @@ test("free upload continuity is enforced before the atomic publish batch", async
 });
 
 test("only Manager+ can resolve a reference chapter and every decision is audited", async () => {
-  const [route, page, app, panel, operations] = await Promise.all([
+  const [route, page, navigation, panel, operations] = await Promise.all([
     read("app/api/v1/admin/chapter-access-decisions/route.ts"),
     read("app/onyx/admin/access/[[...slug]]/page.tsx"),
-    read("components/nyascans/NyaScansApp.tsx"),
+    read("lib/admin-navigation.ts"),
     read("components/nyascans/admin/ChapterAccessDecisionPanel.tsx"),
     read("components/nyascans/OperationsControlPanel.tsx"),
   ]);
@@ -95,7 +95,7 @@ test("only Manager+ can resolve a reference chapter and every decision is audite
   assert.match(route, /auditStatement/u);
   assert.match(route, /id <> \?/u);
   assert.match(page, /requestedCapability = ADMIN_SECTION_CAPABILITIES\[requestedSection\]/u);
-  assert.match(app, /\["Access decisions",/u);
+  assert.match(navigation, /slug: "access-decisions"[\s\S]+label: "Access Decisions"/u);
   assert.match(operations, /<ChapterAccessDecisionPanel \/>/u);
   assert.match(panel, /The newly uploaded chapter remains Paid/u);
 });

@@ -3,6 +3,11 @@ import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import {
+  effectiveChapterAccessSql,
+  publicPaidChapterPredicate,
+  publicPaidSeriesPredicate,
+} from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +134,7 @@ export async function GET(request: Request) {
        LEFT JOIN publishers p
          ON p.id = s.publisher_id AND p.archived_at IS NULL
        WHERE s.slug = ? AND s.is_published = 1 AND s.archived_at IS NULL
+         AND ${publicPaidSeriesPredicate("s")}
          AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
          AND s.rights_status IN
            ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
@@ -171,7 +177,16 @@ export async function GET(request: Request) {
     const chapters = await env.DB.prepare(
       `SELECT c.id, c.slug, c.chapter_number AS chapterNumber,
               c.title, c.volume, c.language, c.version,
-              c.access_type AS accessType, c.price_onyx AS priceOnyx,
+              CASE
+                WHEN (${effectiveChapterAccessSql("c", "detail_visibility")}) = 'FREE'
+                THEN 'FREE' ELSE 'PAID'
+              END AS accessType,
+              ${effectiveChapterAccessSql("c", "detail_visibility")} AS effectiveAccessType,
+              CASE
+                WHEN (${effectiveChapterAccessSql("c", "detail_visibility")})
+                     IN ('FREE', 'PREMIUM')
+                THEN 0 ELSE c.price_onyx
+              END AS priceOnyx,
               c.published_at AS publishedAt, c.page_count AS pageCount,
               t.id AS teamId, t.name AS teamName,
               c.uploader_user_id AS uploaderUserId,
@@ -181,10 +196,13 @@ export async function GET(request: Request) {
        LEFT JOIN teams t ON t.id = c.team_id
        LEFT JOIN users u ON u.id = c.uploader_user_id
        LEFT JOIN user_profiles up ON up.user_id = c.uploader_user_id
+       LEFT JOIN content_visibility_overrides detail_visibility
+         ON detail_visibility.chapter_id = c.id
        WHERE c.series_id = ? AND c.state = 'PUBLISHED'
          AND c.visibility = 'PUBLIC'
          AND c.published_at IS NOT NULL
          AND datetime(c.published_at) <= datetime('now')
+         AND ${publicPaidChapterPredicate("c", "detail_visibility")}
        ORDER BY CAST(c.chapter_number AS REAL) DESC,
                 c.version DESC,
                 COALESCE(c.published_at, c.created_at) DESC,
@@ -266,7 +284,7 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          "cache-control": "public, max-age=30, stale-while-revalidate=120",
+          "cache-control": "no-store",
         },
       },
     );

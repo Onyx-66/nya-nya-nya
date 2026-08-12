@@ -46,6 +46,7 @@ type PublicTeamRecord = {
   releaseLanguages: string[];
   totalViews: number;
   commentCount: number;
+  rank: number;
 };
 
 function label(value: string) {
@@ -78,7 +79,9 @@ function SeriesTypeLabel({ type }: { type: string }) {
 function SeriesStatusLabel({ status }: { status: string }) {
   const normalized = status.toUpperCase();
   const tone =
-    normalized === "COMPLETED"
+    normalized === "CANCELLED"
+      ? "cancelled"
+      : normalized === "COMPLETED"
       ? "completed"
       : normalized === "HIATUS" || normalized === "PAUSED"
         ? "paused"
@@ -145,13 +148,14 @@ function PublishingTeamCard({
 
   return (
     <article
-      className={`team-carousel-card ${variant === "directory" ? "team-directory-card" : ""}`}
+      className={`team-carousel-card${variant === "directory" ? " team-directory-card" : ""}${record.rank <= 3 ? ` is-ranked-${record.rank}` : ""}`}
       data-active={active ? "true" : "false"}
       data-team-index={index}
+      data-site-rank={record.rank}
     >
-      {index < 3 ? (
-        <span className={`team-rank-badge rank-${index + 1}`} aria-label={`Top team rank ${index + 1}`}>
-          <Medal size={17} weight="fill" /> {index + 1}
+      {record.rank <= 3 ? (
+        <span className={`team-rank-badge rank-${record.rank}`} aria-label={`Top team rank ${record.rank}`}>
+          <Medal size={17} weight="fill" /> {record.rank}
         </span>
       ) : null}
       <span className="team-carousel-banner">
@@ -346,7 +350,7 @@ export function PublishingTeamsCarousel() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch("/api/v1/public-teams?limit=10", {
+        const response = await fetch("/api/v1/public-teams?limit=7", {
           signal: controller.signal,
         });
         const payload = (await response.json()) as {
@@ -358,7 +362,12 @@ export function PublishingTeamsCarousel() {
             payload.error?.message ?? "Publishing teams are unavailable.",
           );
         }
-        setRecords(payload.data ?? []);
+        setRecords(
+          (payload.data ?? []).slice(0, 7).map((record, index) => ({
+            ...record,
+            rank: Number(record.rank || index + 1),
+          })),
+        );
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
@@ -547,7 +556,12 @@ export function PublishingTeamsDirectory() {
       .then(async (response) => {
         const payload = (await response.json()) as { data?: PublicTeamRecord[]; error?: { message?: string } };
         if (!response.ok) throw new Error(payload.error?.message ?? "Publishing teams are unavailable.");
-        setRecords(payload.data ?? []);
+        setRecords(
+          (payload.data ?? []).map((record, index) => ({
+            ...record,
+            rank: Number(record.rank || index + 1),
+          })),
+        );
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Publishing teams are unavailable.");

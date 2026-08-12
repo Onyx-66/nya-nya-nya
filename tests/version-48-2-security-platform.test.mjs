@@ -344,7 +344,9 @@ test("reader progress is pointer-draggable and keyboard-accessible while chapter
   assert.match(route, /MAX\(CASE WHEN chr\.user_id = \? THEN 1 ELSE 0 END\) AS selected/u);
   assert.match(route, /ON CONFLICT\(user_id, chapter_id\) DO UPDATE SET/u);
   assert.match(route, /return \{[\s\S]*total: data\.reduce/u);
-  assert.match(app, /chapterReactions\.reduce\(\(sum, reaction\) => sum \+ reaction\.count, 0\)/u);
+  assert.match(app, /const orderedChapterReactions = \[\.\.\.chapterReactions\]\.sort/u);
+  assert.match(app, />Chapter Reactions</u);
+  assert.doesNotMatch(app, /Choose one reaction\./u);
   assert.match(discussion, /chapter-reaction-placement/u);
   assert.match(adminRoute, /const chapterReactionSlots = new Set\(\["upvote", "laugh", "heart", "surprised", "angry", "sad"\]\)/u);
   assert.match(adminRoute, /CHAPTER_REACTION_SLOT_PROTECTED/u);

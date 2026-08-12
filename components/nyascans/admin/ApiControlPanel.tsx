@@ -1,8 +1,17 @@
 "use client";
 
-import { Check, Copy, Key, Plus, SpinnerGap, WarningCircle } from "@phosphor-icons/react";
+import {
+  ArrowSquareOut,
+  Check,
+  Copy,
+  Key,
+  PlugsConnected,
+  Plus,
+  SpinnerGap,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
-import { AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { AdminCombobox, AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 
 type ApiKeyRecord = {
   id: string;
@@ -118,13 +127,63 @@ export function ApiControlPanel() {
 
   return (
     <AdminPageScaffold
-      breadcrumbs={["Admin", "Site administration"]}
-      kicker="Owner-only security"
-      title="API Control"
-      description="Issue scoped credentials for Discord, Telegram, and trusted publishing applications without sharing an administrator session."
+      breadcrumbs={["Settings", "Integrations & API"]}
+      kicker="Connections and credentials"
+      title="Integrations & API"
+      description="Review external metadata connections and issue scoped credentials for bots and trusted publishing applications."
       message={message}
       state={loading ? { kind: "loading", message: "Loading masked credentials and usage…" } : { kind: "ready" }}
     >
+      <section className="admin-integration-section">
+        <header>
+          <span>Metadata providers</span>
+          <h3>Manga import connections</h3>
+          <p>
+            Imports use each provider’s official read-only API, with a shared
+            cache, request budgets, explicit attribution, and human approval
+            before publishing. Neither provider currently requires a private
+            credential, so no key is stored or hard-coded.
+          </p>
+        </header>
+        <div className="admin-integration-grid">
+          {[
+            {
+              name: "MangaDex",
+              host: "api.mangadex.org",
+              href: "https://api.mangadex.org/docs/",
+              cache: "Detail 12h · search 1h",
+            },
+            {
+              name: "MangaUpdates",
+              host: "api.mangaupdates.com",
+              href: "https://api.mangaupdates.com/",
+              cache: "Detail 12h · search 1h",
+            },
+          ].map((provider) => (
+            <article key={provider.name}>
+              <PlugsConnected size={20} />
+              <div>
+                <header>
+                  <h4>{provider.name}</h4>
+                  <span className="admin-status-badge tone-success">
+                    Public API
+                  </span>
+                </header>
+                <code>{provider.host}</code>
+                <p>{provider.cache} · no credential required</p>
+              </div>
+              <a
+                className="button button-secondary"
+                href={provider.href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Provider API <ArrowSquareOut size={16} />
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
       <section className="v46-api-security-note">
         <Key size={24} /><div><strong>Secrets are hashed at rest</strong><p>A raw key is revealed once. Reset creates a replacement and disables the previous key atomically. Keys are rate-limited to 60 requests per minute and 10,000 per day.</p></div>
       </section>
@@ -138,7 +197,7 @@ export function ApiControlPanel() {
         <header><span>New application</span><h3>Create a scoped API key</h3></header>
         <div className="v46-api-form">
           <label><span>Application name</span><input value={appName} placeholder="NyaScans Discord Bot" maxLength={100} onChange={(event) => setAppName(event.target.value)} /></label>
-          <label><span>Publishing team</span><select value={teamId} onChange={(event) => setTeamId(event.target.value)}><option value="">All verified teams</option>{data.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+          <label><span>Publishing team</span><AdminCombobox ariaLabel="Publishing team" value={teamId} emptyLabel="All verified teams" options={data.teams.map((team) => ({ value: team.id, label: team.name, description: team.slug }))} onChange={setTeamId} /></label>
           <fieldset><legend>Scopes</legend>{data.availableScopes.map((scope) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} /><span><strong>{scope}</strong><small>{scope === "series:create" ? "Create private series drafts" : scope === "upload:chapter" ? "Create chapter upload jobs" : "Read series metadata"}</small></span></label>)}</fieldset>
           <button className="button button-primary" type="button" disabled={busy || !appName.trim() || !scopes.length} onClick={() => void createKey()}>{busy ? <SpinnerGap className="spin" /> : <Plus />} Create key</button>
         </div>

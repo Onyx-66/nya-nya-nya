@@ -500,15 +500,15 @@ test("runtime chapter access never mutates the catalogue with demo helpers", asy
   assert.match(access, /CHAPTER_NOT_FOUND/);
 });
 
-test("public and administrative UI expose only canonical content states", async () => {
-  const [api, app, panel] = await Promise.all([
+test("public and administrative UI expose only supported content states", async () => {
+  const [api, app, panel, visibility] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("components/nyascans/NyaScansApp.tsx"),
     read("components/nyascans/OperationsControlPanel.tsx"),
+    read("components/nyascans/admin/ContentVisibilityPanel.tsx"),
   ]);
   assert.match(api, /chapterAccessTypeSchema = z\.enum\(\["FREE", "PAID"\]\)/);
   for (const legacy of [
-    "PREMIUM",
     "EARLY_ACCESS",
     "WAIT_TO_UNLOCK",
     "WAIT_REQUIRED",
@@ -521,6 +521,8 @@ test("public and administrative UI expose only canonical content states", async 
   assert.match(app, /Paid/);
   assert.match(app, /Free/);
   assert.match(app, /TypeBadge/);
+  assert.match(visibility, /type AccessType = "FREE" \| "PAID" \| "PREMIUM"/u);
+  assert.match(api, /MEMBERSHIP_REQUIRED/u);
 });
 
 test("client and worker identifiers remain available without randomUUID", async () => {
