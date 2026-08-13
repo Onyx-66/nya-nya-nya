@@ -51008,3 +51008,83 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
   .latest-pagination > button { min-height: 2.35rem; padding-inline: .58rem; font-size: .7rem; }
   .latest-pagination .latest-page-dots > button { width: 2.35rem; min-width: 2.35rem; height: 2.35rem; min-height: 2.35rem; font-size: .76rem; }
 }
+
+/* Final mobile Latest Updates contract: one dense MangaDex-style release row, no separators or displaced controls. */
+@media (max-width: 600px) {
+  .latest-release-table-shell,
+  .latest-release-table,
+  .latest-release-table tbody,
+  .latest-release-table tbody tr,
+  .latest-release-table tbody th { display: block; width: 100%; border: 0; background: transparent; }
+  .latest-release-table tbody tr + tr { border-top: 0; }
+  .latest-release-table tbody tr.is-paid .latest-feed-row { background: transparent; }
+  .latest-feed-row { display: grid; grid-template-columns: 68px minmax(0, 1fr); align-items: center; gap: 13px; min-height: 0; padding: 12px 0; }
+  .latest-feed-cover { display: block; width: 68px; height: 96px; overflow: hidden; border: 0; border-radius: 8px; box-shadow: none; }
+  .latest-feed-row-main { display: grid; min-width: 0; gap: 5px; }
+  .latest-feed-title { min-width: 0; }
+  .latest-feed-row-main > .latest-feed-title > strong { min-width: 0; font-size: 1rem; line-height: 1.2; white-space: nowrap; }
+  .latest-feed-chapterline { display: flex; min-width: 0; min-height: 1.75rem; align-items: center; gap: 7px; }
+  .latest-feed-chapter { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+  .latest-feed-status { margin-left: auto; flex: 0 0 auto; }
+  .latest-feed-status .chapter-status-badge { min-height: 26px; padding: 3px 9px; border-radius: 7px; box-shadow: none; font-size: .69rem; }
+  .latest-feed-row-meta { display: flex; min-width: 0; min-height: 1.2rem; flex-wrap: nowrap; align-items: center; gap: 8px; font-size: .73rem; line-height: 1.2; }
+  .latest-feed-team { display: block; flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .latest-feed-engagement { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; white-space: nowrap; }
+  .latest-feed-row-meta > time { display: inline-flex; order: initial; flex: 0 0 auto; align-items: center; gap: 3px; margin-left: 0; white-space: nowrap; }
+  .latest-feed-row-meta > span:last-child { margin-left: 0; }
+  .latest-pagination,
+  .latest-pagination.is-home { display: flex; width: 100%; min-height: 2.45rem; flex-wrap: nowrap; align-items: center; justify-content: center; gap: .4rem; margin: 1rem 0 0; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: hidden; }
+  .latest-pagination > button,
+  .latest-pagination.is-home > button { display: grid; flex: 0 0 auto; width: 2.45rem; min-width: 2.45rem; height: 2.45rem; min-height: 2.45rem; place-items: center; padding: 0; border: 1px solid color-mix(in srgb, var(--line) 90%, var(--accent)); border-radius: .7rem; background: var(--surface-strong, #10233b); color: #e9f3ff; box-shadow: none; }
+  .latest-pagination .latest-page-dots { display: inline-flex; min-width: 0; flex: 0 1 auto; align-items: center; justify-content: center; gap: .35rem; overflow: hidden; }
+  .latest-pagination .latest-page-dots > button,
+  .latest-pagination.is-home .latest-page-dots > button { display: grid; flex: 0 0 auto; width: 2.45rem; min-width: 2.45rem; height: 2.45rem; min-height: 2.45rem; place-items: center; padding: 0; border: 1px solid color-mix(in srgb, var(--line) 90%, var(--accent)); border-radius: .7rem; background: var(--surface-strong, #10233b); color: #e9f3ff; font-size: .8rem; font-weight: 750; box-shadow: none; }
+  .latest-pagination .latest-page-dots > button[aria-current="page"] { border-color: var(--accent); background: var(--accent); color: #061326; box-shadow: none; }
+  .latest-pagination .latest-page-ellipsis { flex: 0 0 auto; width: 1rem; color: #e9f3ff; }
+}
+
+/* Latest Updates mobile contrast and alignment: preserve the MangaDex row content in one visible compact block. */
+@media (max-width: 600px) {
+  .latest-release-table-shell { background: #151719; }
+  .latest-feed-row { grid-template-columns: 68px minmax(0, 1fr); align-items: center; padding: 13px 16px; }
+  .latest-feed-row-main { align-content: center; gap: 6px; }
+  .latest-feed-row-main > .latest-feed-title > strong { color: #f3f5f7; }
+  .latest-feed-chapterline { color: #e1e5e9; }
+  .latest-feed-chapter { color: #e1e5e9; }
+  .latest-feed-row-meta { color: #b9c0c8; }
+  .latest-feed-team { color: #d9dee3; }
+  .latest-feed-row-meta svg { color: #75aeea; }
+  .latest-feed-row-main > .latest-feed-title,
+  .latest-feed-chapterline,
+  .latest-feed-row-meta { width: 100%; }
+}
+
+/* Hard override for legacy table-grid rules: the single release cell must span the entire mobile row. */
+@media (max-width: 600px) {
+  .latest-release-table tbody tr,
+  .latest-release-table tbody tr.is-paid {
+    display: block !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    grid-template-columns: none !important;
+    grid-template-rows: none !important;
+  }
+  .latest-release-table tbody tr > th,
+  .latest-release-table tbody tr > :is(th, td),
+  .latest-release-table tbody tr > :nth-child(1) {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+  .latest-release-table tbody tr > :is(th, td)::before { display: none !important; }
+  .latest-feed-row { width: 100% !important; }
+}
+
+@media (max-width: 600px) {
+  .latest-feed-chapterline .latest-feed-chapter { color: #edf2f7 !important; font-weight: 650; }
+  .latest-feed-row-meta > time { color: #b9c0c8; }
+}

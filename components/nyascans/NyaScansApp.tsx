@@ -2651,11 +2651,11 @@ function LatestUpdatesGrid({
                               <span className="latest-feed-team">
                                 {chapter.teamName ?? "Independent release"}
                               </span>
-                              <span className="latest-feed-engagement" aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
-                              <span className="latest-feed-engagement" aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
                               <time dateTime={chapter.publishedAt} title={releaseAbsoluteTime(chapter.publishedAt)}>
                                 <Clock size={14} aria-hidden="true" /> {releaseTime(chapter.publishedAt)} ago
                               </time>
+                              <span className="latest-feed-engagement" aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
+                              <span className="latest-feed-engagement" aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
                             </div>
                           </div>
                         </div>
@@ -2791,7 +2791,6 @@ function LatestUpdatesGrid({
             onClick={() => movePage(-1)}
           >
             <CaretLeft size={17} />
-            <span>Previous</span>
           </button>
           <span className="latest-page-dots" aria-label={`Page ${page} of ${pageCount}`}>
             {pageItems.map((item, index) =>
@@ -2816,7 +2815,6 @@ function LatestUpdatesGrid({
             aria-label="Next latest updates page"
             onClick={() => movePage(1)}
           >
-            <span>Next</span>
             <CaretRight size={17} />
           </button>
         </nav>
