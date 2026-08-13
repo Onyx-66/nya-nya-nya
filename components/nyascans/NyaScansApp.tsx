@@ -2433,12 +2433,15 @@ function LatestUpdatesGrid({
     };
   }, [effectivePeriod, page, pageSize, releaseLanguages, revision, useHomeTable]);
 
-  const pageNumbers = useMemo(() => {
-    const start = Math.max(1, Math.min(page - 2, pageCount - 4));
-    return Array.from(
-      { length: Math.min(5, pageCount) },
-      (_, index) => start + index,
-    );
+  const pageItems = useMemo<Array<number | "ellipsis">>(() => {
+    if (pageCount <= 5) {
+      return Array.from({ length: pageCount }, (_, index) => index + 1);
+    }
+    if (page <= 3) return [1, 2, 3, "ellipsis", pageCount];
+    if (page >= pageCount - 2) {
+      return [1, "ellipsis", pageCount - 2, pageCount - 1, pageCount];
+    }
+    return [1, "ellipsis", page - 1, page, page + 1, "ellipsis", pageCount];
   }, [page, pageCount]);
   const feedRows = useMemo(
     () =>
@@ -2620,41 +2623,41 @@ function LatestUpdatesGrid({
                     >
                       <th scope="row" colSpan={5}>
                         <div className="latest-feed-row">
-                          <a className="latest-feed-series" href={`/title/${update.slug}`}>
-                            <span className="latest-feed-cover">
-                              {update.cover ? (
-                                <ResilientCoverImage
-                                  src={update.cover}
-                                  alt=""
-                                  width={72}
-                                  height={100}
-                                  decorative
-                                />
-                              ) : (
-                                <Books size={19} aria-hidden="true" />
-                              )}
-                            </span>
-                            <span className="latest-feed-row-main">
-                              <strong>{update.title}</strong>
-                              <span className="latest-feed-chapterline">
-                                <LanguageFlag language={chapter.language} showCode={false} />
-                                <span>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</span>
-                                <span className="latest-feed-status">
-                                  <ChapterAccessBadge accessType={chapter.effectiveAccessType ?? chapter.accessType} />
-                                </span>
-                              </span>
-                              <span className="latest-feed-row-meta">
-                                <span className="latest-feed-team">
-                                  <span>{chapter.teamName ?? "Independent release"}</span>
-                                </span>
-                                <time dateTime={chapter.publishedAt} title={releaseAbsoluteTime(chapter.publishedAt)}>
-                                  <Clock size={14} aria-hidden="true" /> {releaseTime(chapter.publishedAt)} ago
-                                </time>
-                                <span aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
-                                <span aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
-                              </span>
-                            </span>
+                          <a className="latest-feed-cover" href={`/title/${update.slug}`} aria-label={`Open ${update.title}`}>
+                            {update.cover ? (
+                              <ResilientCoverImage
+                                src={update.cover}
+                                alt={`Cover art for ${update.title}`}
+                                width={72}
+                                height={100}
+                                decorative
+                              />
+                            ) : (
+                              <Books size={19} aria-hidden="true" />
+                            )}
                           </a>
+                          <div className="latest-feed-row-main">
+                            <a className="latest-feed-title" href={`/title/${update.slug}`}>
+                              <strong>{update.title}</strong>
+                            </a>
+                            <div className="latest-feed-chapterline">
+                              <LanguageFlag language={chapter.language} showCode={false} />
+                              <span className="latest-feed-chapter">Chapter {normalizeChapterNumber(chapter.chapterNumber)}</span>
+                              <span className="latest-feed-status">
+                                <ChapterAccessBadge accessType={chapter.effectiveAccessType ?? chapter.accessType} />
+                              </span>
+                            </div>
+                            <div className="latest-feed-row-meta">
+                              <span className="latest-feed-team">
+                                {chapter.teamName ?? "Independent release"}
+                              </span>
+                              <span className="latest-feed-engagement" aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
+                              <span className="latest-feed-engagement" aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
+                              <time dateTime={chapter.publishedAt} title={releaseAbsoluteTime(chapter.publishedAt)}>
+                                <Clock size={14} aria-hidden="true" /> {releaseTime(chapter.publishedAt)} ago
+                              </time>
+                            </div>
+                          </div>
                         </div>
                       </th>
                     </tr>
@@ -2788,21 +2791,24 @@ function LatestUpdatesGrid({
             onClick={() => movePage(-1)}
           >
             <CaretLeft size={17} />
-            {!heading ? <span>Previous</span> : null}
+            <span>Previous</span>
           </button>
-          <span className="latest-page-status" aria-label={`Page ${page} of ${pageCount}`}>Page {page} of {pageCount}</span>
           <span className="latest-page-dots" aria-label={`Page ${page} of ${pageCount}`}>
-            {pageNumbers.map((pageNumber) => (
-              <button
-                type="button"
-                key={pageNumber}
-                aria-label={`Go to latest updates page ${pageNumber}`}
-                aria-current={page === pageNumber ? "page" : undefined}
-                onClick={() => setPage(pageNumber)}
-              >
-                {pageNumber}
-              </button>
-            ))}
+            {pageItems.map((item, index) =>
+              item === "ellipsis" ? (
+                <span className="latest-page-ellipsis" aria-hidden="true" key={`ellipsis-${index}`}>…</span>
+              ) : (
+                <button
+                  type="button"
+                  key={item}
+                  aria-label={`Go to latest updates page ${item}`}
+                  aria-current={page === item ? "page" : undefined}
+                  onClick={() => setPage(item)}
+                >
+                  {item}
+                </button>
+              ),
+            )}
           </span>
           <button
             type="button"
@@ -2810,7 +2816,7 @@ function LatestUpdatesGrid({
             aria-label="Next latest updates page"
             onClick={() => movePage(1)}
           >
-            {!heading ? <span>Next</span> : null}
+            <span>Next</span>
             <CaretRight size={17} />
           </button>
         </nav>
