@@ -2569,7 +2569,7 @@ function LatestUpdatesGrid({
               </div>
             </details>
             <a className="latest-all-action" href="/latest">
-              View All <ArrowRight size={17} />
+              All <ArrowRight size={17} />
             </a>
           </div>
         </div>
@@ -2659,11 +2659,13 @@ function LatestUpdatesGrid({
                               <span className="latest-feed-team">
                                 {chapter.teamName ?? "Independent release"}
                               </span>
-                              <time dateTime={chapter.publishedAt} title={releaseAbsoluteTime(chapter.publishedAt)}>
-                                <Clock size={14} aria-hidden="true" /> {releaseTime(chapter.publishedAt)} ago
-                              </time>
-                              <span className="latest-feed-engagement" aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
-                              <span className="latest-feed-engagement" aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
+                              <span className="latest-feed-engagement-group">
+                                <time dateTime={chapter.publishedAt} title={releaseAbsoluteTime(chapter.publishedAt)}>
+                                  <Clock size={14} aria-hidden="true" /> {releaseTime(chapter.publishedAt)} ago
+                                </time>
+                                <span className="latest-feed-engagement" aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
+                                <span className="latest-feed-engagement" aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
+                              </span>
                             </div>
                           </div>
                         </div>

@@ -503,20 +503,30 @@ export function PinnedSeriesDirectory({
   );
 }
 
-function expiryLabel(value: string) {
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return "Limited time";
-  const remainingDays = Math.max(
-    0,
-    Math.ceil((timestamp - Date.now()) / 86_400_000),
+function DiscountCountdown({ endsAt }: { endsAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const target = Date.parse(endsAt);
+  const remaining = Number.isFinite(target) ? Math.max(0, target - now) : 0;
+  const days = Math.floor(remaining / 86_400_000);
+  const hours = Math.floor((remaining % 86_400_000) / 3_600_000);
+  const minutes = Math.floor((remaining % 3_600_000) / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1_000);
+  const label = remaining === 0 ? "Offer ended" : `${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+  return (
+    <span className="v481-ticket-countdown" aria-label={`Time remaining: ${label}`}>
+      <Timer size={15} aria-hidden="true" />
+      <span>
+        <b>{days}d</b><b>{String(hours).padStart(2, "0")}h</b><b>{String(minutes).padStart(2, "0")}m</b><b>{String(seconds).padStart(2, "0")}s</b>
+      </span>
+    </span>
   );
-  if (remainingDays === 0) return "Ends today";
-  if (remainingDays === 1) return "1 day left";
-  if (remainingDays <= 30) return `${remainingDays} days left`;
-  return `Ends ${new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(timestamp))}`;
 }
 
 function DiscountTicket({
@@ -546,7 +556,7 @@ function DiscountTicket({
           <s>{coinLabel(record.originalPrice, settings)}</s>
           <b>{coinLabel(record.reducedPrice, settings)}</b>
         </span>
-        <em><Timer size={14} /> {expiryLabel(record.endsAt)}</em>
+        <DiscountCountdown endsAt={record.endsAt} />
       </span>
     </a>
   );
@@ -617,6 +627,26 @@ export function DiscountsSection({
 export function RecentReviewsSection() {
   const [records, setRecords] = useState<RecentReviewRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+
+  const syncActiveReview = useCallback(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const cards = Array.from(rail.querySelectorAll<HTMLElement>("[data-review-id]"));
+    if (!cards.length) return;
+    const center = rail.getBoundingClientRect().left + rail.clientWidth / 2;
+    const active = cards.reduce((closest, card) => {
+      const rect = card.getBoundingClientRect();
+      const cardCenter = rect.left + rect.width / 2;
+      const closestRect = closest.getBoundingClientRect();
+      const closestCenter = closestRect.left + closestRect.width / 2;
+      return Math.abs(cardCenter - center) < Math.abs(closestCenter - center)
+        ? card
+        : closest;
+    });
+    setActiveReviewId(active.dataset.reviewId ?? null);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -635,6 +665,12 @@ export function RecentReviewsSection() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (!records.length) return;
+    const frame = window.requestAnimationFrame(syncActiveReview);
+    return () => window.cancelAnimationFrame(frame);
+  }, [records, syncActiveReview]);
+
   return (
     <section className="content-section page-wrap recent-reviews-section">
       <HomeFeatureStyles />
@@ -643,12 +679,24 @@ export function RecentReviewsSection() {
         title="Recent Reviews"
         allHref="/latest?view=reviews"
       />
-      <div className="recent-reviews-rail" aria-busy={loading}>
+      <div
+        ref={railRef}
+        className="recent-reviews-rail"
+        aria-busy={loading}
+        onScroll={syncActiveReview}
+        onPointerUp={syncActiveReview}
+      >
         {loading
           ? Array.from({ length: 3 }, (_, index) => <span className="recent-review-skeleton" key={index} />)
           : records.length
             ? records.map((review) => (
-              <a className="recent-review-card" href={`/title/${review.seriesSlug}#reviews`} key={review.id}>
+              <a
+                className="recent-review-card"
+                href={`/title/${review.seriesSlug}#reviews`}
+                key={review.id}
+                data-review-id={review.id}
+                data-active={review.id === activeReviewId ? "true" : "false"}
+              >
                 <div className="recent-review-cover">
                   <CoverArtwork src={review.coverUrl} title={review.seriesTitle} />
                 </div>

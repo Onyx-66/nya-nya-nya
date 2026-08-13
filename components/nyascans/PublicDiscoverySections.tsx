@@ -157,9 +157,14 @@ function PublishingTeamCard({
       data-site-rank={record.rank}
     >
       {record.rank <= 3 ? (
-        <span className={`team-rank-badge rank-${record.rank}`} aria-label={`Top team rank ${record.rank}`}>
-          <Medal size={17} weight="fill" /> {record.rank}
-        </span>
+        <>
+          <span className={`team-rank-badge rank-${record.rank}`} aria-label={`Top team rank ${record.rank}`}>
+            <Medal size={17} weight="fill" /> {record.rank}
+          </span>
+          <span className={`team-podium-decor rank-${record.rank}`} aria-hidden="true">
+            <i /><i /><i />
+          </span>
+        </>
       ) : null}
       <span className="team-carousel-banner">
         {record.bannerUrl && !bannerFailed ? (
