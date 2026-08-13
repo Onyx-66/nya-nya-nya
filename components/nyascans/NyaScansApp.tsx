@@ -2448,7 +2448,10 @@ function LatestUpdatesGrid({
         .sort(
           (left, right) =>
             Date.parse(right.chapter.publishedAt) -
-            Date.parse(left.chapter.publishedAt),
+              Date.parse(left.chapter.publishedAt) ||
+            Date.parse(right.update.latestPublishedAt ?? "") -
+              Date.parse(left.update.latestPublishedAt ?? "") ||
+            left.update.title.localeCompare(right.update.title),
         )
         .slice(0, 15),
     [effectivePeriod, records],
@@ -2550,7 +2553,7 @@ function LatestUpdatesGrid({
               </div>
             </details>
             <a className="latest-all-action" href="/latest">
-              All <ArrowRight size={17} />
+              View All <ArrowRight size={17} />
             </a>
           </div>
         </div>
@@ -2975,7 +2978,10 @@ function TrendingShowcase() {
           }}
         >
           {ordered.map((item, index) => (
-            <div className="ranked-card" key={item.id}>
+            <div
+              className={`ranked-card${index < 3 ? ` is-top-${index + 1}` : ""}`}
+              key={item.id}
+            >
               <span>{String(index + 1).padStart(2, "0")}</span>
               <SeriesCardView item={liveSeriesCard(item)} />
               <small className="trending-live-metrics">
@@ -3396,7 +3402,7 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
             <strong>Your recent series will appear here.</strong>
             <span>Open a chapter to start a synced reading trail.</span>
           </div>
-          <a href="/browse">Browse series</a>
+          <a className="continue-reading-browse" href="/browse">Browse Series <ArrowRight size={16} /></a>
         </div>
       )}
     </section>
@@ -3935,7 +3941,6 @@ function EditorsPickSection({
         <div className="editors-pick-heading">
           <span className="editors-pick-fleur" aria-hidden="true">⚜</span>
           <div>
-            <p className="eyebrow">Curated by NyaScans</p>
             <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
             <span>Only the best, chosen for you.</span>
           </div>

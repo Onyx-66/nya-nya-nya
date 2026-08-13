@@ -2,6 +2,7 @@
 
 import {
   Check,
+  ClipboardText,
   Copy,
   Fingerprint,
   Key,
@@ -34,6 +35,7 @@ export function AdminMfaGate({
   const [message, setMessage] = useState("");
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const code = digits.join("");
+  const enrollmentReady = enrolled || Boolean(setup);
 
   function focusDigit(index: number) {
     inputRefs.current[Math.max(0, Math.min(5, index))]?.focus();
@@ -106,6 +108,17 @@ export function AdminMfaGate({
     applyDigits(pasted.length === 6 ? 0 : index, pasted);
   }
 
+  async function fillFromClipboard() {
+    if (!navigator.clipboard?.readText) return;
+    try {
+      const clipboardValue = await navigator.clipboard.readText();
+      const pasted = clipboardValue.replace(/\D/gu, "").slice(0, 6);
+      if (pasted) applyDigits(0, pasted);
+    } catch {
+      // Clipboard permissions are optional; manual entry remains available.
+    }
+  }
+
   async function begin() {
     setBusy(true);
     setMessage("");
@@ -133,7 +146,7 @@ export function AdminMfaGate({
       const response = await fetch("/api/v1/admin-mfa", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "VERIFY", code }),
+        body: JSON.stringify({ action: "VERIFY", code: code.replace(/\D/gu, "").slice(0, 6) }),
       });
       const payload = await response.json() as { data?: { verified?: boolean; suspicious?: boolean }; error?: { message?: string } };
       if (!response.ok || !payload.data?.verified) throw new Error(payload.error?.message ?? "The authenticator code was rejected.");
@@ -147,7 +160,6 @@ export function AdminMfaGate({
     }
   }
 
-  const enrollmentReady = enrolled || Boolean(setup);
   return (
     <main className="admin-mfa-page">
       <section className="admin-mfa-card" aria-labelledby="admin-mfa-title">
@@ -197,6 +209,12 @@ export function AdminMfaGate({
             <form onSubmit={verify} aria-describedby="admin-mfa-instructions admin-mfa-security-note">
               <fieldset disabled={busy}>
                 <legend>Authenticator code</legend>
+                <div className="admin-mfa-code-tools">
+                  <span>Enter the current six-digit code</span>
+                  <button type="button" className="admin-mfa-paste" onClick={() => void fillFromClipboard()} disabled={busy}>
+                    <ClipboardText size={16} aria-hidden="true" /> Paste from clipboard
+                  </button>
+                </div>
                 <div className="admin-mfa-code" role="group" aria-label="Six-digit authenticator code">
                   {digits.map((digit, index) => (
                     <input
@@ -210,7 +228,10 @@ export function AdminMfaGate({
                       value={digit}
                       aria-label={`Digit ${index + 1} of 6`}
                       aria-invalid={Boolean(message)}
-                      onFocus={(event) => event.currentTarget.select()}
+                      onFocus={(event) => {
+                        event.currentTarget.select();
+                        if (index === 0 && !code) void fillFromClipboard();
+                      }}
                       onChange={(event) => applyDigits(index, event.target.value)}
                       onKeyDown={(event) => handleDigitKeyDown(event, index)}
                       onPaste={(event) => handlePaste(event, index)}

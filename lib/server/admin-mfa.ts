@@ -6,6 +6,7 @@ import { randomId } from "@/lib/server/random-id";
 export const ADMIN_MFA_COOKIE = "__Host-nyascans_admin_mfa";
 const ADMIN_SESSION_SECONDS = 60 * 60;
 const MAX_FAILURES = 5;
+const TOTP_COUNTER_WINDOW = 2;
 
 function database() {
   if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Administrative security storage is unavailable.");
@@ -152,7 +153,8 @@ export async function beginAdminMfaEnrollment(userId: string, email: string) {
 }
 
 export async function verifyAdminMfa(userId: string, code: string, requestHeaders: Headers) {
-  if (!/^\d{6}$/u.test(code)) throw new ApiError(400, "ADMIN_MFA_CODE_INVALID", "Enter the six-digit authenticator code.");
+  const normalizedCode = code.replace(/\D/gu, "").slice(0, 6);
+  if (!/^\d{6}$/u.test(normalizedCode)) throw new ApiError(400, "ADMIN_MFA_CODE_INVALID", "Enter the six-digit authenticator code.");
   const db = database();
   const fingerprintHash = await fingerprint(requestHeaders);
   const failures = await db.prepare(
@@ -171,8 +173,9 @@ export async function verifyAdminMfa(userId: string, code: string, requestHeader
   const secret = await decryptSecret(factor.encryptedSecret, factor.encryptionIv);
   const currentCounter = Math.floor(Date.now() / 30_000);
   let acceptedCounter = -1;
-  for (const counter of [currentCounter - 1, currentCounter, currentCounter + 1]) {
-    if (counter > Number(factor.lastCounter) && await totp(secret, counter) === code) {
+  for (let offset = -TOTP_COUNTER_WINDOW; offset <= TOTP_COUNTER_WINDOW; offset += 1) {
+    const counter = currentCounter + offset;
+    if (counter > Number(factor.lastCounter) && await totp(secret, counter) === normalizedCode) {
       acceptedCounter = counter;
       break;
     }

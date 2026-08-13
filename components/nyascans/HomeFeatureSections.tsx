@@ -284,9 +284,7 @@ function PinnedSeriesCard({
   position?: -1 | 0 | 1;
   onActivate?: () => void;
 }) {
-  const imageUrl = featured
-    ? record.bannerUrl || record.coverUrl
-    : record.coverUrl || record.bannerUrl;
+  const imageUrl = record.bannerUrl || record.coverUrl;
   return (
     <a
       className={`v481-pin-card ${featured ? "is-featured" : "is-small"}`}

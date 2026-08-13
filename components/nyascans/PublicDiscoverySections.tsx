@@ -130,10 +130,12 @@ function PublishingTeamCard({
   active,
   index,
   record,
+  position = 0,
   variant = "carousel",
 }: {
   active: boolean;
   index: number;
+  position?: -1 | 0 | 1;
   record: PublicTeamRecord;
   variant?: "carousel" | "directory";
 }) {
@@ -151,6 +153,7 @@ function PublishingTeamCard({
       className={`team-carousel-card${variant === "directory" ? " team-directory-card" : ""}${record.rank <= 3 ? ` is-ranked-${record.rank}` : ""}`}
       data-active={active ? "true" : "false"}
       data-team-index={index}
+      data-team-position={position}
       data-site-rank={record.rank}
     >
       {record.rank <= 3 ? (
@@ -274,7 +277,7 @@ export function NewSeriesSection() {
         </div>
         <div className="new-series-heading-actions">
           <a href="/browse?sort=added">
-            All <ArrowRight size={17} />
+            View All <ArrowRight size={17} />
           </a>
         </div>
       </div>
@@ -343,8 +346,9 @@ export function PublishingTeamsCarousel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [language, setLanguage] = useState("");
-  const railRef = useRef<HTMLDivElement | null>(null);
+  const teamPointerStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -383,62 +387,43 @@ export function PublishingTeamsCarousel() {
     return () => controller.abort();
   }, []);
 
+  const visibleRecords = language
+    ? records.filter((record) => record.releaseLanguages.includes(language))
+    : records;
+
   function goTo(index: number) {
-    const rail = railRef.current;
-    const recordCount = language
-      ? records.filter((record) => record.releaseLanguages.includes(language)).length
-      : records.length;
-    if (!rail || recordCount === 0) return;
-    const nextIndex = (index + recordCount) % recordCount;
-    const card = rail.querySelector<HTMLElement>(
-      `[data-team-index="${nextIndex}"]`,
-    );
-    if (!card) return;
-    rail.scrollTo({
-      left: Math.max(
-        0,
-        card.offsetLeft - (rail.clientWidth - card.clientWidth) / 2,
-      ),
-      behavior: "smooth",
-    });
-    setActiveIndex(nextIndex);
+    if (!visibleRecords.length) return;
+    setIsTransitioning(true);
+    setActiveIndex((index + visibleRecords.length) % visibleRecords.length);
+    window.setTimeout(() => setIsTransitioning(false), 420);
   }
 
   function move(direction: -1 | 1) {
     goTo(activeIndex + direction);
   }
 
-  function syncActiveCard() {
-    const rail = railRef.current;
-    if (!rail) return;
-    const center = rail.scrollLeft + rail.clientWidth / 2;
-    const cards = Array.from(
-      rail.querySelectorAll<HTMLElement>("[data-team-index]"),
-    );
-    let closestIndex = 0;
-    let closestDistance = Number.POSITIVE_INFINITY;
-    for (const card of cards) {
-      const distance = Math.abs(
-        card.offsetLeft + card.clientWidth / 2 - center,
-      );
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = Number(card.dataset.teamIndex ?? 0);
-      }
+  const teamSlots = useMemo(() => {
+    if (!visibleRecords.length) return [];
+    if (visibleRecords.length === 1) {
+      return [{ record: visibleRecords[0]!, index: 0, position: 0 as const }];
     }
-    setActiveIndex(closestIndex);
-  }
-
-  const visibleRecords = language
-    ? records.filter((record) => record.releaseLanguages.includes(language))
-    : records;
+    const leftIndex = activeIndex === 0
+      ? Math.min(2, visibleRecords.length - 1)
+      : (activeIndex - 1 + visibleRecords.length) % visibleRecords.length;
+    const rightIndex = (activeIndex + 1) % visibleRecords.length;
+    return [
+      { record: visibleRecords[leftIndex]!, index: leftIndex, position: -1 as const },
+      { record: visibleRecords[activeIndex]!, index: activeIndex, position: 0 as const },
+      { record: visibleRecords[rightIndex]!, index: rightIndex, position: 1 as const },
+    ];
+  }, [activeIndex, visibleRecords]);
 
   function selectLanguage(nextLanguage: string) {
     setLanguage(nextLanguage);
     setActiveIndex(0);
-    window.requestAnimationFrame(() => {
-      railRef.current?.scrollTo({ left: 0, behavior: "smooth" });
-    });
+      window.requestAnimationFrame(() => {
+        setActiveIndex(0);
+      });
     document
       .querySelector(".public-teams .compact-language-menu[open]")
       ?.removeAttribute("open");
@@ -492,11 +477,21 @@ export function PublishingTeamsCarousel() {
             </div>
           ) : null}
           <div
-            className={`teams-carousel ${visibleRecords.length === 1 ? "is-single" : ""}`}
-            ref={railRef}
+            className={`teams-carousel ${visibleRecords.length === 1 ? "is-single" : "is-circular"}${isTransitioning ? " is-transitioning" : ""}`}
             tabIndex={0}
             aria-label="Top Publishing Teams carousel"
-            onScroll={syncActiveCard}
+            onPointerDown={(event) => {
+              if (event.pointerType !== "mouse") teamPointerStartRef.current = event.clientX;
+            }}
+            onPointerUp={(event) => {
+              const start = teamPointerStartRef.current;
+              teamPointerStartRef.current = null;
+              if (start === null || Math.abs(event.clientX - start) < 42) return;
+              move(event.clientX < start ? 1 : -1);
+            }}
+            onPointerCancel={() => {
+              teamPointerStartRef.current = null;
+            }}
             onKeyDown={(event) => {
               if (event.key === "ArrowLeft") {
                 event.preventDefault();
@@ -507,13 +502,17 @@ export function PublishingTeamsCarousel() {
               }
             }}
           >
-            {visibleRecords.map((record, index) => (
+            {teamSlots.map(({ record, index, position }) => (
               <PublishingTeamCard
-                active={index === activeIndex}
+                active={position === 0}
                 index={index}
-                key={record.id}
+                key={`${record.id}:${position}`}
+                position={position}
                 record={record}
               />
+            ))}
+            {visibleRecords.slice(3).map((record, index) => (
+              <span className="team-carousel-behind" data-team-index={index + 3} key={`behind-${record.id}`} aria-hidden="true" />
             ))}
           </div>
         </div>
