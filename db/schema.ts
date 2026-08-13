@@ -2011,6 +2011,24 @@ export const reviews = sqliteTable(
   ],
 );
 
+export const reviewReactions = sqliteTable(
+  "review_reactions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reviewId: text("review_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    reaction: text("reaction").notNull().default("LIKE"),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.reviewId] }),
+    index("review_reactions_review_idx").on(table.reviewId, table.reaction),
+  ],
+);
+
 export const comments = sqliteTable(
   "comments",
   {

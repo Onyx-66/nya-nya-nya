@@ -51088,3 +51088,88 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
   .latest-feed-chapterline .latest-feed-chapter { color: #edf2f7 !important; font-weight: 650; }
   .latest-feed-row-meta > time { color: #b9c0c8; }
 }
+
+/* Homepage polish: retain a compact, high-contrast dark-blue visual language. */
+.latest-feed-team {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: .2rem .55rem;
+  border: 1px solid rgb(94 159 219 / 68%);
+  border-radius: .48rem;
+  background: rgb(18 50 82 / 72%);
+  color: #d8ecff;
+  font-size: .71rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.chapter-status-free {
+  border-color: #52c58a !important;
+  background: rgb(25 103 68 / 26%) !important;
+  color: #74edab !important;
+}
+.chapter-status-paid {
+  border-color: #d9b655 !important;
+  background: rgb(114 83 18 / 22%) !important;
+  color: #f4d77d !important;
+}
+.latest-pagination > button,
+.latest-pagination.is-home > button,
+.latest-pagination .latest-page-dots > button,
+.latest-pagination.is-home .latest-page-dots > button,
+.latest-pagination .latest-page-ellipsis {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  border-radius: .7rem;
+  box-shadow: none !important;
+}
+.latest-pagination .latest-page-ellipsis {
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, var(--accent));
+  background: var(--surface-strong, #10233b);
+  color: #e9f3ff;
+  font-size: .82rem;
+  font-weight: 800;
+}
+.trending-rail .series-card-copy { display: grid; gap: .46rem; }
+.trending-rail .trending-live-metrics { display: flex; order: 1; gap: .7rem; margin: 0; color: #8ea9c5; font-size: .74rem; line-height: 1.1; }
+.trending-rail .trending-live-metrics > span,
+.trending-rail .series-meta-trending > span { display: inline-flex; align-items: center; gap: .28rem; }
+.trending-rail .trending-live-metrics svg { color: #66b7ff; }
+.trending-rail .series-meta-trending { display: flex; order: 2; gap: .75rem; margin: 0; padding: 0; color: #c5d2e0; line-height: 1.1; }
+.trending-rail .series-meta-trending svg { color: var(--accent); }
+.v481-discounts-section { position: relative; }
+.v481-discounts-section::before { position: absolute; inset: 3.4rem 0 0; z-index: -1; border-radius: 1.5rem; background: radial-gradient(circle at 12% 30%, rgb(58 153 255 / 14%), transparent 38%), linear-gradient(135deg, rgb(10 34 61 / 84%), rgb(5 22 42 / 74%)); content: ""; }
+.v481-discount-rail { padding: .35rem .15rem .75rem; scrollbar-width: none; }
+.v481-discount-rail::-webkit-scrollbar { display: none; }
+.v481-ticket { overflow: hidden; border: 1px solid rgb(85 164 237 / 48%); background: linear-gradient(120deg, rgb(22 62 102 / 98%), rgb(11 34 61 / 98%)); box-shadow: inset 0 1px 0 rgb(177 224 255 / 12%), 0 .8rem 1.8rem rgb(2 14 31 / 24%); }
+.v481-ticket::after { position: absolute; inset: 0; background: linear-gradient(115deg, transparent 26%, rgb(137 207 255 / 0%) 40%, rgb(137 207 255 / 15%) 52%, transparent 66%); content: ""; opacity: 0; transform: translateX(-110%); transition: opacity .25s ease, transform .7s ease; pointer-events: none; }
+.v481-ticket:hover::after { opacity: 1; transform: translateX(110%); }
+.v481-ticket-copy small { color: #a9c4df; letter-spacing: .08em; }
+.v481-ticket-prices b { color: #63b7ff; }
+.v481-ticket em { color: #f0cf75; }
+.recent-reviews-rail { padding-bottom: 0; scrollbar-width: none; }
+.recent-reviews-rail::-webkit-scrollbar { display: none; }
+.recent-review-card { background: linear-gradient(145deg, rgb(23 54 87 / 98%), rgb(9 31 58 / 98%)); box-shadow: inset 0 1px 0 rgb(174 222 255 / 10%); }
+.recent-review-card:hover { border-color: #68baff; box-shadow: 0 1rem 2rem rgb(0 10 25 / 25%), inset 0 1px 0 rgb(174 222 255 / 18%); }
+.recent-review-meta { gap: .5rem; }
+.recent-review-meta > .recent-review-reactions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .28rem; margin-left: auto; color: #ffbd65; }
+.editors-pick-actions .button-primary { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)) !important; background: color-mix(in srgb, var(--surface-strong) 84%, var(--accent) 16%) !important; color: var(--accent) !important; box-shadow: none !important; }
+.editors-pick-actions .button-primary:is(:hover, :focus-visible) { border-color: color-mix(in srgb, var(--accent) 76%, var(--line)) !important; background: color-mix(in srgb, var(--accent) 24%, var(--surface-strong)) !important; color: #fff !important; }
+@media (max-width: 600px) {
+  .latest-release-table-shell { background: #071a31; }
+  .latest-feed-row { padding: 13px 16px; }
+  .latest-feed-team { grid-column: auto; grid-row: auto; flex: 0 1 auto; min-width: 0; max-width: 48%; margin: 0; }
+  .latest-feed-row-meta { justify-content: flex-start; gap: 6px; }
+  .latest-feed-row-meta > time { flex: 0 0 auto; }
+  .latest-pagination > button,
+  .latest-pagination.is-home > button,
+  .latest-pagination .latest-page-dots > button,
+  .latest-pagination.is-home .latest-page-dots > button,
+  .latest-pagination .latest-page-ellipsis { width: 2.35rem; min-width: 2.35rem; height: 2.35rem; min-height: 2.35rem; }
+}

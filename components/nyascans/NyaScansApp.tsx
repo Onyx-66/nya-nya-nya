@@ -1676,10 +1676,12 @@ function SeriesCardView({
   item,
   wide = false,
   hideSubtitle = false,
+  trendingStats,
 }: {
   item: SeriesCard;
   wide?: boolean;
   hideSubtitle?: boolean;
+  trendingStats?: { views: number; followers: number };
 }) {
   return (
     <article className={`series-card ${wide ? "series-card-wide" : ""}`}>
@@ -1702,11 +1704,17 @@ function SeriesCardView({
           <h3>{item.title}</h3>
         </a>
         {!hideSubtitle ? <p>{item.subtitle}</p> : null}
-        <div className="series-meta">
+        {trendingStats ? (
+          <div className="trending-live-metrics" aria-label="Reader activity">
+            <span aria-label={`${trendingStats.views.toLocaleString("en-US")} views`}><Eye size={14} aria-hidden="true" /> {trendingStats.views.toLocaleString("en-US")}</span>
+            <span aria-label={`${trendingStats.followers.toLocaleString("en-US")} followers`}><Heart size={14} aria-hidden="true" /> {trendingStats.followers.toLocaleString("en-US")}</span>
+          </div>
+        ) : null}
+        <div className={`series-meta${trendingStats ? " series-meta-trending" : ""}`}>
           <span>
             <Star size={14} weight="fill" /> {item.rating}
           </span>
-          <span>{item.chapter}</span>
+          {trendingStats ? <span><Books size={14} /> {item.chapter}</span> : <span>{item.chapter}</span>}
         </div>
       </div>
     </article>
@@ -2989,11 +2997,14 @@ function TrendingShowcase() {
               key={item.id}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
-              <SeriesCardView item={liveSeriesCard(item)} hideSubtitle />
-              <small className="trending-live-metrics">
-                <span aria-label={`${Number(item.viewCount ?? 0).toLocaleString("en-US")} views`}><Eye size={14} aria-hidden="true" /> {Number(item.viewCount ?? 0).toLocaleString("en-US")}</span>
-                <span aria-label={`${Number(item.followerCount ?? 0).toLocaleString("en-US")} followers`}><Heart size={14} aria-hidden="true" /> {Number(item.followerCount ?? 0).toLocaleString("en-US")}</span>
-              </small>
+              <SeriesCardView
+                item={liveSeriesCard(item)}
+                hideSubtitle
+                trendingStats={{
+                  views: Number(item.viewCount ?? 0),
+                  followers: Number(item.followerCount ?? 0),
+                }}
+              />
             </div>
           ))}
         </div>
@@ -4070,7 +4081,7 @@ function EditorsPickSection({
           </div>
           <div className="editors-pick-actions">
             <a
-              className="button button-primary"
+              className="button button-secondary"
               href={
                 item.latestChapterSlug
                   ? `/title/${item.slug}/chapter/${item.latestChapterSlug}`
@@ -4277,10 +4288,10 @@ function HomeView({
 
         <PinnedSeriesSection />
 
+        <RecentReviewsSection />
         <DiscountsSection
           enabled={premiumEconomyPublic && runtimeFeatures.payments}
         />
-        <RecentReviewsSection />
 
         <section className="updates-section">
           <div className="page-wrap">

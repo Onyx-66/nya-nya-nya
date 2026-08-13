@@ -1304,7 +1304,12 @@ export async function GET(request: Request, context: RouteContext) {
                 u.display_name AS displayName,
                 s.slug AS seriesSlug,
                 s.title AS seriesTitle,
-                s.cover_key AS coverKey
+                s.cover_key AS coverKey,
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM review_reactions rr
+                   WHERE rr.review_id = r.id
+                ), 0) AS reactionCount
            FROM reviews r
            JOIN users u ON u.id = r.user_id
            JOIN series s ON s.id = r.series_id
@@ -1323,6 +1328,7 @@ export async function GET(request: Request, context: RouteContext) {
         seriesSlug: string;
         seriesTitle: string;
         coverKey: string | null;
+        reactionCount: number;
       }>();
       return json(id, {
         data: rows.results.map((review) => ({

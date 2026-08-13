@@ -4,7 +4,7 @@
 import {
   ArrowRight,
   Books,
-  ChatCircle,
+  Heart,
   CaretLeft,
   CaretRight,
   PushPin,
@@ -108,6 +108,7 @@ type RecentReviewRecord = {
   seriesSlug: string;
   seriesTitle: string;
   coverUrl: string | null;
+  reactionCount: number;
 };
 
 async function readPublicData<T>(response: Response, fallback: string) {
@@ -658,7 +659,7 @@ export function RecentReviewsSection() {
                     <b>{review.rating}/5</b>
                   </span>
                   <p>{review.spoiler ? "Spoiler review · Tap to read" : review.body}</p>
-                  <span className="recent-review-meta"><span>{review.displayName}</span><time dateTime={review.createdAt}>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(review.createdAt))}</time><ChatCircle size={15} /> Reviews</span>
+                  <span className="recent-review-meta"><span>{review.displayName}</span><span className="recent-review-reactions" aria-label={`${review.reactionCount} reactions`}><Heart size={15} weight="fill" /> {review.reactionCount}</span></span>
                 </div>
               </a>
             ))
