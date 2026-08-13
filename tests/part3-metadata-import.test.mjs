@@ -191,3 +191,33 @@ test("request workspace requires preview and explicit per-field acceptance", asy
   assert.match(teamApi, /previewRequired: true/);
   assert.match(teamApi, /perFieldAcceptance: true/);
 });
+
+test("MangaUpdates detail URLs canonicalize to the decimal API identifier used by the provider", async () => {
+  const { mangaUpdatesIdentifierFromUrl } = await import(
+    "../lib/mangaupdates-identifiers.ts"
+  );
+  assert.deepEqual(
+    mangaUpdatesIdentifierFromUrl(
+      "https://www.mangaupdates.com/series/mbhnrbb/suterare-youhei-wa-jiyuu-kimama-ni-ikitai",
+    ),
+    {
+      externalId: "48584001287",
+      providerId: "48584001287",
+      sourceToken: "mbhnrbb",
+      sourceUrl: "https://www.mangaupdates.com/series/mbhnrbb",
+    },
+  );
+});
+
+test("metadata import detects provider URLs before source-specific normalization", async () => {
+  const [service, editor] = await Promise.all([
+    read("lib/server/metadata-import.ts"),
+    read("components/nyascans/admin/SeriesManagementPanel.tsx"),
+  ]);
+  assert.match(service, /providerFromMetadataInput/);
+  assert.match(service, /source: detectedSource/);
+  assert.match(editor, /providerFromImportInput/);
+  assert.match(editor, /const requestSource = detectedSource \?\? importSource/);
+  assert.match(service, /mangaUpdatesTitleFromUrl/);
+  assert.match(service, /MANGAUPDATES_RESPONSE_INVALID/);
+});

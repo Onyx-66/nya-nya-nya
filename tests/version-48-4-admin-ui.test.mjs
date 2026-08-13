@@ -70,6 +70,9 @@ test("admin shell provides searchable navigation, command palette, and an off-ca
   assert.match(css, /grid-template-columns: 72px minmax\(0, 1fr\)/u);
   assert.match(css, /@media \(max-width: 1023px\)[\s\S]+transform: translateX\(-100%\)/u);
   assert.match(css, /\.ops-sidebar\.is-mobile-open[\s\S]+transform: translateX\(0\)/u);
+  assert.match(css, /\.ops-admin-navigation-tools[\s\S]+display: none !important/u);
+  assert.match(css, /\.ops-release-version,[\s\S]+\.ops-account-menu[\s\S]+display: none !important/u);
+  assert.match(css, /opacity: 0[\s\S]+pointer-events: none[\s\S]+visibility: hidden/u);
 });
 
 test("admin design tokens and responsive primitives follow the panel specification", async () => {

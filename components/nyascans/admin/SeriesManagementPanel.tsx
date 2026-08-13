@@ -170,6 +170,13 @@ const seriesEditorTabs = [
 
 type SeriesEditorTab = (typeof seriesEditorTabs)[number]["key"];
 
+const publishableRights: ReadonlySet<FormState["rightsStatus"]> = new Set([
+  "LICENSED",
+  "AUTHORIZED",
+  "DEMO_ORIGINAL",
+  "TEST_ORIGINAL",
+]);
+
 const emptyForm: FormState = {
   title: "",
   slug: "",
@@ -217,6 +224,18 @@ function slugFromTitle(title: string) {
     .normalize("NFKD")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function providerFromImportInput(value: string) {
+  try {
+    const url = new URL(value.trim());
+    const host = url.hostname.toLocaleLowerCase("en-US").replace(/^www\./u, "");
+    if (host === "mangadex.org") return "MANGADEX" as const;
+    if (host === "mangaupdates.com") return "MANGAUPDATES" as const;
+  } catch {
+    // A title or numeric ID has no provider host to detect.
+  }
+  return null;
 }
 
 async function api<T>(response: Response) {
@@ -801,6 +820,13 @@ export function SeriesManagementPanel({
       publishOverride === undefined
         ? form
         : { ...form, isPublished: publishOverride };
+    if (workingForm.isPublished && !publishableRights.has(workingForm.rightsStatus)) {
+      setMessage({
+        kind: "error",
+        text: "Publishing is unavailable until Rights status is Licensed, Authorized, Demo Original, or Test Original. Save as a draft first, or update the rights status before publishing.",
+      });
+      return;
+    }
     if (
       modeRef.current === "create" &&
       unresolvedImportConflicts.length > 0
@@ -1015,6 +1041,12 @@ export function SeriesManagementPanel({
   }
 
   async function previewImport() {
+    const detectedSource = providerFromImportInput(importInput);
+    const requestSource = detectedSource ?? importSource;
+    if (detectedSource && detectedSource !== importSource) {
+      setImportSource(detectedSource);
+      setCreationEntry(detectedSource);
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -1022,7 +1054,7 @@ export function SeriesManagementPanel({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          source: importSource,
+          source: requestSource,
           input: importInput,
           seriesId: form.id,
           refresh: forceRefresh,
@@ -1063,7 +1095,7 @@ export function SeriesManagementPanel({
         kind: payload.duplicate ? "error" : "neutral",
         text: payload.duplicate
           ? `This source is already linked to ${payload.duplicate.title}.`
-          : `Metadata preview loaded${payload.data.cached ? " from cache" : ""}. Choose which values to apply.`,
+          : `Metadata preview loaded from ${payload.data.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"}${payload.data.cached ? " cache" : ""}. Choose which values to apply.`,
       });
     } catch (error) {
       setMessage({
@@ -1071,7 +1103,7 @@ export function SeriesManagementPanel({
         text:
           error instanceof Error
             ? error.message
-            : "Metadata could not be imported.",
+            : `Metadata could not be imported from ${requestSource === "MANGADEX" ? "MangaDex" : "MangaUpdates"}.`,
       });
     } finally {
       setSaving(false);
@@ -1988,6 +2020,9 @@ export function SeriesManagementPanel({
                     </option>
                   ))}
                 </select>
+                <small>
+                  Publish requires Licensed, Authorized, Demo Original, or Test Original rights. Other statuses remain draft-only.
+                </small>
               </label>
             </div>
 

@@ -190,6 +190,36 @@ export function normalizeMangaUpdatesInput(
   };
 }
 
+function providerFromMetadataInput(value: string) {
+  try {
+    const url = new URL(value.trim());
+    const host = url.hostname.toLocaleLowerCase("en-US").replace(/^www\./u, "");
+    if (host === "mangadex.org") return "MANGADEX" as const;
+    if (host === "mangaupdates.com") return "MANGAUPDATES" as const;
+  } catch {
+    // Search strings and numeric IDs do not contain a provider host.
+  }
+  return null;
+}
+
+function mangaUpdatesTitleFromUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    const segments = url.pathname.split("/").filter(Boolean);
+    const seriesIndex = segments.findIndex(
+      (segment) => segment.toLocaleLowerCase("en-US") === "series",
+    );
+    const titleSegments = segments.slice(seriesIndex + 2);
+    if (!titleSegments.length) return "";
+    return decodeURIComponent(titleSegments.join(" "))
+      .replace(/[-_]+/gu, " ")
+      .replace(/\\s+/gu, " ")
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
 function firstText(record: Record<string, string> | undefined) {
   if (!record) return undefined;
   return (
@@ -764,6 +794,13 @@ export async function previewExternalMetadata(
   db: D1Database,
   context: MetadataPreviewContext,
 ) {
+  const detectedSource = providerFromMetadataInput(context.input);
+  if (detectedSource && detectedSource !== context.source) {
+    return previewExternalMetadata(db, {
+      ...context,
+      source: detectedSource,
+    });
+  }
   let normalized: NormalizedProviderInput | null = null;
   try {
     normalized =
@@ -866,7 +903,7 @@ export async function previewExternalMetadata(
         )
         .run();
     }
-    const cacheKey = `${context.source}:${normalized.id}`;
+    let cacheKey = `${context.source}:${normalized.id}`;
     let raw = "";
     let cached = false;
     if (!context.refresh) {
@@ -886,21 +923,79 @@ export async function previewExternalMetadata(
       }
     }
     if (!raw) {
-      raw = await fetchWithRetry(
-        context.source === "MANGADEX"
-          ? `https://api.mangadex.org/manga/${normalized.providerId}?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art`
-          : `https://api.mangaupdates.com/v1/series/${normalized.providerId}`,
-        {},
-        {
-          db,
-          actorUserId: context.actorUserId,
-          requestId: context.requestId,
-          seriesId: context.seriesId,
-          source: context.source,
-          externalId: normalized.id,
-          operation: "DETAIL",
-        },
-      );
+      if (context.source === "MANGADEX") {
+        raw = await fetchWithRetry(
+          `https://api.mangadex.org/manga/${normalized.providerId}?includes%5B%5D=author&includes%5B%5D=artist&includes%5B%5D=cover_art`,
+          {},
+          {
+            db,
+            actorUserId: context.actorUserId,
+            requestId: context.requestId,
+            seriesId: context.seriesId,
+            source: context.source,
+            externalId: normalized.id,
+            operation: "DETAIL",
+          },
+        );
+      } else {
+        try {
+          raw = await fetchWithRetry(
+            `https://api.mangaupdates.com/v1/series/${normalized.providerId}`,
+            {},
+            {
+              db,
+              actorUserId: context.actorUserId,
+              requestId: context.requestId,
+              seriesId: context.seriesId,
+              source: context.source,
+              externalId: normalized.id,
+              operation: "DETAIL",
+            },
+          );
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 404) throw error;
+          const titleQuery = mangaUpdatesTitleFromUrl(normalized.url);
+          if (!titleQuery) throw error;
+          const searchRaw = await providerSearchRaw(context.source, titleQuery, {
+            db,
+            actorUserId: context.actorUserId,
+            requestId: context.requestId,
+            seriesId: context.seriesId,
+            source: context.source,
+            externalId: `search:${normalized.id}`,
+            operation: "SEARCH",
+          });
+          const matches = mangaUpdatesSearchResults(searchRaw);
+          const match = matches.find(
+            (candidate) =>
+              normalizedLookupKey(candidate.title) ===
+              normalizedLookupKey(titleQuery),
+          ) ?? matches[0];
+          const recovered = match
+            ? mangaUpdatesIdentifierFromProviderId(match.externalId)
+            : null;
+          if (!match || !recovered) throw error;
+          normalized = {
+            id: recovered.externalId,
+            url: recovered.sourceUrl,
+            providerId: recovered.providerId,
+          };
+          cacheKey = `${context.source}:${normalized.id}`;
+          raw = await fetchWithRetry(
+            `https://api.mangaupdates.com/v1/series/${normalized.providerId}`,
+            {},
+            {
+              db,
+              actorUserId: context.actorUserId,
+              requestId: context.requestId,
+              seriesId: context.seriesId,
+              source: context.source,
+              externalId: normalized.id,
+              operation: "DETAIL",
+            },
+          );
+        }
+      }
     }
     const responseHash = await sha256Hex(new TextEncoder().encode(raw));
     let providerPayload: MangaDexPayload | MangaUpdatesPayload;

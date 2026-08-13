@@ -5161,3 +5161,97 @@
   .ops-shell[data-operations-mode="admin"] .ops-sidebar,
   .admin-mfa-page * { transition: none !important; }
 }
+
+/* Admin sidebar mobile fix: one off-canvas drawer, one scrolling navigation region. */
+@media (max-width: 1023px) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar,
+  .ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar {
+    position: fixed !important;
+    z-index: 80 !important;
+    inset: 0 auto 0 0 !important;
+    display: flex !important;
+    box-sizing: border-box;
+    width: min(342px, calc(100vw - 1rem)) !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 0 !important;
+    flex-direction: column !important;
+    gap: .75rem !important;
+    padding: max(.85rem, env(safe-area-inset-top)) .75rem max(.85rem, env(safe-area-inset-bottom)) !important;
+    overflow: hidden !important;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transform: translateX(-104%);
+    transition: transform .22s cubic-bezier(.23, 1, .32, 1), opacity .16s ease, visibility 0s linear .22s;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar.is-mobile-open {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar-head {
+    flex: 0 0 auto !important;
+    min-height: 3.25rem;
+    padding: .15rem .15rem .7rem;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar-head .brand {
+    min-width: 0;
+    margin: 0 !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar-collapse {
+    display: none !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-admin-navigation-tools {
+    display: none !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-grouped-nav {
+    display: block !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding: .1rem .1rem .5rem;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-nav-group {
+    margin-bottom: .7rem;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle {
+    min-height: 2.15rem !important;
+    padding-inline: .65rem !important;
+  }
+  .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned) {
+    min-height: 2.85rem;
+    padding: .58rem .7rem !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-release-version,
+  .ops-shell[data-operations-mode="admin"] .ops-account-menu {
+    display: none !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar-mobile-close {
+    display: inline-grid !important;
+    flex: 0 0 auto;
+  }
+}
+@media (max-width: 480px) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar {
+    width: min(330px, calc(100vw - .65rem)) !important;
+    padding-inline: .65rem !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-nav-group {
+    margin-bottom: .55rem;
+  }
+  .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned) {
+    min-height: 2.7rem;
+    padding-inline: .62rem !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar {
+    transition: none;
+  }
+}
