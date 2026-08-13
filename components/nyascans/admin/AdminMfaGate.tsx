@@ -33,9 +33,11 @@ export function AdminMfaGate({
   const [digits, setDigits] = useState<string[]>([...EMPTY_CODE]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [factorReset, setFactorReset] = useState(false);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const code = digits.join("");
-  const enrollmentReady = enrolled || Boolean(setup);
+  const enrollmentReady = (enrolled && !factorReset) || Boolean(setup);
 
   function focusDigit(index: number) {
     inputRefs.current[Math.max(0, Math.min(5, index))]?.focus();
@@ -138,6 +140,28 @@ export function AdminMfaGate({
     }
   }
 
+  async function recoverAuthenticator(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/v1/admin-mfa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "RESET", password: recoveryPassword }),
+      });
+      const payload = await response.json() as { data?: { reset?: boolean }; error?: { message?: string } };
+      if (!response.ok || !payload.data?.reset) throw new Error(payload.error?.message ?? "Authenticator recovery could not start.");
+      setRecoveryPassword("");
+      setFactorReset(true);
+      await begin();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Authenticator recovery could not start.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function verify(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -206,6 +230,7 @@ export function AdminMfaGate({
             </div>
           ) : null}
           {enrollmentReady ? (
+            <>
             <form onSubmit={verify} aria-describedby="admin-mfa-instructions admin-mfa-security-note">
               <fieldset disabled={busy}>
                 <legend>Authenticator code</legend>
@@ -244,6 +269,27 @@ export function AdminMfaGate({
                 {busy ? <SpinnerGap className="spin" /> : <ShieldCheck />} Verify and open admin
               </button>
             </form>
+            <details className="admin-mfa-recovery">
+              <summary>Authenticator code not working?</summary>
+              <p>Confirm your account password to replace the old authenticator with a new Google Authenticator setup.</p>
+              <form onSubmit={recoverAuthenticator}>
+                <label>
+                  <span>Account password</span>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={recoveryPassword}
+                    onChange={(event) => setRecoveryPassword(event.target.value)}
+                    disabled={busy}
+                    required
+                  />
+                </label>
+                <button className="button button-secondary" type="submit" disabled={busy || !recoveryPassword}>
+                  {busy ? <SpinnerGap className="spin" /> : <Key />} Reset and enroll a new authenticator
+                </button>
+              </form>
+            </details>
+            </>
           ) : message ? <p className="admin-mfa-error" role="alert">{message}</p> : null}
           <footer id="admin-mfa-security-note">
             <LockKey size={17} aria-hidden="true" />

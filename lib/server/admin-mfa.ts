@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
 import { hashOpaqueToken, newOpaqueToken } from "@/lib/server/auth-crypto";
 import { randomId } from "@/lib/server/random-id";
+import { verifyCurrentPassword } from "@/lib/server/local-auth";
 
 export const ADMIN_MFA_COOKIE = "__Host-nyascans_admin_mfa";
 const ADMIN_SESSION_SECONDS = 60 * 60;
@@ -184,30 +185,69 @@ export async function verifyAdminMfa(userId: string, code: string, requestHeader
     await db.prepare("INSERT INTO admin_login_events (id, user_id, fingerprint_hash, result, reason) VALUES (?, ?, ?, 'FAILURE', 'Invalid or replayed TOTP code')").bind(`admin_login_${randomId()}`, userId, fingerprintHash).run();
     throw new ApiError(401, "ADMIN_MFA_CODE_REJECTED", "That authenticator code is invalid, expired, or already used.");
   }
-  const updated = await db.prepare(
-    `UPDATE admin_mfa_factors SET confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP),
-       last_accepted_counter = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-     WHERE user_id = ? AND last_accepted_counter < ?`,
-  ).bind(acceptedCounter, userId, acceptedCounter).run();
-  if (!updated.meta.changes) throw new ApiError(409, "ADMIN_MFA_CODE_REPLAYED", "That authenticator code was already used.");
   const suspicious = Boolean(await db.prepare("SELECT 1 FROM admin_login_events WHERE user_id = ? AND result = 'SUCCESS' AND fingerprint_hash <> ? LIMIT 1").bind(userId, fingerprintHash).first());
   const token = newOpaqueToken();
   const tokenHash = await hashOpaqueToken(token);
   const expiresAt = new Date(Date.now() + ADMIN_SESSION_SECONDS * 1_000).toISOString();
   const sessionId = `admin_mfa_session_${randomId()}`;
+  const acceptedEventId = `admin_login_${randomId()}`;
   const statements = [
-    db.prepare("INSERT INTO admin_mfa_sessions (id, user_id, token_hash, fingerprint_hash, expires_at) VALUES (?, ?, ?, ?, ?)").bind(sessionId, userId, tokenHash, fingerprintHash, expiresAt),
-    db.prepare("INSERT INTO admin_login_events (id, user_id, fingerprint_hash, result, reason) VALUES (?, ?, ?, 'SUCCESS', ?)").bind(`admin_login_${randomId()}`, userId, fingerprintHash, suspicious ? "New administrator device or network" : "TOTP verified"),
+    db.prepare(
+      `UPDATE admin_mfa_factors SET confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP),
+         last_accepted_counter = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND last_accepted_counter < ?`,
+    ).bind(acceptedCounter, userId, acceptedCounter),
+    db.prepare(
+      `INSERT INTO admin_mfa_sessions (id, user_id, token_hash, fingerprint_hash, expires_at)
+       SELECT ?, ?, ?, ?, ? WHERE changes() = 1`,
+    ).bind(sessionId, userId, tokenHash, fingerprintHash, expiresAt),
+    db.prepare(
+      `INSERT INTO admin_login_events (id, user_id, fingerprint_hash, result, reason)
+       SELECT ?, ?, ?, 'SUCCESS', ? WHERE changes() = 1`,
+    ).bind(acceptedEventId, userId, fingerprintHash, suspicious ? "New administrator device or network" : "TOTP verified"),
   ];
   if (suspicious) {
     statements.push(db.prepare(
       `INSERT INTO notifications (id, user_id, kind, title, body, dedupe_key, action_url, metadata_json)
-       VALUES (?, ?, 'SECURITY_ALERT', 'New administrator sign-in',
-       'A new device or network completed administrator two-factor authentication. Review access immediately if this was not you.', ?, '/account?section=security', '{}')`,
+       SELECT ?, ?, 'SECURITY_ALERT', 'New administrator sign-in',
+       'A new device or network completed administrator two-factor authentication. Review access immediately if this was not you.', ?, '/account?section=security', '{}'
+       WHERE changes() = 1`,
     ).bind(`ntf_${randomId()}`, userId, `admin-new-device:${sessionId}`));
   }
-  await db.batch(statements);
+  const results = await db.batch(statements);
+  if (!Number(results[0]?.meta.changes ?? 0)) {
+    throw new ApiError(409, "ADMIN_MFA_CODE_REPLAYED", "That authenticator code was already used.");
+  }
   return { token, expiresAt, enrolledNow: !factor.confirmedAt, suspicious };
+}
+
+export async function resetAdminMfaEnrollment(
+  userId: string,
+  password: string,
+  requestHeaders: Headers,
+) {
+  const db = database();
+  const fingerprintHash = await fingerprint(requestHeaders);
+  const matches = await verifyCurrentPassword(userId, password);
+  if (!matches) {
+    await db.prepare(
+      `INSERT INTO admin_login_events (id, user_id, fingerprint_hash, result, reason)
+       VALUES (?, ?, ?, 'FAILURE', 'Administrator MFA recovery password rejected')`,
+    ).bind(`admin_login_${randomId()}`, userId, fingerprintHash).run();
+    throw new ApiError(401, "ADMIN_MFA_RECOVERY_REJECTED", "The account password could not be verified.");
+  }
+  await db.batch([
+    db.prepare(
+      `UPDATE admin_mfa_sessions
+          SET revoked_at = CURRENT_TIMESTAMP
+        WHERE user_id = ? AND revoked_at IS NULL`,
+    ).bind(userId),
+    db.prepare("DELETE FROM admin_mfa_factors WHERE user_id = ?").bind(userId),
+    db.prepare(
+      `INSERT INTO admin_login_events (id, user_id, fingerprint_hash, result, reason)
+       VALUES (?, ?, ?, 'SUCCESS', 'Administrator MFA factor reset after password reauthentication')`,
+    ).bind(`admin_login_${randomId()}`, userId, fingerprintHash),
+  ]);
 }
 
 export async function revokeAdminMfaSession(userId: string, requestHeaders: Headers) {

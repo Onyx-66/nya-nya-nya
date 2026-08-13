@@ -7,6 +7,7 @@ import {
   clearAdminMfaCookie,
   getAdminMfaState,
   revokeAdminMfaSession,
+  resetAdminMfaEnrollment,
   verifyAdminMfa,
 } from "@/lib/server/admin-mfa";
 import { actorHasCapability, requireActor, type Actor } from "@/lib/server/policy";
@@ -39,9 +40,16 @@ export async function POST(request: Request) {
     const payload = z.discriminatedUnion("action", [
       z.object({ action: z.literal("BEGIN") }),
       z.object({ action: z.literal("VERIFY"), code: z.string().trim() }),
+      z.object({ action: z.literal("RESET"), password: z.string().min(1).max(512) }),
     ]).parse(await request.json());
     if (payload.action === "BEGIN") {
       return json(requestId, { data: await beginAdminMfaEnrollment(actor.id, actor.email) }, { headers: { "cache-control": "private, no-store" } });
+    }
+    if (payload.action === "RESET") {
+      await resetAdminMfaEnrollment(actor.id, payload.password, request.headers);
+      return json(requestId, { data: { reset: true } }, {
+        headers: { "set-cookie": clearAdminMfaCookie(), "cache-control": "private, no-store" },
+      });
     }
     const verified = await verifyAdminMfa(actor.id, payload.code, request.headers);
     return json(requestId, { data: { verified: true, enrolledNow: verified.enrolledNow, suspicious: verified.suspicious, expiresAt: verified.expiresAt } }, {

@@ -329,6 +329,27 @@ async function recordFailedPassword(db: AuthDatabase, userId: string) {
     .run();
 }
 
+export async function verifyCurrentPassword(userId: string, password: string) {
+  if (!password || password.length > 512) return false;
+  const account = await authDatabase()
+    .prepare(
+      `SELECT algorithm, iterations, salt, password_hash
+         FROM user_password_credentials
+        WHERE user_id = ?
+        LIMIT 1`,
+    )
+    .bind(userId)
+    .first<Pick<PasswordAccountRow, "algorithm" | "iterations" | "salt" | "password_hash">>();
+  return verifyPassword(password, account
+    ? {
+        algorithm: account.algorithm,
+        iterations: Number(account.iterations),
+        salt: account.salt,
+        passwordHash: account.password_hash,
+      }
+    : DUMMY_PASSWORD_DIGEST);
+}
+
 export async function authenticatePassword(input: {
   email: string;
   password: string;
