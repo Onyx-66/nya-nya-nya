@@ -1675,9 +1675,11 @@ function ChapterAccessBadge({
 function SeriesCardView({
   item,
   wide = false,
+  hideSubtitle = false,
 }: {
   item: SeriesCard;
   wide?: boolean;
+  hideSubtitle?: boolean;
 }) {
   return (
     <article className={`series-card ${wide ? "series-card-wide" : ""}`}>
@@ -1699,7 +1701,7 @@ function SeriesCardView({
         <a href={`/title/${item.slug}`}>
           <h3>{item.title}</h3>
         </a>
-        <p>{item.subtitle}</p>
+        {!hideSubtitle ? <p>{item.subtitle}</p> : null}
         <div className="series-meta">
           <span>
             <Star size={14} weight="fill" /> {item.rating}
@@ -2788,7 +2790,7 @@ function LatestUpdatesGrid({
             <CaretLeft size={17} />
             {!heading ? <span>Previous</span> : null}
           </button>
-          {!heading ? <span>{page} / {pageCount}</span> : null}
+          <span className="latest-page-status" aria-label={`Page ${page} of ${pageCount}`}>Page {page} of {pageCount}</span>
           <span className="latest-page-dots" aria-label={`Page ${page} of ${pageCount}`}>
             {pageNumbers.map((pageNumber) => (
               <button
@@ -2798,7 +2800,7 @@ function LatestUpdatesGrid({
                 aria-current={page === pageNumber ? "page" : undefined}
                 onClick={() => setPage(pageNumber)}
               >
-                {!heading ? pageNumber : <span className="sr-only">{pageNumber}</span>}
+                {pageNumber}
               </button>
             ))}
           </span>
@@ -2983,10 +2985,10 @@ function TrendingShowcase() {
               key={item.id}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
-              <SeriesCardView item={liveSeriesCard(item)} />
+              <SeriesCardView item={liveSeriesCard(item)} hideSubtitle />
               <small className="trending-live-metrics">
-                {Number(item.viewCount ?? 0).toLocaleString("en-US")} views ·{" "}
-                {Number(item.followerCount ?? 0).toLocaleString("en-US")} followers
+                <span aria-label={`${Number(item.viewCount ?? 0).toLocaleString("en-US")} views`}><Eye size={14} aria-hidden="true" /> {Number(item.viewCount ?? 0).toLocaleString("en-US")}</span>
+                <span aria-label={`${Number(item.followerCount ?? 0).toLocaleString("en-US")} followers`}><Heart size={14} aria-hidden="true" /> {Number(item.followerCount ?? 0).toLocaleString("en-US")}</span>
               </small>
             </div>
           ))}
