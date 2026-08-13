@@ -90,7 +90,6 @@ export function HotThisWeek() {
           <span aria-hidden="true"><Fire size={21} weight="fill" /></span>
           <div>
             <h2 id="hot-this-week-title">Hot This Week</h2>
-            <p>Stories with the strongest real reader activity over the last 7 days.</p>
           </div>
         </div>
         <a href="/browse?sort=viewed">Browse popular series <ArrowRight size={16} /></a>

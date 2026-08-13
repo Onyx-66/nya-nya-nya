@@ -2610,65 +2610,48 @@ function LatestUpdatesGrid({
                       className={paid ? "is-paid" : undefined}
                       key={`${update.slug}:${chapter.slug}`}
                     >
-                      <th scope="row" data-label="Series">
-                        <a className="latest-feed-series" href={`/title/${update.slug}`}>
-                          <span className="latest-feed-cover">
-                            {update.cover ? (
-                              <ResilientCoverImage
-                                src={update.cover}
-                                alt=""
-                                width={72}
-                                height={100}
-                                decorative
-                              />
-                            ) : (
-                              <Books size={19} aria-hidden="true" />
-                            )}
-                          </span>
-                          <span>
-                            <strong>{update.title}</strong>
-                          </span>
-                        </a>
-                      </th>
-                      <td data-label="Chapter">
-                        <a
-                          className="latest-feed-chapter"
-                          href={`/title/${update.slug}/chapter/${chapter.slug}`}
-                        >
-                          <span>
-                            <strong>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</strong>
-                            {sanitizeChapterTitle(chapter.title) ? (
-                              <small>{sanitizeChapterTitle(chapter.title)}</small>
-                            ) : null}
-                          </span>
-                        </a>
-                      </td>
-                      <td data-label="Releaser">
-                        <span className="latest-feed-team">
-                          <LanguageFlag language={chapter.language} showCode={false} />
-                          {chapter.teamSlug ? (
-                            <a href={`/team/${encodeURIComponent(chapter.teamSlug)}`}>
-                              {chapter.teamName ?? "Publishing team"}
+                      <th scope="row" colSpan={5}>
+                        <div className="latest-feed-row">
+                          <a className="latest-feed-series" href={`/title/${update.slug}`}>
+                            <span className="latest-feed-cover">
+                              {update.cover ? (
+                                <ResilientCoverImage
+                                  src={update.cover}
+                                  alt=""
+                                  width={72}
+                                  height={100}
+                                  decorative
+                                />
+                              ) : (
+                                <Books size={19} aria-hidden="true" />
+                              )}
+                            </span>
+                            <span>
+                              <strong>{update.title}</strong>
+                            </span>
+                          </a>
+                          <div className="latest-feed-row-copy">
+                            <a
+                              className="latest-feed-chapter"
+                              href={`/title/${update.slug}/chapter/${chapter.slug}`}
+                            >
+                              <strong>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</strong>
                             </a>
-                          ) : (
-                            <span>{chapter.teamName ?? "Independent release"}</span>
-                          )}
-                        </span>
-                      </td>
-                      <td data-label="Status" className="latest-feed-status">
-                        <ChapterAccessBadge
-                          accessType={chapter.effectiveAccessType ?? chapter.accessType}
-                        />
-                      </td>
-                      <td data-label="Date">
-                        <time
-                          dateTime={chapter.publishedAt}
-                          title={releaseAbsoluteTime(chapter.publishedAt)}
-                        >
-                          <Clock size={14} aria-hidden="true" />
-                          {releaseTime(chapter.publishedAt)} ago
-                        </time>
-                      </td>
+                            <time
+                              dateTime={chapter.publishedAt}
+                              title={releaseAbsoluteTime(chapter.publishedAt)}
+                            >
+                              <Clock size={14} aria-hidden="true" />
+                              {releaseTime(chapter.publishedAt)} ago
+                            </time>
+                          </div>
+                          <span data-label="Status" className="latest-feed-status">
+                            <ChapterAccessBadge
+                              accessType={chapter.effectiveAccessType ?? chapter.accessType}
+                            />
+                          </span>
+                        </div>
+                      </th>
                     </tr>
                   );
                 })}
@@ -3277,7 +3260,7 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
         <div>
           <p className="eyebrow">Your recent stories</p>
           <h2 id="continue-reading-title">Continue reading</h2>
-          <p>Resume one of the last 12 series you opened.</p>
+          <p>Resume from where you left...</p>
           {preferenceError ? (
             <p className="continue-reading-preference-error" role="alert">
               {preferenceError}
@@ -3936,14 +3919,6 @@ function EditorsPickSection({
 
   return (
     <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
-      <div className="editors-pick-heading">
-        <span className="editors-pick-fleur" aria-hidden="true">⚜</span>
-        <div>
-          <p className="eyebrow">Curated by NyaScans</p>
-          <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
-          <span>Only the best, chosen for you.</span>
-        </div>
-      </div>
       <article
         className="editors-pick-card"
         tabIndex={0}
@@ -3957,6 +3932,14 @@ function EditorsPickSection({
           }
         }}
       >
+        <div className="editors-pick-heading">
+          <span className="editors-pick-fleur" aria-hidden="true">⚜</span>
+          <div>
+            <p className="eyebrow">Curated by NyaScans</p>
+            <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
+            <span>Only the best, chosen for you.</span>
+          </div>
+        </div>
         <div className="editors-pick-visual">
           <div
             className="editors-pick-cover-stage"

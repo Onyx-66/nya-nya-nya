@@ -456,11 +456,7 @@ export function PublishingTeamsCarousel() {
           <h2 id="publishing-teams-title">Top Publishing Teams</h2>
           <p>Verified teams ranked by real releases and reader activity.</p>
         </div>
-        <div className="teams-heading-actions">
-          <div className="teams-carousel-controls" aria-label="Publishing team controls">
-            <button type="button" aria-label="Previous publishing team" disabled={visibleRecords.length < 2} onClick={() => move(-1)}><CaretLeft size={17} /></button>
-            <button type="button" aria-label="Next publishing team" disabled={visibleRecords.length < 2} onClick={() => move(1)}><CaretRight size={17} /></button>
-          </div>
+          <div className="teams-heading-actions">
           <details className="compact-language-menu">
             <summary aria-label={language ? `Language: ${languageName(language)}` : "Choose team language"}>
               {language ? <LanguageFlag language={language} showCode={false} /> : <Translate size={18} />}
@@ -489,6 +485,12 @@ export function PublishingTeamsCarousel() {
         </div>
       ) : visibleRecords.length ? (
         <div className="teams-carousel-shell">
+          {visibleRecords.length > 1 ? (
+            <div className="teams-carousel-controls" aria-label="Publishing team controls">
+              <button type="button" aria-label="Previous publishing team" disabled={visibleRecords.length < 2} onClick={() => move(-1)}><CaretLeft size={17} /></button>
+              <button type="button" aria-label="Next publishing team" disabled={visibleRecords.length < 2} onClick={() => move(1)}><CaretRight size={17} /></button>
+            </div>
+          ) : null}
           <div
             className={`teams-carousel ${visibleRecords.length === 1 ? "is-single" : ""}`}
             ref={railRef}

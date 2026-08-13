@@ -244,11 +244,13 @@ function FeatureHeading({
   icon,
   title,
   allHref,
+  allLabel = "All",
   controls,
 }: {
   icon: ReactNode;
   title: string;
   allHref: string;
+  allLabel?: string;
   controls?: ReactNode;
 }) {
   return (
@@ -260,7 +262,7 @@ function FeatureHeading({
       <div className="v481-heading-actions">
         {controls}
         <a className="button button-secondary latest-all-action" href={allHref}>
-          All <ArrowRight size={15} />
+          {allLabel} <ArrowRight size={15} />
         </a>
       </div>
     </header>
@@ -377,6 +379,7 @@ export function PinnedSeriesSection({
         icon={<PushPin size={21} weight="fill" />}
         title="Pinned Series"
         allHref={allHref}
+        allLabel="View All"
       />
       {loading ? (
         <PinnedLoading />
