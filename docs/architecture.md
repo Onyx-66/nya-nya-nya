@@ -50,6 +50,7 @@ exactly one primary role:
 
 - `OWNER`
 - `ADMINISTRATOR`
+- `MANAGER`
 - `MODERATOR`
 - `TEAM_LEADER`
 - `UPLOADER`
