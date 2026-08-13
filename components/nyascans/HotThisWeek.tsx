@@ -158,16 +158,14 @@ export function HotThisWeek() {
         <div className="hot-week-title-group">
           <span className="hot-week-heading-icon" aria-hidden="true"><Fire size={20} weight="fill" /></span>
           <div>
-            <p className="hot-week-eyebrow">Weekly activity</p>
             <h2 id="hot-this-week-title">Hot This Week</h2>
           </div>
-          <span className="hot-week-live-status"><i aria-hidden="true" /> Live · 60s</span>
         </div>
         <a href="/browse?sort=viewed">Browse Series <ArrowRight size={16} /></a>
       </header>
 
       {loading ? (
-        <div className="hot-week-grid is-loading" aria-label="Loading weekly rankings">
+        <div className="hot-week-list hot-week-list-loading" aria-label="Loading weekly rankings">
           {Array.from({ length: 6 }, (_, index) => <span key={index} />)}
         </div>
       ) : error ? (
@@ -179,26 +177,29 @@ export function HotThisWeek() {
           </button>
         </div>
       ) : records.length ? (
-        <div className="hot-week-grid">
+        <div className="hot-week-list">
           {records.map((record) => (
             <article
-              className={`hot-week-card${record.rank <= 3 ? ` is-top-${record.rank}` : ""}`}
+              className={`hot-week-card hot-week-list-card${record.rank <= 3 ? ` is-top-${record.rank}` : ""}`}
               key={record.id}
             >
               <div className="hot-week-card-topline">
-                <span className="hot-week-rank"><b>{String(record.rank).padStart(2, "0")}</b><small>rank</small></span>
+                <span className="hot-week-rank" aria-label={`Rank ${record.rank}`}>
+                  <b>{String(record.rank).padStart(2, "0")}</b>
+                  <small>rank</small>
+                </span>
                 <HotMovement movement={record.rankMovement} />
               </div>
               <a className="hot-week-cover" href={`/title/${record.slug}`}>
                 <HotCover record={record} />
               </a>
               <div className="hot-week-copy">
-                <a href={`/title/${record.slug}`}><h3>{record.title}</h3></a>
+                <a className="hot-week-title-link" href={`/title/${record.slug}`}><h3>{record.title}</h3></a>
                 <span className="hot-week-metrics" aria-label={`${record.title} weekly activity`}>
-                  <HotMetric icon={<Eye size={14} />} value={record.uniqueReaders} label="Distinct readers in the last 7 days" />
-                  <HotMetric icon={<Books size={14} />} value={record.chapterStarts} label="Chapter starts in the last 7 days" />
-                  <HotMetric icon={<ChatCircle size={14} />} value={record.commentCount} label="Comments in the last 7 days" />
-                  <HotMetric icon={<Heart size={14} />} value={record.reactionCount} label="Reactions in the last 7 days" />
+                  <HotMetric icon={<Eye size={16} />} value={record.uniqueReaders} label="Distinct readers in the last 7 days" />
+                  <HotMetric icon={<Books size={16} />} value={record.chapterStarts} label="Chapter starts in the last 7 days" />
+                  <HotMetric icon={<ChatCircle size={16} />} value={record.commentCount} label="Comments in the last 7 days" />
+                  <HotMetric icon={<Heart size={16} />} value={record.reactionCount} label="Reactions in the last 7 days" />
                 </span>
                 {record.genres.length ? (
                   <span className="hot-week-genres">
@@ -206,7 +207,7 @@ export function HotThisWeek() {
                   </span>
                 ) : null}
                 <a className="hot-week-read" href={`/title/${record.slug}`}>
-                  Read series <ArrowRight size={15} />
+                  Read <ArrowRight size={15} />
                 </a>
               </div>
             </article>
