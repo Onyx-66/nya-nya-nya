@@ -4,9 +4,11 @@
 import {
   ArrowRight,
   Books,
+  ChatCircle,
   CaretLeft,
   CaretRight,
   PushPin,
+  Star,
   Tag,
   Timer,
 } from "@phosphor-icons/react";
@@ -94,6 +96,18 @@ export type DiscountsDirectoryProps = {
   initialSort?: "discount" | "expiry";
   unavailableHref?: string;
   onUnavailable?: () => void;
+};
+
+type RecentReviewRecord = {
+  id: string;
+  rating: number;
+  body: string;
+  spoiler: boolean | number;
+  createdAt: string;
+  displayName: string;
+  seriesSlug: string;
+  seriesTitle: string;
+  coverUrl: string | null;
 };
 
 async function readPublicData<T>(response: Response, fallback: string) {
@@ -595,6 +609,61 @@ export function DiscountsSection({
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+export function RecentReviewsSection() {
+  const [records, setRecords] = useState<RecentReviewRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/recent-reviews?limit=6", { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as PublicDataResponse<RecentReviewRecord>;
+        if (!response.ok) throw new Error(payload.error?.message ?? "Recent reviews are unavailable.");
+        setRecords(payload.data ?? []);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRecords([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <section className="content-section page-wrap recent-reviews-section">
+      <HomeFeatureStyles />
+      <FeatureHeading
+        icon={<Star size={21} weight="fill" />}
+        title="Recent Reviews"
+        allHref="/latest?view=reviews"
+      />
+      <div className="recent-reviews-rail" aria-busy={loading}>
+        {loading
+          ? Array.from({ length: 3 }, (_, index) => <span className="recent-review-skeleton" key={index} />)
+          : records.length
+            ? records.map((review) => (
+              <a className="recent-review-card" href={`/title/${review.seriesSlug}#reviews`} key={review.id}>
+                <div className="recent-review-cover">
+                  <CoverArtwork src={review.coverUrl} title={review.seriesTitle} />
+                </div>
+                <div className="recent-review-copy">
+                  <strong>{review.seriesTitle}</strong>
+                  <span className="recent-review-rating" aria-label={`${review.rating} out of 5 stars`}>
+                    {Array.from({ length: 5 }, (_, index) => <Star key={index} size={14} weight={index < review.rating ? "fill" : "regular"} />)}
+                    <b>{review.rating}/5</b>
+                  </span>
+                  <p>{review.spoiler ? "Spoiler review · Tap to read" : review.body}</p>
+                  <span className="recent-review-meta"><span>{review.displayName}</span><time dateTime={review.createdAt}>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(review.createdAt))}</time><ChatCircle size={15} /> Reviews</span>
+                </div>
+              </a>
+            ))
+            : <div className="recent-reviews-empty"><Star size={26} /><strong>No reviews yet</strong><span>Reader reviews will appear here as the community rates published series.</span></div>}
+      </div>
     </section>
   );
 }

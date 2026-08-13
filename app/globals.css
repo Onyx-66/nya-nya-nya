@@ -50847,3 +50847,102 @@ body {
     width: min(100%, 286px);
   }
 }
+
+/* Reader refresh: MangaDex-inspired release rows, commerce cards, reviews, and personal palettes. */
+.latest-release-table-shell { overflow: hidden; border: 1px solid color-mix(in srgb, var(--line, #2a3a51) 78%, transparent); border-radius: 24px; background: color-mix(in srgb, var(--surface-strong, #0e1d30) 92%, transparent); }
+.latest-release-table { width: 100%; border-collapse: collapse; }
+.latest-release-table thead { display: none; }
+.latest-release-table tbody tr { border: 0; }
+.latest-release-table tbody tr + tr { border-top: 1px solid color-mix(in srgb, var(--line, #2a3a51) 62%, transparent); }
+.latest-release-table tbody th { padding: 0; text-align: left; font-weight: inherit; }
+.latest-feed-row { min-height: 128px; padding: 18px 22px; }
+.latest-feed-series { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 18px; align-items: center; color: inherit; text-decoration: none; }
+.latest-feed-cover { width: 72px; height: 100px; overflow: hidden; display: grid; place-items: center; border-radius: 13px; background: #16243a; color: #86a2c2; box-shadow: 0 10px 24px rgb(0 0 0 / 18%); }
+.latest-feed-cover img { width: 100%; height: 100%; object-fit: cover; }
+.latest-feed-row-main { min-width: 0; display: grid; gap: 7px; }
+.latest-feed-row-main > strong { overflow: hidden; color: var(--text, #f4f8ff); font-size: clamp(1rem, 1.4vw, 1.18rem); line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.latest-feed-chapterline, .latest-feed-row-meta { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--muted, #94a8bf); font-size: .86rem; }
+.latest-feed-chapterline > span:nth-child(2) { color: var(--text, #eaf2ff); font-weight: 600; }
+.latest-feed-status { margin-left: auto; flex: 0 0 auto; }
+.latest-feed-status .chapter-access-badge { min-height: 26px; padding: 3px 10px; border-radius: 999px; font-size: .72rem; }
+.latest-feed-row-meta { flex-wrap: wrap; gap: 12px; font-size: .78rem; }
+.latest-feed-row-meta > span, .latest-feed-row-meta > time { display: inline-flex; align-items: center; gap: 4px; }
+.latest-feed-team { overflow: hidden; max-width: 30%; text-overflow: ellipsis; white-space: nowrap; color: #8fb8e8; }
+.latest-feed-row-meta svg { color: var(--accent, #75aeea); }
+.latest-release-table tr.is-paid .latest-feed-row { background: linear-gradient(90deg, rgb(53 42 24 / 12%), transparent 70%); }
+
+.discounts-section { position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, #54a9ff 35%, var(--line, #2a3a51)); border-radius: 30px; background: linear-gradient(135deg, rgb(24 43 65 / 96%), rgb(12 26 45 / 98%)); box-shadow: 0 24px 70px rgb(0 0 0 / 20%); }
+.discounts-section::before { content: ""; position: absolute; inset: -35% 42% auto -18%; width: 58%; height: 180%; transform: rotate(21deg); background: linear-gradient(90deg, transparent, rgb(89 181 255 / 15%), transparent); pointer-events: none; animation: discount-sheen 8s ease-in-out infinite; }
+.discount-card { position: relative; overflow: hidden; border: 1px solid rgb(118 171 222 / 30%); background: linear-gradient(112deg, rgb(13 31 54 / 98%), rgb(19 42 67 / 92%)); box-shadow: 0 18px 45px rgb(0 0 0 / 22%); }
+.discount-card:hover { border-color: rgb(112 201 255 / 70%); transform: translateY(-3px); }
+.discount-card .discount-card-cover img { object-fit: cover; filter: saturate(1.08) contrast(1.04); }
+.discount-card .discount-badge { background: linear-gradient(135deg, #6bc6ff, #377fe7); color: #061326; box-shadow: 0 7px 22px rgb(65 157 255 / 32%); }
+.discount-card .discount-price-current { color: #78c8ff; text-shadow: 0 0 22px rgb(73 167 255 / 30%); }
+.discount-card .discount-expiry { color: #f4c86a; }
+@keyframes discount-sheen { 0%, 100% { transform: translateX(-25%) rotate(21deg); opacity: .35; } 50% { transform: translateX(28%) rotate(21deg); opacity: .8; } }
+
+.recent-reviews-section { position: relative; }
+.recent-reviews-rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(310px, 1fr); gap: 18px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.recent-review-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 17px; min-height: 210px; padding: 16px; scroll-snap-align: start; border: 1px solid color-mix(in srgb, var(--line, #2a3a51) 72%, transparent); border-radius: 22px; background: linear-gradient(145deg, rgb(29 43 59 / 96%), rgb(15 29 47 / 97%)); color: inherit; text-decoration: none; transition: border-color .22s ease, transform .22s ease, box-shadow .22s ease; }
+.recent-review-card:hover { border-color: #ffad35; box-shadow: 0 16px 36px rgb(0 0 0 / 20%); transform: translateY(-3px); }
+.recent-review-cover { overflow: hidden; min-height: 178px; border-radius: 15px; background: #15263a; }
+.recent-review-cover img { width: 100%; height: 100%; object-fit: cover; }
+.recent-review-copy { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.recent-review-copy > strong { overflow: hidden; color: var(--text, #f3f7ff); font-size: 1.04rem; line-height: 1.25; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.recent-review-rating { display: inline-flex; align-items: center; gap: 2px; color: #ffc45d; }
+.recent-review-rating b { margin-left: 5px; color: #b9c8da; font-size: .78rem; }
+.recent-review-copy p { display: -webkit-box; overflow: hidden; margin: 0; color: #bdc9d9; font-size: .88rem; line-height: 1.5; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.recent-review-meta { display: flex; align-items: center; gap: 7px; margin-top: auto; color: #8298b1; font-size: .75rem; }
+.recent-review-meta > span { overflow: hidden; color: #ffad35; text-overflow: ellipsis; white-space: nowrap; }
+.recent-review-meta time { margin-left: auto; }
+.recent-review-skeleton { display: block; min-height: 210px; border-radius: 22px; background: linear-gradient(100deg, rgb(32 49 68 / 70%), rgb(51 70 92 / 80%), rgb(32 49 68 / 70%)); background-size: 220% 100%; animation: review-skeleton 1.7s ease-in-out infinite; }
+.recent-reviews-empty { display: grid; place-items: center; gap: 8px; min-height: 168px; padding: 24px; border: 1px dashed rgb(121 157 193 / 32%); border-radius: 22px; background: linear-gradient(135deg, rgb(18 34 53 / 84%), rgb(10 23 38 / 94%)); color: #9eb2c8; text-align: center; }
+.recent-reviews-empty svg { color: #ffc45d; }
+.recent-reviews-empty strong { color: #f1f6ff; font-size: 1rem; }
+.recent-reviews-empty span { max-width: 420px; font-size: .84rem; line-height: 1.5; }
+html[data-profile-theme="crazy-orange-nya"] .recent-reviews-empty { border-color: rgb(255 154 47 / 52%); background: linear-gradient(135deg, rgb(82 39 20 / 80%), rgb(42 22 13 / 94%)); }
+@keyframes review-skeleton { 0%, 100% { background-position: 0 0; } 50% { background-position: 100% 0; } }
+
+.profile-theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.profile-theme-option { display: grid; grid-template-columns: auto 1fr; gap: 11px; align-items: center; min-height: 74px; padding: 13px; border: 1px solid var(--line, #2a3a51); border-radius: 16px; cursor: pointer; background: color-mix(in srgb, var(--surface-strong, #10223a) 80%, transparent); transition: border-color .2s ease, transform .2s ease, background .2s ease; }
+.profile-theme-option:hover, .profile-theme-option.is-selected { border-color: #55b9ff; background: rgb(38 107 166 / 17%); transform: translateY(-2px); }
+.profile-theme-option input { accent-color: #55b9ff; }
+.profile-theme-option > span:last-child { display: grid; gap: 3px; }
+.profile-theme-option strong { color: var(--text, #f1f6ff); font-size: .85rem; }
+.profile-theme-option small { color: var(--muted, #91a7c0); font-size: .72rem; line-height: 1.35; }
+.profile-theme-swatch { width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(135deg, #51b8ff, #1c6ed1); box-shadow: 0 0 0 3px rgb(255 255 255 / 8%); }
+.profile-theme-swatch[data-theme-swatch="mangadex"] { background: linear-gradient(135deg, #0b0d10, #2f9cff); }
+.profile-theme-swatch[data-theme-swatch="crazy-orange-nya"] { background: linear-gradient(135deg, #ffbd42, #ee5b20 58%, #a51e22); }
+
+html[data-profile-theme="mangadex"] { --bg: #0b0d10; --surface: #101419; --line: #34404d; --text: #f1f3f5; --muted: #aeb8c4; --accent: #2f9cff; }
+html[data-profile-theme="mangadex"] body { background: #0b0d10; }
+html[data-profile-theme="mangadex"] .button-primary, html[data-profile-theme="mangadex"] .latest-all-action { background: #2f9cff; border-color: #2f9cff; color: #06111f; }
+html[data-profile-theme="crazy-orange-nya"] { --bg: #17120f; --surface: #251b16; --line: #714226; --text: #fff5e9; --muted: #d7bca5; --accent: #ff9a2f; }
+html[data-profile-theme="crazy-orange-nya"] body { background: radial-gradient(circle at 80% 0%, rgb(255 132 35 / 14%), transparent 35%), #17120f; }
+html[data-profile-theme="crazy-orange-nya"] .button-primary, html[data-profile-theme="crazy-orange-nya"] .latest-all-action { background: linear-gradient(135deg, #ffbd42, #ef6a27); border-color: #ff9f35; color: #2a1207; }
+html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-color: #ff9a2f; }
+
+@media (max-width: 760px) {
+  .latest-feed-row { padding: 15px 14px; }
+  .latest-feed-series { grid-template-columns: 72px minmax(0, 1fr); gap: 14px; }
+  .latest-feed-row-main > strong { font-size: .96rem; }
+  .latest-feed-row-meta { gap: 9px; }
+  .latest-feed-team { max-width: 42%; }
+  .recent-reviews-rail { grid-auto-columns: minmax(290px, 88vw); }
+  .profile-theme-options { grid-template-columns: 1fr; }
+}
+@media (max-width: 430px) {
+  .latest-feed-row { min-height: 116px; padding: 13px 11px; }
+  .latest-feed-cover { width: 62px; height: 86px; }
+  .latest-feed-series { grid-template-columns: 62px minmax(0, 1fr); gap: 11px; }
+  .latest-feed-chapterline, .latest-feed-row-meta { font-size: .72rem; gap: 6px; }
+  .latest-feed-status .chapter-access-badge { padding-inline: 7px; font-size: .65rem; }
+  .latest-feed-row-meta > time { order: 3; }
+  .latest-feed-row-meta > span:last-child { margin-left: auto; }
+  .recent-review-card { grid-template-columns: 94px minmax(0, 1fr); min-height: 184px; padding: 12px; gap: 12px; }
+  .recent-review-cover { min-height: 158px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .discounts-section::before, .recent-review-skeleton { animation: none; }
+  .recent-review-card, .profile-theme-option, .discount-card { transition: none; }
+}

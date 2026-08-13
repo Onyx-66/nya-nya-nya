@@ -91,6 +91,7 @@ import { KeyboardShortcutsDialog } from "@/components/nyascans/KeyboardShortcuts
 import {
   DiscountsDirectory,
   DiscountsSection,
+  RecentReviewsSection,
   PinnedSeriesDirectory,
   PinnedSeriesSection,
 } from "@/components/nyascans/HomeFeatureSections";
@@ -2241,6 +2242,8 @@ type LatestRelease = {
     effectiveAccessType: string;
     priceOnyx: number;
     publishedAt: string;
+    commentCount: number;
+    reactionCount: number;
     teamName: string | null;
     teamSlug: string | null;
     isRead?: boolean;
@@ -2629,30 +2632,27 @@ function LatestUpdatesGrid({
                                 <Books size={19} aria-hidden="true" />
                               )}
                             </span>
-                            <span>
+                            <span className="latest-feed-row-main">
                               <strong>{update.title}</strong>
+                              <span className="latest-feed-chapterline">
+                                <LanguageFlag language={chapter.language} showCode={false} />
+                                <span>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</span>
+                                <span className="latest-feed-status">
+                                  <ChapterAccessBadge accessType={chapter.effectiveAccessType ?? chapter.accessType} />
+                                </span>
+                              </span>
+                              <span className="latest-feed-row-meta">
+                                <span className="latest-feed-team">
+                                  <span>{chapter.teamName ?? "Independent release"}</span>
+                                </span>
+                                <time dateTime={chapter.publishedAt} title={releaseAbsoluteTime(chapter.publishedAt)}>
+                                  <Clock size={14} aria-hidden="true" /> {releaseTime(chapter.publishedAt)} ago
+                                </time>
+                                <span aria-label={`${chapter.reactionCount} reactions`}><Heart size={14} aria-hidden="true" /> {chapter.reactionCount}</span>
+                                <span aria-label={`${chapter.commentCount} comments`}><ChatCircle size={14} aria-hidden="true" /> {chapter.commentCount}</span>
+                              </span>
                             </span>
                           </a>
-                          <div className="latest-feed-row-copy">
-                            <a
-                              className="latest-feed-chapter"
-                              href={`/title/${update.slug}/chapter/${chapter.slug}`}
-                            >
-                              <strong>Chapter {normalizeChapterNumber(chapter.chapterNumber)}</strong>
-                            </a>
-                            <time
-                              dateTime={chapter.publishedAt}
-                              title={releaseAbsoluteTime(chapter.publishedAt)}
-                            >
-                              <Clock size={14} aria-hidden="true" />
-                              {releaseTime(chapter.publishedAt)} ago
-                            </time>
-                          </div>
-                          <span data-label="Status" className="latest-feed-status">
-                            <ChapterAccessBadge
-                              accessType={chapter.effectiveAccessType ?? chapter.accessType}
-                            />
-                          </span>
                         </div>
                       </th>
                     </tr>
@@ -4274,6 +4274,7 @@ function HomeView({
         <DiscountsSection
           enabled={premiumEconomyPublic && runtimeFeatures.payments}
         />
+        <RecentReviewsSection />
 
         <section className="updates-section">
           <div className="page-wrap">

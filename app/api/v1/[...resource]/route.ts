@@ -1290,6 +1290,54 @@ export async function GET(request: Request, context: RouteContext) {
     const path = pathOf(resource);
     const url = new URL(request.url);
 
+    if (path === "recent-reviews") {
+      if (!env.DB) {
+        throw new ApiError(503, "DATABASE_UNAVAILABLE", "Recent reviews are temporarily unavailable.");
+      }
+      const limit = Math.min(12, Math.max(1, Number(url.searchParams.get("limit") ?? 6) || 6));
+      const rows = await env.DB.prepare(
+        `SELECT r.id,
+                r.rating,
+                r.body,
+                r.spoiler,
+                r.created_at AS createdAt,
+                u.display_name AS displayName,
+                s.slug AS seriesSlug,
+                s.title AS seriesTitle,
+                s.cover_key AS coverKey
+           FROM reviews r
+           JOIN users u ON u.id = r.user_id
+           JOIN series s ON s.id = r.series_id
+          WHERE r.moderation_status = 'VISIBLE'
+            AND r.body <> ''
+            AND ${publicSeriesPredicate("s")}
+          ORDER BY datetime(r.created_at) DESC
+          LIMIT ?`,
+      ).bind(limit).all<{
+        id: string;
+        rating: number;
+        body: string;
+        spoiler: number | boolean;
+        createdAt: string;
+        displayName: string;
+        seriesSlug: string;
+        seriesTitle: string;
+        coverKey: string | null;
+      }>();
+      return json(id, {
+        data: rows.results.map((review) => ({
+          ...review,
+          coverUrl:
+            review.coverKey &&
+            (review.coverKey.startsWith("/") || review.coverKey.startsWith("http://") || review.coverKey.startsWith("https://"))
+              ? review.coverKey
+              : review.coverKey
+                ? `/api/v1/series-cover?slug=${encodeURIComponent(review.seriesSlug)}`
+                : null,
+        })),
+      });
+    }
+
     if (path === "site-commercial-settings") {
       const document = await getCommercialSettingsDocument();
       const featureStates = env.DB ? await getFeatureStates(env.DB) : null;
@@ -2548,6 +2596,8 @@ export async function GET(request: Request, context: RouteContext) {
                       THEN 0 ELSE c.price_onyx
                     END AS priceOnyx,
                     c.published_at AS publishedAt,
+                    (SELECT COUNT(*) FROM comments cm WHERE cm.chapter_id = c.id AND cm.moderation_status = 'VISIBLE') AS commentCount,
+                    (SELECT COUNT(*) FROM chapter_reactions cr WHERE cr.chapter_id = c.id) AS reactionCount,
                     CASE WHEN EXISTS (
                       SELECT 1
                         FROM reading_progress rp
@@ -2604,6 +2654,8 @@ export async function GET(request: Request, context: RouteContext) {
               effectiveAccessType: string;
               priceOnyx: number;
               publishedAt: string;
+              commentCount: number;
+              reactionCount: number;
               isRead: number | boolean;
               isFresh: number | boolean;
               teamName: string | null;
@@ -2672,6 +2724,8 @@ export async function GET(request: Request, context: RouteContext) {
                     effectiveAccessType: release.effectiveAccessType,
                     priceOnyx: release.priceOnyx,
                     publishedAt: release.publishedAt,
+                    commentCount: Number(release.commentCount ?? 0),
+                    reactionCount: Number(release.reactionCount ?? 0),
                     isRead: Boolean(release.isRead),
                     isFresh: Boolean(release.isFresh),
                     isNewInPeriod: period === "all" ? false : true,
