@@ -672,7 +672,7 @@ export function RecentReviewsSection() {
   }, [records, syncActiveReview]);
 
   return (
-    <section className="page-wrap recent-reviews-section">
+    <div className="page-wrap recent-reviews-section">
       <HomeFeatureStyles />
       <FeatureHeading
         icon={<Star size={21} weight="fill" />}
@@ -713,7 +713,7 @@ export function RecentReviewsSection() {
             ))
             : <div className="recent-reviews-empty"><Star size={26} /><strong>No reviews yet</strong><span>Reader reviews will appear here as the community rates published series.</span></div>}
       </div>
-    </section>
+    </div>
   );
 }
 
