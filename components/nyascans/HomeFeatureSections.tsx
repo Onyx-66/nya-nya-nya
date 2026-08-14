@@ -327,10 +327,6 @@ function PinnedSeriesCard({
       <span className="v481-pin-shade" aria-hidden="true" />
       {featured ? <span className="v481-featured-badge">Featured</span> : null}
       <span className="v481-pin-copy">
-        <small>
-          {record.type} · {record.chapterCount}{" "}
-          {record.chapterCount === 1 ? "chapter" : "chapters"}
-        </small>
         <strong>{record.title}</strong>
         {featured ? (
           <em>{record.synopsis || "Discover this series on NyaScans."}</em>
@@ -813,7 +809,7 @@ const HOME_FEATURE_CSS = `
   .v481-pinned-carousel > .v481-pin-card[data-pin-position='-1'] { grid-column:1; }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position='0'] { grid-column:2; }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position='1'] { grid-column:3; }
-  .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) { opacity:.58; transform:scale(.9); filter:saturate(.72); }
+  .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) { opacity:.5; transform:scale(.9); filter:saturate(.72); }
   .v481-pinned-arrow { position:absolute; z-index:8; top:50%; display:grid; width:2.8rem; height:2.8rem; place-items:center; padding:0; transform:translateY(-50%); border:1px solid color-mix(in srgb,#f5c451 62%,var(--line)); border-radius:50%; background:color-mix(in srgb,var(--bg) 82%,transparent); color:#ffd877; box-shadow:0 .8rem 2rem rgb(0 0 0 / 35%); cursor:pointer; backdrop-filter:blur(.8rem); }
   .v481-pinned-arrow.is-previous { left:.75rem; }
   .v481-pinned-arrow.is-next { right:.75rem; }
@@ -823,7 +819,7 @@ const HOME_FEATURE_CSS = `
   .v481-pin-card { position:relative; display:block; min-width:0; height:100%; overflow:hidden; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:var(--surface-strong); color:#fff; isolation:isolate; transition:border-color .24s ease,box-shadow .24s ease,transform .24s ease; }
   .v481-pinned-carousel > .v481-pin-card[data-active='true'] { border-color:transparent; box-shadow:0 0 0 1px rgb(247 198 77 / 35%),0 0 2.2rem rgb(226 166 30 / 28%),0 1.4rem 3rem rgb(0 0 0 / 34%); transform:scale(.985); }
   .v481-pinned-carousel > .v481-pin-card[data-active='true']::after { position:absolute; z-index:6; inset:0; padding:2px; border-radius:inherit; background:conic-gradient(from var(--v487-pin-angle),transparent 0 56%,#fff0a8 64%,#e4a91d 74%,transparent 82%); content:''; pointer-events:none; -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; animation:v487-pin-orbit 2.8s linear infinite; }
-  .v481-featured-badge { position:absolute; z-index:5; top:.85rem; left:.85rem; display:inline-flex; min-height:1.85rem; align-items:center; padding:.32rem .62rem; border:1px solid rgb(255 216 119 / 72%); border-radius:.48rem; background:rgb(42 29 5 / 78%); color:#ffd877; font-size:.64rem; font-weight:900; letter-spacing:.08em; text-transform:none; box-shadow:0 0 1.15rem rgb(225 166 28 / 24%); backdrop-filter:blur(.7rem); }
+  .v481-featured-badge { position:absolute; z-index:5; top:.7rem; left:.7rem; display:inline-flex; min-height:1.55rem; align-items:center; padding:.22rem .48rem; border:1px solid rgb(255 216 119 / 72%); border-radius:.42rem; background:rgb(42 29 5 / 78%); color:#ffd877; font-size:.56rem; font-weight:900; letter-spacing:.07em; text-transform:none; box-shadow:0 0 .85rem rgb(225 166 28 / 20%); backdrop-filter:blur(.7rem); }
   .v481-pin-card > picture,.v481-pin-card > .v481-art-placeholder { position:absolute; z-index:-2; inset:0; width:100%; height:100%; }
   .v481-pin-card > picture > img { width:100%; height:100%; object-fit:cover; transition:transform .45s ease; }
   .v481-pin-card:hover > picture > img { transform:scale(1.035); }

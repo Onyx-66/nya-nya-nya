@@ -50120,33 +50120,47 @@ body {
   line-height: 1;
 }
 
-/* Pinned cards remain parallel, with equal side offsets around the active banner. */
+/* Pinned cards keep the active series centered, with 90%-scale neighboring previews tucked behind the controls. */
 .v481-pinned-stage { padding-inline: clamp(1rem, 5vw, 5rem); }
 .v481-pinned-carousel {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.72fr) minmax(0, 1fr) !important;
-  align-items: stretch;
-  gap: clamp(.75rem, 2vw, 1.4rem) !important;
-  width: 100%;
+  position: relative;
+  display: block !important;
+  width: min(100%, 42rem);
 }
 .v481-pinned-carousel > .v481-pin-card {
-  position: relative !important;
   inset: auto !important;
   width: 100% !important;
-  transform: none !important;
+}
+.v481-pinned-carousel > .v481-pin-card[data-active="true"] {
+  position: relative !important;
+  z-index: 2;
+  opacity: 1;
+  transform: scale(.985) !important;
 }
 .v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] { opacity: .68; }
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
+  position: absolute !important;
+  top: 50%;
+  z-index: 1;
+  width: 90% !important;
+  opacity: .5;
+  transform: translateY(-50%) scale(.9) !important;
+}
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"] { left: -72%; }
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] { right: -72%; }
 @media (max-width: 680px) {
-  .v481-pinned-stage { padding-inline: .6rem; }
-  .v481-pinned-carousel { grid-template-columns: minmax(0, 1fr) !important; }
+  .v481-pinned-stage { padding-inline: .25rem; }
+  .v481-pinned-carousel { width: min(calc(100% - 6.2rem), 17rem); }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position="0"] {
-    grid-column: 1 !important;
     min-height: 0 !important;
     aspect-ratio: 1 / 1 !important;
   }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
-  .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] { display: none; }
+  .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
+    display: block;
+    min-height: 0 !important;
+    aspect-ratio: 1 / 1 !important;
+  }
 }
 
 /* New Series: slow automatic rail movement where the carousel layout is active. */
