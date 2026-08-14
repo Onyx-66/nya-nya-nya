@@ -206,35 +206,35 @@ export function HotThisWeek() {
               className={`hot-week-card hot-week-list-card${record.rank <= 3 ? ` is-top-${record.rank}` : ""}`}
               key={record.id}
             >
-              <div className="hot-week-card-topline">
+              <a className="hot-week-cover" href={`/title/${record.slug}`}>
                 <span className="hot-week-rank" aria-label={`Rank ${record.rank}`}>
                   <b>{String(record.rank).padStart(2, "0")}</b>
                   <small>rank</small>
                 </span>
                 <HotMovement movement={record.rankMovement} />
-              </div>
-              <a className="hot-week-cover" href={`/title/${record.slug}`}>
-                <HotCover record={record} />
+                <span className="hot-week-cover-art">
+                  <HotCover record={record} />
+                </span>
               </a>
               <div className="hot-week-copy">
                 <a className="hot-week-title-link" href={`/title/${record.slug}`}><h3>{record.title}</h3></a>
                 {record.genres.length ? (
                   <span className="hot-week-genres">
-                    <strong>Genres:</strong>
+                    <strong>Genres:</strong>{" "}
                     {record.genres.map((genre) => <small key={genre}>{genre}</small>)}
                   </span>
                 ) : null}
-                <span className="hot-week-rating" aria-label={`${record.title} rating ${record.rating.toFixed(1)} out of 10`}>
-                  <span className="hot-week-stars" aria-hidden="true">
-                    {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} weight="fill" />)}
-                  </span>
-                  <strong>{record.rating > 0 ? record.rating.toFixed(1) : "—"}</strong>
-                </span>
                 <span className="hot-week-metrics" aria-label={`${record.title} ${periodLabel.toLowerCase()} activity`}>
                   <HotMetric icon={<Eye size={16} />} value={record.uniqueReaders} label={`Distinct readers in the ${periodLabel.toLowerCase()} period`} />
                   <HotMetric icon={<Books size={16} />} value={record.chapterStarts} label={`Chapter starts in the ${periodLabel.toLowerCase()} period`} />
                   <HotMetric icon={<ChatCircle size={16} />} value={record.commentCount} label={`Comments in the ${periodLabel.toLowerCase()} period`} />
                   <HotMetric icon={<Heart size={16} />} value={record.reactionCount} label={`Reactions in the ${periodLabel.toLowerCase()} period`} />
+                </span>
+                <span className="hot-week-rating" aria-label={`${record.title} rating ${record.rating.toFixed(1)} out of 10`}>
+                  <span className="hot-week-stars" aria-hidden="true">
+                    {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} weight="fill" />)}
+                  </span>
+                  <strong>{record.rating > 0 ? record.rating.toFixed(1) : "—"}</strong>
                 </span>
                 <a className="hot-week-read" href={`/title/${record.slug}`}>
                   Read <ArrowRight size={15} />

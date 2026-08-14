@@ -52295,3 +52295,162 @@ body::-webkit-scrollbar {
 .hot-this-week .hot-week-cover-fallback {
   min-height: 0 !important;
 }
+
+/* v48.17.1: align Hot This Week rows with the supplied Popular reference. */
+.hot-this-week .hot-week-list-card {
+  min-height: 0;
+  padding-block: .56rem;
+}
+
+.hot-this-week .hot-week-cover {
+  position: relative;
+  display: block;
+  align-self: center;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.hot-this-week .hot-week-cover-art {
+  position: relative;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: .72rem;
+}
+
+.hot-this-week .hot-week-cover-art > img,
+.hot-this-week .hot-week-cover-art > .hot-week-cover-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0 !important;
+  object-fit: cover;
+}
+
+.hot-this-week .hot-week-rank {
+  position: absolute;
+  z-index: 2;
+  top: .28rem;
+  left: -.58rem;
+  width: 2.12rem;
+  height: 2.12rem;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--hot-rank-accent) 72%, white 10%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hot-rank-accent) 92%, #071426 8%);
+  box-shadow: 0 .22rem .55rem color-mix(in srgb, var(--hot-rank-accent) 28%, transparent);
+  color: #fff;
+}
+
+.hot-this-week .hot-week-rank small {
+  display: none;
+}
+
+.hot-this-week .hot-week-movement {
+  position: absolute;
+  z-index: 2;
+  top: .3rem;
+  right: .3rem;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+  padding: .16rem .28rem;
+  border-radius: .42rem;
+  font-size: .5rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hot-this-week .hot-week-movement svg {
+  width: .62rem;
+  height: .62rem;
+}
+
+.hot-this-week .hot-week-genres {
+  margin-top: .16rem;
+  line-height: 1.2;
+}
+
+.hot-this-week .hot-week-metrics {
+  gap: .18rem .58rem;
+  margin-top: .22rem;
+  order: 3;
+}
+
+.hot-this-week .hot-week-rating {
+  gap: .4rem;
+  margin-top: .18rem;
+  order: 4;
+}
+
+.hot-this-week .hot-week-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+}
+
+.hot-this-week .hot-week-title-link h3 {
+  line-height: 1.12;
+}
+
+.hot-this-week .hot-week-stars {
+  gap: .04rem;
+}
+
+.hot-this-week .hot-week-stars svg {
+  width: .82rem;
+  height: .82rem;
+}
+
+.hot-this-week .hot-week-list-card.is-top-1 { --hot-rank-accent: #d9a52a; }
+.hot-this-week .hot-week-list-card.is-top-2 { --hot-rank-accent: #b9c4d1; }
+.hot-this-week .hot-week-list-card.is-top-3 { --hot-rank-accent: #b8754d; }
+.hot-this-week .hot-week-list-card:not(.is-top-1):not(.is-top-2):not(.is-top-3) { --hot-rank-accent: var(--accent); }
+
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-list-card {
+    min-height: 0;
+    padding-block: .48rem;
+  }
+
+  .hot-this-week .hot-week-rank {
+    top: .25rem;
+    left: -.5rem;
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .hot-this-week .hot-week-movement {
+    top: .25rem;
+    right: .25rem;
+  }
+
+  .hot-this-week .hot-week-genres {
+    margin-top: .12rem;
+    line-height: 1.15;
+  }
+
+  .hot-this-week .hot-week-metrics {
+    margin-top: .16rem;
+  }
+
+  .hot-this-week .hot-week-rating {
+    margin-top: .14rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .hot-this-week .hot-week-rank {
+    left: -.46rem;
+    width: 1.92rem;
+    height: 1.92rem;
+  }
+
+  .hot-this-week .hot-week-movement {
+    display: none;
+  }
+}
