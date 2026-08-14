@@ -191,7 +191,7 @@ for (const [id, title, nativeTitle, synopsis, type, status, country, language, y
   exec(
     `INSERT INTO series (id, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RIGHT_TO_LEFT', ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
-    id, seriesSlug, title, nativeTitle, synopsis, type, status, country, language, year, paid ? "PAID" : "FREE", coverKey, bannerKey, bannerKey, rating, followers, views, iso(-1440 - Math.floor(Math.random() * 5000)), iso(-20),
+    id, seriesSlug, title, nativeTitle, synopsis, type, status, country, language, year, paid ? "PAID" : "FREE", coverKey, bannerKey, coverKey, rating, followers, views, iso(-1440 - Math.floor(Math.random() * 5000)), iso(-20),
   );
   exec(
     `INSERT INTO series_team_assignments (series_id, team_id, can_upload, can_publish, is_primary, assigned_by_user_id, allowed_languages_json, upload_requires_review)

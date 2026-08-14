@@ -36,6 +36,7 @@ type PinnedSeriesRow = {
   status: string;
   coverKey: string | null;
   bannerKey: string | null;
+  sliderKey: string | null;
   revision: number;
   chapterCount: number;
 };
@@ -92,6 +93,12 @@ function serializePinnedSeries(row: PinnedSeriesRow) {
       row.bannerKey,
       row.revision,
     ),
+    sliderUrl: seriesMediaUrl(
+      row.seriesId,
+      "slider",
+      row.sliderKey,
+      row.revision,
+    ),
     href: `/title/${row.slug}`,
   };
 }
@@ -105,7 +112,7 @@ function pinnedSelect(chapterVisibilityPredicate = "") {
          pin.created_at AS createdAt, pin.updated_at AS updatedAt,
          s.slug, s.title, s.native_title AS nativeTitle,
          s.synopsis, s.type, s.status, s.cover_key AS coverKey,
-         s.banner_key AS bannerKey, s.revision,
+         s.banner_key AS bannerKey, s.slider_key AS sliderKey, s.revision,
          COUNT(DISTINCT CASE
            WHEN c.state = 'PUBLISHED' AND c.visibility = 'PUBLIC'
              AND datetime(c.published_at) <= datetime('now')

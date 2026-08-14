@@ -43,6 +43,7 @@ export type PinnedSeriesRecord = {
   chapterCount: number;
   coverUrl: string | null;
   bannerUrl: string | null;
+  sliderUrl: string | null;
   href: string;
 };
 
@@ -232,24 +233,31 @@ function useDiscounts(
 
 function CoverArtwork({
   src,
+  mobileSrc,
   title,
   eager = false,
 }: {
   src: string | null;
+  mobileSrc?: string | null;
   title: string;
   eager?: boolean;
 }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
-  const failed = Boolean(src && src === failedSource);
-  return src && !failed ? (
-    <img
-      src={src}
-      alt={`Cover art for ${title}`}
-      loading={eager ? "eager" : "lazy"}
-      onError={() => setFailedSource(src)}
-    />
+  const desktopSource = src || mobileSrc || null;
+  const mobileSource = mobileSrc || desktopSource;
+  const failed = Boolean(desktopSource && desktopSource === failedSource);
+  return desktopSource && !failed ? (
+    <picture>
+      {mobileSource && mobileSource !== desktopSource ? <source media="(max-width: 680px)" srcSet={mobileSource} /> : null}
+      <img
+        src={desktopSource}
+        alt={`Artwork for ${title}`}
+        loading={eager ? "eager" : "lazy"}
+        onError={() => setFailedSource(desktopSource)}
+      />
+    </picture>
   ) : (
-    <span className="v481-art-placeholder" aria-label={`${title} cover unavailable`}>
+    <span className="v481-art-placeholder" aria-label={`${title} artwork unavailable`}>
       <Books size={30} />
     </span>
   );
@@ -299,7 +307,8 @@ function PinnedSeriesCard({
   position?: -1 | 0 | 1;
   onActivate?: () => void;
 }) {
-  const imageUrl = record.bannerUrl || null;
+  const bannerUrl = record.bannerUrl || null;
+  const mobileSliderUrl = record.sliderUrl || record.coverUrl || bannerUrl;
   return (
     <a
       className={`v481-pin-card ${featured ? "is-featured" : "is-small"}`}
@@ -314,7 +323,7 @@ function PinnedSeriesCard({
         onActivate();
       }}
     >
-      <CoverArtwork src={imageUrl} title={record.title} eager={featured} />
+      <CoverArtwork src={bannerUrl} mobileSrc={mobileSliderUrl} title={record.title} eager={featured} />
       <span className="v481-pin-shade" aria-hidden="true" />
       {featured ? <span className="v481-featured-badge">Featured</span> : null}
       <span className="v481-pin-copy">
@@ -799,8 +808,8 @@ const HOME_FEATURE_CSS = `
   .v481-rail-controls button:is(:hover,:focus-visible) { border-color:var(--accent); color:var(--accent); }
   .v481-pinned-section .v481-feature-heading > div:first-child > span { border-color:rgb(255 216 119 / 58%); background:rgb(67 45 7 / 48%); color:#ffd877; box-shadow:0 0 1.15rem rgb(225 166 28 / 22%); }
   .v481-pinned-stage { position:relative; overflow:hidden; isolation:isolate; }
-  .v481-pinned-carousel { display:grid; min-width:0; grid-template-columns:minmax(6rem,.32fr) minmax(0,1fr) minmax(6rem,.32fr); align-items:stretch; gap:.8rem; padding:.25rem 3.8rem .8rem; outline:none; }
-  .v481-pinned-carousel > .v481-pin-card { min-height:24rem; }
+  .v481-pinned-carousel { display:grid; min-width:0; grid-template-columns:minmax(6rem,.32fr) minmax(0,1fr) minmax(6rem,.32fr); align-items:center; gap:.8rem; padding:.25rem 3.8rem .8rem; outline:none; }
+  .v481-pinned-carousel > .v481-pin-card { height:auto; min-height:0; aspect-ratio:16 / 9; }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position='-1'] { grid-column:1; }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position='0'] { grid-column:2; }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position='1'] { grid-column:3; }
@@ -815,8 +824,9 @@ const HOME_FEATURE_CSS = `
   .v481-pinned-carousel > .v481-pin-card[data-active='true'] { border-color:transparent; box-shadow:0 0 0 1px rgb(247 198 77 / 35%),0 0 2.2rem rgb(226 166 30 / 28%),0 1.4rem 3rem rgb(0 0 0 / 34%); transform:scale(.985); }
   .v481-pinned-carousel > .v481-pin-card[data-active='true']::after { position:absolute; z-index:6; inset:0; padding:2px; border-radius:inherit; background:conic-gradient(from var(--v487-pin-angle),transparent 0 56%,#fff0a8 64%,#e4a91d 74%,transparent 82%); content:''; pointer-events:none; -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; animation:v487-pin-orbit 2.8s linear infinite; }
   .v481-featured-badge { position:absolute; z-index:5; top:.85rem; left:.85rem; display:inline-flex; min-height:1.85rem; align-items:center; padding:.32rem .62rem; border:1px solid rgb(255 216 119 / 72%); border-radius:.48rem; background:rgb(42 29 5 / 78%); color:#ffd877; font-size:.64rem; font-weight:900; letter-spacing:.08em; text-transform:none; box-shadow:0 0 1.15rem rgb(225 166 28 / 24%); backdrop-filter:blur(.7rem); }
-  .v481-pin-card > img,.v481-pin-card > .v481-art-placeholder { position:absolute; z-index:-2; inset:0; width:100%; height:100%; object-fit:cover; transition:transform .45s ease; }
-  .v481-pin-card:hover > img { transform:scale(1.035); }
+  .v481-pin-card > picture,.v481-pin-card > .v481-art-placeholder { position:absolute; z-index:-2; inset:0; width:100%; height:100%; }
+  .v481-pin-card > picture > img { width:100%; height:100%; object-fit:cover; transition:transform .45s ease; }
+  .v481-pin-card:hover > picture > img { transform:scale(1.035); }
   .v481-pin-shade { position:absolute; z-index:-1; inset:0; background:linear-gradient(180deg,transparent 24%,rgb(2 9 20 / 22%) 48%,rgb(2 9 20 / 94%) 100%); }
   .v481-pin-copy { position:absolute; right:0; bottom:0; left:0; display:grid; gap:.28rem; padding:clamp(.85rem,2vw,1.45rem); }
   .v481-pin-copy small { color:rgb(255 255 255 / 72%); font-size:.68rem; font-weight:750; letter-spacing:.055em; text-transform:uppercase; }

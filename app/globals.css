@@ -50140,7 +50140,11 @@ body {
 @media (max-width: 680px) {
   .v481-pinned-stage { padding-inline: .6rem; }
   .v481-pinned-carousel { grid-template-columns: minmax(0, 1fr) !important; }
-  .v481-pinned-carousel > .v481-pin-card[data-pin-position="0"] { grid-column: 1 !important; }
+  .v481-pinned-carousel > .v481-pin-card[data-pin-position="0"] {
+    grid-column: 1 !important;
+    min-height: 0 !important;
+    aspect-ratio: 1 / 1 !important;
+  }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
   .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] { display: none; }
 }
