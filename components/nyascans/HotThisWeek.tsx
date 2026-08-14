@@ -12,6 +12,7 @@ import {
   Fire,
   Heart,
   Minus,
+  Star,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
 
@@ -21,6 +22,7 @@ type HotSeries = {
   slug: string;
   title: string;
   coverUrl: string | null;
+  rating: number;
   genres: string[];
   uniqueReaders: number;
   chapterStarts: number;
@@ -30,6 +32,12 @@ type HotSeries = {
 };
 
 const HOT_WEEK_SNAPSHOT_KEY = "nyascans:hot-week-ranks";
+type HotPeriod = "weekly" | "monthly" | "all";
+const HOT_PERIODS: Array<{ key: HotPeriod; label: string }> = [
+  { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
+  { key: "all", label: "All" },
+];
 
 function HotCover({ record }: { record: HotSeries }) {
   const [failed, setFailed] = useState(false);
@@ -76,6 +84,8 @@ export function HotThisWeek() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [period, setPeriod] = useState<HotPeriod>("weekly");
+  const periodLabel = HOT_PERIODS.find((option) => option.key === period)?.label ?? "Weekly";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -85,7 +95,7 @@ export function HotThisWeek() {
       if (firstLoad) setLoading(true);
       setError("");
       try {
-        const response = await fetch("/api/v1/hot-this-week", {
+        const response = await fetch(`/api/v1/hot-this-week?period=${period}`, {
           signal: controller.signal,
           cache: "no-store",
         });
@@ -102,7 +112,7 @@ export function HotThisWeek() {
         let previousRanks: Record<string, number> = {};
         try {
           previousRanks = JSON.parse(
-            window.localStorage.getItem(HOT_WEEK_SNAPSHOT_KEY) ?? "{}",
+            window.localStorage.getItem(`${HOT_WEEK_SNAPSHOT_KEY}:${period}`) ?? "{}",
           ) as Record<string, number>;
         } catch {
           previousRanks = {};
@@ -118,7 +128,7 @@ export function HotThisWeek() {
         setRecords(nextRecords);
         try {
           window.localStorage.setItem(
-            HOT_WEEK_SNAPSHOT_KEY,
+            `${HOT_WEEK_SNAPSHOT_KEY}:${period}`,
             JSON.stringify(
               Object.fromEntries(
                 nextRecords.map((record) => [record.id, record.rank]),
@@ -150,7 +160,7 @@ export function HotThisWeek() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [revision]);
+  }, [period, revision]);
 
   return (
     <section className="content-section page-wrap hot-this-week" aria-labelledby="hot-this-week-title">
@@ -163,6 +173,19 @@ export function HotThisWeek() {
         </div>
         <a href="/browse?sort=viewed">Browse Series <ArrowRight size={16} /></a>
       </header>
+      <nav className="hot-week-tabs" aria-label="Hot ranking period">
+        {HOT_PERIODS.map((option) => (
+          <button
+            className={period === option.key ? "is-active" : ""}
+            key={option.key}
+            type="button"
+            aria-pressed={period === option.key}
+            onClick={() => setPeriod(option.key)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </nav>
 
       {loading ? (
         <div className="hot-week-list hot-week-list-loading" aria-label="Loading weekly rankings">
@@ -195,17 +218,24 @@ export function HotThisWeek() {
               </a>
               <div className="hot-week-copy">
                 <a className="hot-week-title-link" href={`/title/${record.slug}`}><h3>{record.title}</h3></a>
-                <span className="hot-week-metrics" aria-label={`${record.title} weekly activity`}>
-                  <HotMetric icon={<Eye size={16} />} value={record.uniqueReaders} label="Distinct readers in the last 7 days" />
-                  <HotMetric icon={<Books size={16} />} value={record.chapterStarts} label="Chapter starts in the last 7 days" />
-                  <HotMetric icon={<ChatCircle size={16} />} value={record.commentCount} label="Comments in the last 7 days" />
-                  <HotMetric icon={<Heart size={16} />} value={record.reactionCount} label="Reactions in the last 7 days" />
-                </span>
                 {record.genres.length ? (
                   <span className="hot-week-genres">
+                    <strong>Genres:</strong>
                     {record.genres.map((genre) => <small key={genre}>{genre}</small>)}
                   </span>
                 ) : null}
+                <span className="hot-week-rating" aria-label={`${record.title} rating ${record.rating.toFixed(1)} out of 10`}>
+                  <span className="hot-week-stars" aria-hidden="true">
+                    {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} weight="fill" />)}
+                  </span>
+                  <strong>{record.rating > 0 ? record.rating.toFixed(1) : "—"}</strong>
+                </span>
+                <span className="hot-week-metrics" aria-label={`${record.title} ${periodLabel.toLowerCase()} activity`}>
+                  <HotMetric icon={<Eye size={16} />} value={record.uniqueReaders} label={`Distinct readers in the ${periodLabel.toLowerCase()} period`} />
+                  <HotMetric icon={<Books size={16} />} value={record.chapterStarts} label={`Chapter starts in the ${periodLabel.toLowerCase()} period`} />
+                  <HotMetric icon={<ChatCircle size={16} />} value={record.commentCount} label={`Comments in the ${periodLabel.toLowerCase()} period`} />
+                  <HotMetric icon={<Heart size={16} />} value={record.reactionCount} label={`Reactions in the ${periodLabel.toLowerCase()} period`} />
+                </span>
                 <a className="hot-week-read" href={`/title/${record.slug}`}>
                   Read <ArrowRight size={15} />
                 </a>
@@ -216,8 +246,8 @@ export function HotThisWeek() {
       ) : (
         <div className="hot-week-state">
           <Fire size={25} />
-          <strong>No weekly ranking yet</strong>
-          <span>Real reader activity will build this list as chapters are read and discussed.</span>
+          <strong>No {periodLabel.toLowerCase()} ranking yet</strong>
+          <span>Reader activity will build this ranking as chapters are read and discussed.</span>
         </div>
       )}
     </section>

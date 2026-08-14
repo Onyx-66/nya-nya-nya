@@ -9,12 +9,20 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type HotPeriod = "weekly" | "monthly" | "all";
+
+function periodFromRequest(request: Request): HotPeriod {
+  const value = new URL(request.url).searchParams.get("period");
+  return value === "monthly" || value === "all" ? value : "weekly";
+}
+
 type HotSeriesRow = {
   id: string;
   slug: string;
   title: string;
   coverKey: string | null;
   revision: number;
+  ratingTenths: number;
   genres: string;
   uniqueReaders: number;
   chapterStarts: number;
@@ -26,6 +34,12 @@ type HotSeriesRow = {
 
 export async function GET(request: Request) {
   const requestId = requestIdFor(request);
+  const period = periodFromRequest(request);
+  const activitySince = period === "monthly"
+    ? "datetime('now', '-30 days')"
+    : period === "all"
+      ? "datetime('1970-01-01 00:00:00')"
+      : "datetime('now', '-7 days')";
   try {
     if (!env.DB) {
       throw new ApiError(
@@ -50,7 +64,7 @@ export async function GET(request: Request) {
            JOIN series s ON s.id = c.series_id
            LEFT JOIN content_visibility_overrides visibility_override
              ON visibility_override.chapter_id = c.id
-          WHERE rp.onsite_activity_at >= datetime('now', '-7 days')
+          WHERE rp.onsite_activity_at >= ${activitySince}
             AND rp.onsite_activity_at < CURRENT_TIMESTAMP
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
@@ -84,7 +98,7 @@ export async function GET(request: Request) {
                    AND ${publicPaidChapterPredicate("comment_chapter", "comment_visibility")}
               )
             )
-            AND dc.created_at >= datetime('now', '-7 days')
+            AND dc.created_at >= ${activitySince}
             AND dc.created_at < CURRENT_TIMESTAMP
           GROUP BY dc.series_slug
        ),
@@ -114,7 +128,7 @@ export async function GET(request: Request) {
                    AND ${publicPaidChapterPredicate("reaction_chapter", "reaction_visibility")}
               )
             )
-            AND dr.created_at >= datetime('now', '-7 days')
+            AND dr.created_at >= ${activitySince}
             AND dr.created_at < CURRENT_TIMESTAMP
           GROUP BY dc.series_slug
        ),
@@ -127,7 +141,7 @@ export async function GET(request: Request) {
            JOIN series s ON s.id = c.series_id
            LEFT JOIN content_visibility_overrides visibility_override
              ON visibility_override.chapter_id = c.id
-          WHERE cr.created_at >= datetime('now', '-7 days')
+          WHERE cr.created_at >= ${activitySince}
             AND cr.created_at < CURRENT_TIMESTAMP
             AND c.state = 'PUBLISHED'
             AND c.visibility = 'PUBLIC'
@@ -141,6 +155,7 @@ export async function GET(request: Request) {
               s.title,
               s.cover_key AS coverKey,
               s.revision,
+              s.rating_tenths AS ratingTenths,
               COALESCE((
                 SELECT GROUP_CONCAT(g.name, '||')
                   FROM series_genres sg
@@ -194,6 +209,8 @@ export async function GET(request: Request) {
           rank: index + 1,
           slug: row.slug,
           title: row.title,
+          revision: row.revision,
+          rating: Number(row.ratingTenths) / 10,
           coverUrl: seriesMediaUrl(
             row.id,
             "cover",
@@ -208,7 +225,8 @@ export async function GET(request: Request) {
           reactionCount: Number(row.reactionCount),
           latestActivityAt: row.latestActivityAt,
         })),
-        windowDays: 7,
+        period,
+        windowDays: period === "monthly" ? 30 : period === "all" ? null : 7,
       },
       {
         headers: {

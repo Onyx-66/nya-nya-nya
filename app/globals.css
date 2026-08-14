@@ -51886,3 +51886,412 @@ body::-webkit-scrollbar {
   height: 0;
   display: none;
 }
+
+/* v48.17.0: Hot This Week compact Popular-style ranking redesign. */
+.hot-this-week {
+  width: min(100%, 58rem);
+  margin-inline: auto;
+}
+
+.hot-this-week .hot-week-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .85rem 1.25rem;
+  margin-bottom: .85rem;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.hot-this-week .hot-week-title-group {
+  gap: .7rem;
+}
+
+.hot-this-week .hot-week-heading-icon {
+  width: 2.55rem;
+  height: 2.55rem;
+  border-radius: .82rem;
+}
+
+.hot-this-week .hot-week-heading h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  letter-spacing: -.055em;
+}
+
+.hot-this-week .hot-week-heading > a {
+  display: inline-flex;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  padding: .55rem .85rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: .72rem;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+  font-size: .72rem;
+  font-weight: 780;
+  text-decoration: none;
+  transition: background-color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.hot-this-week .hot-week-heading > a:is(:hover, :focus-visible) {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  transform: translateY(-1px);
+}
+
+.hot-this-week .hot-week-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .25rem;
+  width: min(100%, 34rem);
+  margin: 0 0 1.05rem;
+  padding: .25rem;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: .75rem;
+  background: color-mix(in srgb, #080713 82%, var(--surface));
+}
+
+.hot-this-week .hot-week-tabs button {
+  min-height: 2.35rem;
+  border: 0;
+  border-radius: .55rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 760;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease, transform .18s ease;
+}
+
+.hot-this-week .hot-week-tabs button:is(:hover, :focus-visible) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.hot-this-week .hot-week-tabs button.is-active {
+  background: linear-gradient(135deg, #a33cf0, #7b2bd0);
+  color: #fff;
+  box-shadow: 0 .3rem .75rem rgb(126 46 206 / 24%);
+}
+
+.hot-this-week .hot-week-list {
+  display: grid;
+  gap: 0;
+  width: min(100%, 54rem);
+}
+
+.hot-this-week .hot-week-list-card {
+  --hot-rank-accent: #a347f4;
+  grid-template-columns: 2.75rem 4.55rem minmax(0, 1fr);
+  column-gap: .78rem;
+  align-items: center;
+  min-height: 6.9rem;
+  padding: .78rem .25rem .78rem 0;
+  overflow: visible;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 42%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color .18s ease, transform .18s ease;
+}
+
+.hot-this-week .hot-week-list-card:last-child {
+  border-bottom: 0;
+}
+
+.hot-this-week .hot-week-list-card::before {
+  display: none;
+}
+
+.hot-this-week .hot-week-list-card:is(:hover, :focus-within) {
+  border-color: color-mix(in srgb, var(--line) 42%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: none;
+  transform: translateX(2px);
+}
+
+.hot-this-week .hot-week-list-card.is-top-1 { --hot-rank-accent: #f3b632; }
+.hot-this-week .hot-week-list-card.is-top-2 { --hot-rank-accent: #cbb9ff; }
+.hot-this-week .hot-week-list-card.is-top-3 { --hot-rank-accent: #e99562; }
+
+.hot-this-week .hot-week-card-topline {
+  display: flex;
+  grid-column: 1;
+  align-items: center;
+  gap: .3rem;
+  padding-top: 0;
+}
+
+.hot-this-week .hot-week-rank {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hot-rank-accent) 92%, #6424a0);
+  box-shadow: 0 .25rem .7rem color-mix(in srgb, var(--hot-rank-accent) 24%, transparent);
+  color: #fff;
+}
+
+.hot-this-week .hot-week-rank b {
+  font-size: .98rem;
+  font-weight: 800;
+  letter-spacing: -.04em;
+}
+
+.hot-this-week .hot-week-movement {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: .55rem;
+}
+
+.hot-this-week .hot-week-movement svg { width: .7rem; height: .7rem; }
+
+.hot-this-week .hot-week-cover {
+  grid-column: 2;
+  width: 4.55rem;
+  height: 6rem;
+  aspect-ratio: 3 / 4;
+  border: 0;
+  border-radius: .72rem;
+  background: var(--surface-2);
+  box-shadow: 0 .4rem .9rem rgb(0 0 0 / 16%);
+}
+
+.hot-this-week .hot-week-cover img,
+.hot-this-week .hot-week-cover-fallback {
+  object-fit: cover;
+}
+
+.hot-this-week .hot-week-copy {
+  grid-column: 3;
+  min-height: 0;
+  padding: 0;
+  align-self: center;
+}
+
+.hot-this-week .hot-week-title-link h3 {
+  font-size: clamp(.98rem, 1.8vw, 1.16rem);
+  font-weight: 760;
+  line-height: 1.18;
+}
+
+.hot-this-week .hot-week-genres {
+  display: block;
+  width: 100%;
+  margin-top: .25rem;
+  padding-top: 0;
+  border-top: 0;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.35;
+}
+
+.hot-this-week .hot-week-genres strong {
+  color: var(--muted);
+  font-weight: 520;
+}
+
+.hot-this-week .hot-week-genres small {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-soft, #cbd9e8);
+  font-size: inherit;
+  white-space: normal;
+}
+
+.hot-this-week .hot-week-genres small + small::before {
+  content: ", ";
+}
+
+.hot-this-week .hot-week-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  margin-top: .42rem;
+}
+
+.hot-this-week .hot-week-stars {
+  display: inline-flex;
+  gap: .08rem;
+  color: #ffc400;
+}
+
+.hot-this-week .hot-week-stars svg { width: .9rem; height: .9rem; }
+
+.hot-this-week .hot-week-rating strong {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+.hot-this-week .hot-week-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .8rem;
+  width: 100%;
+  margin-top: .4rem;
+}
+
+.hot-this-week .hot-week-metrics > span {
+  gap: .22rem;
+  color: var(--muted);
+  font-size: .63rem;
+}
+
+.hot-this-week .hot-week-metrics > span svg {
+  width: .78rem;
+  height: .78rem;
+  color: var(--accent);
+}
+
+.hot-this-week .hot-week-metrics > span strong {
+  color: var(--muted);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.hot-this-week .hot-week-read { display: none; }
+
+.hot-this-week .hot-week-list-loading {
+  gap: 0;
+}
+
+.hot-this-week .hot-week-list-loading > span {
+  min-height: 6.9rem;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 42%, transparent);
+  border-radius: 0;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--surface-2) 92%, transparent), color-mix(in srgb, var(--surface-3) 68%, transparent), color-mix(in srgb, var(--surface-2) 92%, transparent));
+}
+
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-heading {
+    grid-template-columns: 1fr;
+    gap: .65rem;
+  }
+
+  .hot-this-week .hot-week-heading > a {
+    justify-self: start;
+  }
+
+  .hot-this-week .hot-week-tabs {
+    width: 100%;
+  }
+
+  .hot-this-week .hot-week-list-card {
+    grid-template-columns: 2.35rem 4.25rem minmax(0, 1fr);
+    column-gap: .62rem;
+    min-height: 6.45rem;
+    padding-block: .7rem;
+  }
+
+  .hot-this-week .hot-week-rank {
+    width: 2.15rem;
+    height: 2.15rem;
+  }
+
+  .hot-this-week .hot-week-cover {
+    width: 4.25rem;
+    height: 5.65rem;
+  }
+
+  .hot-this-week .hot-week-title-link h3 {
+    font-size: .98rem;
+  }
+
+  .hot-this-week .hot-week-genres {
+    font-size: .66rem;
+  }
+
+  .hot-this-week .hot-week-stars svg {
+    width: .78rem;
+    height: .78rem;
+  }
+
+  .hot-this-week .hot-week-rating {
+    margin-top: .3rem;
+  }
+
+  .hot-this-week .hot-week-metrics {
+    gap: .25rem .58rem;
+    margin-top: .28rem;
+  }
+
+  .hot-this-week .hot-week-metrics > span {
+    font-size: .58rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .hot-this-week .hot-week-heading-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+  .hot-this-week .hot-week-list-card {
+    grid-template-columns: 2.2rem 3.95rem minmax(0, 1fr);
+    column-gap: .52rem;
+  }
+
+  .hot-this-week .hot-week-rank {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .hot-this-week .hot-week-cover {
+    width: 3.95rem;
+    height: 5.25rem;
+  }
+
+  .hot-this-week .hot-week-genres {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hot-this-week .hot-week-list-card,
+  .hot-this-week .hot-week-heading > a,
+  .hot-this-week .hot-week-tabs button {
+    transition: none;
+  }
+}
+
+/* v48.17.0 cascade correction: the legacy `.hot-week-card` surface is important. */
+.hot-this-week .hot-week-list-card,
+.hot-this-week .hot-week-list-card:is(:hover, :focus-within) {
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 42%, transparent);
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.hot-this-week .hot-week-list-card:last-child,
+.hot-this-week .hot-week-list-card:last-child:is(:hover, :focus-within) {
+  border-bottom: 0;
+}
+
+/* v48.17.0 cascade correction: legacy cover min-heights stretched each row. */
+.hot-this-week .hot-week-cover {
+  align-self: center;
+  min-height: 0 !important;
+}
+
+.hot-this-week .hot-week-cover img,
+.hot-this-week .hot-week-cover-fallback {
+  min-height: 0 !important;
+}
