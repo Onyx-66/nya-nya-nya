@@ -51861,3 +51861,13 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
   box-shadow: none !important;
   border-radius: 0 !important;
 }
+
+/* v48.16.2: The hero carousel itself owns no full-width painted field.
+   Individual slide cards retain their intended borders; the global page backdrop carries the space around them. */
+.featured-slider {
+  background: transparent !important;
+}
+.featured-slider-backdrop,
+.featured-slider-shade {
+  display: none !important;
+}
