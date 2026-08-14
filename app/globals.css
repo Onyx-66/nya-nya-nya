@@ -51840,3 +51840,24 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
 .v481-ticket-copy { background:linear-gradient(180deg,rgb(4 18 32 / 56%),rgb(4 18 32 / 94%)); }
 .v481-ticket-prices s { color:#a9bfd0 !important; text-decoration-color:#7690a5; opacity:1; }
 .v481-ticket-prices b { color:#58b9ff !important; text-shadow:0 0 .8rem rgb(52 166 255 / 22%); }
+
+/* v48.16.1: Homepage layout shells must never paint a rounded outer frame.
+   Cards own their borders; this covers the hero stage plus every direct page-wrap section,
+   including Trending and Continue Reading that do not carry .content-section. */
+.home-main,
+.home-main::before,
+.home-main::after,
+.home-main > :is(.featured-slider, .page-wrap, .content-section),
+.home-main > :is(.featured-slider, .page-wrap, .content-section)::before,
+.home-main > :is(.featured-slider, .page-wrap, .content-section)::after,
+.featured-slider > :is(.featured-slider-shade, .featured-slider-inner),
+.featured-slider > :is(.featured-slider-shade, .featured-slider-inner)::before,
+.featured-slider > :is(.featured-slider-shade, .featured-slider-inner)::after,
+.featured-slider-stage,
+.featured-slider-stage::before,
+.featured-slider-stage::after {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
