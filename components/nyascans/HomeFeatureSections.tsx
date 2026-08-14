@@ -299,7 +299,7 @@ function PinnedSeriesCard({
   position?: -1 | 0 | 1;
   onActivate?: () => void;
 }) {
-  const imageUrl = record.bannerUrl || record.coverUrl;
+  const imageUrl = record.bannerUrl || null;
   return (
     <a
       className={`v481-pin-card ${featured ? "is-featured" : "is-small"}`}
@@ -316,7 +316,7 @@ function PinnedSeriesCard({
     >
       <CoverArtwork src={imageUrl} title={record.title} eager={featured} />
       <span className="v481-pin-shade" aria-hidden="true" />
-      {featured ? <span className="v481-featured-badge">Featured Pin</span> : null}
+      {featured ? <span className="v481-featured-badge">Featured</span> : null}
       <span className="v481-pin-copy">
         <small>
           {record.type} · {record.chapterCount}{" "}
@@ -672,7 +672,7 @@ export function RecentReviewsSection() {
   }, [records, syncActiveReview]);
 
   return (
-    <section className="content-section page-wrap recent-reviews-section">
+    <section className="page-wrap recent-reviews-section">
       <HomeFeatureStyles />
       <FeatureHeading
         icon={<Star size={21} weight="fill" />}

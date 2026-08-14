@@ -51692,3 +51692,32 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
   .v481-pinned-arrow.is-previous { left: .35rem; }
   .v481-pinned-arrow.is-next { right: .35rem; }
 }
+
+/* v48.15.1: Recent Reviews is intentionally frameless; Pinned Series presents banners only. */
+.recent-reviews-section {
+  position: relative;
+  padding-top: 105px;
+  padding-bottom: 105px;
+  overflow: visible !important;
+  outline: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.recent-reviews-section::before,
+.recent-reviews-section::after,
+.recent-reviews-section > .v481-feature-heading::before,
+.recent-reviews-section > .v481-feature-heading::after {
+  display: none !important;
+  content: none !important;
+}
+@media (max-width: 760px) {
+  .recent-reviews-section {
+    padding-top: 64px;
+    padding-bottom: 64px;
+  }
+}
+
+/* Keep the requested Pinned Series badge copy in title case. */
+.v481-featured-badge { text-transform: none; }
