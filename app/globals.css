@@ -51822,3 +51822,21 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
 .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
   right: -86% !important;
 }
+
+/* Live discount indicators sit at the cover bottom so they do not compete with type, status, Featured, or New labels. */
+.cover-link { position:relative; }
+.active-discount-cover-badge { position:absolute; z-index:5; right:.45rem; bottom:.45rem; display:inline-flex; min-height:1.7rem; align-items:center; gap:.2rem; max-width:calc(100% - .9rem); padding:.22rem .46rem; border:1px solid rgb(255 255 255 / 30%); border-radius:.45rem; background:linear-gradient(135deg,#7263f6,#4030b8); box-shadow:0 .38rem .9rem rgb(8 5 43 / 42%); color:#fff; font-size:.66rem; font-weight:900; letter-spacing:.01em; line-height:1; text-transform:uppercase; }
+.active-discount-cover-badge svg { flex:0 0 auto; }
+@media (max-width:600px) { .active-discount-cover-badge { right:.32rem; bottom:.32rem; min-height:1.5rem; padding:.18rem .38rem; font-size:.58rem; } }
+
+/* Live series-wide discount action above the title chapter list. */
+.series-bulk-unlock-action { display:inline-flex; min-height:2.75rem; align-items:center; justify-content:center; gap:.42rem; padding:.55rem .9rem; border:1px solid rgb(255 205 95 / 76%); border-radius:var(--site-button-radius,var(--radius-small)); background:linear-gradient(135deg,#ff9a1a,#f47a00); box-shadow:0 .65rem 1.4rem rgb(144 65 0 / 24%); color:#fffdf7; font:inherit; font-size:.82rem; font-weight:850; cursor:pointer; }
+.series-bulk-unlock-action:hover:not(:disabled),.series-bulk-unlock-action:focus-visible:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+.series-bulk-unlock-action:disabled { cursor:wait; opacity:.66; }
+@media (max-width:600px) { .series-bulk-unlock-action { width:100%; min-height:2.9rem; } }
+@media (prefers-reduced-motion:reduce) { .series-bulk-unlock-action { transition:none; } }
+
+/* Keep both live prices readable when the mobile card stacks its portrait cover above the copy. */
+.v481-ticket-copy { background:linear-gradient(180deg,rgb(4 18 32 / 56%),rgb(4 18 32 / 94%)); }
+.v481-ticket-prices s { color:#a9bfd0 !important; text-decoration-color:#7690a5; opacity:1; }
+.v481-ticket-prices b { color:#58b9ff !important; text-shadow:0 0 .8rem rgb(52 166 255 / 22%); }

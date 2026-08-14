@@ -46,6 +46,7 @@ type DiscountRow = {
   chapterNumber: string | null;
   chapterTitle: string | null;
   currentChapterPrice: number | null;
+  eligibleChapterCount: number;
 };
 
 type ActiveDiscountRow = {
@@ -124,6 +125,7 @@ function serializeDiscount(row: DiscountRow) {
     chapterSlug: row.chapterSlug,
     chapterNumber: row.chapterNumber,
     chapterTitle: row.chapterTitle,
+    eligibleChapterCount: Math.max(1, Number(row.eligibleChapterCount ?? 1)),
     priceChanged:
       row.targetType === "CHAPTER" &&
       Number(row.currentChapterPrice) !== Number(row.originalPrice),
@@ -157,7 +159,21 @@ const discountSelect = `
          s.slug AS seriesSlug, s.title AS seriesTitle,
          s.cover_key AS coverKey, s.revision AS seriesRevision,
          c.slug AS chapterSlug, c.chapter_number AS chapterNumber,
-         c.title AS chapterTitle, c.price_onyx AS currentChapterPrice
+         c.title AS chapterTitle, c.price_onyx AS currentChapterPrice,
+         CASE
+           WHEN discount.target_type = 'CHAPTER' THEN 1
+           ELSE (
+             SELECT COUNT(1)
+               FROM chapters eligible_chapter_count
+              WHERE eligible_chapter_count.series_id = discount.series_id
+                AND eligible_chapter_count.access_type = 'PAID'
+                AND eligible_chapter_count.price_onyx > 0
+                AND eligible_chapter_count.state = 'PUBLISHED'
+                AND eligible_chapter_count.visibility = 'PUBLIC'
+                AND eligible_chapter_count.published_at IS NOT NULL
+                AND datetime(eligible_chapter_count.published_at) <= datetime('now')
+           )
+         END AS eligibleChapterCount
     FROM content_discounts discount
     JOIN series s ON s.id = discount.series_id
     LEFT JOIN chapters c ON c.id = discount.chapter_id`;

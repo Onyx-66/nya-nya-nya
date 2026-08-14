@@ -17,6 +17,7 @@ import {
   Translate,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { languageName } from "@/lib/language-flags";
@@ -118,6 +119,7 @@ function NewSeriesCover({ record }: { record: NewSeriesRecord }) {
         </span>
       )}
       <small>New</small>
+      <ActiveDiscountBadge seriesSlug={record.slug} />
       <span className="new-series-badges">
         <SeriesTypeLabel type={record.type} />
         <SeriesStatusLabel status={record.status} />

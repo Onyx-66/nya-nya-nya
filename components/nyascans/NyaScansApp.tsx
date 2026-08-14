@@ -82,6 +82,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
@@ -1694,6 +1695,7 @@ function SeriesCardView({
         />
         <span className="cover-shade" />
         <SeriesTypeBadge type={item.type} flagOnly />
+        <ActiveDiscountBadge seriesSlug={item.slug} />
         <span className="quick-read">
           <Play size={14} weight="fill" />
           Read
@@ -7103,6 +7105,12 @@ function TitleView({
   const [chapterPolicies, setChapterPolicies] = useState<
     SeriesChapterAccess[]
   >([]);
+  const [seriesBulkDiscount, setSeriesBulkDiscount] = useState<{
+    percentage: number;
+    endsAt: string;
+  } | null>(null);
+  const [bulkUnlocking, setBulkUnlocking] = useState(false);
+  const bulkUnlockIdempotencyKey = useRef("");
   const [canUploadChapter, setCanUploadChapter] = useState(false);
   const [uploadChooserOpen, setUploadChooserOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
@@ -7162,6 +7170,50 @@ function TitleView({
       .catch(() => {
         setChapterPolicies([]);
         setCanUploadChapter(false);
+      });
+    return () => controller.abort();
+  }, [available, item.slug]);
+  useEffect(() => {
+    if (!available) return;
+    const controller = new AbortController();
+    void fetch("/api/v1/discounts?sort=discount", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const payload = (await response.json()) as {
+          data?: Array<{
+            seriesSlug: string;
+            targetType: "SERIES" | "CHAPTER";
+            percentage: number;
+            endsAt: string;
+            active: boolean;
+            status: string;
+          }>;
+        };
+        return (
+          payload.data?.find(
+            (discount) =>
+              discount.seriesSlug === item.slug &&
+              discount.targetType === "SERIES" &&
+              discount.active &&
+              discount.status === "ACTIVE" &&
+              Date.parse(discount.endsAt) > Date.now(),
+          ) ?? null
+        );
+      })
+      .then((discount) => {
+        if (!controller.signal.aborted) {
+          setSeriesBulkDiscount(
+            discount
+              ? { percentage: discount.percentage, endsAt: discount.endsAt }
+              : null,
+          );
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSeriesBulkDiscount(null);
       });
     return () => controller.abort();
   }, [available, item.slug]);
@@ -7274,6 +7326,13 @@ function TitleView({
   const latestChapter = allGroupsAscending.at(-1)?.releases[0] ?? null;
   const firstChapter = allGroupsAscending[0]?.releases[0] ?? null;
   const seriesReleaseLanguages = [...new Set(chapterPolicies.map((chapter) => chapter.language.toLowerCase()))].sort();
+  const bulkUnlockAvailable = Boolean(seriesBulkDiscount) && chapterPolicies.some(
+    (chapter) =>
+      chapter.accessType === "PAID" &&
+      !chapter.canRead &&
+      chapter.priceOnyx > 0 &&
+      Boolean(chapter.discountPercentage),
+  );
 
   function applyCollapsedChapters(next: Set<string>) {
     setCollapsedChapterNumbers(next);
@@ -7304,6 +7363,58 @@ function TitleView({
     setReportDialogOpen(false);
     window.requestAnimationFrame(() => reportTriggerRef.current?.focus());
   }, []);
+
+  async function unlockAllDiscountedChapters() {
+    if (!actor) {
+      window.location.href = authEntryPath("login", `/title/${item.slug}#chapters`);
+      return;
+    }
+    if (!seriesBulkDiscount || bulkUnlocking) return;
+    if (!bulkUnlockIdempotencyKey.current) {
+      bulkUnlockIdempotencyKey.current = `series-unlock:${item.slug}:${clientRandomId()}`;
+    }
+    setBulkUnlocking(true);
+    try {
+      const response = await fetch("/api/v1/series-unlock-all", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          seriesSlug: item.slug,
+          idempotencyKey: bulkUnlockIdempotencyKey.current,
+        }),
+      });
+      const payload = (await response.json()) as {
+        unlockedChapterIds?: string[];
+        totalPriceOnyx?: number;
+        alreadyUnlocked?: boolean;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Discounted chapters could not be unlocked.");
+      }
+      const unlocked = new Set(payload.unlockedChapterIds ?? []);
+      setChapterPolicies((current) =>
+        current.map((chapter) =>
+          unlocked.has(chapter.chapterId)
+            ? { ...chapter, canRead: true, isUnlocked: true, reason: "UNLOCKED" }
+            : chapter,
+        ),
+      );
+      showToast(
+        payload.alreadyUnlocked
+          ? "All eligible discounted chapters are already unlocked."
+          : `${unlocked.size} discounted chapter${unlocked.size === 1 ? "" : "s"} unlocked for ${coinLabel(Number(payload.totalPriceOnyx ?? 0), commercial)}.`,
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Discounted chapters could not be unlocked.",
+      );
+    } finally {
+      setBulkUnlocking(false);
+    }
+  }
 
   async function shareSeries() {
     const shareData = {
@@ -7588,6 +7699,19 @@ function TitleView({
               </div>
             </div>
             <div className="chapter-action-bar" aria-label="Chapter actions">
+              {bulkUnlockAvailable && seriesBulkDiscount ? (
+                <button
+                  className="series-bulk-unlock-action"
+                  type="button"
+                  disabled={bulkUnlocking}
+                  onClick={() => void unlockAllDiscountedChapters()}
+                >
+                  <span aria-hidden="true">🔓</span>
+                  {bulkUnlocking
+                    ? "Unlocking…"
+                    : `Unlock All · −${seriesBulkDiscount.percentage}% off`}
+                </button>
+              ) : null}
               {firstChapter ? (
                 <a
                   className="button button-secondary"

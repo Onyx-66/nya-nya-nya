@@ -237,17 +237,17 @@ for (const [order, seriesIndex] of [0, 1, 2].entries()) {
   exec(`INSERT INTO editor_picks (id, series_id, category_label, short_description, sort_order, is_published) VALUES (?, ?, ?, ?, ?, 1)`, `pick-${order + 1}`, seriesId, "Editor's Pick", `A richly populated temporary pick for layout, media, and action testing.`, order);
 }
 
-for (const [id, seriesIndex, discountValue, originalPrice, reducedPrice] of [
-  ["discount-solo", 0, 35, 220, 143],
-  ["discount-mercenary", 1, 40, 180, 108],
-  ["discount-kaiju", 8, 25, 200, 150],
+for (const [id, seriesIndex, targetType, discountValue, originalPrice, reducedPrice] of [
+  ["discount-solo", 0, "CHAPTER", 35, 220, 143],
+  ["discount-mercenary", 1, "SERIES", 40, 180, 108],
+  ["discount-kaiju", 8, "CHAPTER", 25, 200, 150],
 ]) {
   const [seriesId] = series[seriesIndex];
-  const chapterId = `chapter-${seriesIndex + 1}-4`;
+  const chapterId = targetType === "CHAPTER" ? `chapter-${seriesIndex + 1}-4` : null;
   exec(
     `INSERT INTO content_discounts (id, target_type, series_id, chapter_id, discount_type, discount_value, original_price, reduced_price, starts_at, ends_at, is_active, created_by_user_id)
-     VALUES (?, 'CHAPTER', ?, ?, 'PERCENT', ?, ?, ?, ?, ?, 1, ?)`,
-    id, seriesId, chapterId, discountValue, originalPrice, reducedPrice, date(-1), date(6 + seriesIndex), owner.id,
+     VALUES (?, ?, ?, ?, 'PERCENT', ?, ?, ?, ?, ?, 1, ?)`,
+    id, targetType, seriesId, chapterId, discountValue, originalPrice, reducedPrice, date(-1), date(6 + seriesIndex), owner.id,
   );
 }
 

@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import {
   coinLabel,
@@ -69,6 +70,7 @@ export type DiscountRecord = {
   targetLabel: string;
   coverUrl: string | null;
   href: string;
+  eligibleChapterCount: number;
 };
 
 type PublicDataResponse<T> = {
@@ -324,6 +326,7 @@ function PinnedSeriesCard({
       }}
     >
       <CoverArtwork src={bannerUrl} mobileSrc={mobileSliderUrl} title={record.title} eager={featured} />
+      <ActiveDiscountBadge seriesSlug={record.slug} />
       <span className="v481-pin-shade" aria-hidden="true" />
       {featured ? <span className="v481-featured-badge">Featured</span> : null}
       <span className="v481-pin-copy">
@@ -526,9 +529,12 @@ function DiscountCountdown({ endsAt }: { endsAt: string }) {
 
   return (
     <span className="v481-ticket-countdown" aria-label={`Time remaining: ${label}`}>
-      <Timer size={15} aria-hidden="true" />
-      <span>
-        <b>{days}d</b><b>{String(hours).padStart(2, "0")}h</b><b>{String(minutes).padStart(2, "0")}m</b><b>{String(seconds).padStart(2, "0")}s</b>
+      <Timer size={19} aria-hidden="true" />
+      <span className="v481-ticket-time-grid">
+        <b><i>Days</i>{days}</b>
+        <b><i>Hours</i>{String(hours).padStart(2, "0")}</b>
+        <b><i>Minutes</i>{String(minutes).padStart(2, "0")}</b>
+        <b className="is-seconds"><i>Seconds</i>{String(seconds).padStart(2, "0")}</b>
       </span>
     </span>
   );
@@ -555,8 +561,10 @@ function DiscountTicket({
       </span>
       <span className="v481-ticket-perforation" aria-hidden="true" />
       <span className="v481-ticket-copy">
-        <small>{record.targetType === "CHAPTER" ? record.seriesTitle : "Series-wide chapter offer"}</small>
-        <strong>{record.targetLabel}</strong>
+        <span className="v481-ticket-orbit" aria-hidden="true" />
+        <strong>{record.seriesTitle}</strong>
+        <span className="v481-ticket-divider" aria-hidden="true"><i /></span>
+        <span className="v481-ticket-chapters"><Books size={15} weight="fill" /> Chapters: {record.eligibleChapterCount}</span>
         <span className="v481-ticket-prices">
           <s>{coinLabel(record.originalPrice, settings)}</s>
           <b>{coinLabel(record.reducedPrice, settings)}</b>
@@ -704,6 +712,7 @@ export function RecentReviewsSection() {
               >
                 <div className="recent-review-cover">
                   <CoverArtwork src={review.coverUrl} title={review.seriesTitle} />
+                  <ActiveDiscountBadge seriesSlug={review.seriesSlug} />
                 </div>
                 <div className="recent-review-copy">
                   <strong>{review.seriesTitle}</strong>
@@ -837,23 +846,31 @@ const HOME_FEATURE_CSS = `
   .v481-pinned-carousel.is-loading > span { min-height:24rem; scroll-snap-align:start; }
   .v481-pinned-bento.is-loading > span:first-child { grid-column:span 2; grid-row:span 2; }
   .v481-discounts-section { position:relative; padding-block:clamp(1rem,2.3vw,1.6rem); border:0; border-radius:0; background:transparent; box-shadow:none; }
-  .v481-discount-rail { display:grid; grid-auto-columns:minmax(20rem,25rem); grid-auto-flow:column; gap:1rem; overflow-x:auto; overscroll-behavior-inline:contain; padding:.2rem .1rem .8rem; scroll-snap-type:inline mandatory; scrollbar-width:thin; }
-  .v481-ticket { position:relative; display:grid; min-height:12.5rem; grid-template-columns:8rem .8rem minmax(0,1fr); overflow:hidden; border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line)); border-radius:1.15rem; background:linear-gradient(135deg,color-mix(in srgb,var(--surface-strong) 96%,var(--accent) 4%),var(--surface)); color:var(--text); scroll-snap-align:start; box-shadow:0 .9rem 2rem rgb(0 0 0 / 18%); transition:border-color .22s ease,transform .22s ease,box-shadow .22s ease; }
-  .v481-ticket-cover { position:relative; display:block; min-height:12rem; overflow:hidden; }
-  .v481-ticket-cover > img,.v481-ticket-cover > .v481-art-placeholder { width:100%; height:100%; object-fit:cover; }
-  .v481-ticket-ribbon { position:absolute; top:.75rem; left:-2.35rem; width:8rem; padding:.34rem 0; transform:rotate(-42deg); background:var(--danger); color:#fff; font-size:.72rem; font-weight:900; letter-spacing:.04em; text-align:center; box-shadow:0 5px 14px rgb(0 0 0 / 28%); }
-  .v481-ticket-perforation { position:relative; display:block; border-left:1px dashed color-mix(in srgb,var(--accent) 48%,var(--line)); }
-  .v481-ticket-perforation::before,.v481-ticket-perforation::after { position:absolute; left:-.52rem; width:1rem; height:1rem; border-radius:50%; background:color-mix(in srgb,var(--warning) 6%,var(--surface)); content:''; }
-  .v481-ticket-perforation::before { top:-.5rem; }
-  .v481-ticket-perforation::after { bottom:-.5rem; }
-  .v481-ticket-copy { display:grid; min-width:0; align-content:center; gap:.45rem; padding:1rem 1rem 1rem .45rem; }
-  .v481-ticket-copy > small { overflow:hidden; color:var(--muted); font-size:.66rem; font-weight:750; letter-spacing:.055em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
-  .v481-ticket-copy > strong { display:-webkit-box; overflow:hidden; font-size:1.08rem; line-height:1.3; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-  .v481-ticket-prices { display:flex; align-items:baseline; flex-wrap:wrap; gap:.45rem; }
-  .v481-ticket-prices s { color:var(--muted); font-size:.7rem; }
-  .v481-ticket-prices b { color:var(--accent); font-size:1rem; }
-  .v481-ticket-copy em { display:flex; align-items:center; gap:.3rem; color:var(--warning); font-size:.74rem; font-style:normal; font-weight:750; }
-  .v481-ticket:is(:hover,:focus-visible) { border-color:color-mix(in srgb,var(--accent) 68%,var(--line)); box-shadow:0 1.1rem 2.6rem rgb(0 0 0 / 28%); transform:translateY(-3px); }
+  .v481-discount-rail { display:grid; grid-auto-columns:minmax(0,100%); grid-auto-flow:column; gap:1rem; overflow-x:auto; overscroll-behavior-inline:contain; padding:.2rem .1rem .8rem; scroll-snap-type:inline mandatory; scrollbar-width:thin; }
+  .v481-ticket { position:relative; display:grid; min-height:17rem; grid-template-columns:minmax(8.25rem,34%) .8rem minmax(0,1fr); overflow:hidden; border:1px solid color-mix(in srgb,var(--accent) 62%,var(--line)); border-radius:1.3rem; background:linear-gradient(135deg,color-mix(in srgb,#0b2440 92%,var(--accent) 8%),color-mix(in srgb,var(--surface-strong) 96%,#061323 4%)); color:var(--text); scroll-snap-align:start; box-shadow:0 1rem 2.8rem rgb(0 0 0 / 24%),inset 0 1px 0 rgb(255 255 255 / 5%); transition:border-color .22s ease,transform .22s ease,box-shadow .22s ease; }
+  .v481-ticket-cover { position:relative; display:block; min-height:100%; overflow:hidden; }
+  .v481-ticket-cover > picture,.v481-ticket-cover > .v481-art-placeholder,.v481-ticket-cover > picture > img { display:block; width:100%; height:100%; }
+  .v481-ticket-cover > picture > img { object-fit:cover; }
+  .v481-ticket-cover::after { position:absolute; inset:0; background:linear-gradient(90deg,transparent 64%,rgb(4 14 28 / 62%)); content:''; pointer-events:none; }
+  .v481-ticket-ribbon { position:absolute; z-index:2; top:1.2rem; left:-2.45rem; width:9rem; padding:.42rem 0; transform:rotate(-42deg); background:linear-gradient(135deg,#ff887c,#ff784f 52%,#ff9b38); color:#fff; font-size:.77rem; font-weight:900; letter-spacing:.045em; text-align:center; box-shadow:0 6px 18px rgb(69 12 8 / 38%); }
+  .v481-ticket-perforation { position:relative; display:block; background:linear-gradient(180deg,transparent 6%,rgb(62 185 255 / 72%) 50%,transparent 94%); }
+  .v481-ticket-perforation::after { position:absolute; top:8%; bottom:8%; left:50%; width:1px; transform:translateX(-50%); background:rgb(136 216 255 / 68%); box-shadow:0 0 .7rem rgb(56 172 255 / 75%); content:''; }
+  .v481-ticket-copy { position:relative; display:grid; min-width:0; align-content:center; gap:.68rem; padding:1.2rem 1.25rem 1.2rem 1rem; }
+  .v481-ticket-copy > strong { display:-webkit-box; z-index:1; overflow:hidden; max-width:calc(100% - 2rem); font-size:clamp(1.1rem,2.05vw,1.72rem); line-height:1.17; letter-spacing:-.035em; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+  .v481-ticket-orbit { position:absolute; top:1rem; right:1rem; width:4.3rem; aspect-ratio:1; border:1px solid rgb(99 191 255 / 28%); border-radius:50%; box-shadow:inset 0 0 0 .62rem rgb(25 84 137 / 8%),0 0 1.8rem rgb(30 157 255 / 14%); }
+  .v481-ticket-orbit::after { position:absolute; top:50%; left:50%; width:2.8rem; height:1.35rem; transform:translate(-50%,-50%) rotate(-28deg); border-top:1px solid rgb(99 191 255 / 30%); border-radius:50%; content:''; }
+  .v481-ticket-divider { display:flex; align-items:center; gap:.45rem; width:100%; height:1px; background:linear-gradient(90deg,rgb(72 181 255 / 78%),rgb(72 181 255 / 13%),transparent); }
+  .v481-ticket-divider i { display:block; width:.35rem; height:.35rem; flex:0 0 auto; border-radius:50%; background:#60c4ff; box-shadow:0 0 .55rem #60c4ff; }
+  .v481-ticket-chapters { display:inline-flex; width:max-content; max-width:100%; min-height:1.85rem; align-items:center; gap:.32rem; padding:.25rem .55rem; border:1px solid rgb(72 181 255 / 42%); border-radius:999px; background:rgb(3 16 31 / 58%); color:#b9e6ff; font-size:.72rem; font-weight:760; }
+  .v481-ticket-prices { display:flex; align-items:baseline; flex-wrap:wrap; gap:.58rem; }
+  .v481-ticket-prices s { color:color-mix(in srgb,var(--muted) 90%,#d6e9fa); font-size:.85rem; }
+  .v481-ticket-prices b { color:#4eb4ff; font-size:clamp(1.2rem,2.4vw,1.7rem); line-height:1; }
+  .v481-ticket-countdown { display:flex; align-items:center; gap:.55rem; color:#f4cf70; }
+  .v481-ticket-time-grid { display:grid; min-width:0; flex:1; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.38rem; }
+  .v481-ticket-time-grid b { display:grid; min-height:2.55rem; place-content:center; gap:.12rem; border:1px solid rgb(245 203 103 / 38%); border-radius:.65rem; background:rgb(28 31 31 / 72%); color:#f7da84; font-size:.88rem; text-align:center; }
+  .v481-ticket-time-grid b i { color:rgb(255 239 187 / 68%); font-size:.48rem; font-style:normal; font-weight:800; letter-spacing:.045em; text-transform:uppercase; }
+  .v481-ticket-time-grid b.is-seconds { border-color:rgb(77 178 255 / 54%); background:rgb(17 60 99 / 72%); color:#8bd3ff; }
+  .v481-ticket:is(:hover,:focus-visible) { border-color:color-mix(in srgb,#55bdff 82%,var(--line)); box-shadow:0 1.25rem 3rem rgb(0 0 0 / 32%),0 0 1.35rem rgb(41 160 255 / 16%); transform:translateY(-3px); }
   .v481-directory { display:grid; gap:1.25rem; padding-block:clamp(1.2rem,3vw,2.4rem); }
   .v481-directory-header { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:1rem; padding-bottom:1.1rem; border-bottom:1px solid var(--line); }
   .v481-directory-header > span { display:grid; width:3rem; height:3rem; place-items:center; border:1px solid color-mix(in srgb,var(--accent) 36%,var(--line)); border-radius:var(--site-card-radius,var(--radius)); background:color-mix(in srgb,var(--accent) 9%,var(--surface)); color:var(--accent); }
@@ -874,7 +891,7 @@ const HOME_FEATURE_CSS = `
   @keyframes v481-skeleton { 0% { background-position:100% 0; } 100% { background-position:0 0; } }
   @media (prefers-reduced-motion:reduce) { .v481-feature-slot,.v481-pinned-bento.is-loading > span,.v481-pinned-carousel.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span,.v481-pinned-carousel > .v481-pin-card[data-active='true']::after { animation:none; } .v481-pin-card,.v481-pin-card > img { transition:none; } }
   @media (max-width:850px) { .v481-pinned-bento { min-height:26rem; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:14rem repeat(2,10rem); } .v481-feature-slot,.v481-pinned-bento.is-loading > span:first-child { grid-column:1 / -1; grid-row:span 1; } .v481-discount-grid { grid-template-columns:1fr; } }
-  @media (max-width:600px) { .v481-feature-heading { align-items:flex-start; } .v481-heading-actions { flex-wrap:wrap; justify-content:flex-end; } .v481-rail-controls button { width:2.2rem; height:2.2rem; } .v481-pinned-carousel { grid-template-columns:minmax(3.25rem,.24fr) minmax(0,1fr) minmax(3.25rem,.24fr); gap:.4rem; padding:.2rem 1.7rem .65rem; } .v481-pinned-carousel > .v481-pin-card,.v481-pinned-carousel.is-loading > span { min-height:17rem; } .v481-pinned-arrow { width:2.4rem; height:2.4rem; } .v481-pinned-arrow.is-previous { left:.35rem; } .v481-pinned-arrow.is-next { right:.35rem; } .v481-featured-badge { top:.65rem; left:.65rem; } .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) .v481-pin-copy { display:none; } .v481-pinned-bento { min-height:0; grid-template-rows:14rem repeat(2,8.5rem); gap:.55rem; } .v481-pin-copy { padding:.9rem; } .v481-pin-copy small { font-size:.58rem; } .v481-pin-copy strong { font-size:1.15rem; } .v481-feature-slot .v481-pin-copy strong { font-size:1.15rem; } .v481-discount-rail { grid-auto-columns:min(88vw,22rem); } .v481-ticket { grid-template-columns:6.5rem .65rem minmax(0,1fr); } .v481-ticket-cover { min-height:11rem; } .v481-directory-header { grid-template-columns:auto minmax(0,1fr); align-items:start; } .v481-directory-header > .v481-sort-control { grid-column:1 / -1; width:100%; } .v481-sort-control select { width:100%; } .v481-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .v481-directory-grid .v481-pin-card { min-height:14rem; } }
+  @media (max-width:600px) { .v481-ticket { grid-template-columns:1fr; min-height:0; } .v481-ticket-cover { min-height:15rem; aspect-ratio:3 / 4; } .v481-ticket-cover::after { background:linear-gradient(180deg,transparent 55%,rgb(4 14 28 / 44%)); } .v481-ticket-ribbon { top:1.1rem; } .v481-ticket-perforation { display:none; } .v481-ticket-copy { padding:1rem; } .v481-ticket-copy > strong { max-width:calc(100% - 3rem); } .v481-ticket-time-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .v481-ticket-time-grid b { min-height:2.75rem; } .v481-feature-heading { align-items:flex-start; } .v481-heading-actions { flex-wrap:wrap; justify-content:flex-end; } .v481-rail-controls button { width:2.2rem; height:2.2rem; } .v481-pinned-carousel { grid-template-columns:minmax(3.25rem,.24fr) minmax(0,1fr) minmax(3.25rem,.24fr); gap:.4rem; padding:.2rem 1.7rem .65rem; } .v481-pinned-carousel > .v481-pin-card,.v481-pinned-carousel.is-loading > span { min-height:17rem; } .v481-pinned-arrow { width:2.4rem; height:2.4rem; } .v481-pinned-arrow.is-previous { left:.35rem; } .v481-pinned-arrow.is-next { right:.35rem; } .v481-featured-badge { top:.65rem; left:.65rem; } .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) .v481-pin-copy { display:none; } .v481-pinned-bento { min-height:0; grid-template-rows:14rem repeat(2,8.5rem); gap:.55rem; } .v481-pin-copy { padding:.9rem; } .v481-pin-copy small { font-size:.58rem; } .v481-pin-copy strong { font-size:1.15rem; } .v481-feature-slot .v481-pin-copy strong { font-size:1.15rem; } .v481-discount-rail { grid-auto-columns:min(88vw,22rem); } .v481-directory-header { grid-template-columns:auto minmax(0,1fr); align-items:start; } .v481-directory-header > .v481-sort-control { grid-column:1 / -1; width:100%; } .v481-sort-control select { width:100%; } .v481-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .v481-directory-grid .v481-pin-card { min-height:14rem; } }
 `;
 
 function HomeFeatureStyles() {
