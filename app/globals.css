@@ -51785,3 +51785,40 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
     margin-bottom: 4rem;
   }
 }
+
+/* v48.15.9: Homepage section wrappers are layout-only; inner cards own all visual framing. */
+.featured-slider,
+.home-main > .content-section {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Keep the three adjacent feature rails on the same, tighter vertical rhythm. */
+.recent-reviews-section > .v481-feature-heading {
+  margin-top: clamp(2rem, 3vw, 2.75rem);
+}
+.recent-reviews-section > .recent-reviews-rail {
+  margin-bottom: clamp(2rem, 3vw, 2.75rem);
+}
+@media (max-width: 760px) {
+  .recent-reviews-section > .v481-feature-heading {
+    margin-top: 2.25rem;
+  }
+  .recent-reviews-section > .recent-reviews-rail {
+    margin-bottom: 2.25rem;
+  }
+}
+
+/* Side pins recede and leave equal breathing room around the centered active card. */
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
+  width: 88% !important;
+  transform: translateY(-50%) scale(.88) !important;
+}
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"] {
+  left: -86% !important;
+}
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
+  right: -86% !important;
+}
