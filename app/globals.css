@@ -50140,14 +50140,20 @@ body {
 .v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
 .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
   position: absolute !important;
-  top: 50%;
+  top: 50% !important;
   z-index: 1;
   width: 90% !important;
   opacity: .5;
   transform: translateY(-50%) scale(.9) !important;
 }
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"] { left: -72%; }
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] { right: -72%; }
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"] {
+  right: auto !important;
+  left: -72% !important;
+}
+.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
+  right: -72% !important;
+  left: auto !important;
+}
 @media (max-width: 680px) {
   .v481-pinned-stage { padding-inline: .25rem; }
   .v481-pinned-carousel { width: min(calc(100% - 6.2rem), 17rem); }
@@ -51755,3 +51761,27 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
 
 /* Keep the requested Pinned Series badge copy in title case. */
 .v481-featured-badge { text-transform: none; }
+
+/* v48.15.8: Recent Reviews must not own a painted outer container. */
+.recent-reviews-section {
+  display: contents !important;
+}
+.recent-reviews-section > .v481-feature-heading,
+.recent-reviews-section > .recent-reviews-rail {
+  width: var(--page);
+  margin-inline: auto;
+}
+.recent-reviews-section > .v481-feature-heading {
+  margin-top: clamp(4rem, 7vw, 6.5625rem);
+}
+.recent-reviews-section > .recent-reviews-rail {
+  margin-bottom: clamp(4rem, 7vw, 6.5625rem);
+}
+@media (max-width: 760px) {
+  .recent-reviews-section > .v481-feature-heading {
+    margin-top: 4rem;
+  }
+  .recent-reviews-section > .recent-reviews-rail {
+    margin-bottom: 4rem;
+  }
+}
