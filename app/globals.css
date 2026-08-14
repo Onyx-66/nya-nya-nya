@@ -50140,6 +50140,7 @@ body {
 @media (max-width: 680px) {
   .v481-pinned-stage { padding-inline: .6rem; }
   .v481-pinned-carousel { grid-template-columns: minmax(0, 1fr) !important; }
+  .v481-pinned-carousel > .v481-pin-card[data-pin-position="0"] { grid-column: 1 !important; }
   .v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
   .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] { display: none; }
 }
@@ -51717,6 +51718,21 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
     padding-top: 64px;
     padding-bottom: 64px;
   }
+}
+
+/* Remove the Reviews rail frame in every theme while preserving the individual review cards. */
+.recent-reviews-section > .v481-feature-heading,
+.recent-reviews-section > .recent-reviews-rail {
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.recent-reviews-section > .recent-reviews-rail::before,
+.recent-reviews-section > .recent-reviews-rail::after {
+  display: none !important;
+  content: none !important;
 }
 
 /* Keep the requested Pinned Series badge copy in title case. */

@@ -2998,7 +2998,6 @@ function TrendingShowcase() {
               className={`ranked-card${index < 3 ? ` is-top-${index + 1}` : ""}`}
               key={item.id}
             >
-              <span>{String(index + 1).padStart(2, "0")}</span>
               <SeriesCardView
                 item={liveSeriesCard(item)}
                 hideSubtitle
