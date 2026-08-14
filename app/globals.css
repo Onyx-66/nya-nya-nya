@@ -51871,3 +51871,18 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
 .featured-slider-shade {
   display: none !important;
 }
+
+/* v48.16.3: The persistent outer strip was the native root scrollbar gutter,
+   not an application section frame. Keep document scrolling, but remove the
+   browser scrollbar chrome that visually extends beyond the site shell. */
+html,
+body {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
