@@ -53421,3 +53421,120 @@ body::-webkit-scrollbar {
     font-size: .76rem;
   }
 }
+
+/* v48.21.0: merge the old discount content order into the current horizontal red-pink card. */
+.v481-discounts-section .v481-ticket {
+  height: 31rem;
+  min-height: 31rem;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.v481-discounts-section .v481-ticket-cover {
+  height: 100%;
+  min-height: 0;
+}
+
+.v481-discounts-section .v481-ticket-cover picture,
+.v481-discounts-section .v481-ticket-cover picture > img,
+.v481-discounts-section .v481-ticket-cover > img {
+  height: 100%;
+}
+
+.v481-discounts-section .v481-ticket-copy {
+  align-content: start;
+  grid-template-rows: auto auto auto auto;
+  gap: .55rem;
+  padding-top: 1rem;
+}
+
+.v481-discounts-section .v481-ticket-copy > strong {
+  align-self: start;
+  margin-top: -.3rem;
+}
+
+.v481-discounts-section .v481-ticket-divider {
+  margin-block: .1rem .25rem;
+}
+
+.v481-discounts-section .v481-ticket-chapters {
+  margin-top: .25rem;
+}
+
+.v481-discounts-section .v481-ticket-prices.is-compact {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: .55rem;
+  width: 100%;
+  margin-top: .15rem;
+  overflow: hidden;
+}
+
+.v481-discounts-section .v481-ticket-prices.is-compact s {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #a9bfd0 !important;
+  font-size: clamp(.74rem, 1.45vw, .98rem);
+  text-decoration-color: #7690a5;
+  white-space: nowrap;
+}
+
+.v481-discounts-section .v481-ticket-prices.is-compact b {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #58b9ff !important;
+  font-size: clamp(1.08rem, 2.1vw, 1.42rem);
+  text-shadow: 0 0 .8rem rgb(52 166 255 / 22%);
+  white-space: nowrap;
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact {
+  position: relative;
+  top: -.5rem;
+  align-self: start;
+  margin-top: .45rem;
+  padding-top: 0;
+}
+
+.v481-discounts-section .v481-ticket-countdown-box {
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket {
+    height: 16.25rem;
+    min-height: 16.25rem;
+  }
+
+  .v481-discounts-section .v481-ticket-copy {
+    padding-top: .75rem;
+    gap: .34rem;
+  }
+
+  .v481-discounts-section .v481-ticket-copy > strong {
+    margin-top: -.2rem;
+  }
+
+  .v481-discounts-section .v481-ticket-prices.is-compact {
+    gap: .28rem;
+  }
+
+  .v481-discounts-section .v481-ticket-prices.is-compact s {
+    font-size: .66rem;
+  }
+
+  .v481-discounts-section .v481-ticket-prices.is-compact b {
+    font-size: .95rem;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    top: -.35rem;
+    margin-top: .55rem;
+  }
+}
+
+/* v48.21.0 height parity: let the cover fill the card through the border box. */
+.v481-discounts-section .v481-ticket-cover {
+  height: calc(100% + 2px);
+  margin-block: -1px;
+}
