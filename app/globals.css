@@ -53021,3 +53021,192 @@ body::-webkit-scrollbar {
     mask: none;
   }
 }
+
+/* v48.19.0: horizontal Discounts tickets with a scoped red-pink promotion accent. */
+.v481-discounts-section {
+  --discount-pink: #ff4f87;
+  --discount-pink-soft: #ff8fb3;
+  --discount-pink-deep: #e62f70;
+}
+
+.v481-discounts-section > .v481-feature-heading > div:first-child > span {
+  border-color: color-mix(in srgb, var(--discount-pink) 62%, var(--line));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--discount-pink) 22%, var(--surface-strong)), color-mix(in srgb, var(--discount-pink) 8%, var(--surface)));
+  color: var(--discount-pink-soft);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 .9rem color-mix(in srgb, var(--discount-pink) 18%, transparent);
+}
+
+.v481-discounts-section > .v481-feature-heading .latest-all-action {
+  border-color: color-mix(in srgb, var(--discount-pink) 64%, var(--line));
+  background: color-mix(in srgb, var(--surface-strong) 80%, var(--discount-pink) 20%);
+  color: var(--discount-pink-soft);
+  box-shadow: 0 .35rem 1rem color-mix(in srgb, var(--discount-pink) 16%, transparent);
+}
+
+.v481-discounts-section > .v481-feature-heading .latest-all-action:is(:hover, :focus-visible) {
+  border-color: var(--discount-pink-soft);
+  background: color-mix(in srgb, var(--discount-pink) 30%, var(--surface-strong));
+  color: #fff;
+  box-shadow: 0 .45rem 1.2rem color-mix(in srgb, var(--discount-pink) 26%, transparent);
+}
+
+.v481-discounts-section .v481-ticket {
+  --discount-pink-angle: 0deg;
+  isolation: isolate;
+  grid-template-columns: minmax(8rem, 34%) .8rem minmax(0, 1fr);
+  min-height: 18rem;
+  border-color: color-mix(in srgb, var(--discount-pink) 48%, var(--line));
+  background: linear-gradient(120deg, color-mix(in srgb, #5b1637 78%, var(--surface-strong)), color-mix(in srgb, #28132c 94%, var(--surface)));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 .8rem 1.8rem rgb(2 14 31 / 24%), 0 0 1.1rem color-mix(in srgb, var(--discount-pink) 10%, transparent);
+}
+
+.v481-discounts-section .v481-ticket::after {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--discount-pink-angle), transparent 0 56%, var(--discount-pink-soft) 64%, var(--discount-pink) 74%, transparent 84% 100%);
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: discounts-pink-orbit 3.2s linear infinite;
+}
+
+.v481-discounts-section .v481-ticket:is(:hover, :focus-visible) {
+  border-color: color-mix(in srgb, var(--discount-pink-soft) 78%, var(--line));
+  background: linear-gradient(120deg, color-mix(in srgb, #7b1d49 80%, var(--surface-strong)), color-mix(in srgb, #351638 94%, var(--surface)));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%), 0 1rem 2rem rgb(32 3 23 / 27%), 0 0 1.35rem color-mix(in srgb, var(--discount-pink) 20%, transparent);
+}
+
+.v481-discounts-section .v481-ticket-ribbon {
+  background: linear-gradient(135deg, var(--discount-pink-deep), var(--discount-pink) 54%, var(--discount-pink-soft));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--discount-pink-deep) 42%, transparent);
+}
+
+.v481-discounts-section .v481-ticket-cover {
+  min-height: 100%;
+}
+
+.v481-discounts-section .v481-ticket-copy {
+  min-width: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgb(31 8 29 / 22%), rgb(12 12 28 / 52%));
+}
+
+@property --discount-pink-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes discounts-pink-orbit {
+  to { --discount-pink-angle: 360deg; }
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket {
+    grid-template-columns: minmax(6.75rem, 36%) .55rem minmax(0, 1fr);
+    min-height: 16.25rem;
+  }
+
+  .v481-discounts-section .v481-ticket-cover {
+    min-height: 100%;
+    aspect-ratio: auto;
+  }
+
+  .v481-discounts-section .v481-ticket-copy {
+    align-content: center;
+    min-width: 0;
+    min-height: 0;
+    padding: .95rem .85rem .95rem .75rem;
+  }
+
+  .v481-discounts-section .v481-ticket-copy > strong {
+    max-width: 100%;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .v481-discounts-section .v481-ticket-prices {
+    align-items: baseline;
+    gap: .35rem;
+  }
+
+  .v481-discounts-section .v481-ticket-prices s,
+  .v481-discounts-section .v481-ticket-prices b {
+    font-size: .78rem;
+  }
+
+  .v481-discounts-section .v481-ticket-time-grid {
+    gap: .22rem;
+  }
+
+  .v481-discounts-section .v481-ticket-time-grid b {
+    min-height: 2.25rem;
+    padding-inline: .2rem;
+    font-size: .72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v481-discounts-section .v481-ticket::after {
+    animation: none;
+    background: var(--discount-pink);
+  }
+}
+
+/* v48.19.0 grid correction: keep the existing ticket parts in explicit horizontal tracks. */
+.v481-discounts-section .v481-ticket-cover {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.v481-discounts-section .v481-ticket-perforation {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.v481-discounts-section .v481-ticket-copy {
+  grid-column: 3;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+/* v48.19.0 overflow guard: every horizontal ticket content row stays inside the copy track. */
+.v481-discounts-section .v481-ticket-copy > strong,
+.v481-discounts-section .v481-ticket-prices,
+.v481-discounts-section .v481-ticket-countdown,
+.v481-discounts-section .v481-ticket-chapters {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.v481-discounts-section .v481-ticket-copy > strong {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.v481-discounts-section .v481-ticket-countdown,
+.v481-discounts-section .v481-ticket-prices {
+  overflow: hidden;
+}
+
+/* v48.19.0 scope correction: preserve the existing blue card, copy, price, timer, and pill surfaces. */
+.v481-discounts-section .v481-ticket {
+  background: linear-gradient(120deg, rgb(22 62 102 / 98%), rgb(11 34 61 / 98%));
+}
+
+.v481-discounts-section .v481-ticket:is(:hover, :focus-visible) {
+  background: linear-gradient(120deg, rgb(22 62 102 / 98%), rgb(11 34 61 / 98%));
+}
+
+.v481-discounts-section .v481-ticket-copy {
+  background: linear-gradient(180deg, rgb(4 18 32 / 56%), rgb(4 18 32 / 94%));
+}
