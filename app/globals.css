@@ -52957,3 +52957,67 @@ body::-webkit-scrollbar {
   mask: none !important;
   transform: none !important;
 }
+
+/* v48.18.3: vertically center row details and animate only the top-three rank badges. */
+.hot-this-week .hot-week-copy {
+  align-self: center;
+  justify-content: center;
+  min-height: 0;
+  padding-top: 0;
+}
+
+.hot-this-week .hot-week-rank {
+  position: absolute;
+  isolation: isolate;
+}
+
+.hot-this-week .hot-week-rank b {
+  position: relative;
+  z-index: 2;
+}
+
+.hot-this-week .hot-week-list-card:is(.is-top-1, .is-top-2, .is-top-3) .hot-week-rank::before {
+  position: absolute;
+  z-index: 1;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--hot-rank-angle),
+    transparent 0 56%,
+    color-mix(in srgb, var(--hot-rank-accent) 42%, #fff) 64%,
+    var(--hot-rank-accent) 74%,
+    transparent 84% 100%
+  );
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: hot-rank-orbit 2.8s linear infinite;
+}
+
+.hot-this-week .hot-week-list-card.is-top-1 .hot-week-rank,
+.hot-this-week .hot-week-list-card.is-top-2 .hot-week-rank,
+.hot-this-week .hot-week-list-card.is-top-3 .hot-week-rank {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hot-rank-accent) 46%, transparent), 0 .14rem .42rem color-mix(in srgb, var(--hot-rank-accent) 28%, transparent), 0 0 .8rem color-mix(in srgb, var(--hot-rank-accent) 20%, transparent);
+}
+
+@property --hot-rank-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes hot-rank-orbit {
+  to { --hot-rank-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hot-this-week .hot-week-list-card:is(.is-top-1, .is-top-2, .is-top-3) .hot-week-rank::before {
+    animation: none;
+    background: color-mix(in srgb, var(--hot-rank-accent) 78%, transparent);
+    -webkit-mask: none;
+    mask: none;
+  }
+}
