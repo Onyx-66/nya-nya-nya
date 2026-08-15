@@ -53538,3 +53538,53 @@ body::-webkit-scrollbar {
   height: calc(100% + 2px);
   margin-block: -1px;
 }
+
+/* v48.21.1 visual correction: restore visible title contrast and lift the compact countdown above the cover edge. */
+.v481-discounts-section .v481-ticket {
+  overflow: visible;
+}
+
+.v481-discounts-section .v481-ticket-copy {
+  overflow: visible;
+  position: relative;
+}
+
+.v481-discounts-section .v481-ticket-copy > strong {
+  color: #f3f8ff !important;
+  text-shadow: 0 0 .55rem rgb(18 53 84 / 42%);
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact {
+  position: absolute;
+  z-index: 8;
+  top: -1.15rem;
+  right: .85rem;
+  left: .85rem;
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact .v481-ticket-countdown-box {
+  width: auto;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    top: -.9rem;
+    right: .55rem;
+    left: .55rem;
+  }
+}
+
+/* v48.21.2 visual capture correction: reserve rail space for the elevated countdown. */
+.v481-discounts-section .v481-discount-rail {
+  padding-top: 1.45rem;
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-discount-rail {
+    padding-top: 1.2rem;
+  }
+}
