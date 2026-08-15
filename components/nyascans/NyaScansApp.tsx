@@ -4292,9 +4292,7 @@ function HomeView({
         <PinnedSeriesSection />
 
         <RecentReviewsSection />
-        <DiscountsSection
-          enabled={premiumEconomyPublic && runtimeFeatures.payments}
-        />
+        <DiscountsSection enabled={premiumEconomyPublic} />
 
         <section className="updates-section">
           <div className="page-wrap">

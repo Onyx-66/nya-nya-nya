@@ -5,7 +5,6 @@ import {
   getCommercialSettingsDocument,
   requirePaidEconomyPublicDocument,
 } from "@/lib/server/commercial-settings";
-import { requireFeature } from "@/lib/server/feature-flags";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
@@ -180,7 +179,6 @@ const discountSelect = `
 
 export async function listPublicDiscounts(sort: "discount" | "expiry") {
   await requirePaidEconomyPublicDocument();
-  await requireFeature("payments", database());
   const order =
     sort === "expiry"
       ? "datetime(discount.ends_at), discount.id"
