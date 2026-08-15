@@ -52666,3 +52666,128 @@ body::-webkit-scrollbar {
   -webkit-mask: none !important;
   mask: none !important;
 }
+
+/* v48.17.3: match the supplied mobile reference for Hot This Week geometry. */
+.hot-this-week .hot-week-tabs {
+  width: calc(100% - 1rem);
+  margin-inline: .5rem;
+}
+
+.hot-this-week .hot-week-list-card {
+  grid-template-columns: 4.55rem minmax(0, 1fr);
+  column-gap: .58rem;
+  overflow: visible !important;
+}
+
+.hot-this-week .hot-week-cover {
+  grid-column: 1;
+}
+
+.hot-this-week .hot-week-copy {
+  grid-column: 2;
+  grid-template-rows: 1.34rem 1.16rem 1.16rem 1.24rem;
+  row-gap: .1rem;
+  align-content: center;
+}
+
+.hot-this-week .hot-week-title-link {
+  min-height: 1.34rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.hot-this-week .hot-week-title-link h3 {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.16;
+}
+
+.hot-this-week .hot-week-genres,
+.hot-this-week .hot-week-metrics,
+.hot-this-week .hot-week-rating {
+  min-height: 0;
+  height: 100%;
+}
+
+.hot-this-week .hot-week-rank {
+  top: -.34rem;
+  left: -.82rem;
+  width: 1.76rem;
+  height: 1.76rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+.hot-this-week .hot-week-rank b {
+  display: block;
+  width: 100%;
+  text-align: center;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-list-card {
+    grid-template-columns: 3.95rem minmax(0, 1fr);
+    column-gap: .52rem;
+  }
+
+  .hot-this-week .hot-week-copy {
+    grid-template-rows: 1.3rem 1.14rem 1.14rem 1.22rem;
+    row-gap: .1rem;
+  }
+
+  .hot-this-week .hot-week-title-link {
+    min-height: 1.3rem;
+  }
+
+  .hot-this-week .hot-week-rank {
+    top: -.38rem;
+    left: -.84rem;
+    width: 1.72rem;
+    height: 1.72rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .hot-this-week .hot-week-list-card {
+    grid-template-columns: 3.95rem minmax(0, 1fr);
+    column-gap: .5rem;
+  }
+
+  .hot-this-week .hot-week-copy {
+    grid-template-rows: 1.28rem 1.12rem 1.12rem 1.2rem;
+  }
+
+  .hot-this-week .hot-week-rank {
+    top: -.4rem;
+    left: -.86rem;
+    width: 1.68rem;
+    height: 1.68rem;
+  }
+}
+
+/* v48.17.3 cascade correction: preserve the shared mobile content gutter. */
+.hot-this-week .hot-week-list-card {
+  padding-left: 2.75rem;
+  padding-right: .5rem;
+}
+
+.hot-this-week .hot-week-copy {
+  text-align: left;
+}
+
+.hot-this-week .hot-week-title-link h3 {
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-list-card {
+    padding-left: 2.75rem;
+    padding-right: .5rem;
+  }
+}
