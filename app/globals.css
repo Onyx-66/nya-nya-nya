@@ -52791,3 +52791,58 @@ body::-webkit-scrollbar {
     padding-right: .5rem;
   }
 }
+
+/* v48.18.0: Most Popular naming, orange section accents, and tighter mobile alignment. */
+.hot-this-week {
+  --hot-popular-accent: #ff7043;
+}
+
+.hot-this-week .hot-week-heading {
+  width: calc(100% - 1rem);
+  margin-inline: .5rem;
+}
+
+.hot-this-week .hot-week-heading-icon {
+  border-color: color-mix(in srgb, var(--hot-popular-accent) 48%, var(--line));
+  background: color-mix(in srgb, var(--hot-popular-accent) 14%, var(--surface));
+  color: var(--hot-popular-accent);
+}
+
+.hot-this-week .hot-week-heading > a.latest-all-action {
+  border-color: color-mix(in srgb, var(--hot-popular-accent) 48%, var(--line));
+  background: color-mix(in srgb, var(--surface-strong) 84%, var(--hot-popular-accent) 16%);
+  color: var(--hot-popular-accent);
+}
+
+.hot-this-week .hot-week-heading > a.latest-all-action:is(:hover, :focus-visible) {
+  border-color: color-mix(in srgb, var(--hot-popular-accent) 76%, var(--line));
+  background: color-mix(in srgb, var(--hot-popular-accent) 24%, var(--surface-strong));
+  box-shadow: 0 .45rem 1.2rem rgb(0 0 0 / 18%), 0 0 1rem color-mix(in srgb, var(--hot-popular-accent) 20%, transparent);
+}
+
+.hot-this-week .hot-week-list-card {
+  column-gap: .7rem;
+  padding-left: 1.65rem;
+  padding-right: .5rem;
+}
+
+.hot-this-week .hot-week-copy,
+.hot-this-week .hot-week-title-link h3 {
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-list-card {
+    column-gap: .7rem;
+    padding-left: 1.65rem;
+    padding-right: .5rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .hot-this-week .hot-week-rank {
+    width: 1.5rem;
+    height: 1.5rem;
+    left: -.72rem;
+  }
+}

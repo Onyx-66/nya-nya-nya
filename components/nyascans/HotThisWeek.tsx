@@ -163,15 +163,15 @@ export function HotThisWeek() {
   }, [period, revision]);
 
   return (
-    <section className="content-section page-wrap hot-this-week" aria-labelledby="hot-this-week-title">
+    <section className="content-section page-wrap hot-this-week" aria-labelledby="most-popular-title">
       <header className="hot-week-heading">
         <div className="hot-week-title-group">
           <span className="hot-week-heading-icon" aria-hidden="true"><Fire size={20} weight="fill" /></span>
           <div>
-            <h2 id="hot-this-week-title">Hot This Week</h2>
+            <h2 id="most-popular-title">Most Popular</h2>
           </div>
         </div>
-        <a href="/browse?sort=viewed">Browse Series <ArrowRight size={16} /></a>
+        <a className="button button-secondary latest-all-action" href="/browse?sort=viewed">Browse Series <ArrowRight size={16} /></a>
       </header>
       <nav className="hot-week-tabs" aria-label="Hot ranking period">
         {HOT_PERIODS.map((option) => (
@@ -208,7 +208,7 @@ export function HotThisWeek() {
             >
               <a className="hot-week-cover" href={`/title/${record.slug}`}>
                 <span className="hot-week-rank" aria-label={`Rank ${record.rank}`}>
-                  <b>{String(record.rank).padStart(2, "0")}</b>
+                  <b>{record.rank}</b>
                   <small>rank</small>
                 </span>
                 <HotMovement movement={record.rankMovement} />

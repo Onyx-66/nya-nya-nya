@@ -186,12 +186,7 @@ export async function GET(request: Request) {
           AND s.status NOT IN ('DRAFT', 'REJECTED', 'ARCHIVED')
           AND s.rights_status IN
             ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
-          AND (
-            COALESCE(wp.chapterStarts, 0)
-            + COALESCE(wc.commentCount, 0)
-            + COALESCE(wr.reactionCount, 0)
-            + COALESCE(wcr.reactionCount, 0)
-          ) > 0
+          -- Keep nine public ranking slots populated; zero-activity titles rank after active titles.
         ORDER BY uniqueReaders DESC,
                  chapterStarts DESC,
                  commentCount DESC,
