@@ -52846,3 +52846,34 @@ body::-webkit-scrollbar {
     left: -.72rem;
   }
 }
+
+/* v48.18.1: final Most Popular CTA state — neutral transparent Browse button. */
+.hot-this-week .hot-week-heading > a.latest-all-action {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.hot-this-week .hot-week-heading > a.latest-all-action:is(:hover, :focus-visible) {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+  color: var(--text);
+  box-shadow: none;
+  transform: none;
+}
+
+/* v48.18.1 cascade correction: preserve the filled active Weekly tab. */
+.hot-this-week .hot-week-tabs button {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  box-shadow: none !important;
+}
+
+.hot-this-week .hot-week-tabs button.is-active {
+  border: 0 !important;
+  background: linear-gradient(135deg, #ff7a45, #e94b2f) !important;
+  color: #fff !important;
+  box-shadow: 0 .3rem .75rem rgb(236 83 47 / 25%) !important;
+}

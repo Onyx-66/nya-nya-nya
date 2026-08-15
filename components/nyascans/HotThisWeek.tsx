@@ -171,7 +171,7 @@ export function HotThisWeek() {
             <h2 id="most-popular-title">Most Popular</h2>
           </div>
         </div>
-        <a className="button button-secondary latest-all-action" href="/browse?sort=viewed">Browse Series <ArrowRight size={16} /></a>
+        <a className="button button-secondary latest-all-action" href="/browse?sort=viewed">Browse <ArrowRight size={16} /></a>
       </header>
       <nav className="hot-week-tabs" aria-label="Hot ranking period">
         {HOT_PERIODS.map((option) => (
