@@ -53340,3 +53340,84 @@ body::-webkit-scrollbar {
     background: var(--discount-pink) !important;
   }
 }
+
+/* v48.20.0: compact homepage Discounts countdown consolidation and vertical rhythm. */
+.v481-discounts-section .v481-ticket-copy {
+  align-content: start;
+  gap: .45rem;
+}
+
+.v481-discounts-section .v481-ticket-copy > strong {
+  margin-top: -.3rem;
+}
+
+.v481-discounts-section .v481-ticket-divider {
+  margin-top: .1rem;
+  margin-bottom: .35rem;
+}
+
+.v481-discounts-section .v481-ticket-chapters {
+  margin-top: .3rem;
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact {
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin-top: auto;
+  padding-top: .8rem;
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact > svg {
+  flex: 0 0 auto;
+}
+
+.v481-discounts-section .v481-ticket-countdown-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  padding: .58rem .72rem;
+  border: 1px solid rgb(243 202 100 / 34%);
+  border-radius: .62rem;
+  background: rgb(85 61 15 / 28%);
+  color: #ffe7a3;
+  font-size: clamp(.78rem, 1.5vw, .98rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 0 .8rem rgb(246 194 73 / 12%);
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-under-day .v481-ticket-countdown-box {
+  border-color: rgb(86 179 248 / 42%);
+  background: rgb(19 77 125 / 30%);
+  color: #8fd0ff;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 0 .8rem rgb(52 166 255 / 14%);
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket-copy {
+    gap: .35rem;
+  }
+
+  .v481-discounts-section .v481-ticket-copy > strong {
+    margin-top: -.2rem;
+  }
+
+  .v481-discounts-section .v481-ticket-chapters {
+    margin-top: .4rem;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    padding-top: .75rem;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown-box {
+    padding: .52rem .42rem;
+    font-size: .76rem;
+  }
+}

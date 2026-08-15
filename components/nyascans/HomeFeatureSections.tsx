@@ -511,7 +511,13 @@ export function PinnedSeriesDirectory({
   );
 }
 
-function DiscountCountdown({ endsAt }: { endsAt: string }) {
+function DiscountCountdown({
+  endsAt,
+  compact = false,
+}: {
+  endsAt: string;
+  compact?: boolean;
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -525,7 +531,24 @@ function DiscountCountdown({ endsAt }: { endsAt: string }) {
   const hours = Math.floor((remaining % 86_400_000) / 3_600_000);
   const minutes = Math.floor((remaining % 3_600_000) / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1_000);
-  const label = remaining === 0 ? "Offer ended" : `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  const underOneDay = remaining > 0 && remaining < 86_400_000;
+  const compactValue = remaining === 0
+    ? "Offer ended"
+    : underOneDay
+      ? `${hours}h ${minutes}m ${seconds}s`
+      : `${days}d ${hours}h ${minutes}m`;
+  const label = remaining === 0
+    ? "Offer ended"
+    : `${days} days, ${hours} hours, ${minutes} minutes, ${seconds} seconds remaining`;
+
+  if (compact) {
+    return (
+      <span className={`v481-ticket-countdown is-compact ${underOneDay ? "is-under-day" : "is-over-day"}`} aria-label={`Time remaining: ${label}`}>
+        <Timer size={19} aria-hidden="true" />
+        <span className="v481-ticket-countdown-box">{compactValue}</span>
+      </span>
+    );
+  }
 
   return (
     <span className="v481-ticket-countdown" aria-label={`Time remaining: ${label}`}>
@@ -565,11 +588,13 @@ function DiscountTicket({
         <strong>{record.seriesTitle}</strong>
         <span className="v481-ticket-divider" aria-hidden="true"><i /></span>
         <span className="v481-ticket-chapters"><Books size={15} weight="fill" /> Chapters: {record.eligibleChapterCount}</span>
-        <span className={`v481-ticket-prices${directory ? "" : " is-compact"}`}>
-          {directory ? <s>{coinLabel(record.originalPrice, settings)}</s> : null}
-          <b>{coinLabel(record.reducedPrice, settings)}</b>
-        </span>
-        <DiscountCountdown endsAt={record.endsAt} />
+        {directory ? (
+          <span className="v481-ticket-prices">
+            <s>{coinLabel(record.originalPrice, settings)}</s>
+            <b>{coinLabel(record.reducedPrice, settings)}</b>
+          </span>
+        ) : null}
+        <DiscountCountdown endsAt={record.endsAt} compact={!directory} />
       </span>
     </a>
   );
