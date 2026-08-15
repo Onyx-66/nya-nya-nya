@@ -565,8 +565,8 @@ function DiscountTicket({
         <strong>{record.seriesTitle}</strong>
         <span className="v481-ticket-divider" aria-hidden="true"><i /></span>
         <span className="v481-ticket-chapters"><Books size={15} weight="fill" /> Chapters: {record.eligibleChapterCount}</span>
-        <span className="v481-ticket-prices">
-          <s>{coinLabel(record.originalPrice, settings)}</s>
+        <span className={`v481-ticket-prices${directory ? "" : " is-compact"}`}>
+          {directory ? <s>{coinLabel(record.originalPrice, settings)}</s> : null}
           <b>{coinLabel(record.reducedPrice, settings)}</b>
         </span>
         <DiscountCountdown endsAt={record.endsAt} />
