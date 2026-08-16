@@ -53666,3 +53666,129 @@ body::-webkit-scrollbar {
     padding: 0;
   }
 }
+
+
+/* v48.22.2: unify mobile discount controls and add card-wide light motion. */
+.v481-discounts-section .v481-ticket::after {
+  z-index: 6;
+  opacity: 1;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--discount-pink-angle),
+    transparent 0 56%,
+    var(--discount-pink-soft) 64%,
+    var(--discount-pink) 74%,
+    transparent 84% 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: discounts-pink-orbit 3.2s linear infinite;
+}
+
+.v481-discounts-section .v481-ticket-copy::after {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: -25%;
+  width: 150%;
+  height: 2px;
+  transform: translateX(-115%) rotate(-9deg);
+  transform-origin: center;
+  background: linear-gradient(90deg, transparent 0 18%, rgb(255 255 255 / 8%) 38%, var(--discount-pink-soft) 50%, var(--discount-pink) 56%, rgb(255 255 255 / 10%) 68%, transparent 86%);
+  box-shadow: 0 0 .8rem color-mix(in srgb, var(--discount-pink) 70%, transparent);
+  content: "";
+  pointer-events: none;
+  opacity: 0;
+  animation: discounts-lightning-sweep 4.8s ease-in-out infinite;
+}
+
+@keyframes discounts-lightning-sweep {
+  0%, 18% { opacity: 0; transform: translateX(-115%) rotate(-9deg); }
+  28% { opacity: .9; }
+  55% { opacity: .72; }
+  78%, 100% { opacity: 0; transform: translateX(115%) rotate(-9deg); }
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket-copy {
+    display: grid;
+    align-content: stretch;
+    grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr);
+    grid-template-rows: auto 1fr auto;
+    column-gap: .3rem;
+    row-gap: .3rem;
+    padding: .8rem .75rem;
+  }
+
+  .v481-discounts-section .v481-ticket-copy > strong {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    align-self: start;
+    margin: 0;
+  }
+
+  .v481-discounts-section .v481-ticket-divider {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-self: center;
+    margin: 0;
+  }
+
+  .v481-discounts-section .v481-ticket-chapters {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: end;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 2rem;
+    padding: .32rem .24rem;
+    border-color: rgb(72 181 255 / 54%);
+    border-radius: .62rem;
+    background: rgb(8 47 82 / 58%);
+    font-size: .55rem;
+    white-space: nowrap;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    position: relative;
+    grid-column: 2;
+    grid-row: 3;
+    align-self: end;
+    width: 100%;
+    min-width: 0;
+    margin: 0 0 .05rem;
+    padding: 0;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact > svg {
+    position: absolute;
+    z-index: 2;
+    margin-left: .75rem;
+    color: #ffe7a3;
+    pointer-events: none;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact .v481-ticket-countdown-box {
+    justify-content: center;
+    min-height: 2rem;
+    padding: .48rem 1.8rem .48rem 2.2rem;
+    border-radius: .62rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v481-discounts-section .v481-ticket::after,
+  .v481-discounts-section .v481-ticket-copy::after {
+    animation: none !important;
+  }
+
+  .v481-discounts-section .v481-ticket-copy::after {
+    opacity: .55;
+    transform: translateX(0) rotate(-9deg);
+  }
+}
