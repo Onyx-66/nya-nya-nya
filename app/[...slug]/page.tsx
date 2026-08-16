@@ -7,9 +7,7 @@ import {
 } from "@/app/chatgpt-auth";
 import { NyaScansApp, type AppView } from "@/components/nyascans/NyaScansApp";
 import { ApiError } from "@/lib/server/api";
-import { requirePaidEconomyPublicDocument } from "@/lib/server/commercial-settings";
 import { getActor } from "@/lib/server/policy";
-import { requireFeature } from "@/lib/server/feature-flags";
 import {
   publicPaidChapterPredicate,
   publicPaidSeriesPredicate,
@@ -179,14 +177,6 @@ export default async function CatchAllPage({
     ))
   ) {
     notFound();
-  }
-  if (resolved.view === "discounts") {
-    try {
-      await requirePaidEconomyPublicDocument();
-      await requireFeature("payments");
-    } catch {
-      notFound();
-    }
   }
   const user = await getAuthenticatedUser();
   let actor: Awaited<ReturnType<typeof getActor>> = null;

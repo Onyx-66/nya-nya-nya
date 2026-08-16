@@ -1,10 +1,7 @@
 import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
 import { auditStatement } from "@/lib/server/admin-utils";
-import {
-  getCommercialSettingsDocument,
-  requirePaidEconomyPublicDocument,
-} from "@/lib/server/commercial-settings";
+import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
@@ -187,7 +184,6 @@ const discountSelect = `
     LEFT JOIN chapters c ON c.id = discount.chapter_id`;
 
 export async function listPublicDiscounts(sort: "discount" | "expiry") {
-  await requirePaidEconomyPublicDocument();
   const order =
     sort === "expiry"
       ? "datetime(discount.ends_at), discount.id"
