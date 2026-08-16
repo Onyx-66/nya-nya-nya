@@ -53588,3 +53588,81 @@ body::-webkit-scrollbar {
     padding-top: 1.2rem;
   }
 }
+
+
+/* v48.22.1: responsive Discounts card layout correction. */
+.v481-discounts-section .v481-discount-rail {
+  padding-top: .2rem;
+}
+
+.v481-discounts-section .v481-ticket {
+  height: 11.5rem;
+  min-height: 11.5rem;
+  grid-template-columns: 12rem .8rem minmax(0, 1fr);
+}
+
+.v481-discounts-section .v481-ticket-cover {
+  width: 12rem;
+  height: 11.5rem;
+  min-height: 0;
+  margin: 0;
+  align-self: stretch;
+}
+
+.v481-discounts-section .v481-ticket-cover picture,
+.v481-discounts-section .v481-ticket-cover picture > img,
+.v481-discounts-section .v481-ticket-cover > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.v481-discounts-section .v481-ticket-copy {
+  align-content: start;
+  gap: .52rem;
+  padding: .9rem 1rem .9rem .9rem;
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact {
+  position: static;
+  inset: auto;
+  align-self: start;
+  width: 100%;
+  margin-top: .1rem;
+  padding: 0;
+}
+
+.v481-discounts-section .v481-ticket-countdown.is-compact .v481-ticket-countdown-box {
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket {
+    height: 12rem;
+    min-height: 12rem;
+    grid-template-columns: 8.25rem .55rem minmax(0, 1fr);
+  }
+
+  .v481-discounts-section .v481-ticket-cover {
+    width: 8.25rem;
+    height: 12rem;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .v481-discounts-section .v481-ticket-copy {
+    gap: .3rem;
+    padding: .8rem .75rem;
+  }
+
+  .v481-discounts-section .v481-ticket-prices.is-compact {
+    display: none;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    position: static;
+    inset: auto;
+    margin-top: .1rem;
+    padding: 0;
+  }
+}
