@@ -53924,3 +53924,54 @@ body::-webkit-scrollbar {
     background: linear-gradient(#091b30, #091b30) padding-box, var(--discount-pink) border-box;
   }
 }
+
+
+/* v48.22.4: tighten mobile discount controls and intensify the moving pink border. */
+.v481-discounts-section .v481-ticket::after {
+  padding: 1.5px;
+  background: linear-gradient(#091b30, #091b30) padding-box,
+    conic-gradient(
+      from var(--discount-review-angle),
+      transparent 0 42%,
+      rgb(255 241 247 / 92%) 52%,
+      var(--discount-pink-soft) 58%,
+      var(--discount-pink) 65%,
+      rgb(255 255 255 / 82%) 70%,
+      transparent 80% 100%
+    ) border-box;
+  filter: drop-shadow(0 0 .55rem rgb(255 79 135 / 35%));
+  animation-duration: 3.8s;
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket-copy {
+    gap: .42rem;
+    padding-top: .95rem;
+    padding-bottom: .6rem;
+  }
+
+  .v481-discounts-section .v481-ticket-chapters {
+    min-height: 1.8rem;
+    padding: .25rem .48rem;
+    font-size: .58rem;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    align-self: flex-start;
+    width: max-content;
+    max-width: 100%;
+    margin-top: .18rem;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact .v481-ticket-countdown-box {
+    min-height: 1.8rem;
+    padding: .4rem 1.35rem .4rem 1.85rem;
+    font-size: .72rem;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact > svg {
+    margin-left: .58rem;
+    width: 17px;
+    height: 17px;
+  }
+}
