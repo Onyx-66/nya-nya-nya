@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       const actor = await getActor().catch(() => null);
       if (
         !actor ||
-        !actor.adminMfaVerified ||
+        !actor.adminMfaEnrolled ||
         !actorHasCapability(actor, "content.series.manage")
       ) {
         throw new ApiError(

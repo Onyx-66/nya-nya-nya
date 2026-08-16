@@ -191,20 +191,20 @@ export function AdminMfaGate({
           <span className="admin-mfa-orbit"><Fingerprint size={46} weight="duotone" /></span>
           <span className="admin-mfa-visual-mark"><ShieldCheck size={54} weight="duotone" /></span>
           <strong>Protected operations</strong>
-          <p>One verified identity. One short-lived administrator session.</p>
+          <p>One configured account. Direct administrator access.</p>
         </div>
         <div className="admin-mfa-content">
           <header>
             <span className="admin-mfa-icon"><ShieldCheck size={28} weight="duotone" /></span>
             <div>
               <p className="eyebrow">Protected administration</p>
-              <h1 id="admin-mfa-title">Two-factor verification</h1>
+              <h1 id="admin-mfa-title">Set up 2FA to continue</h1>
             </div>
           </header>
           <ol className="admin-mfa-progress" aria-label="Verification progress">
             <li className="is-complete"><Check aria-hidden="true" /><span>Account</span></li>
-            <li className={busy ? "is-complete" : "is-active"} aria-current={!busy ? "step" : undefined}><Key aria-hidden="true" /><span>Code</span></li>
-            <li className={busy ? "is-active" : ""} aria-current={busy ? "step" : undefined}><LockKey aria-hidden="true" /><span>Validation</span></li>
+            <li className={busy ? "is-complete" : "is-active"} aria-current={!busy ? "step" : undefined}><Key aria-hidden="true" /><span>Setup</span></li>
+            <li className={busy ? "is-active" : ""} aria-current={busy ? "step" : undefined}><LockKey aria-hidden="true" /><span>Confirm</span></li>
           </ol>
           <p className="admin-mfa-intro" id="admin-mfa-instructions">
             {enrollmentReady
@@ -293,7 +293,7 @@ export function AdminMfaGate({
           ) : message ? <p className="admin-mfa-error" role="alert">{message}</p> : null}
           <footer id="admin-mfa-security-note">
             <LockKey size={17} aria-hidden="true" />
-            <span><strong>One-hour protected session</strong>No authenticator secret or verification code is written to application logs.</span>
+            <span><strong>One-time account setup</strong>Enable an authenticator once; future administrator-panel opens do not require another challenge.</span>
           </footer>
         </div>
       </section>

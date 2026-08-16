@@ -47,7 +47,7 @@ export default async function AdminChapterManagementPage({
   ) {
     forbidden();
   }
-  if (actor.adminMfaRequired && !actor.adminMfaVerified) {
+  if (actor.adminMfaRequired && !actor.adminMfaEnrolled) {
     return (
       <AdminMfaGate
         displayName={actor.displayName}

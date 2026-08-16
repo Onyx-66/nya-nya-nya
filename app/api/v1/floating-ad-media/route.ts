@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     if (!row?.imageKey) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
     if (!row.isActive) {
       const actor = await getActor().catch(() => null);
-      if (!actor || !actor.adminMfaVerified || !actorHasCapability(actor, "announcements.manage")) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
+      if (!actor || !actor.adminMfaEnrolled || !actorHasCapability(actor, "announcements.manage")) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");
     }
     const object = await bucket.get(row.imageKey);
     if (!object) throw new ApiError(404, "MEDIA_NOT_FOUND", "This ad image is not available.");

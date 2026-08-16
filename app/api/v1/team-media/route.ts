@@ -62,7 +62,7 @@ export async function GET(request: Request) {
         : null;
       if (
         !actor ||
-        (!(actor.adminMfaVerified && actorHasCapability(actor, "content.teams.manage")) &&
+        (!(actor.adminMfaEnrolled && actorHasCapability(actor, "content.teams.manage")) &&
           !pendingCreator &&
           !actor.teamIds.includes(query.id))
       ) {

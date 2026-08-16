@@ -63,7 +63,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
     forbidden();
   }
 
-  if (actor.adminMfaRequired && !actor.adminMfaVerified) {
+  if (actor.adminMfaRequired && !actor.adminMfaEnrolled) {
     return (
       <AdminMfaGate
         displayName={actor.displayName}

@@ -5347,10 +5347,10 @@ function SecurityPanel() {
           {[
             [
               "Mandatory authenticator 2FA",
-              mfa?.verified
-                ? `This administrator session is TOTP-verified and expires ${mfa.expiresAt ? new Date(mfa.expiresAt).toLocaleString() : "within one hour"}.`
-                : "Administrator routes require a confirmed TOTP authenticator and a short-lived, device-bound session.",
-              Boolean(mfa?.enrolled && mfa?.verified),
+              mfa?.enrolled
+                ? "A TOTP authenticator is enabled on this administrator account. Future admin-panel opens do not require another challenge."
+                : "This administrator must enable a TOTP authenticator once before opening the administration panel.",
+              Boolean(mfa?.enrolled),
             ],
             [
               "Attempt limits and sign-in alerts",

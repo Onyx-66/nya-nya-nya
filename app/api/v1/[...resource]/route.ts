@@ -862,7 +862,7 @@ function analyticsWindow(url: URL) {
 function isAdminActor(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
-  return actor.adminMfaVerified && actor.roles.some((role) =>
+  return actor.adminMfaEnrolled && actor.roles.some((role) =>
     ["OWNER", "ADMINISTRATOR"].includes(role),
   ) && actorHasCapability(actor, "admin.console.access");
 }
@@ -871,7 +871,7 @@ function isGlobalModerator(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
   const elevatedAdmin = actor.roles.some((role) => ["OWNER", "ADMINISTRATOR"].includes(role));
-  return actorHasCapability(actor, "comments.moderate.global") && (!elevatedAdmin || actor.adminMfaVerified);
+  return actorHasCapability(actor, "comments.moderate.global") && (!elevatedAdmin || actor.adminMfaEnrolled);
 }
 
 function publicSeriesPredicate(alias = "s") {

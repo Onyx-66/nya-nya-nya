@@ -468,8 +468,8 @@ export function requireAdminConsole(actor: Actor) {
   if (!actorHasCapability(actor, "admin.console.access")) {
     throw new ApiError(403, "ADMIN_PERMISSION_REQUIRED", "Administrator console permission is required.");
   }
-  if (!actor.adminMfaVerified) {
-    throw new ApiError(403, "ADMIN_MFA_REQUIRED", "Complete administrator two-factor authentication to continue.");
+  if (!actor.adminMfaEnrolled) {
+    throw new ApiError(403, "ADMIN_MFA_SETUP_REQUIRED", "Set up administrator two-factor authentication before continuing.");
   }
 }
 
@@ -494,8 +494,8 @@ export function requireAdmin(actor: Actor) {
   if (!actorHasCapability(actor, "admin.console.access")) {
     throw new ApiError(403, "ADMIN_PERMISSION_REQUIRED", "Administrator console permission is required.");
   }
-  if (!actor.adminMfaVerified) {
-    throw new ApiError(403, "ADMIN_MFA_REQUIRED", "Complete administrator two-factor authentication to continue.");
+  if (!actor.adminMfaEnrolled) {
+    throw new ApiError(403, "ADMIN_MFA_SETUP_REQUIRED", "Set up administrator two-factor authentication before continuing.");
   }
 }
 
@@ -507,7 +507,7 @@ export function requireOwner(actor: Actor) {
       "Owner authorization is required.",
     );
   }
-  if (!actor.adminMfaVerified) {
-    throw new ApiError(403, "ADMIN_MFA_REQUIRED", "Complete administrator two-factor authentication to continue.");
+  if (!actor.adminMfaEnrolled) {
+    throw new ApiError(403, "ADMIN_MFA_SETUP_REQUIRED", "Set up administrator two-factor authentication before continuing.");
   }
 }
