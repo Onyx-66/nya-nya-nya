@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getPasswordSessionIdentity } from "@/lib/server/local-auth";
+import { getPasswordSessionIdentity, type SessionAuthMethod } from "@/lib/server/local-auth";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -10,7 +10,7 @@ export type ChatGPTUser = {
 
 export type AuthenticatedUser = ChatGPTUser & {
   userId: string | null;
-  authMethod: "CHATGPT" | "PASSWORD";
+  authMethod: "CHATGPT" | SessionAuthMethod;
 };
 
 const USER_EMAIL_HEADER = "oai-authenticated-user-email";

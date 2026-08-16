@@ -15,6 +15,7 @@ import {
 import { randomId } from "@/lib/server/random-id";
 
 export const PASSWORD_SESSION_COOKIE = "__Host-nyascans_session";
+export type SessionAuthMethod = "PASSWORD" | "PASSKEY";
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const VERIFICATION_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
@@ -48,7 +49,7 @@ export type PasswordSessionIdentity = {
   displayName: string;
   email: string;
   fullName: null;
-  authMethod: "PASSWORD";
+  authMethod: SessionAuthMethod;
 };
 
 export type PasswordSessionResult = {
@@ -77,7 +78,7 @@ function expiryAfter(milliseconds: number) {
   return new Date(Date.now() + milliseconds).toISOString();
 }
 
-function sessionCookie(token: string, expiresAt: string) {
+export function sessionCookie(token: string, expiresAt: string) {
   return [
     `${PASSWORD_SESSION_COOKIE}=${token}`,
     "Path=/",
@@ -121,6 +122,40 @@ async function newSessionMaterial() {
     token,
     tokenHash: await hashOpaqueToken(token),
     expiresAt,
+  };
+}
+
+export async function createUserSession(input: {
+  userId: string;
+  authMethod: SessionAuthMethod;
+}) {
+  const db = authDatabase();
+  const session = await newSessionMaterial();
+  await db.batch([
+    db.prepare(
+      `INSERT INTO user_sessions
+       (id, user_id, token_hash, auth_method, expires_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).bind(
+      session.id,
+      input.userId,
+      session.tokenHash,
+      input.authMethod,
+      session.expiresAt,
+    ),
+    db.prepare(
+      `UPDATE user_sessions
+          SET revoked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ? AND revoked_at IS NULL AND id NOT IN (
+          SELECT id FROM user_sessions
+           WHERE user_id = ? AND revoked_at IS NULL
+           ORDER BY created_at DESC LIMIT 10
+        )`,
+    ).bind(input.userId, input.userId),
+  ]);
+  return {
+    cookie: sessionCookie(session.token, session.expiresAt),
+    expiresAt: session.expiresAt,
   };
 }
 
@@ -564,12 +599,12 @@ export async function getPasswordSessionIdentity(
   if (!token || !env.DB) return null;
   const tokenHash = await hashOpaqueToken(token);
   const session = await env.DB.prepare(
-    `SELECT s.id AS sessionId, u.id AS userId, u.email,
-            u.display_name AS displayName
+    `       SELECT s.id AS sessionId, s.auth_method AS authMethod,
+              u.id AS userId, u.email, u.display_name AS displayName
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ?
-        AND s.auth_method = 'PASSWORD'
+        AND s.auth_method IN ('PASSWORD', 'PASSKEY')
         AND s.revoked_at IS NULL
         AND datetime(s.expires_at) > CURRENT_TIMESTAMP
         AND u.status = 'ACTIVE'
@@ -579,6 +614,7 @@ export async function getPasswordSessionIdentity(
     .bind(tokenHash)
     .first<{
       sessionId: string;
+      authMethod: SessionAuthMethod;
       userId: string;
       email: string;
       displayName: string;
@@ -597,7 +633,7 @@ export async function getPasswordSessionIdentity(
     displayName: session.displayName,
     email: session.email,
     fullName: null,
-    authMethod: "PASSWORD",
+    authMethod: session.authMethod,
   };
 }
 

@@ -10,6 +10,7 @@ import {
 } from "@/lib/permissions.mjs";
 import { randomId } from "@/lib/server/random-id";
 import { getAdminMfaState } from "@/lib/server/admin-mfa";
+import type { SessionAuthMethod } from "@/lib/server/local-auth";
 import { NON_DELEGABLE_CAPABILITIES } from "@/lib/admin-permissions";
 
 export type Actor = {
@@ -24,7 +25,7 @@ export type Actor = {
   requestTeamIds: string[];
   uploadTeamIds: string[];
   canUseUploadCenter: boolean;
-  authMethod: "CHATGPT" | "PASSWORD";
+  authMethod: "CHATGPT" | SessionAuthMethod;
   adminMfaRequired: boolean;
   adminMfaEnrolled: boolean;
   adminMfaVerified: boolean;
@@ -115,7 +116,7 @@ export async function getActor(): Promise<Actor | null> {
       profile_revision: number | null;
     }>();
 
-  if (!row && identity.authMethod === "PASSWORD") {
+  if (!row && (identity.authMethod === "PASSWORD" || identity.authMethod === "PASSKEY")) {
     throw new ApiError(
       401,
       "ACCOUNT_NOT_FOUND",
@@ -411,6 +412,10 @@ export async function getActor(): Promise<Actor | null> {
   const adminMfa = adminMfaRequired
     ? await getAdminMfaState(row.id, new Headers(await headers()))
     : { enrolled: false, verified: false, expiresAt: null };
+  const registeredPasskey = adminMfaRequired
+    ? await env.DB.prepare("SELECT 1 FROM account_passkeys WHERE user_id = ? LIMIT 1").bind(row.id).first()
+    : null;
+  const adminMfaEnrolled = adminMfa.enrolled || Boolean(registeredPasskey);
 
   return {
     id: row.id,
@@ -432,7 +437,7 @@ export async function getActor(): Promise<Actor | null> {
       managedTeamIds.length > 0,
     authMethod: identity.authMethod,
     adminMfaRequired,
-    adminMfaEnrolled: adminMfa.enrolled,
+    adminMfaEnrolled,
     adminMfaVerified: adminMfa.verified,
     adminMfaExpiresAt: adminMfa.expiresAt,
     permissionOverrides,

@@ -118,7 +118,7 @@ export const userSessions = sqliteTable(
     index("user_sessions_expiry_idx").on(table.expiresAt, table.revokedAt),
     check(
       "user_sessions_auth_method_check",
-      sql`${table.authMethod} IN ('PASSWORD')`,
+      sql`${table.authMethod} IN ('PASSWORD', 'PASSKEY')`,
     ),
   ],
 );
@@ -507,6 +507,63 @@ export const adminMfaSessions = sqliteTable(
   (table) => [
     uniqueIndex("admin_mfa_sessions_token_uidx").on(table.tokenHash),
     index("admin_mfa_sessions_user_expiry_idx").on(table.userId, table.expiresAt),
+  ],
+);
+
+export const accountRecoveryCodes = sqliteTable(
+  "account_recovery_codes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: text("used_at"),
+    createdAt,
+  },
+  (table) => [
+    index("account_recovery_codes_user_idx").on(table.userId, table.usedAt),
+    uniqueIndex("account_recovery_codes_hash_uidx").on(table.codeHash),
+  ],
+);
+
+export const accountPasskeys = sqliteTable(
+  "account_passkeys",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id").notNull(),
+    publicKey: text("public_key").notNull(),
+    counter: integer("counter").notNull().default(0),
+    transportsJson: text("transports_json").notNull().default("[]"),
+    deviceType: text("device_type").notNull().default("singleDevice"),
+    backedUp: integer("backed_up", { mode: "boolean" }).notNull().default(false),
+    deviceName: text("device_name").notNull().default("Passkey"),
+    lastUsedAt: text("last_used_at"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("account_passkeys_credential_uidx").on(table.credentialId),
+    index("account_passkeys_user_idx").on(table.userId, table.createdAt),
+  ],
+);
+
+export const webauthnChallenges = sqliteTable(
+  "webauthn_challenges",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    challenge: text("challenge").notNull(),
+    ceremony: text("ceremony").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("webauthn_challenges_challenge_uidx").on(table.challenge),
+    index("webauthn_challenges_expiry_idx").on(table.expiresAt, table.ceremony),
   ],
 );
 

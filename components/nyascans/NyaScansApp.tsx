@@ -68,6 +68,7 @@ import {
   X,
   type Icon as PhosphorIcon,
 } from "@phosphor-icons/react";
+import { startAuthentication } from "@simplewebauthn/browser";
 import {
   useCallback,
   useEffect,
@@ -83,6 +84,7 @@ import {
   type ReactNode,
 } from "react";
 import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
+import { AccountSecurityWorkspace } from "@/components/nyascans/AccountSecurityWorkspace";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
 import { GiftStorePanel } from "@/components/nyascans/GiftStorePanel";
@@ -196,7 +198,7 @@ type Actor = {
   email: string;
   role: string;
   roles?: string[];
-  authMethod?: "CHATGPT" | "PASSWORD";
+  authMethod?: "CHATGPT" | "PASSWORD" | "PASSKEY";
   avatarUrl?: string | null;
   canUseUploadCenter?: boolean;
   canUpload?: boolean;
@@ -11104,6 +11106,37 @@ function AuthEntryView({
     }
   }
 
+  async function signInWithPasskey() {
+    if (isSignup) return;
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthMessage("");
+    try {
+      const query = email.trim() ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : "";
+      const beginResponse = await fetch(`/api/v1/auth/passkey${query}`, { cache: "no-store" });
+      const beginPayload = (await beginResponse.json()) as {
+        data?: { challengeId: string; options: Parameters<typeof startAuthentication>[0]["optionsJSON"] };
+        error?: { message?: string };
+      };
+      if (!beginResponse.ok || !beginPayload.data) {
+        throw new Error(beginPayload.error?.message ?? "Passkey sign-in could not start.");
+      }
+      const credential = await startAuthentication({ optionsJSON: beginPayload.data.options });
+      const finishResponse = await fetch("/api/v1/auth/passkey", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ challengeId: beginPayload.data.challengeId, response: credential }),
+      });
+      const finishPayload = (await finishResponse.json()) as { data?: { signedIn?: boolean }; error?: { message?: string } };
+      if (!finishResponse.ok) throw new Error(finishPayload.error?.message ?? "Passkey sign-in could not be completed.");
+      window.location.assign(returnTo);
+    } catch (failure) {
+      setAuthError(failure instanceof Error ? failure.message : "Passkey sign-in was cancelled or failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
   async function resendVerification() {
     if (!email) return;
     setAuthBusy(true);
@@ -11307,6 +11340,13 @@ function AuthEntryView({
                 ) : null}
               </div>
             </form>
+            {!isSignup ? (
+              <button className="auth-passkey-button" type="button" onClick={() => void signInWithPasskey()} disabled={authBusy || verifyingLink}>
+                {authBusy ? <SpinnerGap size={19} className="spin" /> : <Key size={20} weight="fill" />}
+                <span>Sign in with a passkey</span>
+                <ArrowRight size={18} />
+              </button>
+            ) : null}
             <div className="auth-provider-divider" role="separator">
               <span>or</span>
             </div>
@@ -11733,17 +11773,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
             </button>
           </form>
         ) : section === "Security" ? (
-          <div className="account-setting-card">
-            <ShieldCheck size={28} />
-            <div>
-              <h3>Sign-in security</h3>
-              <p>
-                {actor.authMethod === "PASSWORD"
-                  ? "Your email is verified and your password is stored only as a salted PBKDF2 hash. The raw password is never retained."
-                  : "Your identity, password, verification, and MFA are managed by ChatGPT. NyaScans never stores provider passwords or tokens."}
-              </p>
-            </div>
-          </div>
+          <AccountSecurityWorkspace />
         ) : section === "Connected accounts" ? (
           <div className="connected-account-list">
             <article>

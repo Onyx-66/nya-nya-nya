@@ -53997,3 +53997,84 @@ body::-webkit-scrollbar {
     box-shadow: inset 0 0 0 1px rgb(255 226 151 / 48%);
   }
 }
+/* v48.24.0: Account Security workspace */
+.auth-passkey-button,
+.account-security-workspace .button { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+.auth-passkey-button { width: 100%; min-height: 3rem; margin-top: .8rem; padding: .78rem 1rem; border: 1px solid rgb(117 167 255 / 46%); border-radius: .9rem; background: linear-gradient(135deg, rgb(18 53 100 / 84%), rgb(13 30 61 / 92%)); color: #dbeafe; font: inherit; font-weight: 700; cursor: pointer; transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease; }
+.auth-passkey-button:hover:not(:disabled), .auth-passkey-button:focus-visible { border-color: #8bb8ff; box-shadow: 0 0 1.2rem rgb(78 139 255 / 24%); transform: translateY(-1px); }
+.auth-passkey-button:disabled { opacity: .65; cursor: wait; }
+.account-security-workspace { display: grid; gap: 1.05rem; max-width: 980px; }
+.account-security-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.25rem; border: 1px solid rgb(96 145 222 / 24%); border-radius: 1.15rem; background: linear-gradient(135deg, rgb(22 51 91 / 72%), rgb(10 26 55 / 88%)); box-shadow: 0 1.2rem 2.8rem rgb(1 8 21 / 18%); }
+.account-security-intro h2 { margin: .2rem 0 .35rem; font-size: clamp(1.15rem, 2vw, 1.55rem); }
+.account-security-intro p:not(.eyebrow) { max-width: 68ch; margin: 0; color: rgb(207 222 246 / 78%); line-height: 1.55; }
+.account-security-intro-icon { display: grid; place-items: center; min-width: 3.2rem; min-height: 3.2rem; border-radius: .95rem; background: rgb(70 135 246 / 16%); color: #8bb8ff; }
+.account-security-feedback { display: flex; align-items: center; gap: .45rem; margin: 0; padding: .75rem .9rem; border-radius: .75rem; font-size: .9rem; line-height: 1.45; }
+.account-security-feedback.is-error { border: 1px solid rgb(248 113 113 / 35%); background: rgb(127 29 29 / 22%); color: #fecaca; }
+.account-security-feedback.is-success { border: 1px solid rgb(74 222 128 / 28%); background: rgb(20 83 45 / 22%); color: #bbf7d0; }
+.security-method-card { display: grid; gap: .95rem; padding: 1.2rem 1.25rem; border: 1px solid rgb(96 145 222 / 22%); border-radius: 1.15rem; background: rgb(8 23 48 / 72%); }
+.security-method-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.security-method-heading { display: flex; align-items: center; gap: .8rem; }
+.security-method-heading h3 { margin: .15rem 0 0; font-size: 1.08rem; }
+.security-method-icon { display: grid; place-items: center; width: 2.7rem; height: 2.7rem; border-radius: .85rem; }
+.security-method-icon.is-blue { background: rgb(67 126 232 / 17%); color: #8bb8ff; }
+.security-method-icon.is-purple { background: rgb(167 139 250 / 16%); color: #c4b5fd; }
+.security-status-badge { display: inline-flex; align-items: center; min-height: 1.8rem; padding: .3rem .65rem; border: 1px solid; border-radius: 999px; font-size: .74rem; font-weight: 800; white-space: nowrap; }
+.security-status-badge.is-enabled { border-color: rgb(74 222 128 / 34%); background: rgb(20 83 45 / 23%); color: #86efac; }
+.security-status-badge.is-disabled { border-color: rgb(148 163 184 / 25%); background: rgb(30 41 59 / 34%); color: #b6c4d9; }
+.security-method-copy { max-width: 74ch; margin: 0; color: rgb(207 222 246 / 73%); line-height: 1.55; }
+.totp-setup-panel { display: grid; grid-template-columns: minmax(210px, .75fr) minmax(240px, 1fr); gap: 1.2rem; align-items: center; padding: 1rem; border: 1px solid rgb(96 145 222 / 20%); border-radius: .95rem; background: rgb(4 15 34 / 46%); }
+.totp-setup-visual { display: grid; justify-items: center; gap: .65rem; text-align: center; }
+.totp-qr-frame { display: grid; place-items: center; width: min(100%, 220px); aspect-ratio: 1; padding: .6rem; border-radius: .85rem; background: #fff; box-shadow: 0 0 1.5rem rgb(125 171 255 / 22%); }
+.totp-qr-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.totp-setup-visual small { max-width: 28ch; color: rgb(207 222 246 / 68%); line-height: 1.45; }
+.totp-setup-details { display: grid; gap: .8rem; }
+.security-label { display: block; margin-bottom: .35rem; color: rgb(207 222 246 / 62%); font-size: .76rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.totp-setup-details code { display: block; overflow-wrap: anywhere; padding: .7rem .8rem; border: 1px solid rgb(96 145 222 / 28%); border-radius: .65rem; background: rgb(13 31 61 / 72%); color: #c7dcff; font-size: .9rem; letter-spacing: .1em; }
+.security-code-input { width: 100%; min-height: 2.8rem; padding: .65rem .75rem; border: 1px solid rgb(96 145 222 / 34%); border-radius: .65rem; background: rgb(5 16 35 / 76%); color: #f8fbff; font-size: 1.15rem; font-variant-numeric: tabular-nums; letter-spacing: .35em; text-align: center; }
+.security-enabled-panel { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .85rem .9rem; border: 1px solid rgb(74 222 128 / 22%); border-radius: .8rem; background: rgb(20 83 45 / 14%); }
+.security-enabled-panel strong { display: inline-flex; align-items: center; gap: .4rem; color: #bbf7d0; }
+.security-enabled-panel p, .security-subheading p { margin: .25rem 0 0; color: rgb(207 222 246 / 66%); font-size: .84rem; }
+.security-recovery-panel { display: grid; gap: .8rem; padding-top: .2rem; }
+.security-subheading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.security-subheading h4 { margin: 0; font-size: .96rem; }
+.security-subheading > span { color: #93c5fd; font-size: .8rem; font-weight: 800; }
+.recovery-code-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
+.recovery-code-grid code { padding: .65rem .55rem; border: 1px dashed rgb(96 145 222 / 32%); border-radius: .6rem; background: rgb(13 31 61 / 68%); color: #dbeafe; font-size: .82rem; letter-spacing: .08em; text-align: center; }
+.security-inline-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.security-reauth-row, .passkey-add-row { display: flex; align-items: center; gap: .65rem; }
+.security-reauth-row input, .passkey-add-row input, .security-reauth-grid input { flex: 1; min-width: 0; min-height: 2.7rem; padding: .6rem .75rem; border: 1px solid rgb(96 145 222 / 28%); border-radius: .65rem; background: rgb(5 16 35 / 76%); color: #f8fbff; }
+.security-danger-disclosure { border-top: 1px solid rgb(248 113 113 / 18%); padding-top: .85rem; }
+.security-danger-disclosure summary { cursor: pointer; color: #fca5a5; font-size: .86rem; font-weight: 750; }
+.security-danger-box { display: grid; gap: .8rem; margin-top: .8rem; padding: .9rem; border: 1px solid rgb(248 113 113 / 25%); border-radius: .8rem; background: rgb(127 29 29 / 13%); }
+.security-danger-box p { display: flex; align-items: flex-start; gap: .45rem; margin: 0; color: #fecaca; font-size: .84rem; line-height: 1.5; }
+.security-reauth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.button.button-danger { border: 1px solid rgb(248 113 113 / 38%); background: rgb(127 29 29 / 35%); color: #fecaca; }
+.passkey-list { display: grid; gap: .55rem; }
+.passkey-row { display: flex; align-items: center; gap: .75rem; padding: .8rem .85rem; border: 1px solid rgb(96 145 222 / 18%); border-radius: .8rem; background: rgb(13 31 61 / 54%); }
+.passkey-row-icon { display: grid; place-items: center; min-width: 2.25rem; min-height: 2.25rem; border-radius: .7rem; background: rgb(167 139 250 / 14%); color: #c4b5fd; }
+.passkey-row-copy { display: grid; min-width: 0; flex: 1; gap: .2rem; }
+.passkey-row-copy strong { overflow: hidden; color: #e3edff; text-overflow: ellipsis; white-space: nowrap; }
+.passkey-row-copy small { color: rgb(207 222 246 / 64%); line-height: 1.4; }
+.icon-button { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border: 1px solid rgb(96 145 222 / 22%); border-radius: .65rem; background: transparent; color: #b9cdf0; cursor: pointer; }
+.icon-button.danger:hover, .icon-button.danger:focus-visible { border-color: rgb(248 113 113 / 46%); color: #fca5a5; }
+.security-empty-state { display: flex; align-items: center; gap: .5rem; padding: .8rem; border: 1px dashed rgb(96 145 222 / 22%); border-radius: .8rem; color: rgb(207 222 246 / 62%); }
+.account-security-note { display: flex; align-items: flex-start; gap: .55rem; padding: .8rem .95rem; border-radius: .8rem; background: rgb(96 145 222 / 8%); color: rgb(207 222 246 / 72%); font-size: .83rem; line-height: 1.5; }
+.account-security-note svg { flex: 0 0 auto; margin-top: .1rem; color: #93c5fd; }
+.account-security-note p { margin: 0; }
+@media (max-width: 700px) {
+  .account-security-intro, .security-method-header, .security-enabled-panel { align-items: flex-start; flex-direction: column; }
+  .account-security-intro-icon { display: none; }
+  .totp-setup-panel { grid-template-columns: 1fr; }
+  .totp-setup-visual { justify-items: start; text-align: left; }
+  .security-reauth-row, .passkey-add-row { align-items: stretch; flex-direction: column; }
+  .security-reauth-row .button, .passkey-add-row .button { width: 100%; }
+  .security-reauth-grid { grid-template-columns: 1fr; }
+  .security-status-badge { align-self: flex-start; }
+}
+@media (max-width: 420px) {
+  .security-method-card, .account-security-intro { padding: .95rem; }
+  .recovery-code-grid { grid-template-columns: 1fr; }
+  .passkey-row { align-items: flex-start; }
+  .passkey-row-copy small { font-size: .72rem; }
+}
+@media (prefers-reduced-motion: reduce) { .auth-passkey-button { transition: none; } }
