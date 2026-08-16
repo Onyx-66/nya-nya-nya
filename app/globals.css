@@ -53792,3 +53792,135 @@ body::-webkit-scrollbar {
     transform: translateX(0) rotate(-9deg);
   }
 }
+
+
+/* v48.22.3: match Recent Reviews card structure for mobile Discounts. */
+.v481-discounts-section .v481-discount-rail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.v481-discounts-section .v481-discount-rail::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.v481-discounts-section .v481-ticket {
+  --discount-review-angle: 0deg;
+  border-color: transparent;
+  border-radius: 22px;
+}
+
+.v481-discounts-section .v481-ticket::after {
+  z-index: 6;
+  inset: 0;
+  padding: 1px;
+  border: 0;
+  border-radius: inherit;
+  background: linear-gradient(#091b30, #091b30) padding-box,
+    conic-gradient(
+      from var(--discount-review-angle),
+      transparent 0 55%,
+      var(--discount-pink-soft) 63%,
+      var(--discount-pink) 70%,
+      var(--discount-pink-soft) 78%,
+      transparent 87%
+    ) border-box;
+  -webkit-mask: none;
+  mask: none;
+  animation: discounts-review-border-orbit 4.6s linear infinite;
+}
+
+@property --discount-review-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes discounts-review-border-orbit {
+  to { --discount-review-angle: 360deg; }
+}
+
+@media (max-width: 600px) {
+  .v481-discounts-section .v481-ticket-copy {
+    display: flex;
+    flex-direction: column;
+    align-content: normal;
+    gap: .35rem;
+    padding: .8rem .75rem;
+  }
+
+  .v481-discounts-section .v481-ticket-copy > strong,
+  .v481-discounts-section .v481-ticket-divider,
+  .v481-discounts-section .v481-ticket-chapters,
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .v481-discounts-section .v481-ticket-copy > strong {
+    flex: 0 0 auto;
+    align-self: stretch;
+    margin: 0;
+  }
+
+  .v481-discounts-section .v481-ticket-divider {
+    flex: 0 0 auto;
+    align-self: stretch;
+    margin: 0;
+  }
+
+  .v481-discounts-section .v481-ticket-chapters {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    justify-content: flex-start;
+    width: max-content;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 2rem;
+    padding: .32rem .55rem;
+    border-color: rgb(72 181 255 / 54%);
+    border-radius: .62rem;
+    background: rgb(8 47 82 / 58%);
+    font-size: .62rem;
+    white-space: nowrap;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact {
+    position: relative;
+    flex: 0 0 auto;
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact > svg {
+    position: absolute;
+    z-index: 2;
+    margin-left: .75rem;
+    color: #ffe7a3;
+    pointer-events: none;
+  }
+
+  .v481-discounts-section .v481-ticket-countdown.is-compact .v481-ticket-countdown-box {
+    justify-content: center;
+    min-height: 2rem;
+    padding: .48rem 1.8rem .48rem 2.2rem;
+    border-radius: .62rem;
+  }
+
+  .v481-discounts-section .v481-discount-rail {
+    overflow-x: auto;
+    padding-bottom: .2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v481-discounts-section .v481-ticket::after {
+    animation: none !important;
+    background: linear-gradient(#091b30, #091b30) padding-box, var(--discount-pink) border-box;
+  }
+}
