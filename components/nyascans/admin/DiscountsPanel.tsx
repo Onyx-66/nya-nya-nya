@@ -41,6 +41,7 @@ export type DiscountAdminRecord = {
   discountValue: number;
   originalPrice: number;
   reducedPrice: number;
+  headline: string;
   percentage: number;
   startsAt: string;
   endsAt: string;
@@ -93,6 +94,7 @@ type DiscountDraft = {
   coverUrl: string | null;
   discountType: "PERCENT" | "FIXED";
   discountValue: string;
+  headline: string;
   startsAt: string;
   endsAt: string;
   active: boolean;
@@ -148,6 +150,7 @@ function blankDraft(): DiscountDraft {
     coverUrl: null,
     discountType: "PERCENT",
     discountValue: "",
+    headline: "READ THE WHOLE VOLUME",
     startsAt: defaultDateInput(0),
     endsAt: defaultDateInput(14),
     active: true,
@@ -167,6 +170,7 @@ function draftFromRecord(record: DiscountAdminRecord): DiscountDraft {
     coverUrl: record.coverUrl,
     discountType: record.discountType,
     discountValue: String(record.discountValue),
+    headline: record.headline || "READ THE WHOLE VOLUME",
     startsAt: dateTimeInputValue(record.startsAt),
     endsAt: dateTimeInputValue(record.endsAt),
     active: record.active,
@@ -183,6 +187,7 @@ function draftSignature(draft: DiscountDraft | null) {
     chapterId: draft.chapterId,
     discountType: draft.discountType,
     discountValue: draft.discountValue,
+    headline: draft.headline,
     startsAt: draft.startsAt,
     endsAt: draft.endsAt,
     active: draft.active,
@@ -435,6 +440,7 @@ export function DiscountsPanel({
             chapterId: draft.targetType === "CHAPTER" ? draft.chapterId : null,
             discountType: draft.discountType,
             discountValue: Number(draft.discountValue),
+            headline: draft.headline.trim() || "READ THE WHOLE VOLUME",
             startsAt: new Date(draft.startsAt).toISOString(),
             endsAt: new Date(draft.endsAt).toISOString(),
             active: draft.active,
@@ -649,6 +655,17 @@ export function DiscountsPanel({
                     onChange={(event) => setDraft((current) => current ? { ...current, discountValue: event.target.value } : current)}
                   />
                 </label>
+                <label className="v481-span-two">
+                  Style 2 headline
+                  <input
+                    type="text"
+                    maxLength={120}
+                    value={draft.headline}
+                    placeholder="READ THE WHOLE VOLUME"
+                    onChange={(event) => setDraft((current) => current ? { ...current, headline: event.target.value } : current)}
+                  />
+                  <small>Used by the Spotlight/Hero card style. Leave the default text or customize it for this discount.</small>
+                </label>
                 <label>
                   Start date
                   <input type="datetime-local" value={draft.startsAt} onChange={(event) => setDraft((current) => current ? { ...current, startsAt: event.target.value } : current)} />
@@ -675,6 +692,7 @@ export function DiscountsPanel({
                 <div>
                   <small>{draft.targetType === "CHAPTER" ? draft.seriesTitle || "Paid chapter" : "Series-wide chapter offer"}</small>
                   <strong>{draft.targetLabel || "Select content to preview the offer"}</strong>
+                  <em>{draft.headline || "READ THE WHOLE VOLUME"}</em>
                   <span><s>{draft.originalPrice ? coinLabel(draft.originalPrice, settings) : "Original price"}</s><b>{reducedPrice !== null ? coinLabel(reducedPrice, settings) : "Reduced price"}</b></span>
                   <em><CalendarBlank /> {draft.endsAt ? `Ends ${formatScheduleDate(new Date(draft.endsAt).toISOString())}` : "Choose an end date"}</em>
                 </div>

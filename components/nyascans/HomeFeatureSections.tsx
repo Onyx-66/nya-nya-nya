@@ -64,6 +64,8 @@ export type DiscountRecord = {
   status: "INACTIVE" | "SCHEDULED" | "ACTIVE" | "EXPIRED";
   seriesSlug: string;
   seriesTitle: string;
+  genreLabel: string;
+  headline: string;
   chapterSlug: string | null;
   chapterNumber: string | null;
   chapterTitle: string | null;
@@ -564,7 +566,7 @@ function DiscountCountdown({
   );
 }
 
-function DiscountTicket({
+function DiscountStyleOne({
   record,
   settings,
   directory = false,
@@ -599,6 +601,84 @@ function DiscountTicket({
   );
 }
 
+function DiscountSpotlight({
+  record,
+  settings,
+  directory = false,
+}: {
+  record: DiscountRecord;
+  settings: CommercialSettings;
+  directory?: boolean;
+}) {
+  const headline = record.headline || settings.discounts.defaultHeadline;
+  const saved = Math.max(0, record.originalPrice - record.reducedPrice);
+  return (
+    <article className={`v481-spotlight-card ${directory ? "is-directory" : ""}`}>
+      <a className="v481-spotlight-cover" href={record.href} aria-label={`${record.percentage}% discount on ${record.seriesTitle}`}>
+        <CoverArtwork src={record.coverUrl} title={record.seriesTitle} eager />
+        <span className="v481-ticket-ribbon">−{record.percentage}%</span>
+        <strong>{record.seriesTitle}</strong>
+      </a>
+      <div className="v481-spotlight-body">
+        <DiscountCountdown endsAt={record.endsAt} compact />
+        <h3>{headline}</h3>
+        <p>Every chapter at {record.percentage}% off until the deal ends. When it does, the price returns.</p>
+        <div className="v481-spotlight-price-row">
+          <span className="v481-save-pill">SAVE {saved} COINS</span>
+          <span className="v481-ticket-prices"><s>{coinLabel(record.originalPrice, settings)}</s><b>{record.reducedPrice}</b><span>{settings.economy.coinPlural}</span></span>
+        </div>
+        <div className="v481-spotlight-actions">
+          <a className="v481-spotlight-primary" href={record.href}>Unlock now</a>
+          <a className="v481-spotlight-secondary" href={record.href}>Save for later</a>
+        </div>
+        <a className="v481-spotlight-all" href="/discounts">See all deals</a>
+      </div>
+    </article>
+  );
+}
+
+function DiscountGridCard({
+  record,
+  settings,
+}: {
+  record: DiscountRecord;
+  settings: CommercialSettings;
+}) {
+  return (
+    <a className="v481-grid-discount-card" href={record.href} aria-label={`${record.percentage}% discount on ${record.targetLabel}`}>
+      <span className="v481-grid-discount-cover">
+        <CoverArtwork src={record.coverUrl} title={record.seriesTitle} />
+        <span className="v481-ticket-ribbon">−{record.percentage}%</span>
+      </span>
+      <span className="v481-grid-discount-copy">
+        <small>{record.genreLabel}</small>
+        <strong>{record.seriesTitle}</strong>
+        <DiscountCountdown endsAt={record.endsAt} compact />
+        <span className="v481-grid-discount-price"><s>{coinLabel(record.originalPrice, settings)}</s><b>{record.reducedPrice}</b><em>{settings.economy.coinPlural}</em></span>
+      </span>
+    </a>
+  );
+}
+
+function DiscountTicket({
+  record,
+  settings,
+  directory = false,
+}: {
+  record: DiscountRecord;
+  settings: CommercialSettings;
+  directory?: boolean;
+}) {
+  switch (settings.discounts.cardStyle) {
+    case "STYLE_2":
+      return <DiscountSpotlight record={record} settings={settings} directory={directory} />;
+    case "STYLE_3":
+      return <DiscountGridCard record={record} settings={settings} />;
+    default:
+      return <DiscountStyleOne record={record} settings={settings} directory={directory} />;
+  }
+}
+
 function DiscountLoading({ count = 4 }: { count?: number }) {
   return (
     <div className="v481-discount-rail is-loading" aria-label="Loading discounts">
@@ -627,16 +707,17 @@ export function DiscountsSection({
     });
   }
 
+  const visibleRecords = settings.discounts.cardStyle === "STYLE_2" ? records.slice(0, 1) : records;
   if (unavailable || (!loading && (error || !records.length))) return null;
   return (
-    <section className="content-section page-wrap v481-discounts-section">
+    <section className={`content-section page-wrap v481-discounts-section is-${settings.discounts.cardStyle.toLowerCase()}`}>
       <HomeFeatureStyles />
       <FeatureHeading
         icon={<Tag size={21} weight="fill" />}
         title="Discounts"
         allHref={allHref}
         controls={
-          records.length > 2 ? (
+              visibleRecords.length > 2 ? (
             <span className="v481-rail-controls">
               <button type="button" aria-label="Previous discounts" onClick={() => move(-1)}>
                 <CaretLeft size={17} />
@@ -651,8 +732,8 @@ export function DiscountsSection({
       {loading ? (
         <DiscountLoading />
       ) : (
-        <div ref={railRef} className="v481-discount-rail">
-          {records.map((record) => (
+        <div ref={railRef} className={`v481-discount-rail is-${settings.discounts.cardStyle.toLowerCase()}`}>
+          {visibleRecords.map((record) => (
             <DiscountTicket key={record.id} record={record} settings={settings} />
           ))}
         </div>
@@ -769,6 +850,7 @@ export function DiscountsDirectory({
     sort,
     initialRecords,
   );
+  const visibleRecords = settings.discounts.cardStyle === "STYLE_2" ? records.slice(0, 1) : records;
 
   useEffect(() => {
     if (!unavailable) return;
@@ -804,9 +886,9 @@ export function DiscountsDirectory({
         <DiscountLoading count={8} />
       ) : error ? (
         <div className="public-discovery-error" role="alert">{error}</div>
-      ) : records.length ? (
-        <div className="v481-discount-grid">
-          {records.map((record) => (
+      ) : visibleRecords.length ? (
+        <div className={`v481-discount-grid is-${settings.discounts.cardStyle.toLowerCase()}`}>
+          {visibleRecords.map((record) => (
             <DiscountTicket
               key={record.id}
               record={record}
@@ -913,9 +995,50 @@ const HOME_FEATURE_CSS = `
   @property --v487-pin-angle { syntax:'<angle>'; initial-value:0deg; inherits:false; }
   @keyframes v487-pin-orbit { to { --v487-pin-angle:360deg; } }
   @keyframes v481-skeleton { 0% { background-position:100% 0; } 100% { background-position:0 0; } }
-  @media (prefers-reduced-motion:reduce) { .v481-feature-slot,.v481-pinned-bento.is-loading > span,.v481-pinned-carousel.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span,.v481-pinned-carousel > .v481-pin-card[data-active='true']::after { animation:none; } .v481-pin-card,.v481-pin-card > img { transition:none; } }
-  @media (max-width:850px) { .v481-pinned-bento { min-height:26rem; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:14rem repeat(2,10rem); } .v481-feature-slot,.v481-pinned-bento.is-loading > span:first-child { grid-column:1 / -1; grid-row:span 1; } .v481-discount-grid { grid-template-columns:1fr; } }
-  @media (max-width:600px) { .v481-ticket { grid-template-columns:1fr; min-height:0; } .v481-ticket-cover { min-height:15rem; aspect-ratio:3 / 4; } .v481-ticket-cover::after { background:linear-gradient(180deg,transparent 55%,rgb(4 14 28 / 44%)); } .v481-ticket-ribbon { top:1.1rem; } .v481-ticket-perforation { display:none; } .v481-ticket-copy { padding:1rem; } .v481-ticket-copy > strong { max-width:calc(100% - 3rem); } .v481-ticket-time-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .v481-ticket-time-grid b { min-height:2.75rem; } .v481-feature-heading { align-items:flex-start; } .v481-heading-actions { flex-wrap:wrap; justify-content:flex-end; } .v481-rail-controls button { width:2.2rem; height:2.2rem; } .v481-pinned-carousel { grid-template-columns:minmax(3.25rem,.24fr) minmax(0,1fr) minmax(3.25rem,.24fr); gap:.4rem; padding:.2rem 1.7rem .65rem; } .v481-pinned-carousel > .v481-pin-card,.v481-pinned-carousel.is-loading > span { min-height:17rem; } .v481-pinned-arrow { width:2.4rem; height:2.4rem; } .v481-pinned-arrow.is-previous { left:.35rem; } .v481-pinned-arrow.is-next { right:.35rem; } .v481-featured-badge { top:.65rem; left:.65rem; } .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) .v481-pin-copy { display:none; } .v481-pinned-bento { min-height:0; grid-template-rows:14rem repeat(2,8.5rem); gap:.55rem; } .v481-pin-copy { padding:.9rem; } .v481-pin-copy small { font-size:.58rem; } .v481-pin-copy strong { font-size:1.15rem; } .v481-feature-slot .v481-pin-copy strong { font-size:1.15rem; } .v481-discount-rail { grid-auto-columns:min(88vw,22rem); } .v481-directory-header { grid-template-columns:auto minmax(0,1fr); align-items:start; } .v481-directory-header > .v481-sort-control { grid-column:1 / -1; width:100%; } .v481-sort-control select { width:100%; } .v481-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .v481-directory-grid .v481-pin-card { min-height:14rem; } }
+  .v481-spotlight-card { display:block; width:min(100%,820px); margin-inline:auto; overflow:hidden; border:1px solid color-mix(in srgb,var(--accent) 34%,var(--line)); border-radius:var(--site-card-radius,var(--radius)); background:linear-gradient(145deg,color-mix(in srgb,var(--surface-2) 88%,#071426),var(--surface)); box-shadow:0 1.5rem 3rem rgb(0 0 0 / 28%); }
+  .v481-spotlight-cover { position:relative; display:block; aspect-ratio:1.78 / 1; overflow:hidden; }
+  .v481-spotlight-cover picture,.v481-spotlight-cover img { display:block; width:100%; height:100%; }
+  .v481-spotlight-cover img { object-fit:cover; }
+  .v481-spotlight-cover::after { position:absolute; inset:35% 0 0; background:linear-gradient(180deg,transparent,rgb(3 8 18 / 86%)); content:''; }
+  .v481-spotlight-cover .v481-ticket-ribbon { z-index:1; }
+  .v481-spotlight-cover > strong { position:absolute; z-index:1; right:1.1rem; bottom:1rem; left:1.1rem; color:#fff; font-size:clamp(1.35rem,3.2vw,2.45rem); font-weight:900; line-height:1.04; letter-spacing:-.035em; text-transform:uppercase; }
+  .v481-spotlight-body { display:grid; gap:1rem; padding:clamp(1.1rem,3vw,2rem); }
+  .v481-spotlight-body > .v481-ticket-countdown { justify-self:start; }
+  .v481-spotlight-body h3 { margin:0; color:var(--text); font-size:clamp(1.5rem,3.4vw,2.5rem); line-height:1.05; letter-spacing:-.04em; text-transform:uppercase; }
+  .v481-spotlight-body p { max-width:58ch; margin:0; color:var(--muted); font-size:clamp(.95rem,1.6vw,1.2rem); line-height:1.55; }
+  .v481-spotlight-price-row { display:flex; align-items:center; flex-wrap:wrap; gap:.9rem 1.1rem; }
+  .v481-save-pill { display:inline-flex; align-items:center; min-height:2.2rem; padding-inline:.9rem; border:1px solid color-mix(in srgb,#f4cf70 65%,var(--line)); border-radius:999px; color:#f4cf70; font-size:.78rem; font-weight:850; letter-spacing:.08em; }
+  .v481-spotlight-price-row .v481-ticket-prices { display:flex; align-items:baseline; gap:.55rem; }
+  .v481-spotlight-price-row .v481-ticket-prices s { color:var(--muted); }
+  .v481-spotlight-price-row .v481-ticket-prices b { color:var(--text); font-size:clamp(1.7rem,4vw,2.7rem); }
+  .v481-spotlight-price-row .v481-ticket-prices > span { color:var(--muted); }
+  .v481-spotlight-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; }
+  .v481-spotlight-actions a { display:grid; min-height:3.25rem; place-items:center; border-radius:999px; font-weight:850; text-decoration:none; }
+  .v481-spotlight-primary { background:var(--accent); color:var(--accent-contrast,#06101f); box-shadow:0 .65rem 1.5rem color-mix(in srgb,var(--accent) 28%,transparent); }
+  .v481-spotlight-secondary { border:1px solid var(--line); color:var(--text); }
+  .v481-spotlight-all { width:max-content; color:var(--muted); font-weight:750; text-decoration:none; }
+  .v481-spotlight-all:is(:hover,:focus-visible) { color:var(--accent); }
+  .v481-grid-discount-card { display:grid; grid-template-rows:auto 1fr; overflow:hidden; border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line)); border-radius:var(--site-card-radius,var(--radius)); background:var(--surface); color:var(--text); text-decoration:none; box-shadow:0 1rem 2rem rgb(0 0 0 / 20%); transition:transform .2s ease,border-color .2s ease; }
+  .v481-grid-discount-card:is(:hover,:focus-visible) { transform:translateY(-3px); border-color:var(--accent); }
+  .v481-grid-discount-cover { position:relative; display:block; aspect-ratio:3 / 4; overflow:hidden; }
+  .v481-grid-discount-cover picture,.v481-grid-discount-cover img { display:block; width:100%; height:100%; }
+  .v481-grid-discount-cover img { object-fit:cover; }
+  .v481-grid-discount-cover::after { position:absolute; inset:45% 0 0; background:linear-gradient(180deg,transparent,rgb(3 8 18 / 82%)); content:''; }
+  .v481-grid-discount-copy { display:grid; align-content:start; gap:.7rem; padding:1rem; }
+  .v481-grid-discount-copy small { overflow:hidden; color:var(--muted); font-size:.72rem; font-weight:800; letter-spacing:.12em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
+  .v481-grid-discount-copy > strong { display:-webkit-box; overflow:hidden; color:var(--text); font-size:clamp(1rem,1.7vw,1.4rem); font-weight:900; line-height:1.08; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+  .v481-grid-discount-copy .v481-ticket-countdown { justify-self:start; }
+  .v481-grid-discount-price { display:flex; align-items:baseline; flex-wrap:wrap; gap:.45rem; }
+  .v481-grid-discount-price s { color:var(--muted); font-size:.85rem; }
+  .v481-grid-discount-price b { color:var(--text); font-size:1.55rem; }
+  .v481-grid-discount-price em { color:var(--muted); font-size:.82rem; font-style:normal; }
+  .v481-discount-grid.is-style_3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .v481-discount-grid.is-style_2 { display:block; }
+  .v481-discount-rail.is-style_2 { display:block; }
+  .v481-discount-rail.is-style_3 { grid-auto-columns:minmax(0,48%); }
+  @media (prefers-reduced-motion:reduce) { .v481-feature-slot,.v481-pinned-bento.is-loading > span,.v481-pinned-carousel.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span,.v481-pinned-carousel > .v481-pin-card[data-active='true']::after { animation:none; } .v481-pin-card,.v481-pin-card > img,.v481-grid-discount-card { transition:none; } }
+  @media (max-width:850px) { .v481-discount-grid.is-style_3 { grid-template-columns:repeat(2,minmax(0,1fr)); } .v481-pinned-bento { min-height:26rem; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:14rem repeat(2,10rem); } .v481-feature-slot,.v481-pinned-bento.is-loading > span:first-child { grid-column:1 / -1; grid-row:span 1; } .v481-discount-grid:not(.is-style_3) { grid-template-columns:1fr; } }
+  @media (max-width:600px) { .v481-spotlight-cover { aspect-ratio:1.42 / 1; } .v481-spotlight-actions { grid-template-columns:1fr; } .v481-grid-discount-copy { padding:.8rem; } .v481-grid-discount-price b { font-size:1.25rem; } .v481-ticket { grid-template-columns:1fr; min-height:0; } .v481-ticket-cover { min-height:15rem; aspect-ratio:3 / 4; } .v481-ticket-cover::after { background:linear-gradient(180deg,transparent 55%,rgb(4 14 28 / 44%)); } .v481-ticket-ribbon { top:1.1rem; } .v481-ticket-perforation { display:none; } .v481-ticket-copy { padding:1rem; } .v481-ticket-copy > strong { max-width:calc(100% - 3rem); } .v481-ticket-time-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .v481-ticket-time-grid b { min-height:2.75rem; } .v481-feature-heading { align-items:flex-start; } .v481-heading-actions { flex-wrap:wrap; justify-content:flex-end; } .v481-rail-controls button { width:2.2rem; height:2.2rem; } .v481-pinned-carousel { grid-template-columns:minmax(3.25rem,.24fr) minmax(0,1fr) minmax(3.25rem,.24fr); gap:.4rem; padding:.2rem 1.7rem .65rem; } .v481-pinned-carousel > .v481-pin-card,.v481-pinned-carousel.is-loading > span { min-height:17rem; } .v481-pinned-arrow { width:2.4rem; height:2.4rem; } .v481-pinned-arrow.is-previous { left:.35rem; } .v481-pinned-arrow.is-next { right:.35rem; } .v481-featured-badge { top:.65rem; left:.65rem; } .v481-pinned-carousel > .v481-pin-card:not([data-active='true']) .v481-pin-copy { display:none; } .v481-pinned-bento { min-height:0; grid-template-rows:14rem repeat(2,8.5rem); gap:.55rem; } .v481-pin-copy { padding:.9rem; } .v481-pin-copy small { font-size:.58rem; } .v481-pin-copy strong { font-size:1.15rem; } .v481-feature-slot .v481-pin-copy strong { font-size:1.15rem; } .v481-discount-rail { grid-auto-columns:min(88vw,22rem); } .v481-directory-header { grid-template-columns:auto minmax(0,1fr); align-items:start; } .v481-directory-header > .v481-sort-control { grid-column:1 / -1; width:100%; } .v481-sort-control select { width:100%; } .v481-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .v481-directory-grid .v481-pin-card { min-height:14rem; } }
 `;
 
 function HomeFeatureStyles() {

@@ -186,14 +186,14 @@ export async function saveCommercialSettings(
       ? env.DB.prepare(
           `INSERT INTO commercial_settings
            (id, schema_version, settings_json, revision, updated_by_user_id)
-           VALUES ('active', 2, ?, 1, ?)
+           VALUES ('active', 3, ?, 1, ?)
            ON CONFLICT(id) DO NOTHING`,
         )
           .bind(JSON.stringify(normalized), actorUserId)
       : env.DB.prepare(
           `UPDATE commercial_settings
               SET settings_json = ?,
-                  schema_version = 2,
+                  schema_version = 3,
                   revision = revision + 1,
                   updated_by_user_id = ?,
                   updated_at = CURRENT_TIMESTAMP

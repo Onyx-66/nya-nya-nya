@@ -20,6 +20,7 @@ const discountSchema = z
     chapterId: z.string().trim().min(3).max(160).nullable(),
     discountType: z.enum(["PERCENT", "FIXED"]),
     discountValue: z.coerce.number().int().min(1).max(10_000_000),
+    headline: z.string().trim().min(2).max(120).default("READ THE WHOLE VOLUME"),
     startsAt: z.string().datetime({ offset: true }),
     endsAt: z.string().datetime({ offset: true }),
     active: z.boolean(),

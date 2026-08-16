@@ -1826,6 +1826,7 @@ export const contentDiscounts = sqliteTable(
     discountValue: integer("discount_value").notNull(),
     originalPrice: integer("original_price").notNull(),
     reducedPrice: integer("reduced_price").notNull(),
+    headline: text("headline").notNull().default(""),
     startsAt: text("starts_at").notNull(),
     endsAt: text("ends_at").notNull(),
     isActive: integer("is_active", { mode: "boolean" })

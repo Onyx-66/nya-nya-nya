@@ -1,0 +1,1 @@
+ALTER TABLE `content_discounts` ADD `headline` text DEFAULT '' NOT NULL;

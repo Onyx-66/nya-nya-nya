@@ -66,7 +66,13 @@ export const membershipOfferSchema = z.object({
 
 export const commercialSettingsSchema = z
   .object({
-    schemaVersion: z.union([z.literal(1), z.literal(2)]),
+    schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    discounts: z
+      .object({
+        cardStyle: z.enum(["STYLE_1", "STYLE_2", "STYLE_3"]).default("STYLE_1"),
+        defaultHeadline: z.string().trim().min(2).max(120).default("READ THE WHOLE VOLUME"),
+      })
+      .default({ cardStyle: "STYLE_1", defaultHeadline: "READ THE WHOLE VOLUME" }),
     announcement: z.object({
       id: z
         .string()
@@ -155,7 +161,11 @@ export type CoinPackage = z.infer<typeof coinPackageSchema>;
 export type MembershipOffer = z.infer<typeof membershipOfferSchema>;
 
 export const defaultCommercialSettings: CommercialSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  discounts: {
+    cardStyle: "STYLE_1",
+    defaultHeadline: "READ THE WHOLE VOLUME",
+  },
   announcement: {
     id: "nya-plus-launch",
     enabled: true,
@@ -245,7 +255,11 @@ export const defaultCommercialSettings: CommercialSettings = {
 };
 
 export const failClosedCommercialSettings: CommercialSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  discounts: {
+    cardStyle: "STYLE_1",
+    defaultHeadline: "READ THE WHOLE VOLUME",
+  },
   announcement: {
     id: "premium-hidden",
     enabled: false,
@@ -320,7 +334,11 @@ export function parseCommercialSettings(value: unknown): CommercialSettings {
   };
   return {
     ...parsed.data,
-    schemaVersion: 2,
+    schemaVersion: 3,
+    discounts: {
+      cardStyle: parsed.data.discounts.cardStyle,
+      defaultHeadline: parsed.data.discounts.defaultHeadline,
+    },
     announcement: {
       ...parsed.data.announcement,
       text: configuredCoinCopy(

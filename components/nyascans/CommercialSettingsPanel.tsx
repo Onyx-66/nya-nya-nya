@@ -6,6 +6,7 @@ import {
   MegaphoneSimple,
   Plus,
   ShieldCheck,
+  Tag,
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -209,7 +210,7 @@ export function CommercialSettingsPanel({
     }
   }
 
-  const { announcement, economy } = document.settings;
+  const { announcement, discounts, economy } = document.settings;
   const owner = actorRole === "OWNER";
   const showTransitionalOfferEditors = false;
 
@@ -433,6 +434,56 @@ export function CommercialSettingsPanel({
             Reset reader dismissals
           </button>
         </div>
+      </section>
+
+      <section className="commercial-block">
+        <div className="control-section-heading">
+          <div>
+            <span>Discounts</span>
+            <h3>Discount card presentation</h3>
+          </div>
+          <Tag size={22} />
+        </div>
+        <div className="commercial-form-grid">
+          <label>
+            <span>Discount Card Style</span>
+            <select
+              value={discounts.cardStyle}
+              onChange={(event) =>
+                update((current) => ({
+                  ...current,
+                  discounts: {
+                    ...current.discounts,
+                    cardStyle: event.target.value as "STYLE_1" | "STYLE_2" | "STYLE_3",
+                  },
+                }))
+              }
+            >
+              <option value="STYLE_1">Style 1 — Horizontal Ticket</option>
+              <option value="STYLE_2">Style 2 — Spotlight / Hero</option>
+              <option value="STYLE_3">Style 3 — Two-up Grid</option>
+            </select>
+          </label>
+          <label className="commercial-wide">
+            <span>Style 2 default headline</span>
+            <input
+              value={discounts.defaultHeadline}
+              maxLength={120}
+              required
+              onChange={(event) =>
+                update((current) => ({
+                  ...current,
+                  discounts: {
+                    ...current.discounts,
+                    defaultHeadline: event.target.value,
+                  },
+                }))
+              }
+            />
+            <small>Used when an individual discount does not override the Spotlight/Hero headline.</small>
+          </label>
+        </div>
+        <p className="commercial-help">The selected style applies site-wide to the homepage Discounts section and the All Discounts page.</p>
       </section>
 
       <section className="commercial-block">

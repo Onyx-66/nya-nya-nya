@@ -17,6 +17,7 @@ export type DiscountInput = {
   chapterId: string | null;
   discountType: "PERCENT" | "FIXED";
   discountValue: number;
+  headline: string;
   startsAt: string;
   endsAt: string;
   active: boolean;
@@ -31,6 +32,7 @@ type DiscountRow = {
   discountValue: number;
   originalPrice: number;
   reducedPrice: number;
+  headline: string;
   startsAt: string;
   endsAt: string;
   active: number;
@@ -39,6 +41,7 @@ type DiscountRow = {
   updatedAt: string;
   seriesSlug: string;
   seriesTitle: string;
+  genreLabel: string | null;
   coverKey: string | null;
   seriesRevision: number;
   chapterSlug: string | null;
@@ -111,6 +114,7 @@ function serializeDiscount(row: DiscountRow) {
     discountValue: Number(row.discountValue),
     originalPrice: Number(row.originalPrice),
     reducedPrice: Number(row.reducedPrice),
+    headline: row.headline?.trim() ?? "",
     percentage,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
@@ -121,6 +125,7 @@ function serializeDiscount(row: DiscountRow) {
     updatedAt: row.updatedAt,
     seriesSlug: row.seriesSlug,
     seriesTitle: row.seriesTitle,
+    genreLabel: row.genreLabel?.trim() || (row.targetType === "SERIES" ? "FEATURED SERIES" : "PAID CHAPTER"),
     chapterSlug: row.chapterSlug,
     chapterNumber: row.chapterNumber,
     chapterTitle: row.chapterTitle,
@@ -152,10 +157,14 @@ const discountSelect = `
          discount.discount_value AS discountValue,
          discount.original_price AS originalPrice,
          discount.reduced_price AS reducedPrice,
+         discount.headline AS headline,
          discount.starts_at AS startsAt, discount.ends_at AS endsAt,
          discount.is_active AS active, discount.revision,
          discount.created_at AS createdAt, discount.updated_at AS updatedAt,
          s.slug AS seriesSlug, s.title AS seriesTitle,
+         (SELECT g.name FROM series_genres sg JOIN genres g ON g.id = sg.genre_id
+           WHERE sg.series_id = s.id AND g.archived_at IS NULL
+           ORDER BY g.name COLLATE NOCASE LIMIT 1) AS genreLabel,
          s.cover_key AS coverKey, s.revision AS seriesRevision,
          c.slug AS chapterSlug, c.chapter_number AS chapterNumber,
          c.title AS chapterTitle, c.price_onyx AS currentChapterPrice,
@@ -621,7 +630,7 @@ export async function saveDiscount(
           `UPDATE content_discounts
               SET target_type = ?, series_id = ?, chapter_id = ?,
                   discount_type = ?, discount_value = ?, original_price = ?,
-                  reduced_price = ?, starts_at = ?, ends_at = ?, is_active = ?,
+                  reduced_price = ?, headline = ?, starts_at = ?, ends_at = ?, is_active = ?,
                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND revision = ?`,
         )
@@ -633,6 +642,7 @@ export async function saveDiscount(
           input.discountValue,
           originalPrice,
           reducedPrice,
+          input.headline.trim(),
           input.startsAt,
           input.endsAt,
           input.active ? 1 : 0,
@@ -669,9 +679,9 @@ export async function saveDiscount(
         .prepare(
           `INSERT INTO content_discounts
            (id, target_type, series_id, chapter_id, discount_type,
-            discount_value, original_price, reduced_price, starts_at,
+            discount_value, original_price, reduced_price, headline, starts_at,
             ends_at, is_active, created_by_user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -682,6 +692,7 @@ export async function saveDiscount(
           input.discountValue,
           originalPrice,
           reducedPrice,
+          input.headline.trim(),
           input.startsAt,
           input.endsAt,
           input.active ? 1 : 0,
