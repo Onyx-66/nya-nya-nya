@@ -532,6 +532,7 @@ function DiscountCountdown({
   const minutes = Math.floor((remaining % 3_600_000) / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1_000);
   const underOneDay = remaining > 0 && remaining < 86_400_000;
+  const underOneHour = remaining > 0 && remaining < 3_600_000;
   const compactValue = remaining === 0
     ? "Offer ended"
     : underOneDay
@@ -543,7 +544,7 @@ function DiscountCountdown({
 
   if (compact) {
     return (
-      <span className={`v481-ticket-countdown is-compact ${underOneDay ? "is-under-day" : "is-over-day"}`} aria-label={`Time remaining: ${label}`}>
+      <span className={`v481-ticket-countdown is-compact ${underOneDay ? "is-under-day" : "is-over-day"} ${underOneHour ? "is-under-hour" : ""}`} aria-label={`Time remaining: ${label}`}>
         <Timer size={19} aria-hidden="true" />
         <span className="v481-ticket-countdown-box">{compactValue}</span>
       </span>
