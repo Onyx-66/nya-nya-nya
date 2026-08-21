@@ -10,7 +10,6 @@ import {
   PushPin,
   Star,
   Tag,
-  TagSimple,
   Timer,
 } from "@phosphor-icons/react";
 import {
@@ -405,7 +404,8 @@ export function PinnedSeriesSection({
         icon={<PushPin size={21} weight="fill" />}
         title="Pinned Series"
         allHref={allHref}
-        allLabel="View All"
+        allLabel="All"
+        tone="pinned"
       />
       {loading ? (
         <PinnedLoading />
@@ -716,7 +716,7 @@ export function DiscountsSection({
     <section className={`content-section page-wrap v481-discounts-section is-${settings.discounts.cardStyle.toLowerCase()}`}>
       <HomeFeatureStyles />
       <FeatureHeading
-        icon={<TagSimple size={21} weight="fill" />}
+        icon={<span className="discounts-heading-icon" aria-hidden="true" />}
         title="Discounts"
         allHref={allHref}
         tone="discounts"
