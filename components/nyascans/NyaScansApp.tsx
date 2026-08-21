@@ -3927,7 +3927,6 @@ function EditorsPickSection({
         </span>
         <div>
           <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
-          <span>Only the best, chosen for you.</span>
         </div>
       </div>
     </header>
