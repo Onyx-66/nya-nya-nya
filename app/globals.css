@@ -54121,3 +54121,203 @@ body::-webkit-scrollbar {
   background: transparent !important;
   box-shadow: none !important;
 }
+
+
+/* v48.25.7 — iconized homepage section headings and organized Editor’s Pick. */
+.section-heading-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .75rem;
+}
+
+.section-heading-main > div {
+  min-width: 0;
+}
+
+.section-heading-icon {
+  display: grid;
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  box-shadow: 0 0 .9rem color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.section-heading-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.trending-title {
+  display: flex !important;
+  align-items: center;
+  gap: .75rem;
+}
+
+.trending-title > div {
+  min-width: 0;
+}
+
+.continue-reading-heading > .section-heading-main {
+  display: flex;
+  gap: .75rem;
+}
+
+.continue-reading-heading > .section-heading-main > div {
+  display: grid;
+  gap: 5px;
+}
+
+.continue-reading-heading .section-heading-main > div > p:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Keep Editor’s Pick’s title and icon outside the content card. */
+.editors-pick-title-group {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+}
+
+.editors-pick-title-group > div {
+  min-width: 0;
+}
+
+.editors-pick-title-group .editors-pick-fleur {
+  display: grid;
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(210 168 255 / 58%);
+  border-radius: .85rem;
+  background: rgb(102 45 156 / 26%);
+  color: #d8b4fe;
+  box-shadow: 0 0 1rem rgb(168 85 247 / 22%);
+}
+
+.editors-pick-title-group .editors-pick-fleur svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.editors-pick-title-group h2 {
+  margin: 0 0 .35rem;
+  color: #e9d5ff;
+}
+
+.editors-pick-title-group > div > span {
+  color: #c4a9e8;
+  font-size: 12px;
+}
+
+@media (min-width: 621px) {
+  .editors-pick-heading {
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 18px;
+  }
+
+  .editors-pick-card {
+    grid-template-columns: minmax(240px, 34%) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(28px, 5vw, 64px);
+  }
+
+  .editors-pick-copy {
+    min-width: 0;
+    align-content: center;
+    justify-items: stretch;
+    gap: 16px;
+    text-align: left;
+  }
+
+  .editors-pick-copy h3 {
+    max-width: 26ch;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.02;
+    text-overflow: ellipsis;
+  }
+
+  .editors-pick-desktop-detail {
+    width: 100%;
+    min-width: 0;
+    gap: 11px;
+  }
+
+  .editors-pick-alternatives span {
+    overflow-wrap: anywhere;
+  }
+
+  .editors-pick-description {
+    max-width: 66ch;
+  }
+
+  .editors-pick-meta,
+  .editors-pick-actions {
+    justify-content: flex-start;
+  }
+
+  .editors-pick-actions {
+    width: min(100%, 470px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 621px) and (max-width: 1024px) {
+  .editors-pick-card {
+    grid-template-columns: minmax(190px, 31%) minmax(0, 1fr);
+    gap: 24px;
+    min-height: 0;
+    padding: 30px;
+  }
+
+  .editors-pick-cover-stage {
+    min-height: 420px;
+  }
+
+  .editors-pick-copy h3 {
+    max-width: 21ch;
+    font-size: clamp(30px, 4.6vw, 46px);
+  }
+
+  .editors-pick-description {
+    -webkit-line-clamp: 3;
+  }
+
+  .editors-pick-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .section-heading-icon,
+  .editors-pick-title-group .editors-pick-fleur {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: .75rem;
+  }
+
+  .section-heading-icon svg,
+  .editors-pick-title-group .editors-pick-fleur svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .editors-pick-heading > .editors-pick-title-group > .editors-pick-fleur {
+    display: grid;
+  }
+
+  .editors-pick-title-group > div > span {
+    font-size: 10px;
+  }
+}

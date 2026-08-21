@@ -2193,17 +2193,26 @@ function SectionHeading({
   body,
   action,
   id,
+  icon,
 }: {
   title: string;
   body?: string;
   action?: { label: string; href: string };
   id?: string;
+  icon?: ReactNode;
 }) {
   return (
     <div className="section-heading">
-      <div>
-        <h2 id={id}>{title}</h2>
-        {body ? <p>{body}</p> : null}
+      <div className="section-heading-main">
+        {icon ? (
+          <span className="section-heading-icon" aria-hidden="true">
+            {icon}
+          </span>
+        ) : null}
+        <div>
+          <h2 id={id}>{title}</h2>
+          {body ? <p>{body}</p> : null}
+        </div>
       </div>
       {action ? (
         <a href={action.href}>
@@ -2500,8 +2509,13 @@ function LatestUpdatesGrid({
     <section className="latest-updates-block" data-latest-style={homeStyle}>
       {heading ? (
         <div className="section-heading latest-updates-heading">
-          <div>
-            <h2>Latest Updates</h2>
+          <div className="section-heading-main">
+            <span className="section-heading-icon" aria-hidden="true">
+              <List size={20} weight="fill" />
+            </span>
+            <div>
+              <h2>Latest Updates</h2>
+            </div>
           </div>
           <div className="latest-updates-actions">
             <div className="latest-style-choices" role="group" aria-label="Latest Updates layout">
@@ -2959,8 +2973,13 @@ function TrendingShowcase() {
     <section className="content-section page-wrap trending-section">
       <div className="section-tabs trending-heading">
         <div className="trending-title">
-          <p className="eyebrow">Reader pulse</p>
-          <h2>Trending</h2>
+          <span className="section-heading-icon" aria-hidden="true">
+            <Pulse size={20} weight="fill" />
+          </span>
+          <div>
+            <p className="eyebrow">Reader pulse</p>
+            <h2>Trending</h2>
+          </div>
         </div>
         <div className="trending-actions">
           <a href="/leaderboard">
@@ -3093,7 +3112,8 @@ function CommunityHighlights() {
   return (
     <section className="content-section page-wrap community-highlights">
       <SectionHeading
-        title="Latest Top Comments"
+        title="Latest Comments"
+        icon={<ChatCircle size={20} weight="fill" />}
         body="The strongest spoiler-safe chapter discussions from the last eight hours."
       />
       {loading ? (
@@ -3283,15 +3303,20 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
       aria-labelledby="continue-reading-title"
     >
       <header className="continue-reading-heading">
-        <div>
-          <p className="eyebrow">Your recent stories</p>
-          <h2 id="continue-reading-title">Continue reading</h2>
-          <p>Resume from where you left...</p>
+        <div className="section-heading-main">
+          <span className="section-heading-icon" aria-hidden="true">
+            <Clock size={20} weight="fill" />
+          </span>
+          <div>
+            <p className="eyebrow">Your recent stories</p>
+            <h2 id="continue-reading-title">Continue reading</h2>
+            <p>Resume from where you left...</p>
           {preferenceError ? (
             <p className="continue-reading-preference-error" role="alert">
               {preferenceError}
             </p>
           ) : null}
+          </div>
         </div>
         {signedIn ? (
           <div className="continue-reading-actions">
@@ -3945,6 +3970,17 @@ function EditorsPickSection({
 
   return (
     <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
+      <header className="editors-pick-heading">
+        <div className="editors-pick-title-group">
+          <span className="editors-pick-fleur" aria-hidden="true">
+            <CrownSimple size={21} weight="fill" />
+          </span>
+          <div>
+            <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
+            <span>Only the best, chosen for you.</span>
+          </div>
+        </div>
+      </header>
       <article
         className="editors-pick-card"
         tabIndex={0}
@@ -3958,13 +3994,6 @@ function EditorsPickSection({
           }
         }}
       >
-        <div className="editors-pick-heading">
-          <span className="editors-pick-fleur" aria-hidden="true">⚜</span>
-          <div>
-            <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
-            <span>Only the best, chosen for you.</span>
-          </div>
-        </div>
         <div className="editors-pick-visual">
           <div
             className="editors-pick-cover-stage"

@@ -278,9 +278,14 @@ export function NewSeriesSection() {
       aria-labelledby="new-series-title"
     >
       <div className="section-heading">
-        <div>
-          <h2 id="new-series-title">New Series</h2>
-          <p>Recently published titles, newest additions first.</p>
+        <div className="section-heading-main">
+          <span className="section-heading-icon" aria-hidden="true">
+            <Books size={20} weight="fill" />
+          </span>
+          <div>
+            <h2 id="new-series-title">New Series</h2>
+            <p>Recently published titles, newest additions first.</p>
+          </div>
         </div>
         <div className="new-series-heading-actions">
           <a href="/browse?sort=added">
@@ -444,9 +449,14 @@ export function PublishingTeamsCarousel() {
       aria-labelledby="publishing-teams-title"
     >
       <div className="section-heading teams-heading">
-        <div>
-          <h2 id="publishing-teams-title">Top Publishing Teams</h2>
-          <p>Verified teams ranked by real releases and reader activity.</p>
+        <div className="section-heading-main">
+          <span className="section-heading-icon" aria-hidden="true">
+            <UsersThree size={20} weight="fill" />
+          </span>
+          <div>
+            <h2 id="publishing-teams-title">Top Teams</h2>
+            <p>Verified teams ranked by real releases and reader activity.</p>
+          </div>
         </div>
           <div className="teams-heading-actions">
           <details className="compact-language-menu">
