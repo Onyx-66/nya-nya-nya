@@ -54613,3 +54613,283 @@ body::-webkit-scrollbar {
     border-radius: .75rem;
   }
 }
+
+
+/* v48.29.0 — one responsive heading rail and section-colored action borders. */
+@property --section-action-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes section-action-orbit {
+  to { --section-action-angle: 360deg; }
+}
+
+.home-main :is(
+  .trending-heading,
+  .continue-reading-heading,
+  .latest-updates-heading,
+  .editors-pick-heading,
+  .public-new-series .section-heading,
+  .public-teams .section-heading,
+  .community-highlights .section-heading,
+  .hot-week-heading
+) {
+  display: flex !important;
+  min-height: 2.55rem;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: .7rem;
+  box-sizing: border-box;
+}
+
+.home-main :is(
+  .trending-title,
+  .continue-reading-heading .section-heading-main,
+  .latest-updates-heading .section-heading-main,
+  .editors-pick-title-group,
+  .public-new-series .section-heading .section-heading-main,
+  .public-teams .section-heading .section-heading-main,
+  .community-highlights .section-heading .section-heading-main,
+  .hot-week-title-group
+) {
+  min-width: 0;
+  min-height: 2.55rem;
+  align-items: center !important;
+  gap: .7rem !important;
+}
+
+.home-main :is(
+  .trending-heading .section-heading-icon,
+  .continue-reading-heading .section-heading-icon,
+  .latest-updates-heading .section-heading-icon,
+  .editors-pick-title-group .editors-pick-fleur,
+  .public-new-series .section-heading .section-heading-icon,
+  .public-teams .section-heading .section-heading-icon,
+  .community-highlights .section-heading .section-heading-icon,
+  .hot-week-heading .hot-week-heading-icon
+) {
+  width: 2.55rem !important;
+  height: 2.55rem !important;
+  min-width: 2.55rem;
+  min-height: 2.55rem;
+  flex: 0 0 2.55rem;
+  box-sizing: border-box;
+}
+
+.home-main .editors-pick-heading {
+  align-items: center !important;
+  justify-content: flex-start;
+}
+
+.home-main .editors-pick-title-group {
+  flex: 1 1 auto;
+  align-items: center !important;
+  gap: .7rem !important;
+}
+
+.home-main .editors-pick-title-group h2 {
+  margin: 0 !important;
+  line-height: 1;
+}
+
+.home-main .hot-week-heading {
+  --section-accent: var(--hot-popular-accent, #ff6b35);
+  --section-accent-strong: #ef5424;
+  --section-accent-soft: #ffc49c;
+  --section-accent-wash: rgb(255 107 53 / 13%);
+}
+
+.home-main :is(
+  .trending-actions > a,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--section-accent) 64%, var(--line));
+  color: var(--section-accent-strong);
+}
+
+.home-main :is(
+  .trending-actions > a,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+)::after {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--section-action-angle),
+    transparent 0 56%,
+    var(--section-accent-soft) 64%,
+    var(--section-accent) 74%,
+    var(--section-accent-strong) 80%,
+    transparent 88% 100%
+  );
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: section-action-orbit 3s linear infinite;
+}
+
+.home-main :is(
+  .trending-actions > a,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+) > * {
+  position: relative;
+  z-index: 5;
+}
+
+@media (max-width: 720px) {
+  .home-main :is(
+    .trending-heading,
+    .continue-reading-heading,
+    .latest-updates-heading,
+    .editors-pick-heading,
+    .public-new-series .section-heading,
+    .public-teams .section-heading,
+    .community-highlights .section-heading,
+    .hot-week-heading
+  ),
+  .home-main :is(
+    .trending-title,
+    .continue-reading-heading .section-heading-main,
+    .latest-updates-heading .section-heading-main,
+    .editors-pick-title-group,
+    .public-new-series .section-heading .section-heading-main,
+    .public-teams .section-heading .section-heading-main,
+    .community-highlights .section-heading .section-heading-main,
+    .hot-week-title-group
+  ) {
+    min-height: 2.35rem;
+  }
+
+  .home-main :is(
+    .trending-heading .section-heading-icon,
+    .continue-reading-heading .section-heading-icon,
+    .latest-updates-heading .section-heading-icon,
+    .editors-pick-title-group .editors-pick-fleur,
+    .public-new-series .section-heading .section-heading-icon,
+    .public-teams .section-heading .section-heading-icon,
+    .community-highlights .section-heading .section-heading-icon,
+    .hot-week-heading .hot-week-heading-icon
+  ) {
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    min-width: 2.35rem;
+    min-height: 2.35rem;
+    flex-basis: 2.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-main :is(
+    .trending-actions > a,
+    .continue-reading-actions > a.latest-all-action,
+    .latest-updates-actions > a.latest-all-action,
+    .public-new-series .new-series-heading-actions > a.latest-all-action,
+    .public-teams .teams-heading-actions > a.latest-all-action,
+    .hot-week-heading > a.latest-all-action
+  )::after {
+    animation: none;
+  }
+}
+
+
+/* v48.29.0 follow-up — include FeatureHeading sections in the same rail and CTA motion. */
+.home-main .v481-feature-heading {
+  --section-accent: var(--accent);
+  --section-accent-strong: var(--accent);
+  --section-accent-soft: #b8e5ff;
+  display: flex !important;
+  min-height: 2.55rem;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: .7rem;
+}
+
+.home-main .v481-feature-heading > :first-child {
+  min-width: 0;
+  min-height: 2.55rem;
+  align-items: center !important;
+  gap: .7rem !important;
+}
+
+.home-main .v481-feature-heading > :first-child > span {
+  width: 2.55rem !important;
+  height: 2.55rem !important;
+  min-width: 2.55rem;
+  min-height: 2.55rem;
+  flex: 0 0 2.55rem;
+  box-sizing: border-box;
+}
+
+.home-main :is(
+  .v481-feature-heading .latest-all-action,
+  .trending-actions > a,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+) {
+  border-color: color-mix(in srgb, var(--section-accent, var(--accent)) 64%, var(--line));
+}
+
+.home-main :is(
+  .v481-feature-heading .latest-all-action,
+  .trending-actions > a,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+)::after {
+  background: conic-gradient(
+    from var(--section-action-angle),
+    transparent 0 56%,
+    var(--section-accent-soft, #b8e5ff) 64%,
+    var(--section-accent, var(--accent)) 74%,
+    var(--section-accent-strong, var(--accent)) 80%,
+    transparent 88% 100%
+  );
+}
+
+@media (max-width: 720px) {
+  .home-main .v481-feature-heading,
+  .home-main .v481-feature-heading > :first-child {
+    min-height: 2.35rem;
+  }
+
+  .home-main .v481-feature-heading > :first-child > span {
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    min-width: 2.35rem;
+    min-height: 2.35rem;
+    flex-basis: 2.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-main .v481-feature-heading .latest-all-action::after {
+    animation: none;
+  }
+}
