@@ -3852,6 +3852,7 @@ function EditorsPickSection({
 }) {
   const [picks, setPicks] = useState<EditorPick[]>([]);
   const [active, setActive] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [librarySeries, setLibrarySeries] = useState<Set<string>>(
     () => new Set(),
@@ -3885,6 +3886,8 @@ function EditorsPickSection({
               : "Editor's Picks could not be loaded.",
           );
         }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
     return () => controller.abort();
@@ -3916,7 +3919,32 @@ function EditorsPickSection({
     return () => controller.abort();
   }, [actor]);
 
-  if (error || picks.length === 0) return null;
+  const editorsPickHeading = (
+    <header className="editors-pick-heading">
+      <div className="editors-pick-title-group">
+        <span className="editors-pick-fleur" aria-hidden="true">
+          <CrownSimple size={21} weight="fill" />
+        </span>
+        <div>
+          <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
+          <span>Only the best, chosen for you.</span>
+        </div>
+      </div>
+    </header>
+  );
+
+  if (loading || error || picks.length === 0) {
+    return (
+      <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
+        {editorsPickHeading}
+        <div className="editors-pick-state-card" role={loading ? "status" : "alert"}>
+          <strong>{loading ? "Loading Editor's Pick" : "Editor's Pick unavailable"}</strong>
+          <span>{loading ? "Finding a standout series for you." : error || "No Editor's Pick is available right now."}</span>
+        </div>
+      </section>
+    );
+  }
+
   const safeActive = active < picks.length ? active : 0;
   const item = picks[safeActive];
   const previousItem = picks[(safeActive - 1 + picks.length) % picks.length];
@@ -3971,17 +3999,7 @@ function EditorsPickSection({
 
   return (
     <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
-      <header className="editors-pick-heading">
-        <div className="editors-pick-title-group">
-          <span className="editors-pick-fleur" aria-hidden="true">
-            <CrownSimple size={21} weight="fill" />
-          </span>
-          <div>
-            <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
-            <span>Only the best, chosen for you.</span>
-          </div>
-        </div>
-      </header>
+      {editorsPickHeading}
       <article
         className="editors-pick-card"
         tabIndex={0}

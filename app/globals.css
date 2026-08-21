@@ -54485,3 +54485,96 @@ body::-webkit-scrollbar {
   align-items: center;
   gap: .75rem;
 }
+
+
+/* v48.27.0 — one shared heading guide plus an always-visible Editor’s Pick state. */
+.home-main :is(
+  .section-heading,
+  .trending-heading,
+  .continue-reading-heading,
+  .editors-pick-heading,
+  .v481-feature-heading,
+  .hot-week-heading
+) {
+  align-items: center;
+}
+
+.home-main :is(
+  .section-heading .section-heading-main,
+  .trending-title,
+  .continue-reading-heading .section-heading-main,
+  .editors-pick-title-group,
+  .v481-feature-heading > :first-child,
+  .hot-week-title-group
+) {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.home-main :is(
+  .section-heading .section-heading-main,
+  .trending-title,
+  .continue-reading-heading .section-heading-main,
+  .editors-pick-title-group,
+  .v481-feature-heading > :first-child,
+  .hot-week-title-group
+) > :first-child {
+  flex: 0 0 auto;
+}
+
+.home-main .editors-pick-heading {
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 18px;
+}
+
+.home-main .editors-pick-title-group {
+  flex: 1 1 auto;
+  gap: .75rem;
+}
+
+.editors-pick-state-card {
+  display: grid;
+  min-height: 190px;
+  place-items: center;
+  align-content: center;
+  gap: .55rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 1px solid color-mix(in srgb, #d8b4fe 32%, var(--line));
+  border-radius: var(--radius, 1.25rem);
+  background:
+    radial-gradient(circle at 50% 0%, rgb(168 85 247 / 12%), transparent 62%),
+    color-mix(in srgb, var(--surface) 92%, #4c1d95 8%);
+  text-align: center;
+}
+
+.editors-pick-state-card strong {
+  color: #eadcff;
+  font-size: clamp(1rem, 2vw, 1.3rem);
+}
+
+.editors-pick-state-card span {
+  max-width: 42ch;
+  color: #c4a9e8;
+  font-size: .85rem;
+}
+
+@media (max-width: 720px) {
+  .home-main :is(
+    .section-heading,
+    .trending-heading,
+    .continue-reading-heading,
+    .editors-pick-heading,
+    .v481-feature-heading,
+    .hot-week-heading
+  ) {
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .home-main .editors-pick-title-group {
+    gap: .58rem;
+  }
+}
