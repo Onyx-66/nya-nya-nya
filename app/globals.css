@@ -54578,3 +54578,38 @@ body::-webkit-scrollbar {
     gap: .58rem;
   }
 }
+
+
+/* v48.28.0 — match the four reported heading rows to Most Popular exactly. */
+.home-main :is(
+  .continue-reading-heading,
+  .latest-updates-heading,
+  .public-new-series .section-heading,
+  .community-highlights .section-heading
+) .section-heading-main {
+  gap: .7rem;
+}
+
+.home-main :is(
+  .continue-reading-heading,
+  .latest-updates-heading,
+  .public-new-series .section-heading,
+  .community-highlights .section-heading
+) .section-heading-icon {
+  width: 2.55rem;
+  height: 2.55rem;
+  border-radius: .82rem;
+}
+
+@media (max-width: 620px) {
+  .home-main :is(
+    .continue-reading-heading,
+    .latest-updates-heading,
+    .public-new-series .section-heading,
+    .community-highlights .section-heading
+  ) .section-heading-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: .75rem;
+  }
+}
