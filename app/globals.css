@@ -54113,3 +54113,11 @@ body::-webkit-scrollbar {
     column-gap: .75rem;
   }
 }
+
+/* v48.25.6: Trending rail cards must not paint an outer wrapper contour. */
+.trending-rail .series-card {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
