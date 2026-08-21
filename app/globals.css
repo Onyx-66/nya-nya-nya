@@ -50068,12 +50068,13 @@ body {
 .editors-pick-heading > div > span { color: var(--muted); }
 @media (min-width: 981px) {
   .editors-pick-card {
-    grid-template-columns: minmax(250px, .62fr) minmax(320px, .9fr) minmax(0, 1.25fr) !important;
-    gap: clamp(1.2rem, 3vw, 3.5rem) !important;
+    grid-template-columns: minmax(280px, .72fr) minmax(0, 1.28fr) !important;
+    gap: clamp(1.5rem, 4vw, 4.5rem) !important;
   }
   .editors-pick-heading { align-self: start; padding-top: .35rem; }
-  .editors-pick-visual { grid-column: 2; }
-  .editors-pick-copy { grid-column: 3; }
+  .editors-pick-visual,
+  .editors-pick-copy { grid-column: auto; }
+  .editors-pick-visual { justify-items: start; }
 }
 @media (max-width: 980px) {
   .editors-pick-heading { margin-bottom: .3rem; }
@@ -54892,4 +54893,128 @@ body::-webkit-scrollbar {
   .home-main .v481-feature-heading .latest-all-action::after {
     animation: none;
   }
+}
+
+
+/* v49.0.0 — enforce one left-to-right homepage heading rail and left-anchor Editor’s Pick media. */
+.home-main :is(
+  .trending-heading,
+  .continue-reading-heading,
+  .latest-updates-heading,
+  .editors-pick-heading,
+  .public-new-series .section-heading,
+  .public-teams .section-heading,
+  .community-highlights .section-heading,
+  .hot-week-heading,
+  .v481-feature-heading
+) {
+  display: flex !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: .7rem;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+  text-align: left;
+}
+
+.home-main :is(
+  .trending-title,
+  .continue-reading-heading .section-heading-main,
+  .latest-updates-heading .section-heading-main,
+  .editors-pick-title-group,
+  .public-new-series .section-heading .section-heading-main,
+  .public-teams .section-heading .section-heading-main,
+  .community-highlights .section-heading .section-heading-main,
+  .hot-week-title-group,
+  .v481-feature-heading > :first-child
+) {
+  display: flex !important;
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: none;
+  min-width: 0;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: .7rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left;
+}
+
+.home-main :is(
+  .trending-title > div,
+  .continue-reading-heading .section-heading-main > div,
+  .latest-updates-heading .section-heading-main > div,
+  .editors-pick-title-group > div,
+  .public-new-series .section-heading .section-heading-main > div,
+  .public-teams .section-heading .section-heading-main > div,
+  .community-highlights .section-heading .section-heading-main > div,
+  .hot-week-title-group > div
+) {
+  min-width: 0;
+  text-align: left;
+}
+
+.home-main .editors-pick-visual {
+  justify-items: start;
+}
+
+@media (min-width: 621px) {
+  .home-main .editors-pick-card {
+    grid-template-columns: minmax(240px, .75fr) minmax(0, 1.25fr) !important;
+    gap: clamp(24px, 4vw, 56px) !important;
+  }
+
+  .home-main .editors-pick-visual {
+    justify-self: start;
+    align-self: center;
+  }
+
+  .home-main .editors-pick-cover-stage {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .home-main :is(
+    .trending-heading,
+    .continue-reading-heading,
+    .latest-updates-heading,
+    .editors-pick-heading,
+    .public-new-series .section-heading,
+    .public-teams .section-heading,
+    .community-highlights .section-heading,
+    .hot-week-heading,
+    .v481-feature-heading
+  ) {
+    justify-content: space-between !important;
+    gap: .55rem;
+  }
+
+  .home-main :is(
+    .trending-title,
+    .continue-reading-heading .section-heading-main,
+    .latest-updates-heading .section-heading-main,
+    .editors-pick-title-group,
+    .public-new-series .section-heading .section-heading-main,
+    .public-teams .section-heading .section-heading-main,
+    .community-highlights .section-heading .section-heading-main,
+    .hot-week-title-group,
+    .v481-feature-heading > :first-child
+  ) {
+    gap: .55rem !important;
+  }
+}
+
+
+/* v49.0.0 follow-up — Editor’s Pick wrapper shares the canonical homepage width at every breakpoint. */
+.home-main .editors-pick-section {
+  width: var(--page) !important;
+  max-width: 100%;
+  box-sizing: border-box;
 }
