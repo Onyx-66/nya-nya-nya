@@ -54078,3 +54078,31 @@ body::-webkit-scrollbar {
   .passkey-row-copy small { font-size: .72rem; }
 }
 @media (prefers-reduced-motion: reduce) { .auth-passkey-button { transition: none; } }
+
+/* v48.25.2: keep Most Popular titles anchored to one stable start beside each cover. */
+.hot-this-week .hot-week-copy {
+  justify-self: start;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  text-align: left;
+}
+
+.hot-this-week .hot-week-title-link,
+.hot-this-week .hot-week-title-link h3 {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
+  text-align: left;
+  justify-self: stretch;
+}
+
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-copy,
+  .hot-this-week .hot-week-title-link,
+  .hot-this-week .hot-week-title-link h3 {
+    justify-self: stretch;
+    text-align: left;
+  }
+}

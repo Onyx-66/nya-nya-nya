@@ -14056,9 +14056,10 @@ export function NyaScansApp({
         }
       };
       const modifierShortcut = enabledShortcuts.find((shortcut) => {
-        const prefix = shortcut.prefix.toLowerCase();
+        const prefix = typeof shortcut.prefix === "string" ? shortcut.prefix.toLowerCase() : "";
+        const shortcutKey = typeof shortcut.key === "string" ? shortcut.key.toLowerCase() : "";
         const usesModifier = /ctrl|control|cmd|meta|⌘|alt|shift/u.test(prefix);
-        if (!usesModifier || shortcut.key.toLowerCase() !== key) return false;
+        if (!usesModifier || shortcutKey !== key) return false;
         const primaryMatches = !/ctrl|control|cmd|meta|⌘/u.test(prefix) || event.ctrlKey || event.metaKey;
         const altMatches = !prefix.includes("alt") || event.altKey;
         const shiftMatches = !prefix.includes("shift") || event.shiftKey;
@@ -14076,7 +14077,11 @@ export function NyaScansApp({
       }
       const pending = shortcutPrefixRef.current;
       if (pending && Date.now() - pending.at <= 1_500) {
-        const destination = enabledShortcuts.find((shortcut) => shortcut.prefix.trim().toLowerCase() === pending.prefix && shortcut.key.toLowerCase() === key);
+        const destination = enabledShortcuts.find((shortcut) => {
+          const prefix = typeof shortcut.prefix === "string" ? shortcut.prefix.trim().toLowerCase() : "";
+          const shortcutKey = typeof shortcut.key === "string" ? shortcut.key.toLowerCase() : "";
+          return prefix === pending.prefix && shortcutKey === key;
+        });
         shortcutPrefixRef.current = null;
         if (destination) {
           run(destination);
@@ -14084,7 +14089,7 @@ export function NyaScansApp({
         }
       }
       const beginsChord = enabledShortcuts.some((shortcut) => {
-        const prefix = shortcut.prefix.trim().toLowerCase();
+        const prefix = typeof shortcut.prefix === "string" ? shortcut.prefix.trim().toLowerCase() : "";
         return prefix && !/ctrl|control|cmd|meta|⌘|alt|shift/u.test(prefix) && prefix === key;
       });
       if (beginsChord) {
