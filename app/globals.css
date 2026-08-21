@@ -54106,3 +54106,10 @@ body::-webkit-scrollbar {
     text-align: left;
   }
 }
+
+/* v48.25.3: keep mobile Most Popular copy visibly clear of the cover. */
+@media (max-width: 640px) {
+  .hot-this-week .hot-week-list-card {
+    column-gap: .75rem;
+  }
+}
