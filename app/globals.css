@@ -55146,3 +55146,24 @@ body::-webkit-scrollbar {
   --section-accent-soft: #ffb6cb;
   --section-accent-wash: rgb(255 95 143 / 14%);
 }
+
+
+/* v49.1.1 — Editor’s Pick heading and progress rail refinements. */
+.home-main .editors-pick-title-group h2 {
+  color: #fff !important;
+}
+
+.home-main .editors-pick-dots {
+  position: relative;
+  z-index: 2;
+  margin-top: -14px;
+  padding-top: 0;
+  transform: translateY(-2px);
+}
+
+/* Keep the progress rail lifted on compact screens where the cover stage is taller. */
+@media (max-width: 620px) {
+  .home-main .editors-pick-dots {
+    margin-top: -18px;
+  }
+}

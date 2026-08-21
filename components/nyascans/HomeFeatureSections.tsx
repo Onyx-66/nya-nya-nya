@@ -586,7 +586,7 @@ function DiscountStyleOne({
     >
       <span className="v481-ticket-cover">
         <CoverArtwork src={record.coverUrl} title={record.seriesTitle} />
-        <span className="v481-ticket-ribbon">−{record.percentage}%</span>
+        <span className="v481-ticket-ribbon">{record.percentage}% OFF</span>
       </span>
       <span className="v481-ticket-perforation" aria-hidden="true" />
       <span className="v481-ticket-copy">
@@ -619,7 +619,7 @@ function DiscountSpotlight({
     <article className={`v481-spotlight-card ${directory ? "is-directory" : ""}`}>
       <a className="v481-spotlight-cover" href={record.href} aria-label={`${record.percentage}% discount on ${record.seriesTitle}`}>
         <CoverArtwork src={record.coverUrl} title={record.seriesTitle} eager />
-        <span className="v481-ticket-ribbon">−{record.percentage}%</span>
+        <span className="v481-ticket-ribbon">{record.percentage}% OFF</span>
         <strong>{record.seriesTitle}</strong>
       </a>
       <div className="v481-spotlight-body">
@@ -651,7 +651,7 @@ function DiscountGridCard({
     <a className="v481-grid-discount-card" href={record.href} aria-label={`${record.percentage}% discount on ${record.targetLabel}`}>
       <span className="v481-grid-discount-cover">
         <CoverArtwork src={record.coverUrl} title={record.seriesTitle} />
-        <span className="v481-ticket-ribbon">−{record.percentage}%</span>
+        <span className="v481-ticket-ribbon">{record.percentage}% OFF</span>
       </span>
       <span className="v481-grid-discount-copy">
         <small>{record.genreLabel}</small>
@@ -962,7 +962,7 @@ const HOME_FEATURE_CSS = `
   .v481-ticket-cover > picture,.v481-ticket-cover > .v481-art-placeholder,.v481-ticket-cover > picture > img { display:block; width:100%; height:100%; }
   .v481-ticket-cover > picture > img { object-fit:cover; }
   .v481-ticket-cover::after { position:absolute; inset:0; background:linear-gradient(90deg,transparent 64%,rgb(4 14 28 / 62%)); content:''; pointer-events:none; }
-  .v481-ticket-ribbon { position:absolute; z-index:2; top:1.2rem; left:-2.45rem; width:9rem; padding:.42rem 0; transform:rotate(-42deg); background:linear-gradient(135deg,#ff887c,#ff784f 52%,#ff9b38); color:#fff; font-size:.77rem; font-weight:900; letter-spacing:.045em; text-align:center; box-shadow:0 6px 18px rgb(69 12 8 / 38%); }
+  .v481-ticket-ribbon { position:absolute; z-index:2; top:1.2rem; left:-2.45rem; width:9rem; padding:.42rem 0; transform:rotate(-42deg); background:linear-gradient(135deg,#ffb2ca,#ff4f87 52%,#ed315f); color:#fff; font-size:.77rem; font-weight:900; letter-spacing:.045em; text-align:center; box-shadow:0 6px 18px rgb(173 20 71 / 38%); }
   .v481-ticket-perforation { position:relative; display:block; background:linear-gradient(180deg,transparent 6%,rgb(62 185 255 / 72%) 50%,transparent 94%); }
   .v481-ticket-perforation::after { position:absolute; top:8%; bottom:8%; left:50%; width:1px; transform:translateX(-50%); background:rgb(136 216 255 / 68%); box-shadow:0 0 .7rem rgb(56 172 255 / 75%); content:''; }
   .v481-ticket-copy { position:relative; display:grid; min-width:0; align-content:center; gap:.68rem; padding:1.2rem 1.25rem 1.2rem 1rem; }
