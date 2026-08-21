@@ -10,6 +10,7 @@ import {
   PushPin,
   Star,
   Tag,
+  TagSimple,
   Timer,
 } from "@phosphor-icons/react";
 import {
@@ -273,15 +274,17 @@ function FeatureHeading({
   allHref,
   allLabel = "All",
   controls,
+  tone,
 }: {
   icon: ReactNode;
   title: string;
   allHref: string;
   allLabel?: string;
   controls?: ReactNode;
+  tone?: string;
 }) {
   return (
-    <header className="v481-feature-heading">
+    <header className={`v481-feature-heading${tone ? ` tone-${tone}` : ""}`}>
       <div>
         <span aria-hidden="true">{icon}</span>
         <h2>{title}</h2>
@@ -713,9 +716,10 @@ export function DiscountsSection({
     <section className={`content-section page-wrap v481-discounts-section is-${settings.discounts.cardStyle.toLowerCase()}`}>
       <HomeFeatureStyles />
       <FeatureHeading
-        icon={<Tag size={21} weight="fill" />}
+        icon={<TagSimple size={21} weight="fill" />}
         title="Discounts"
         allHref={allHref}
+        tone="discounts"
         controls={
               visibleRecords.length > 2 ? (
             <span className="v481-rail-controls">

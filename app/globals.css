@@ -54321,3 +54321,167 @@ body::-webkit-scrollbar {
     font-size: 10px;
   }
 }
+
+
+/* v48.26.0 — unified homepage heading rhythm and section-specific accent palette. */
+.section-heading.tone-comments,
+.section-heading.tone-updates,
+.public-new-series .section-heading.tone-new-series,
+.public-teams .section-heading.tone-teams,
+.trending-heading.tone-trending,
+.continue-reading-section.tone-continue,
+.v481-feature-heading.tone-discounts {
+  --section-accent: #55b9ff;
+  --section-accent-strong: #2f8fff;
+  --section-accent-soft: #b8e5ff;
+  --section-accent-wash: rgb(85 185 255 / 13%);
+}
+
+.trending-heading.tone-trending {
+  --section-accent: #ffc857;
+  --section-accent-strong: #ff8b3d;
+  --section-accent-soft: #ffe0a0;
+  --section-accent-wash: rgb(255 177 76 / 14%);
+}
+
+.continue-reading-section.tone-continue {
+  --section-accent: #55b9ff;
+  --section-accent-strong: #2f8fff;
+  --section-accent-soft: #b8e5ff;
+  --section-accent-wash: rgb(85 185 255 / 13%);
+}
+
+.section-heading.tone-updates {
+  --section-accent: #4ca8ff;
+  --section-accent-strong: #287de2;
+  --section-accent-soft: #b9e0ff;
+  --section-accent-wash: rgb(76 168 255 / 13%);
+}
+
+.public-new-series .section-heading.tone-new-series {
+  --section-accent: #ff3b4d;
+  --section-accent-strong: #e51e39;
+  --section-accent-soft: #ff9aa5;
+  --section-accent-wash: rgb(255 59 77 / 13%);
+}
+
+.public-teams .section-heading.tone-teams {
+  --section-accent: #a27bff;
+  --section-accent-strong: #7552dd;
+  --section-accent-soft: #d7c8ff;
+  --section-accent-wash: rgb(162 123 255 / 13%);
+}
+
+.section-heading.tone-comments {
+  --section-accent: #61d5ff;
+  --section-accent-strong: #2a9fd0;
+  --section-accent-soft: #bcefff;
+  --section-accent-wash: rgb(97 213 255 / 13%);
+}
+
+.v481-feature-heading.tone-discounts {
+  --section-accent: var(--discount-pink, #ff5f8f);
+  --section-accent-strong: #ed315f;
+  --section-accent-soft: #ffb6cb;
+  --section-accent-wash: rgb(255 95 143 / 14%);
+}
+
+:is(.section-heading, .trending-heading, .continue-reading-heading, .v481-feature-heading, .hot-week-heading) {
+  align-items: center;
+}
+
+:is(.section-heading, .trending-heading, .continue-reading-heading) .section-heading-main,
+.trending-title,
+.hot-week-title-group,
+.v481-feature-heading > :first-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .75rem;
+}
+
+:is(.section-heading, .trending-heading, .continue-reading-heading) .section-heading-main > div,
+.trending-title > div,
+.hot-week-title-group > div,
+.v481-feature-heading > :first-child > h2 {
+  min-width: 0;
+}
+
+:is(.section-heading.tone-comments, .section-heading.tone-updates, .public-new-series .section-heading.tone-new-series, .public-teams .section-heading.tone-teams, .trending-heading.tone-trending, .continue-reading-section.tone-continue .continue-reading-heading, .v481-feature-heading.tone-discounts) .section-heading-icon,
+.v481-feature-heading.tone-discounts > :first-child > span {
+  border-color: color-mix(in srgb, var(--section-accent) 54%, var(--line));
+  background: var(--section-accent-wash);
+  color: var(--section-accent);
+  box-shadow: 0 0 .95rem color-mix(in srgb, var(--section-accent) 20%, transparent);
+}
+
+:is(.section-heading.tone-comments, .section-heading.tone-updates, .public-new-series .section-heading.tone-new-series, .public-teams .section-heading.tone-teams, .trending-heading.tone-trending, .continue-reading-section.tone-continue .continue-reading-heading, .v481-feature-heading.tone-discounts) h2 {
+  margin: 0;
+}
+
+.trending-heading.tone-trending .trending-actions > a,
+.continue-reading-section.tone-continue .continue-reading-actions > a,
+.public-new-series .section-heading.tone-new-series .new-series-heading-actions > a,
+.public-teams .section-heading.tone-teams .teams-heading-actions > a,
+.v481-feature-heading.tone-discounts .v481-heading-actions > .latest-all-action {
+  border-color: color-mix(in srgb, var(--section-accent) 58%, var(--line));
+  background: var(--section-accent-wash);
+  color: var(--section-accent-strong);
+  box-shadow: 0 .35rem 1rem color-mix(in srgb, var(--section-accent) 15%, transparent);
+}
+
+.trending-heading.tone-trending .trending-actions > a:is(:hover, :focus-visible),
+.continue-reading-section.tone-continue .continue-reading-actions > a:is(:hover, :focus-visible),
+.public-new-series .section-heading.tone-new-series .new-series-heading-actions > a:is(:hover, :focus-visible),
+.public-teams .section-heading.tone-teams .teams-heading-actions > a:is(:hover, :focus-visible),
+.v481-feature-heading.tone-discounts .v481-heading-actions > .latest-all-action:is(:hover, :focus-visible) {
+  border-color: var(--section-accent-soft);
+  background: color-mix(in srgb, var(--section-accent) 24%, var(--surface-strong));
+  color: var(--text);
+}
+
+.section-heading.tone-updates .latest-updates-actions > *,
+.section-heading.tone-updates .latest-updates-actions summary,
+.public-teams .section-heading.tone-teams .compact-language-menu > summary {
+  border-color: color-mix(in srgb, var(--section-accent) 48%, var(--line));
+  color: var(--section-accent-strong);
+}
+
+.section-heading.tone-updates .latest-updates-actions > *:is(:hover, :focus-visible),
+.section-heading.tone-updates .latest-updates-actions summary:is(:hover, :focus-visible),
+.public-teams .section-heading.tone-teams .compact-language-menu > summary:is(:hover, :focus-visible) {
+  border-color: var(--section-accent);
+  color: var(--section-accent-strong);
+}
+
+@media (max-width: 720px) {
+  :is(.section-heading, .trending-heading, .continue-reading-heading, .v481-feature-heading) {
+    gap: .65rem;
+  }
+
+  :is(.section-heading, .trending-heading, .continue-reading-heading, .v481-feature-heading) .section-heading-main,
+  .trending-title,
+  .hot-week-title-group,
+  .v481-feature-heading > :first-child {
+    gap: .58rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trending-heading.tone-trending .trending-actions > a,
+  .continue-reading-section.tone-continue .continue-reading-actions > a,
+  .public-new-series .section-heading.tone-new-series .new-series-heading-actions > a,
+  .public-teams .section-heading.tone-teams .teams-heading-actions > a,
+  .v481-feature-heading.tone-discounts .v481-heading-actions > .latest-all-action {
+    transition: none;
+  }
+}
+
+
+/* Continue Reading keeps the Most Popular horizontal icon/title rhythm. */
+.continue-reading-heading > div.section-heading-main {
+  display: flex !important;
+  min-width: 0;
+  align-items: center;
+  gap: .75rem;
+}

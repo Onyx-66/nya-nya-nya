@@ -277,18 +277,17 @@ export function NewSeriesSection() {
       className="content-section page-wrap public-new-series"
       aria-labelledby="new-series-title"
     >
-      <div className="section-heading">
+      <div className="section-heading tone-new-series">
         <div className="section-heading-main">
           <span className="section-heading-icon" aria-hidden="true">
-            <Books size={20} weight="fill" />
+            <BookOpenText size={20} weight="fill" />
           </span>
           <div>
             <h2 id="new-series-title">New Series</h2>
-            <p>Recently published titles, newest additions first.</p>
           </div>
         </div>
         <div className="new-series-heading-actions">
-          <a href="/browse?sort=added">
+          <a className="button button-secondary latest-all-action" href="/browse?sort=added">
             View All <ArrowRight size={17} />
           </a>
         </div>
@@ -448,17 +447,16 @@ export function PublishingTeamsCarousel() {
       className="content-section page-wrap public-teams"
       aria-labelledby="publishing-teams-title"
     >
-      <div className="section-heading teams-heading">
+      <div className="section-heading teams-heading tone-teams">
         <div className="section-heading-main">
           <span className="section-heading-icon" aria-hidden="true">
             <UsersThree size={20} weight="fill" />
           </span>
           <div>
             <h2 id="publishing-teams-title">Top Teams</h2>
-            <p>Verified teams ranked by real releases and reader activity.</p>
           </div>
         </div>
-          <div className="teams-heading-actions">
+        <div className="teams-heading-actions">
           <details className="compact-language-menu">
             <summary aria-label={language ? `Language: ${languageName(language)}` : "Choose team language"}>
               {language ? <LanguageFlag language={language} showCode={false} /> : <Translate size={18} />}
@@ -473,7 +471,7 @@ export function PublishingTeamsCarousel() {
               ))}
             </div>
           </details>
-          <a href="/teams">Browse Teams <ArrowRight size={16} /></a>
+          <a className="button button-secondary latest-all-action" href="/teams">Browse Teams <ArrowRight size={16} /></a>
         </div>
       </div>
       {loading ? (

@@ -17,6 +17,7 @@ import {
   Check,
   CheckCircle,
   Clock,
+  ClockCounterClockwise,
   CloudArrowUp,
   Coins,
   Compass,
@@ -56,6 +57,7 @@ import {
   Storefront,
   Sun,
   Tag,
+  TagSimple,
   ThumbsUp,
   Trash,
   Trophy,
@@ -2194,15 +2196,17 @@ function SectionHeading({
   action,
   id,
   icon,
+  tone,
 }: {
   title: string;
   body?: string;
   action?: { label: string; href: string };
   id?: string;
   icon?: ReactNode;
+  tone?: string;
 }) {
   return (
-    <div className="section-heading">
+    <div className={`section-heading${tone ? ` tone-${tone}` : ""}`}>
       <div className="section-heading-main">
         {icon ? (
           <span className="section-heading-icon" aria-hidden="true">
@@ -2508,7 +2512,7 @@ function LatestUpdatesGrid({
   return (
     <section className="latest-updates-block" data-latest-style={homeStyle}>
       {heading ? (
-        <div className="section-heading latest-updates-heading">
+        <div className="section-heading latest-updates-heading tone-updates">
           <div className="section-heading-main">
             <span className="section-heading-icon" aria-hidden="true">
               <List size={20} weight="fill" />
@@ -2584,7 +2588,7 @@ function LatestUpdatesGrid({
                 ) : null}
               </div>
             </details>
-            <a className="latest-all-action" href="/latest">
+            <a className="button button-secondary latest-all-action" href="/latest">
               All <ArrowRight size={17} />
             </a>
           </div>
@@ -2971,18 +2975,17 @@ function TrendingShowcase() {
 
   return (
     <section className="content-section page-wrap trending-section">
-      <div className="section-tabs trending-heading">
+      <div className="section-tabs trending-heading tone-trending">
         <div className="trending-title">
           <span className="section-heading-icon" aria-hidden="true">
-            <Pulse size={20} weight="fill" />
+            <ChartLineUp size={20} weight="fill" />
           </span>
           <div>
-            <p className="eyebrow">Reader pulse</p>
             <h2>Trending</h2>
           </div>
         </div>
         <div className="trending-actions">
-          <a href="/leaderboard">
+          <a className="button button-secondary latest-all-action" href="/leaderboard">
             Full ranking <ArrowRight size={17} />
           </a>
         </div>
@@ -3114,7 +3117,7 @@ function CommunityHighlights() {
       <SectionHeading
         title="Latest Comments"
         icon={<ChatCircle size={20} weight="fill" />}
-        body="The strongest spoiler-safe chapter discussions from the last eight hours."
+        tone="comments"
       />
       {loading ? (
         <div className="community-highlight-loading" role="status">
@@ -3299,18 +3302,16 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
 
   return (
     <section
-      className={`continue-reading-section page-wrap is-${viewMode.toLowerCase()}`}
+      className={`continue-reading-section page-wrap tone-continue is-${viewMode.toLowerCase()}`}
       aria-labelledby="continue-reading-title"
     >
       <header className="continue-reading-heading">
         <div className="section-heading-main">
           <span className="section-heading-icon" aria-hidden="true">
-            <Clock size={20} weight="fill" />
+            <ClockCounterClockwise size={20} weight="fill" />
           </span>
           <div>
-            <p className="eyebrow">Your recent stories</p>
             <h2 id="continue-reading-title">Continue reading</h2>
-            <p>Resume from where you left...</p>
           {preferenceError ? (
             <p className="continue-reading-preference-error" role="alert">
               {preferenceError}
@@ -3346,7 +3347,7 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
                 <SquaresFour size={18} />
               </button>
             </div>
-            <a href="/library">
+            <a className="button button-secondary latest-all-action" href="/library">
               View library <ArrowRight size={15} />
             </a>
           </div>
