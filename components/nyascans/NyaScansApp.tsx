@@ -83,7 +83,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
 import { AccountSecurityWorkspace } from "@/components/nyascans/AccountSecurityWorkspace";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
@@ -1697,7 +1696,6 @@ function SeriesCardView({
         />
         <span className="cover-shade" />
         <SeriesTypeBadge type={item.type} flagOnly />
-        <ActiveDiscountBadge seriesSlug={item.slug} />
         <span className="quick-read">
           <Play size={14} weight="fill" />
           Read
