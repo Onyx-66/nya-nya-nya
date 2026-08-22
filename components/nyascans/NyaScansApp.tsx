@@ -13555,10 +13555,12 @@ function GenericView({
 
   return (
     <main className="page-main page-wrap generic-page">
-      <section className="generic-hero">
-        <h1>{title}</h1>
-        <p>{intro}</p>
-      </section>
+      {view !== "rankings" ? (
+        <section className="generic-hero">
+          <h1>{title}</h1>
+          <p>{intro}</p>
+        </section>
+      ) : null}
       {view === "rankings" ? (
         <UserLeaderboardView />
       ) : view === "support" ? (

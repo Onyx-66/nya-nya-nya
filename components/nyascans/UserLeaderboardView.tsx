@@ -2,16 +2,14 @@
 /* eslint-disable @next/next/no-img-element */
 
 import {
-  ArrowFatDown,
   ArrowFatUp,
-  BookOpen,
   ChatCircle,
   Crown,
-  Diamond,
+  Fire,
   Medal,
   Trophy,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type RankingPeriod = "weekly" | "monthly" | "all";
 
@@ -48,111 +46,123 @@ function rankingTier(rank: number) {
   return "Challenger";
 }
 
-function RankingEntry({
-  entry,
-  viewer,
+function number(value: number) {
+  return value.toLocaleString("en-US");
+}
+
+function profileHref(entry: LeaderboardEntry) {
+  return `/u/${encodeURIComponent(entry.username)}`;
+}
+
+function accessibleEntryLabel(entry: LeaderboardEntry) {
+  return `Rank ${entry.rank}: ${entry.displayName}. Score ${number(entry.score)}, ${
+    entry.communityVisible ? `${number(entry.commentCount)} comments and ${number(entry.upvotes)} upvotes` : "community metrics private"
+  }.`;
+}
+
+function RankingAvatar({ entry, featured = false }: { entry: LeaderboardEntry; featured?: boolean }) {
+  return (
+    <span className={`user-ranking-avatar${featured ? " is-featured" : ""}`}>
+      {entry.avatarUrl ? (
+        <img src={entry.avatarUrl} alt="" loading={featured ? "eager" : "lazy"} />
+      ) : (
+        entry.displayName
+          .split(/\s+/)
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase()
+      )}
+    </span>
+  );
+}
+
+function RankingMetric({
+  icon,
+  label,
+  value,
+  accent = false,
 }: {
-  entry: LeaderboardEntry;
-  viewer?: boolean;
+  icon: ReactNode;
+  label: string;
+  value: string;
+  accent?: boolean;
 }) {
   return (
-    <li
-      className={[
-        entry.rank <= 3 ? `is-top-${entry.rank}` : "",
-        viewer ? "is-viewer" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <a href={`/u/${encodeURIComponent(entry.username)}`}>
-        <span
-          className="user-leaderboard-rank"
-          aria-label={`Rank ${entry.rank.toLocaleString("en-US")}, ${rankingTier(entry.rank)}`}
-        >
-          {entry.rank === 1 ? (
-            <Crown size={20} weight="fill" aria-hidden="true" />
-          ) : entry.rank <= 3 ? (
-            <Medal size={19} weight="fill" aria-hidden="true" />
-          ) : null}
+    <span className={`user-ranking-metric${accent ? " is-accent" : ""}`} data-label={label}>
+      {icon}
+      <span>
+        <strong>{value}</strong>
+        <small>{label}</small>
+      </span>
+    </span>
+  );
+}
+
+function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
+  return (
+    <li className={`user-ranking-podium-card is-rank-${entry.rank}`}>
+      <a href={profileHref(entry)} aria-label={accessibleEntryLabel(entry)}>
+        <span className="user-ranking-place" aria-hidden="true">
+          {entry.rank === 1 ? <Crown weight="fill" /> : <Medal weight="fill" />}
+          <strong>{entry.rank}</strong>
+        </span>
+        <RankingAvatar entry={entry} featured />
+        <strong className="user-ranking-podium-name">{entry.displayName}</strong>
+        <span className="user-ranking-tier">{rankingTier(entry.rank)}</span>
+        <div className="user-ranking-podium-metrics">
+          <RankingMetric
+            icon={<Fire weight="fill" aria-hidden="true" />}
+            label="Score"
+            value={number(entry.score)}
+            accent
+          />
+          <RankingMetric
+            icon={<ChatCircle weight="fill" aria-hidden="true" />}
+            label="Comments"
+            value={entry.communityVisible ? number(entry.commentCount) : "Private"}
+          />
+          <RankingMetric
+            icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
+            label="Upvotes"
+            value={entry.communityVisible ? number(entry.upvotes) : "Private"}
+          />
+        </div>
+      </a>
+    </li>
+  );
+}
+
+function RankingListRow({ entry, viewer = false }: { entry: LeaderboardEntry; viewer?: boolean }) {
+  return (
+    <li className={`user-ranking-list-row${viewer ? " is-viewer" : ""}`}>
+      <a href={profileHref(entry)} aria-label={accessibleEntryLabel(entry)}>
+        <span className="user-ranking-row-rank" aria-label={`Rank ${entry.rank}`}>
           {entry.rank.toLocaleString("en-US")}
-          <small>{rankingTier(entry.rank)}</small>
         </span>
-        <span
-          className="user-leaderboard-reader"
-          aria-label={`Reader ${entry.displayName}, at ${entry.username}`}
-        >
-          <span className="user-leaderboard-avatar">
-            {entry.avatarUrl ? (
-              <img src={entry.avatarUrl} alt="" loading="lazy" />
-            ) : (
-              entry.displayName.slice(0, 2).toUpperCase()
-            )}
-          </span>
-          <span>
-            <strong>{entry.displayName}</strong>
-            <small>@{entry.username}</small>
-          </span>
+        <RankingAvatar entry={entry} />
+        <span className="user-ranking-row-person">
+          <strong>{entry.displayName}</strong>
+          <small>@{entry.username}</small>
         </span>
-        <span
-          data-label="Score"
-          aria-label={`Score ${entry.score.toLocaleString("en-US")}`}
-        >
-          <Trophy size={17} weight="duotone" aria-hidden="true" />
-          <strong>{entry.score.toLocaleString("en-US")}</strong>
-        </span>
-        <span
-          data-label="Shards"
-          aria-label={`Shards collected ${entry.shardsCollected.toLocaleString("en-US")}`}
-        >
-          <Diamond size={17} weight="duotone" aria-hidden="true" />
-          {entry.shardsCollected.toLocaleString("en-US")}
-        </span>
-        <span
-          data-label="Comments"
-          aria-label={
-            entry.communityVisible
-              ? `Comments ${entry.commentCount.toLocaleString("en-US")}`
-              : "Comments private"
-          }
-        >
-          <ChatCircle size={17} aria-hidden="true" />
-          {entry.communityVisible
-            ? entry.commentCount.toLocaleString("en-US")
-            : "Private"}
-        </span>
-        <span
-          data-label="Votes"
-          aria-label={
-            entry.communityVisible
-              ? `${entry.upvotes.toLocaleString("en-US")} upvotes and ${entry.downvotes.toLocaleString("en-US")} downvotes`
-              : "Votes private"
-          }
-          className={
-            entry.reputation > 0
-              ? "is-positive"
-              : entry.reputation < 0
-                ? "is-negative"
-                : ""
-          }
-        >
-          {entry.communityVisible ? (
-            <>
-              <ArrowFatUp size={15} weight="fill" aria-hidden="true" />
-              {entry.upvotes.toLocaleString("en-US")}
-              <ArrowFatDown size={15} weight="fill" aria-hidden="true" />
-              {entry.downvotes.toLocaleString("en-US")}
-            </>
-          ) : (
-            "Private"
-          )}
-        </span>
-        <span
-          data-label="Read"
-          aria-label={`Chapters read ${entry.chaptersRead.toLocaleString("en-US")}`}
-        >
-          <BookOpen size={17} aria-hidden="true" />
-          {entry.chaptersRead.toLocaleString("en-US")}
-        </span>
+        <div className="user-ranking-row-metrics">
+          <RankingMetric
+            icon={<Fire weight="fill" aria-hidden="true" />}
+            label="Score"
+            value={number(entry.score)}
+            accent
+          />
+          <RankingMetric
+            icon={<ChatCircle weight="fill" aria-hidden="true" />}
+            label="Comments"
+            value={entry.communityVisible ? number(entry.commentCount) : "Private"}
+          />
+          <RankingMetric
+            icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
+            label="Upvotes"
+            value={entry.communityVisible ? number(entry.upvotes) : "Private"}
+          />
+        </div>
       </a>
     </li>
   );
@@ -175,19 +185,13 @@ export function UserLeaderboardView() {
         });
         const payload = (await response.json()) as RankingResponse;
         if (!response.ok || !payload.data) {
-          throw new Error(
-            payload.error?.message ?? "The ranking could not be loaded.",
-          );
+          throw new Error(payload.error?.message ?? "The ranking could not be loaded.");
         }
         setEntries(payload.data);
         setViewer(payload.viewer ?? null);
       } catch (loadError) {
         if (!controller.signal.aborted) {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "The ranking could not be loaded.",
-          );
+          setError(loadError instanceof Error ? loadError.message : "The ranking could not be loaded.");
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -196,25 +200,35 @@ export function UserLeaderboardView() {
     return () => controller.abort();
   }, [period]);
 
+  const podiumEntries = entries
+    .filter((entry) => entry.rank <= 3)
+    .sort((a, b) => {
+      const visualOrder: Record<number, number> = { 1: 1, 2: 0, 3: 2 };
+      return (visualOrder[a.rank] ?? a.rank) - (visualOrder[b.rank] ?? b.rank);
+    });
+  const listEntries = entries.filter((entry) => entry.rank > 3);
+
   return (
-    <section className="user-leaderboard" aria-label="Top 100 users">
-      <header className="ranking-toolbar">
-        <div>
-          <p className="eyebrow">Top 100</p>
-          <h2>Community ranking</h2>
-          <span>
-            Score = Shards + community activity. Upvotes raise it; downvotes
-            lower it.
-          </span>
+    <section className="user-leaderboard" aria-labelledby="user-ranking-title">
+      <header className="user-ranking-hero">
+        <div className="user-ranking-hero-mark" aria-hidden="true">
+          <Fire weight="fill" />
         </div>
-        <div role="group" aria-label="Ranking period">
-          {(
-            [
-              ["weekly", "Weekly"],
-              ["monthly", "Monthly"],
-              ["all", "All time"],
-            ] as const
-          ).map(([value, label]) => (
+        <h1 id="user-ranking-title">Users Ranking</h1>
+        <p>Top 100 users ranked by Score earned through community activity and upvotes on comments.</p>
+      </header>
+
+      <div className="user-ranking-controls">
+        <div className="user-ranking-controls-copy">
+          <span className="user-ranking-kicker">Community leaderboard</span>
+          <strong>{period === "weekly" ? "This week" : period === "monthly" ? "This month" : "All time"}</strong>
+        </div>
+        <div className="user-ranking-periods" role="group" aria-label="Ranking period">
+          {([
+            ["weekly", "Weekly"],
+            ["monthly", "Monthly"],
+            ["all", "All time"],
+          ] as const).map(([value, label]) => (
             <button
               type="button"
               key={value}
@@ -230,11 +244,12 @@ export function UserLeaderboardView() {
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       {loading ? (
         <div className="user-leaderboard-state" role="status">
-          Loading the top 100 users…
+          <Trophy size={24} />
+          <strong>Loading the top 100 users…</strong>
         </div>
       ) : error ? (
         <div className="user-leaderboard-state" role="alert">
@@ -250,35 +265,36 @@ export function UserLeaderboardView() {
         </div>
       ) : (
         <>
-          <header className="user-leaderboard-columns">
-            <span>Rank</span>
-            <span>Reader</span>
-            <span>Score</span>
-            <span>Shards</span>
-            <span>Comments</span>
-            <span>Votes</span>
-            <span>Read</span>
-          </header>
-          <ol>
-            {entries.map((entry) => (
-              <RankingEntry
-                entry={entry}
-                viewer={viewer?.userId === entry.userId}
-                key={entry.userId}
-              />
-            ))}
-            {viewer && viewer.rank > 100 ? (
-              <>
-                <li
-                  className="user-leaderboard-ellipsis"
-                  aria-label="Ranks between 100 and your position are omitted"
-                >
-                  <span aria-hidden="true">•••</span>
-                </li>
-                <RankingEntry entry={viewer} viewer />
-              </>
-            ) : null}
-          </ol>
+          {podiumEntries.length ? (
+            <section className="user-ranking-podium" aria-labelledby="user-ranking-podium-title">
+              <h2 id="user-ranking-podium-title" className="sr-only">Top three users</h2>
+              <ol>{podiumEntries.map((entry) => <PodiumCard entry={entry} key={entry.userId} />)}</ol>
+            </section>
+          ) : null}
+          <section className="user-ranking-list" aria-labelledby="user-ranking-list-title">
+            <div className="user-ranking-list-heading">
+              <div>
+                <span className="user-ranking-kicker">The rest of the board</span>
+                <h2 id="user-ranking-list-title">Ranked users</h2>
+              </div>
+              <div className="user-ranking-list-labels" aria-hidden="true">
+                <span>Score</span>
+                <span>Comments</span>
+                <span>Upvotes</span>
+              </div>
+            </div>
+            <ol>
+              {listEntries.map((entry) => (
+                <RankingListRow entry={entry} viewer={viewer?.userId === entry.userId} key={entry.userId} />
+              ))}
+              {viewer && viewer.rank > 100 ? (
+                <>
+                  <li className="user-ranking-ellipsis" aria-label="Ranks between 100 and your position are omitted">•••</li>
+                  <RankingListRow entry={viewer} viewer />
+                </>
+              ) : null}
+            </ol>
+          </section>
         </>
       )}
     </section>
