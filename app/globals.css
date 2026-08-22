@@ -55960,14 +55960,14 @@ body:has(.catalog-toolbar) {
 
 /* Browse header, filter surface, and results */
 body:has(.catalog-toolbar) {
-  --browse-bg: #0d0d1a;
-  --browse-panel: #241443;
-  --browse-panel-2: #1b172c;
-  --browse-card: #17152a;
-  --browse-purple: #9943ea;
-  --browse-text: #f6f4fb;
-  --browse-muted: #a8a4b8;
-  --browse-line: rgb(184 142 239 / 22%);
+  --browse-bg: var(--bg);
+  --browse-panel: var(--surface);
+  --browse-panel-2: var(--surface-2);
+  --browse-card: var(--surface);
+  --browse-purple: var(--accent);
+  --browse-text: var(--text);
+  --browse-muted: var(--muted);
+  --browse-line: color-mix(in srgb, var(--line) 78%, transparent);
 }
 
 body:has(.catalog-toolbar) .page-main {
@@ -55982,7 +55982,7 @@ body:has(.catalog-toolbar) .browse-intro {
   border: 1px solid var(--browse-line);
   border-bottom: 0;
   border-radius: 1.4rem 1.4rem 0 0;
-  background: linear-gradient(145deg, #29154a, #1d1338 72%, #1a1530);
+  background: linear-gradient(145deg, #102b49, #0d1d31 72%, #091727);
 }
 
 .browse-intro-heading {
@@ -55994,7 +55994,7 @@ body:has(.catalog-toolbar) .browse-intro {
 
 body:has(.catalog-toolbar) .browse-intro .eyebrow {
   margin-bottom: 0.3rem;
-  color: #d5a6ff;
+  color: var(--accent);
 }
 
 body:has(.catalog-toolbar) .browse-intro h1 {
@@ -56013,8 +56013,8 @@ body:has(.catalog-toolbar) .browse-intro h1 {
   place-items: center;
   padding: 0 0.6rem;
   border-radius: 0.55rem;
-  color: #f1d8ff;
-  background: color-mix(in srgb, var(--browse-purple) 45%, #271344);
+  color: #e9f7ff;
+  background: color-mix(in srgb, var(--browse-purple) 35%, var(--browse-panel-2));
   font-size: 0.8em;
   letter-spacing: -0.02em;
 }
@@ -56034,7 +56034,7 @@ body:has(.catalog-toolbar) .catalog-toolbar {
   border: 1px solid var(--browse-line);
   border-top: 0;
   border-radius: 0 0 1.4rem 1.4rem;
-  background: linear-gradient(145deg, #29154a, #1d1338 72%, #1a1530);
+  background: linear-gradient(145deg, #102b49, #0d1d31 72%, #091727);
 }
 
 body:has(.catalog-toolbar) .catalog-search,
@@ -56080,14 +56080,14 @@ body:has(.catalog-toolbar) .catalog-desktop-filters > label {
 body:has(.catalog-toolbar) .filter-button {
   justify-content: center;
   padding-inline: 1.1rem;
-  color: #f5eaff;
-  background: linear-gradient(135deg, #7e35cf, #a648e9);
+  color: #effaff;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
   cursor: pointer;
   font-weight: 800;
 }
 
 body:has(.catalog-toolbar) .filter-button svg {
-  color: #f1d8ff;
+  color: #d7f2ff;
 }
 
 body:has(.catalog-toolbar) .catalog-summary {
@@ -56116,7 +56116,7 @@ body:has(.catalog-toolbar) .catalog-series-card .cover-link {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  background: #11101d;
+  background: #081626;
 }
 
 body:has(.catalog-toolbar) .catalog-series-card .cover-link > img,
@@ -56134,7 +56134,7 @@ body:has(.catalog-toolbar) .catalog-series-card .cover-link > .catalog-cover-pla
   border: 0;
   border-radius: 0;
   color: var(--browse-muted);
-  background: linear-gradient(145deg, #211b34, #101322);
+  background: linear-gradient(145deg, #173553, #081626);
 }
 
 body:has(.catalog-toolbar) .catalog-series-card .cover-shade {
@@ -56209,37 +56209,42 @@ body:has(.catalog-toolbar) .catalog-series-card h3 {
 }
 
 .catalog-status-pill {
-  color: #d3a4ff;
-  background: #32185a;
+  color: #a8ddff;
+  background: color-mix(in srgb, var(--accent) 18%, var(--browse-panel-2));
 }
 
-.catalog-card-bookmark {
+.catalog-card-follow {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
   justify-content: center;
   gap: 0.48rem;
   margin: 0.68rem;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--browse-line));
   border-radius: 0.65rem;
-  color: #fff;
-  background: linear-gradient(135deg, #8435d7, #a548ed);
-  box-shadow: 0 0.55rem 1.2rem rgb(132 53 215 / 22%);
+  color: #f4fbff;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  box-shadow: 0 0.55rem 1.2rem color-mix(in srgb, var(--accent) 22%, transparent);
   cursor: pointer;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 820;
-  transition: transform 160ms ease, filter 160ms ease;
+  transition: transform 160ms ease, filter 160ms ease, background 160ms ease;
 }
 
-.catalog-card-bookmark:hover,
-.catalog-card-bookmark:focus-visible {
+.catalog-card-follow:hover,
+.catalog-card-follow:focus-visible {
   filter: brightness(1.08);
   transform: translateY(-1px);
 }
 
-.catalog-card-bookmark:active {
+.catalog-card-follow:active {
   transform: scale(0.97);
+}
+
+.catalog-card-follow.is-following {
+  color: #bdeaff;
+  background: color-mix(in srgb, var(--accent) 18%, var(--browse-panel-2));
 }
 
 body:has(.catalog-toolbar) .catalog-pagination {
@@ -56274,7 +56279,7 @@ body:has(.catalog-toolbar) .catalog-pagination > div button[aria-current="page"]
   overflow: auto;
   border: 1px solid var(--browse-line);
   border-radius: 1.2rem 0 0 1.2rem;
-  background: #0f0b1d;
+  background: #07111f;
   box-shadow: -1.2rem 0 3rem rgb(0 0 0 / 35%);
 }
 
@@ -56352,7 +56357,7 @@ body:has(.catalog-toolbar) .catalog-pagination > div button[aria-current="page"]
   min-height: 2.9rem;
   border: 1px solid var(--browse-line);
   border-radius: 0.7rem;
-  color: #e9d5ff;
+  color: #bdeaff;
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -56599,7 +56604,7 @@ body:has(.catalog-toolbar) .catalog-pagination > div button[aria-current="page"]
     font-size: 0.54rem;
   }
 
-  .catalog-card-bookmark {
+  .catalog-card-follow {
     min-height: 2.65rem;
     margin: 0.55rem;
     font-size: 0.75rem;
@@ -56645,7 +56650,7 @@ body:has(.catalog-toolbar) .catalog-pagination > div button[aria-current="page"]
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .catalog-card-bookmark,
+  .catalog-card-follow,
   .user-ranking-periods button {
     transition: none;
   }

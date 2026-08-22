@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   ArrowsOut,
   Bell,
-  BookmarkSimple,
   Books,
   CaretDown,
   CaretLeft,
@@ -4673,7 +4672,91 @@ function CompactOptionMenu({
   );
 }
 
-function BrowseView({ showToast }: { showToast: (text: string) => void }) {
+function CatalogFollowButton({
+  item,
+  actor,
+  showToast,
+}: {
+  item: CatalogResult;
+  actor: Actor | null;
+  showToast: (text: string) => void;
+}) {
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!actor) {
+      setFollowing(false);
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(`/api/v1/series-follow?slug=${encodeURIComponent(item.slug)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { following?: boolean };
+        if (response.ok && typeof payload.following === "boolean") {
+          setFollowing(payload.following);
+        }
+      })
+      .catch(() => {
+        // The follow state remains available through the action itself.
+      });
+    return () => controller.abort();
+  }, [actor, item.slug]);
+
+  async function toggleFollow() {
+    if (!actor) {
+      window.location.href = authEntryPath("login", `/title/${item.slug}`);
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/v1/series-follow", {
+        method: following ? "DELETE" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug: item.slug }),
+      });
+      const payload = (await response.json()) as {
+        following?: boolean;
+        error?: { message?: string };
+      };
+      if (!response.ok || typeof payload.following !== "boolean") {
+        throw new Error(payload.error?.message ?? "Following could not be updated.");
+      }
+      setFollowing(payload.following);
+      showToast(payload.following ? "Series followed." : "Series unfollowed.");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Following could not be updated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      className={`catalog-card-follow${following ? " is-following" : ""}`}
+      type="button"
+      aria-label={following ? `Unfollow ${item.title}` : `Follow ${item.title}`}
+      aria-pressed={following}
+      disabled={busy}
+      onClick={() => void toggleFollow()}
+    >
+      <Heart size={18} weight={following ? "fill" : "regular"} />
+      {busy ? "Saving…" : following ? "Following" : "Follow"}
+    </button>
+  );
+}
+
+function BrowseView({
+  actor,
+  showToast,
+}: {
+  actor: Actor | null;
+  showToast: (text: string) => void;
+}) {
   const { settings: commercial } = useCommercialSettings();
   const premiumEconomyPublic =
     commercial.economy.premiumEconomyPublic;
@@ -5156,15 +5239,11 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                     </span>
                   </div>
                 </div>
-                <button
-                  className="catalog-card-bookmark"
-                  type="button"
-                  aria-label={`Bookmark ${item.title}`}
-                  onClick={() => showToast("Sign in to bookmark series.")}
-                >
-                  <BookmarkSimple size={18} />
-                  Bookmark
-                </button>
+                <CatalogFollowButton
+                  item={item}
+                  actor={actor}
+                  showToast={showToast}
+                />
               </article>
             ) : (
               <a className="series-list-row" href={`/title/${item.slug}`} key={item.id}>
@@ -14330,7 +14409,7 @@ export function NyaScansApp({
     ) : view === "latest" ? (
       <LatestUpdatesView />
     ) : view === "browse" ? (
-      <BrowseView showToast={showToast} />
+      <BrowseView actor={actor} showToast={showToast} />
     ) : view === "library" ? (
       <LibraryView actor={actor} />
     ) : ["store", "wallet", "orders"].includes(view) && !lockAndPayVisible ? (
