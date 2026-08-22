@@ -2316,6 +2316,32 @@ export async function GET(request: Request, context: RouteContext) {
         .optional()
         .catch(undefined)
         .parse(url.searchParams.get("access")?.toUpperCase());
+      const genre = z
+        .string()
+        .trim()
+        .max(80)
+        .optional()
+        .catch(undefined)
+        .parse(url.searchParams.get("genre") ?? undefined);
+      const creator = z
+        .string()
+        .trim()
+        .max(120)
+        .optional()
+        .catch(undefined)
+        .parse(url.searchParams.get("creator") ?? undefined);
+      const minimumChapters = z
+        .coerce
+        .number()
+        .int()
+        .min(0)
+        .max(10000)
+        .optional()
+        .catch(undefined)
+        .parse(url.searchParams.get("minChapters") ?? undefined);
+      const hideFollowed = ["1", "true"].includes(
+        (url.searchParams.get("hideFollowed") ?? "").toLowerCase(),
+      );
       const query = z
         .string()
         .trim()
@@ -2357,6 +2383,68 @@ export async function GET(request: Request, context: RouteContext) {
       if (access) {
         clauses.push("s.access_type = ?");
         bindings.push(access);
+      }
+      if (genre) {
+        clauses.push(`EXISTS (
+          SELECT 1
+            FROM series_genres sg_filter
+            JOIN genres g_filter ON g_filter.id = sg_filter.genre_id
+           WHERE sg_filter.series_id = s.id
+             AND (LOWER(g_filter.slug) = LOWER(?) OR LOWER(g_filter.name) = LOWER(?))
+        )`);
+        bindings.push(genre, genre);
+      }
+      if (creator) {
+        const creatorPattern = `%${creator
+          .toLowerCase()
+          .replaceAll("%", "\\\\%")
+          .replaceAll("_", "\\\\_")}%`;
+        clauses.push(`(
+          EXISTS (
+            SELECT 1
+              FROM series_creators sc_filter
+              JOIN creators c_filter ON c_filter.id = sc_filter.creator_id
+             WHERE sc_filter.series_id = s.id
+               AND LOWER(c_filter.name) LIKE ? ESCAPE '\\'
+          )
+          OR EXISTS (
+            SELECT 1
+              FROM publishers p_filter
+             WHERE p_filter.id = s.publisher_id
+               AND LOWER(p_filter.name) LIKE ? ESCAPE '\\'
+          )
+        )`);
+        bindings.push(creatorPattern, creatorPattern);
+      }
+      if (minimumChapters && minimumChapters > 0) {
+        clauses.push(`(
+          SELECT COUNT(DISTINCT CASE
+            WHEN mc_filter.id IS NULL THEN NULL
+            WHEN NOT (${publicPaidChapterPredicate("mc_filter", "mc_visibility")}) THEN NULL
+            WHEN LTRIM(mc_filter.chapter_number, '0') = '' THEN '0'
+            ELSE LTRIM(mc_filter.chapter_number, '0')
+          END)
+            FROM chapters mc_filter
+            LEFT JOIN content_visibility_overrides mc_visibility
+              ON mc_visibility.chapter_id = mc_filter.id
+           WHERE mc_filter.series_id = s.id
+             AND mc_filter.state = 'PUBLISHED'
+             AND mc_filter.visibility = 'PUBLIC'
+             AND datetime(mc_filter.published_at) <= datetime('now')
+        ) >= ?`);
+        bindings.push(minimumChapters);
+      }
+      if (hideFollowed) {
+        const actor = await getActor().catch(() => null);
+        if (actor) {
+          clauses.push(`NOT EXISTS (
+            SELECT 1
+              FROM follows hidden_follow
+             WHERE hidden_follow.user_id = ?
+               AND hidden_follow.series_id = s.id
+          )`);
+          bindings.push(actor.id);
+        }
       }
       const orderBy = {
         latest: "COALESCE(latestPublishedAt, s.updated_at) DESC",
@@ -2432,6 +2520,67 @@ export async function GET(request: Request, context: RouteContext) {
           .first<{ count: number }>(),
       ]);
       const total = Number(totalRow?.count ?? 0);
+      const [genreRows, creatorRows, publisherRows] = await Promise.all([
+        env.DB.prepare(
+          `SELECT g.slug AS value,
+                  g.name AS label,
+                  COUNT(DISTINCT sg.series_id) AS count
+             FROM genres g
+             LEFT JOIN series_genres sg ON sg.genre_id = g.id
+             LEFT JOIN series genre_series ON genre_series.id = sg.series_id
+            WHERE g.archived_at IS NULL
+              AND (genre_series.id IS NULL OR (${publicSeriesPredicate("genre_series")}))
+            GROUP BY g.id
+            ORDER BY g.name COLLATE NOCASE ASC
+            LIMIT 80`,
+        ).all(),
+        env.DB.prepare(
+          `SELECT c.name AS value,
+                  c.name AS label,
+                  'creator' AS kind,
+                  COUNT(DISTINCT sc.series_id) AS count
+             FROM creators c
+             JOIN series_creators sc ON sc.creator_id = c.id
+             JOIN series creator_series ON creator_series.id = sc.series_id
+            WHERE c.archived_at IS NULL
+              AND ${publicSeriesPredicate("creator_series")}
+            GROUP BY c.id
+            ORDER BY c.name COLLATE NOCASE ASC
+            LIMIT 120`,
+        ).all(),
+        env.DB.prepare(
+          `SELECT p.name AS value,
+                  p.name AS label,
+                  'publisher' AS kind,
+                  COUNT(DISTINCT publisher_series.id) AS count
+             FROM publishers p
+             JOIN series publisher_series ON publisher_series.publisher_id = p.id
+            WHERE p.archived_at IS NULL
+              AND ${publicSeriesPredicate("publisher_series")}
+            GROUP BY p.id
+            ORDER BY p.name COLLATE NOCASE ASC
+            LIMIT 80`,
+        ).all(),
+      ]);
+      const facets = {
+        genres: (genreRows.results as Array<Record<string, unknown>>).map((row) => ({
+          value: String(row.value ?? ""),
+          label: String(row.label ?? row.value ?? ""),
+          count: Number(row.count ?? 0),
+        })),
+        creators: ([
+          ...(creatorRows.results as Array<Record<string, unknown>>),
+          ...(publisherRows.results as Array<Record<string, unknown>>),
+        ] as Array<Record<string, unknown>>)
+          .map((row) => ({
+            value: String(row.value ?? ""),
+            label: String(row.label ?? row.value ?? ""),
+            kind: row.kind === "publisher" ? "publisher" : "creator",
+            count: Number(row.count ?? 0),
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label))
+          .slice(0, 160),
+      };
       const data = (
         rows.results as Array<
           Record<string, unknown> & {
@@ -2461,6 +2610,7 @@ export async function GET(request: Request, context: RouteContext) {
           hasPrevious: page > 1,
           hasNext: page * pageSize < total,
         },
+        facets,
       });
     }
 
