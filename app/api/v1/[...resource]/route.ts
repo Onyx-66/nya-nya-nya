@@ -2301,11 +2301,13 @@ export async function GET(request: Request, context: RouteContext) {
         .max(60)
         .catch(24)
         .parse(url.searchParams.get("pageSize"));
-      const status = z
-        .enum(["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "CANCELLED", "UPCOMING"])
-        .optional()
-        .catch(undefined)
-        .parse(url.searchParams.get("status")?.toUpperCase());
+      const statusValues = (url.searchParams.get("status") ?? "")
+        .split(",")
+        .map((value) => value.trim().toUpperCase())
+        .filter((value): value is "ONGOING" | "COMPLETED" | "HIATUS" | "PAUSED" | "CANCELLED" | "UPCOMING" =>
+          ["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "CANCELLED", "UPCOMING"].includes(value as never),
+        )
+        .slice(0, 6);
       const type = z
         .enum(["MANHWA", "MANGA", "MANHUA"])
         .optional()
@@ -2316,20 +2318,18 @@ export async function GET(request: Request, context: RouteContext) {
         .optional()
         .catch(undefined)
         .parse(url.searchParams.get("access")?.toUpperCase());
-      const genre = z
-        .string()
-        .trim()
-        .max(80)
-        .optional()
-        .catch(undefined)
-        .parse(url.searchParams.get("genre") ?? undefined);
-      const creator = z
-        .string()
-        .trim()
-        .max(120)
-        .optional()
-        .catch(undefined)
-        .parse(url.searchParams.get("creator") ?? undefined);
+      const genreValues = (url.searchParams.get("genre") ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .map((value) => value.slice(0, 80))
+        .slice(0, 12);
+      const creatorValues = (url.searchParams.get("creator") ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .map((value) => value.slice(0, 120))
+        .slice(0, 12);
       const minimumChapters = z
         .coerce
         .number()
@@ -2372,9 +2372,9 @@ export async function GET(request: Request, context: RouteContext) {
         );
         bindings.push(pattern, pattern, pattern, pattern);
       }
-      if (status) {
-        clauses.push("s.status = ?");
-        bindings.push(status);
+      if (statusValues.length) {
+        clauses.push(`s.status IN (${statusValues.map(() => "?").join(", ")})`);
+        bindings.push(...statusValues);
       }
       if (type) {
         clauses.push("s.type = ?");
@@ -2384,37 +2384,41 @@ export async function GET(request: Request, context: RouteContext) {
         clauses.push("s.access_type = ?");
         bindings.push(access);
       }
-      if (genre) {
+      if (genreValues.length) {
+        const genrePlaceholders = genreValues.map(() => "?").join(", ");
         clauses.push(`EXISTS (
           SELECT 1
             FROM series_genres sg_filter
             JOIN genres g_filter ON g_filter.id = sg_filter.genre_id
            WHERE sg_filter.series_id = s.id
-             AND (LOWER(g_filter.slug) = LOWER(?) OR LOWER(g_filter.name) = LOWER(?))
+             AND (LOWER(g_filter.slug) IN (${genrePlaceholders}) OR LOWER(g_filter.name) IN (${genrePlaceholders}))
         )`);
-        bindings.push(genre, genre);
+        const normalizedGenres = genreValues.map((value) => value.toLowerCase());
+        bindings.push(...normalizedGenres, ...normalizedGenres);
       }
-      if (creator) {
-        const creatorPattern = `%${creator
+      if (creatorValues.length) {
+        const creatorPatterns = creatorValues.map((creatorValue) => `%${creatorValue
           .toLowerCase()
           .replaceAll("%", "\\\\%")
-          .replaceAll("_", "\\\\_")}%`;
+          .replaceAll("_", "\\\\_")}%`);
+        const creatorTerms = creatorPatterns.map(() => "LOWER(c_filter.name) LIKE ? ESCAPE '\\'").join(" OR ");
+        const publisherTerms = creatorPatterns.map(() => "LOWER(p_filter.name) LIKE ? ESCAPE '\\'").join(" OR ");
         clauses.push(`(
           EXISTS (
             SELECT 1
               FROM series_creators sc_filter
               JOIN creators c_filter ON c_filter.id = sc_filter.creator_id
              WHERE sc_filter.series_id = s.id
-               AND LOWER(c_filter.name) LIKE ? ESCAPE '\\'
+               AND (${creatorTerms})
           )
           OR EXISTS (
             SELECT 1
               FROM publishers p_filter
              WHERE p_filter.id = s.publisher_id
-               AND LOWER(p_filter.name) LIKE ? ESCAPE '\\'
+               AND (${publisherTerms})
           )
         )`);
-        bindings.push(creatorPattern, creatorPattern);
+        bindings.push(...creatorPatterns, ...creatorPatterns);
       }
       if (minimumChapters && minimumChapters > 0) {
         clauses.push(`(
@@ -2497,7 +2501,14 @@ export async function GET(request: Request, context: RouteContext) {
                        AND ${publicPaidChapterPredicate("latest", "latest_visibility")}
                      ORDER BY latest.published_at DESC, latest.created_at DESC
                      LIMIT 1
-                  ) AS latestChapterNumber
+                  ) AS latestChapterNumber,
+                  (
+                    SELECT COUNT(*)
+                      FROM discussion_comments dc_catalog
+                     WHERE dc_catalog.series_slug = s.slug
+                       AND dc_catalog.moderation_status = 'VISIBLE'
+                       AND dc_catalog.deleted_at IS NULL
+                  ) AS commentCount
              FROM series s
              LEFT JOIN chapters c
                ON c.series_id = s.id

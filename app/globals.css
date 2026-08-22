@@ -57636,3 +57636,342 @@ body:has(.catalog-toolbar) .catalog-filter-panel .mobile-filter-close {
     max-width: 100%;
   }
 }
+
+
+/* Browse v49.9 — badge polish, right-side filter drawer, and metadata list view */
+body:has(.catalog-toolbar) {
+  --browse-control-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --browse-control-hover: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+body:has(.catalog-toolbar) .catalog-results,
+body:has(.catalog-toolbar) .catalog-series-card,
+body:has(.catalog-toolbar) .series-list-row {
+  background: transparent;
+}
+
+body:has(.catalog-toolbar) .catalog-series-card {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+body:has(.catalog-toolbar) .catalog-card-follow {
+  min-height: 2.75rem;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  color: var(--text);
+  background: var(--browse-control-bg);
+}
+
+body:has(.catalog-toolbar) .catalog-card-follow:hover,
+body:has(.catalog-toolbar) .catalog-card-follow:focus-visible {
+  color: var(--text);
+  background: var(--browse-control-hover);
+}
+
+body:has(.catalog-toolbar) .catalog-cover-top-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.34rem;
+}
+
+body:has(.catalog-toolbar) .catalog-cover-top-badges .catalog-rating-badge {
+  margin-left: auto;
+}
+
+body:has(.catalog-toolbar) .catalog-cover-top-badges .catalog-chapter-badge {
+  margin-left: 0;
+}
+
+body:has(.catalog-toolbar) .catalog-cover-bottom-badges {
+  justify-content: flex-start;
+}
+
+body:has(.catalog-toolbar) .catalog-cover-title {
+  bottom: 2.55rem;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel {
+  position: fixed;
+  z-index: 1200;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(27rem, calc(100vw - 1rem));
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 1.1rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 1.1rem 0 0 1.1rem;
+  background: var(--bg-soft);
+  box-shadow: -1.5rem 0 4rem rgb(0 0 0 / 28%);
+  animation: browse-filter-drawer-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel > header {
+  position: sticky;
+  z-index: 5;
+  top: -1.1rem;
+  margin: -1.1rem -1.1rem 1rem;
+  padding: 1.1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details,
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > label {
+  width: 100%;
+  min-height: 3rem;
+  box-sizing: border-box;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > summary,
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > label {
+  min-height: 3rem;
+  box-sizing: border-box;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details[open] > div {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  width: 100%;
+  max-height: min(48dvh, 25rem);
+  margin-top: 0.45rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div,
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div > button,
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div > small,
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div > label {
+  color: var(--text);
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div > button {
+  min-height: 2.65rem;
+  color: var(--text);
+  background: transparent;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div > button:hover,
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-grid > details > div > button[aria-selected="true"] {
+  color: var(--text);
+  background: var(--browse-control-hover);
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-facet-search {
+  min-height: 2.7rem;
+  margin: 0.55rem;
+  color: var(--text-soft);
+  background: var(--bg-soft);
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-facet-search input {
+  color: var(--text);
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .catalog-filter-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.85rem;
+  padding-bottom: 5rem;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .mobile-filter-close {
+  width: 2.6rem !important;
+  min-width: 2.6rem !important;
+  height: 2.6rem !important;
+  flex: 0 0 2.6rem;
+  padding: 0 !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 0.72rem !important;
+  color: var(--accent) !important;
+  background: var(--surface) !important;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .minimum-chapters-field[open] {
+  height: auto;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .minimum-chapters-editor {
+  grid-template-columns: 2.65rem minmax(0, 1fr) 2.65rem;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+body:has(.catalog-toolbar) .catalog-filter-panel .minimum-chapters-editor > button,
+body:has(.catalog-toolbar) .catalog-filter-panel .minimum-chapters-editor > input {
+  min-height: 2.65rem;
+  height: 2.65rem;
+  box-sizing: border-box;
+}
+
+body:has(.catalog-toolbar) .catalog-list {
+  margin-top: 1rem;
+  gap: 0.75rem;
+}
+
+body:has(.catalog-toolbar) .series-list-row {
+  grid-template-columns: 4.75rem minmax(0, 1fr) 2.8rem;
+  gap: 1rem;
+  min-height: 8.5rem;
+  padding: 0.85rem;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+body:has(.catalog-toolbar) .series-list-cover,
+body:has(.catalog-toolbar) .series-list-cover > img,
+body:has(.catalog-toolbar) .series-list-cover > .catalog-cover-placeholder {
+  width: 4.75rem;
+  height: 7rem;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  object-fit: cover;
+}
+
+body:has(.catalog-toolbar) .series-list-content {
+  min-width: 0;
+}
+
+body:has(.catalog-toolbar) .series-list-content h2 {
+  overflow: hidden;
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-size: clamp(0.95rem, 2vw, 1.35rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body:has(.catalog-toolbar) .series-list-content .catalog-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.38rem;
+  margin-bottom: 0.75rem;
+}
+
+body:has(.catalog-toolbar) .series-list-content .series-type-badge,
+body:has(.catalog-toolbar) .series-list-content .series-status-badge,
+body:has(.catalog-toolbar) .series-list-content .catalog-rating-badge {
+  min-height: 1.6rem;
+  padding-inline: 0.48rem;
+  font-size: 0.68rem;
+}
+
+body:has(.catalog-toolbar) .series-list-content .list-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-items: start;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+
+body:has(.catalog-toolbar) .series-list-content .list-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-soft);
+}
+
+body:has(.catalog-toolbar) .series-list-row .list-follow-button {
+  display: grid;
+  width: 2.7rem;
+  min-width: 2.7rem;
+  height: 2.7rem;
+  min-height: 2.7rem;
+  padding: 0;
+  place-items: center;
+  font-size: 0;
+}
+
+body:has(.catalog-toolbar) .series-list-row .list-follow-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+@keyframes browse-filter-drawer-in {
+  from { opacity: 0; transform: translateX(1.5rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 640px) {
+  body:has(.catalog-toolbar) .catalog-filter-panel {
+    width: min(24rem, calc(100vw - 0.35rem));
+    padding: 0.85rem;
+    border-radius: 0.95rem 0 0 0.95rem;
+  }
+
+  body:has(.catalog-toolbar) .catalog-filter-panel > header {
+    top: -0.85rem;
+    margin: -0.85rem -0.85rem 0.85rem;
+    padding: 0.85rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-row {
+    grid-template-columns: 4.25rem minmax(0, 1fr) 2.55rem;
+    gap: 0.7rem;
+    min-height: 7.25rem;
+    padding: 0.65rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-cover,
+  body:has(.catalog-toolbar) .series-list-cover > img,
+  body:has(.catalog-toolbar) .series-list-cover > .catalog-cover-placeholder {
+    width: 4.25rem;
+    height: 6.35rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-content h2 {
+    margin-bottom: 0.4rem;
+    font-size: 0.82rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-content .catalog-badge-row {
+    gap: 0.25rem;
+    margin-bottom: 0.55rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-content .series-type-badge,
+  body:has(.catalog-toolbar) .series-list-content .series-status-badge,
+  body:has(.catalog-toolbar) .series-list-content .catalog-rating-badge {
+    min-height: 1.35rem;
+    padding-inline: 0.32rem;
+    font-size: 0.54rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-content .list-stats {
+    gap: 0.45rem;
+    font-size: 0.6rem;
+  }
+
+  body:has(.catalog-toolbar) .series-list-row .list-follow-button {
+    width: 2.45rem;
+    min-width: 2.45rem;
+    height: 2.45rem;
+    min-height: 2.45rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:has(.catalog-toolbar) .catalog-filter-panel {
+    animation: none;
+  }
+}

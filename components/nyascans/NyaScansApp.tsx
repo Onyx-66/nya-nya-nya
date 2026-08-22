@@ -4585,6 +4585,7 @@ type CatalogResult = {
   latestPublishedAt: string | null;
   latestChapterNumber: string | null;
   chapterCount: number;
+  commentCount: number;
 };
 
 type CatalogPagination = {
@@ -4640,34 +4641,46 @@ function CompactOptionMenu({
   options,
   onChange,
   className = "",
+  multiple = false,
 }: {
   label: string;
   value: string | number;
   options: Array<{ value: string | number; label: string }>;
   onChange: (value: string) => void;
   className?: string;
+  multiple?: boolean;
 }) {
-  const currentLabel =
-    options.find((option) => String(option.value) === String(value))?.label ??
-    String(value);
+  const selectedValues = String(value).split(",").map((entry) => entry.trim()).filter(Boolean);
+  const selectedLabels = options.filter((option) => selectedValues.includes(String(option.value))).map((option) => option.label);
+  const currentLabel = multiple ? selectedLabels.join(", ") || label : options.find((option) => String(option.value) === String(value))?.label ?? String(value);
   return (
-    <details className={`compact-option-menu ${className}`.trim()}>
+    <details className={`compact-option-menu ${multiple ? "is-multi-select" : ""} ${className}`.trim()}>
       <summary aria-label={`${label}: ${currentLabel}`}>
         <span>{label}</span>
         <CaretDown size={13} />
       </summary>
-      <div role="listbox" aria-label={`${label} options`}>
-        <small>Current: {currentLabel}</small>
+      <div role="listbox" aria-label={`${label} options`} aria-multiselectable={multiple || undefined}>
+        {!multiple ? <small>Current: {currentLabel}</small> : null}
         {options.map((option) => {
-          const selected = String(option.value) === String(value);
+          const optionValue = String(option.value);
+          const selected = multiple ? selectedValues.includes(optionValue) : optionValue === String(value);
           return (
             <button
               type="button"
               role="option"
               aria-selected={selected}
-              key={String(option.value)}
+              key={optionValue}
               onClick={(event) => {
-                onChange(String(option.value));
+                if (multiple) {
+                  const nextValues = optionValue === "All"
+                    ? []
+                    : selected
+                      ? selectedValues.filter((entry) => entry !== optionValue)
+                      : [...selectedValues.filter((entry) => entry !== "All"), optionValue];
+                  onChange(nextValues.join(","));
+                  return;
+                }
+                onChange(optionValue);
                 event.currentTarget.closest("details")?.removeAttribute("open");
               }}
             >
@@ -4698,69 +4711,43 @@ function CatalogFacetMenu({
   onChange: (value: string) => void;
   placeholder: string;
 }) {
-  const selected = options.find(
-    (option) => option.value.toLowerCase() === value.toLowerCase(),
-  );
+  const selectedValues = value.split(",").map((entry) => entry.trim()).filter(Boolean);
+  const selectedLabels = options.filter((option) => selectedValues.includes(option.value)).map((option) => option.label);
   const visibleOptions = options
-    .filter((option) =>
-      `${option.label} ${option.kind ?? ""}`
-        .toLowerCase()
-        .includes(search.trim().toLowerCase()),
-    )
+    .filter((option) => `${option.label} ${option.kind ?? ""}`.toLowerCase().includes(search.trim().toLowerCase()))
     .slice(0, 40);
   return (
     <details className="catalog-facet-menu">
-      <summary aria-label={`${label}: ${selected?.label ?? `All ${label.toLowerCase()}`}`}>
-        <span>{selected?.label ?? label}</span>
+      <summary aria-label={`${label}: ${selectedLabels.join(", ") || label}`}>
+        <span>{label}</span>
         <CaretDown size={15} />
       </summary>
-      <div role="listbox" aria-label={`${label} options`}>
+      <div role="listbox" aria-label={`${label} options`} aria-multiselectable="true">
         <label className="catalog-facet-search">
           <MagnifyingGlass size={15} />
           <span className="sr-only">Search {label.toLowerCase()}</span>
-          <input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={placeholder}
-          />
+          <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={placeholder} />
         </label>
-        <button
-          type="button"
-          role="option"
-          aria-selected={!value}
-          onClick={(event) => {
-            onChange("");
-            event.currentTarget.closest("details")?.removeAttribute("open");
-          }}
-        >
+        <button type="button" role="option" aria-selected={!selectedValues.length} onClick={() => onChange("")}>
           <span>All {label.toLowerCase()}</span>
-          {!value ? <Check size={15} /> : null}
+          {!selectedValues.length ? <Check size={15} /> : null}
         </button>
         {visibleOptions.map((option) => {
-          const selectedOption = option.value.toLowerCase() === value.toLowerCase();
+          const selectedOption = selectedValues.includes(option.value);
           return (
             <button
               type="button"
               role="option"
               aria-selected={selectedOption}
               key={`${option.kind ?? "option"}-${option.value}`}
-              onClick={(event) => {
-                onChange(option.value);
-                event.currentTarget.closest("details")?.removeAttribute("open");
-              }}
+              onClick={() => onChange(selectedOption ? selectedValues.filter((entry) => entry !== option.value).join(",") : [...selectedValues, option.value].join(","))}
             >
-              <span>
-                {option.kind === "publisher" ? "Publisher · " : ""}
-                {option.label}
-                {typeof option.count === "number" ? ` (${option.count})` : ""}
-              </span>
+              <span>{option.kind === "publisher" ? "Publisher · " : ""}{option.label}</span>
               {selectedOption ? <Check size={15} /> : null}
             </button>
           );
         })}
-        {!visibleOptions.length ? (
-          <small className="catalog-facet-empty">No matching {label.toLowerCase()}.</small>
-        ) : null}
+        {!visibleOptions.length ? <small className="catalog-facet-empty">No matching {label.toLowerCase()}.</small> : null}
       </div>
     </details>
   );
@@ -4770,10 +4757,12 @@ function CatalogFollowButton({
   item,
   actor,
   showToast,
+  className = "",
 }: {
   item: CatalogResult;
   actor: Actor | null;
   showToast: (text: string) => void;
+  className?: string;
 }) {
   const [following, setFollowing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -4831,7 +4820,7 @@ function CatalogFollowButton({
 
   return (
     <button
-      className={`catalog-card-follow${following ? " is-following" : ""}`}
+      className={`catalog-card-follow ${className}${following ? " is-following" : ""}`.trim()}
       type="button"
       aria-label={following ? `Unfollow ${item.title}` : `Follow ${item.title}`}
       aria-pressed={following}
@@ -4886,7 +4875,11 @@ function BrowseView({
       const params = new URLSearchParams(window.location.search);
       const nextType = params.get("type")?.toUpperCase() ?? "ALL";
       const nextAccess = params.get("access")?.toUpperCase() ?? "ALL";
-      const nextStatus = params.get("status")?.toUpperCase() ?? "ALL";
+      const nextStatus = (params.get("status") ?? "")
+        .split(",")
+        .map((value) => value.trim().toUpperCase())
+        .filter((value) => ["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "CANCELLED", "UPCOMING"].includes(value))
+        .join(",") || "ALL";
       const nextGenre = params.get("genre") ?? "";
       const nextCreator = params.get("creator") ?? "";
       const nextMinimumChapters = params.get("minChapters") ?? "";
@@ -4907,18 +4900,7 @@ function BrowseView({
           ? nextAccess
           : "All",
       );
-      setStatus(
-        [
-          "ONGOING",
-          "COMPLETED",
-          "HIATUS",
-          "PAUSED",
-          "CANCELLED",
-          "UPCOMING",
-        ].includes(nextStatus)
-          ? nextStatus
-          : "All",
-      );
+      setStatus(nextStatus === "ALL" ? "All" : nextStatus);
       setGenre(nextGenre);
       setCreator(nextCreator);
       setMinimumChapters(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
@@ -5246,9 +5228,10 @@ function BrowseView({
             />
             <CompactOptionMenu
               label="Status"
-              value={status}
+              value={status === "All" ? "" : status}
+              multiple
               options={[
-                { value: "All", label: "All statuses" },
+                { value: "", label: "All statuses" },
                 { value: "ONGOING", label: "Ongoing" },
                 { value: "COMPLETED", label: "Completed" },
                 { value: "HIATUS", label: "Hiatus" },
@@ -5256,7 +5239,7 @@ function BrowseView({
                 { value: "CANCELLED", label: "Cancelled" },
                 { value: "UPCOMING", label: "Upcoming" },
               ]}
-              onChange={(value) => navigate({ status: value, page: 1 })}
+              onChange={(value) => navigate({ status: value || "All", page: 1 })}
             />
             <CatalogFacetMenu
               label="Genres"
@@ -5404,6 +5387,10 @@ function BrowseView({
                   <span className="cover-shade" />
                   <span className="catalog-cover-top-badges">
                     <SeriesTypeBadge type={item.type} flagOnly />
+                    <span className="catalog-chapter-badge">
+                      <Books size={13} />
+                      {Number(item.chapterCount ?? 0)}
+                    </span>
                     <span className="catalog-rating-badge">
                       <Star size={13} weight="fill" />
                       {(Number(item.ratingTenths) / 10).toFixed(1)}
@@ -5411,16 +5398,9 @@ function BrowseView({
                   </span>
                   <span className="catalog-cover-bottom-badges">
                     <SeriesStatusBadge status={item.status} />
-                    <span className="catalog-chapter-badge">
-                      <Books size={13} />
-                      {Number(item.chapterCount ?? 0)}
-                    </span>
                   </span>
                   <span className="catalog-cover-title" title={item.title}>
                     {item.title}
-                  </span>
-                  <span className="quick-read">
-                    <Play size={14} weight="fill" /> Read
                   </span>
                 </a>
                 <CatalogFollowButton
@@ -5430,34 +5410,29 @@ function BrowseView({
                 />
               </article>
             ) : (
-              <a className="series-list-row" href={`/title/${item.slug}`} key={item.id}>
-                <span className="series-list-cover">
+              <article className="series-list-row" key={item.id}>
+                <a className="series-list-cover" href={`/title/${item.slug}`} aria-label={`Open ${item.title}`}>
                   <CatalogCover item={item} compact />
-                </span>
-                <div>
+                </a>
+                <div className="series-list-content">
+                  <a href={`/title/${item.slug}`}>
+                    <h2>{item.title}</h2>
+                  </a>
                   <div className="catalog-badge-row">
                     <SeriesTypeBadge type={item.type} />
                     <SeriesStatusBadge status={item.status} />
+                    <span className="catalog-rating-badge">
+                      <Star size={14} weight="fill" /> {(Number(item.ratingTenths) / 10).toFixed(1)}
+                    </span>
                   </div>
-                  <h2>{item.title}</h2>
-                  <p>{item.synopsis}</p>
+                  <div className="list-stats">
+                    <span><Books size={15} /> {Number(item.chapterCount ?? 0)}</span>
+                    <span><ChatCircle size={15} /> {Number(item.commentCount ?? 0)}</span>
+                    <span><Heart size={15} /> {Number(item.followerCount ?? 0).toLocaleString("en-US")}</span>
+                  </div>
                 </div>
-                <div className="list-stats">
-                  <span>
-                    <Star size={15} weight="fill" />{" "}
-                    {(Number(item.ratingTenths) / 10).toFixed(1)}
-                  </span>
-                  <span>
-                    {Number(item.followerCount).toLocaleString("en-US")} followers
-                  </span>
-                  <strong>
-                    {item.latestChapterNumber
-                      ? `Ch. ${normalizeChapterNumber(item.latestChapterNumber)}`
-                      : "No releases"}
-                  </strong>
-                </div>
-                <ArrowRight size={20} />
-              </a>
+                <CatalogFollowButton item={item} actor={actor} showToast={showToast} className="list-follow-button" />
+              </article>
             ),
           )}
         </section>
