@@ -1,0 +1,267 @@
+/*
+ * Browse mobile refinements — preserve the established NyaScans dark-blue,
+ * accent-blue visual language while making every interactive surface read as
+ * one deliberate system: evenly inset badges, low-contrast dark pagination,
+ * a bottom-anchored follow action, and clean in-flow filter accordions.
+ */
+.browseScope {
+  --browse-mobile-inset: 0.65rem;
+  --browse-control-surface: #102a43;
+  --browse-control-border: rgb(75 170 226 / 42%);
+  --browse-accent: #3aa9f4;
+  --browse-accent-ink: #061727;
+  --browse-selected-pink: #e45692;
+}
+
+@media (max-width: 760px) {
+  /* Grid card badges: equal-height top badges and a clear title-safe lower row. */
+  .browseScope :global(.catalog-cover-top-badges) {
+    top: var(--browse-mobile-inset);
+    right: var(--browse-mobile-inset);
+    left: var(--browse-mobile-inset);
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .browseScope :global(.catalog-cover-top-badges .series-type-badge.is-flag-only),
+  .browseScope :global(.catalog-cover-top-badges .catalog-rating-badge) {
+    min-height: 1.8rem;
+    height: 1.8rem;
+    box-sizing: border-box;
+    align-items: center;
+    border-radius: 0.48rem;
+    padding: 0 0.5rem;
+    line-height: 1;
+  }
+
+  .browseScope :global(.catalog-cover-top-badges .series-type-badge.is-flag-only) {
+    width: 2rem;
+    min-width: 2rem;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .browseScope :global(.catalog-cover-top-badges .catalog-rating-badge) {
+    width: auto;
+    min-width: max-content;
+    margin-left: auto;
+    justify-content: center;
+    gap: 0.26rem;
+    font-size: 0.62rem;
+  }
+
+  .browseScope :global(.catalog-cover-bottom-badges) {
+    right: var(--browse-mobile-inset);
+    bottom: var(--browse-mobile-inset);
+    left: var(--browse-mobile-inset);
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+  }
+
+  .browseScope :global(.catalog-cover-bottom-badges .series-status-badge),
+  .browseScope :global(.catalog-cover-bottom-badges .catalog-chapter-badge) {
+    min-height: 1.8rem;
+    box-sizing: border-box;
+    border-radius: 0.48rem;
+    padding-inline: 0.5rem;
+  }
+
+  .browseScope :global(.catalog-cover-bottom-badges .series-status-badge) {
+    max-width: calc(100% - 3.2rem);
+  }
+
+  .browseScope :global(.catalog-cover-bottom-badges .catalog-chapter-badge) {
+    min-width: 2.5rem;
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .browseScope :global(.catalog-cover-title) {
+    right: var(--browse-mobile-inset);
+    bottom: 3.2rem;
+    left: var(--browse-mobile-inset);
+    line-height: 1.22;
+    -webkit-line-clamp: 2;
+  }
+
+  /* Pagination stays dark on inactive/disabled controls; only the current page uses blue. */
+  .browseScope :global(.catalog-pagination > button),
+  .browseScope :global(.catalog-pagination > div button) {
+    border-color: var(--browse-control-border) !important;
+    color: #d9edf9 !important;
+    background: var(--browse-control-surface) !important;
+    box-shadow: none !important;
+  }
+
+  .browseScope :global(.catalog-pagination > div button[aria-current="page"]) {
+    border-color: var(--browse-accent) !important;
+    color: var(--browse-accent-ink) !important;
+    background: var(--browse-accent) !important;
+  }
+
+  .browseScope :global(.catalog-pagination > button:disabled) {
+    border-color: rgb(104 139 163 / 22%) !important;
+    color: rgb(202 222 235 / 38%) !important;
+    background: #0c1c2d !important;
+    opacity: 1;
+  }
+
+  /* List action shares the cover inset exactly, has no shadow, and uses pink when followed. */
+  .browseScope :global(.series-list-row) {
+    position: relative;
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+    min-height: 7.65rem;
+    padding: var(--browse-mobile-inset);
+  }
+
+  .browseScope :global(.series-list-content) {
+    min-width: 0;
+    padding-right: 2.9rem;
+  }
+
+  .browseScope :global(.series-list-row .list-follow-button) {
+    position: absolute;
+    right: var(--browse-mobile-inset);
+    bottom: var(--browse-mobile-inset);
+    display: grid;
+    width: 2.45rem;
+    min-width: 2.45rem;
+    height: 2.45rem;
+    min-height: 2.45rem;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .browseScope :global(.series-list-row .list-follow-button svg) {
+    display: block;
+    width: 1.28rem;
+    height: 1.28rem;
+    margin: 0;
+  }
+
+  .browseScope :global(.series-list-row .list-follow-button.is-following) {
+    border-color: #fb9fc1;
+    color: #fff;
+    background: var(--browse-selected-pink);
+    box-shadow: none !important;
+  }
+
+  /* Filter panels become in-flow accordions so their borders meet rounded corners cleanly. */
+  .browseScope :global(.catalog-filter-grid > details) {
+    overflow: hidden;
+    border-radius: 0.88rem;
+    background: var(--browse-control-surface);
+  }
+
+  .browseScope :global(.catalog-filter-grid > details > summary) {
+    min-height: 4rem;
+    border: 1px solid var(--browse-control-border);
+    border-radius: 0.88rem;
+    color: #e6f4fd !important;
+    background: var(--browse-control-surface) !important;
+  }
+
+  .browseScope :global(.catalog-filter-grid > details > summary > svg) {
+    color: #b9e6ff !important;
+  }
+
+  .browseScope :global(.catalog-filter-grid > details[open] > summary) {
+    border-radius: 0.88rem 0.88rem 0 0;
+    border-bottom-color: rgb(75 170 226 / 20%);
+  }
+
+  .browseScope :global(.catalog-filter-grid > details > div) {
+    position: static;
+    width: auto;
+    min-width: 0 !important;
+    max-width: none;
+    margin: 0;
+    border: 1px solid var(--browse-control-border);
+    border-top: 0;
+    border-radius: 0 0 0.88rem 0.88rem;
+    color: #e6f4fd;
+    background: #0b2034 !important;
+    box-shadow: none;
+  }
+
+  .browseScope :global(.minimum-chapters-field[open] .minimum-chapters-editor) {
+    display: flex;
+    min-height: 6.3rem;
+    align-items: center;
+    justify-content: center;
+    padding: 1.1rem 0.72rem;
+  }
+
+  /* Facet options are compact touch-friendly pills with explicit selected feedback. */
+  .browseScope :global(.catalog-facet-menu[open] > div) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.46rem;
+    padding: 0.68rem;
+  }
+
+  .browseScope :global(.catalog-facet-menu > div > .catalog-facet-search) {
+    flex: 1 0 100%;
+    margin-bottom: 0.15rem;
+  }
+
+  .browseScope :global(.catalog-facet-search input),
+  .browseScope :global(.minimum-chapters-editor > input) {
+    color: #e6f4fd;
+    background: #102a43;
+  }
+
+  .browseScope :global(.catalog-facet-search input::placeholder),
+  .browseScope :global(.minimum-chapters-editor > input::placeholder) {
+    color: #a9c7da;
+  }
+
+  .browseScope :global(.minimum-chapters-editor > button) {
+    border-color: var(--browse-control-border) !important;
+    color: #e6f4fd !important;
+    background: #102a43 !important;
+  }
+
+  .browseScope :global(.minimum-chapters-editor > button svg) {
+    color: currentColor;
+  }
+
+  .browseScope :global(.catalog-facet-menu > div > button[role="option"]) {
+    display: inline-flex;
+    width: auto;
+    min-height: 2.2rem;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 0.32rem;
+    margin: 0;
+    padding: 0.42rem 0.66rem;
+    border-color: rgb(112 184 229 / 34%);
+    border-radius: 999px;
+    color: #e6f4fd;
+    background: #102a43;
+  }
+
+  .browseScope :global(.catalog-facet-menu > div > button[role="option"][aria-selected="true"]) {
+    border-color: var(--browse-accent);
+    color: var(--browse-accent-ink);
+    background: var(--browse-accent);
+  }
+
+  .browseScope :global(.catalog-facet-menu > div > button[role="option"] > svg) {
+    width: 1rem;
+    height: 1rem;
+    padding: 0;
+    border-radius: 0;
+    color: currentColor;
+    background: transparent;
+  }
+}

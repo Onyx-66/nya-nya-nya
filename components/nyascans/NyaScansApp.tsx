@@ -85,6 +85,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import browseFixes from "./BrowseFixes.module.css";
 import { AccountSecurityWorkspace } from "@/components/nyascans/AccountSecurityWorkspace";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
@@ -5133,7 +5134,7 @@ function BrowseView({
   ].filter(Boolean).length;
 
   return (
-    <main className="page-main page-wrap">
+    <main className={`page-main page-wrap ${browseFixes.browseScope}`}>
       <section className="browse-intro">
         <div className="browse-intro-heading">
           <h1>Browse Series</h1>
