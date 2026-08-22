@@ -1519,7 +1519,7 @@ function SiteHeader({
             </>
           ) : (
             <>
-              <a className="account-link" href={authEntryPath("login", "/account")}>
+              <a className="account-link" href={authEntryPath("login", "/")}>
                 <span>Login</span>
                 <UserCircle size={22} />
               </a>
@@ -1571,7 +1571,7 @@ function MobileNav({
 }) {
   const accountHref = actor
     ? "/account"
-    : authEntryPath("login", "/account");
+    : authEntryPath("login", "/");
   const byLabel = new Map(navItems.map((item) => [item.label, item]));
   const mobileItems = ["Browse", "Library", "Home", "Store"]
     .map((label) => byLabel.get(label))
@@ -11605,7 +11605,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
           </p>
           <a
             className="button button-primary"
-            href={authEntryPath("login", "/account")}
+            href={authEntryPath("login", "/")}
           >
             <SignIn size={18} />
             Open Sign In
@@ -14010,7 +14010,7 @@ export function NyaScansApp({
   actor,
   authenticatedIdentity = null,
   accountBlocked = false,
-  authReturnTo = "/account",
+  authReturnTo = "/",
   resourceSlug,
   chapterSlug,
   uploadMode,
@@ -14115,7 +14115,11 @@ export function NyaScansApp({
         return;
       }
       if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-      const directShortcut = enabledShortcuts.find((shortcut) => !shortcut.prefix.trim() && shortcut.key.toLowerCase() === key);
+      const directShortcut = enabledShortcuts.find((shortcut) => {
+        const prefix = typeof shortcut.prefix === "string" ? shortcut.prefix.trim() : "";
+        const shortcutKey = typeof shortcut.key === "string" ? shortcut.key.toLowerCase() : "";
+        return !prefix && shortcutKey === key;
+      });
       if (directShortcut) {
         run(directShortcut);
         return;

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const result = await authenticatePassword({
       email: input.email,
       password: input.password,
-      returnTo: safeAuthReturnPath(input.returnTo ?? "/account"),
+      returnTo: safeAuthReturnPath(input.returnTo ?? "/"),
     });
     return json(
       requestId,

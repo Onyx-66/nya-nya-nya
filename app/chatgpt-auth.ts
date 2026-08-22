@@ -72,11 +72,11 @@ export function chatGPTSignOutPath(returnTo = "/"): string {
   return `${SIGN_OUT_PATH}?return_to=${encodeURIComponent(safeReturnTo)}`;
 }
 
-export function loginPath(returnTo = "/account"): string {
+export function loginPath(returnTo = "/"): string {
   return `/login?returnTo=${encodeURIComponent(safeAuthReturnPath(returnTo))}`;
 }
 
-export function signupPath(returnTo = "/account"): string {
+export function signupPath(returnTo = "/"): string {
   return `/signup?returnTo=${encodeURIComponent(safeAuthReturnPath(returnTo))}`;
 }
 

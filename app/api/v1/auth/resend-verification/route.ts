@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const input = resendSchema.parse(await request.json());
     await resendPasswordVerification({
       email: input.email,
-      returnTo: safeAuthReturnPath(input.returnTo ?? "/account"),
+      returnTo: safeAuthReturnPath(input.returnTo ?? "/"),
     });
     return json(
       requestId,

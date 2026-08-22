@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     await registerPasswordAccount({
       email: input.email,
       password: input.password,
-      returnTo: safeAuthReturnPath(input.returnTo ?? "/account"),
+      returnTo: safeAuthReturnPath(input.returnTo ?? "/"),
     });
     return json(
       requestId,

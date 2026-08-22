@@ -193,7 +193,7 @@ export default async function CatchAllPage({
   const requestedReturnTo = Array.isArray(query.returnTo)
     ? query.returnTo[0]
     : query.returnTo;
-  const authReturnTo = safeAuthReturnPath(requestedReturnTo ?? "/account");
+  const authReturnTo = safeAuthReturnPath(requestedReturnTo ?? "/");
   return (
     <NyaScansApp
       {...resolved}

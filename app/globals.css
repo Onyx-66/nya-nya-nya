@@ -55167,3 +55167,104 @@ body::-webkit-scrollbar {
     margin-top: -18px;
   }
 }
+
+
+/* v49.2.0 — login-safe homepage rails, Editor’s Pick breathing room, and New Series alignment. */
+@media (min-width: 621px) {
+  .home-main .editors-pick-card {
+    gap: clamp(2.5rem, 5vw, 5rem) !important;
+  }
+}
+
+.home-main .editors-pick-cover-stage {
+  width: min(410px, calc(100% - 2rem));
+  margin-inline: auto;
+}
+
+.home-main .editors-pick-cover-back-left {
+  left: 1.25rem;
+  transform: translateX(-8%) rotate(-6deg) scale(.94);
+}
+
+.home-main .editors-pick-cover-back-right {
+  right: 1.25rem;
+  transform: translateX(8%) rotate(6deg) scale(.94);
+}
+
+.home-main .editors-pick-dots {
+  width: 100%;
+  justify-self: center;
+  margin-top: 0;
+  padding-top: .45rem;
+  transform: none;
+}
+
+.home-main .public-new-series {
+  width: var(--page) !important;
+  max-width: 100%;
+  margin-inline: auto !important;
+  padding-inline: 0 !important;
+  box-sizing: border-box;
+}
+
+.home-main .public-new-series .section-heading,
+.home-main .public-new-series .new-series-grid {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0 !important;
+  box-sizing: border-box;
+}
+
+.home-main .public-new-series .new-series-grid {
+  align-items: start;
+  padding-inline: 0;
+}
+
+.home-main .public-new-series .new-series-card {
+  align-self: start;
+}
+
+.home-main .public-new-series .new-series-cover > small {
+  top: .7rem;
+  left: .7rem;
+  min-height: 1.35rem;
+  padding: .42rem .72rem;
+  border: 1px solid #ff9aa5;
+  border-radius: 999px;
+  background: #e51e39;
+  color: #fff;
+  font-size: .64rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .07em;
+  box-shadow: 0 .3rem .75rem rgb(153 15 34 / 32%);
+}
+
+@media (max-width: 620px) {
+  .home-main .editors-pick-cover-stage {
+    width: calc(100% - 1.25rem);
+  }
+
+  .home-main .editors-pick-cover-back-left {
+    left: .75rem;
+  }
+
+  .home-main .editors-pick-cover-back-right {
+    right: .75rem;
+  }
+
+  .home-main .public-new-series .new-series-cover > small {
+    top: .58rem;
+    left: .58rem;
+    min-height: 1.2rem;
+    padding: .34rem .58rem;
+    font-size: .58rem;
+  }
+}
+
+
+/* v49.2.0 follow-up — keep New Series cards on the shared horizontal rail. */
+.home-main .public-new-series .new-series-grid {
+  animation: none !important;
+  transform: none !important;
+}
