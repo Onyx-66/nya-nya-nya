@@ -2298,7 +2298,7 @@ export async function GET(request: Request, context: RouteContext) {
         .number()
         .int()
         .min(6)
-        .max(60)
+        .max(66)
         .catch(24)
         .parse(url.searchParams.get("pageSize"));
       const statusValues = (url.searchParams.get("status") ?? "")

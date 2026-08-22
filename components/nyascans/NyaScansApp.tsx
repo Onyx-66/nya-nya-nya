@@ -4606,6 +4606,9 @@ type CatalogFacets = {
   genres: CatalogFacetOption[];
   creators: CatalogFacetOption[];
 };
+
+const DEFAULT_CATALOG_PAGE_SIZE = 66;
+
 function catalogLabel(value: string) {
   return value
     .toLowerCase()
@@ -4635,6 +4638,14 @@ function CatalogCover({
   );
 }
 
+function closeOtherBrowseFilterDetails(current: HTMLDetailsElement) {
+  const panel = current.closest(".catalog-filter-panel");
+  if (!panel) return;
+  panel.querySelectorAll<HTMLDetailsElement>("details[open]").forEach((details) => {
+    if (details !== current) details.open = false;
+  });
+}
+
 function CompactOptionMenu({
   label,
   value,
@@ -4654,7 +4665,12 @@ function CompactOptionMenu({
   const selectedLabels = options.filter((option) => selectedValues.includes(String(option.value))).map((option) => option.label);
   const currentLabel = multiple ? selectedLabels.join(", ") || label : options.find((option) => String(option.value) === String(value))?.label ?? String(value);
   return (
-    <details className={`compact-option-menu ${multiple ? "is-multi-select" : ""} ${className}`.trim()}>
+    <details
+      className={`compact-option-menu ${multiple ? "is-multi-select" : ""} ${className}`.trim()}
+      onToggle={(event) => {
+        if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget);
+      }}
+    >
       <summary aria-label={`${label}: ${currentLabel}`}>
         <span>{label}</span>
         <CaretDown size={13} />
@@ -4717,7 +4733,12 @@ function CatalogFacetMenu({
     .filter((option) => `${option.label} ${option.kind ?? ""}`.toLowerCase().includes(search.trim().toLowerCase()))
     .slice(0, 40);
   return (
-    <details className="catalog-facet-menu">
+    <details
+      className="catalog-facet-menu"
+      onToggle={(event) => {
+        if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget);
+      }}
+    >
       <summary aria-label={`${label}: ${selectedLabels.join(", ") || label}`}>
         <span>{label}</span>
         <CaretDown size={15} />
@@ -4854,13 +4875,13 @@ function BrowseView({
   const [mode, setMode] = useState<"grid" | "list">("grid");
   const [sort, setSort] = useState("latest");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(24);
+  const [pageSize, setPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE);
   const [moreOpen, setMoreOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [items, setItems] = useState<CatalogResult[]>([]);
   const [pagination, setPagination] = useState<CatalogPagination>({
     page: 1,
-    pageSize: 24,
+    pageSize: DEFAULT_CATALOG_PAGE_SIZE,
     total: 0,
     pageCount: 1,
     hasPrevious: false,
@@ -4888,7 +4909,7 @@ function BrowseView({
       );
       const nextSort = params.get("sort") ?? "latest";
       const nextPage = Number(params.get("page") ?? 1);
-      const nextPageSize = Number(params.get("pageSize") ?? 24);
+      const nextPageSize = Number(params.get("pageSize") ?? DEFAULT_CATALOG_PAGE_SIZE);
       setQuery(params.get("q") ?? "");
       setType(
         ["MANHWA", "MANGA", "MANHUA"].includes(nextType)
@@ -4918,9 +4939,9 @@ function BrowseView({
           ? 16
           : nextPageSize === 36
             ? 32
-            : [16, 24, 32, 48].includes(nextPageSize)
+            : [16, 24, 32, 48, 66].includes(nextPageSize)
               ? nextPageSize
-              : 24,
+              : DEFAULT_CATALOG_PAGE_SIZE,
       );
       setMoreOpen(
         nextStatus !== "ALL" ||
@@ -5072,7 +5093,7 @@ function BrowseView({
     if (next.hideFollowed && actor) params.set("hideFollowed", "1");
     if (next.sort !== "latest") params.set("sort", next.sort);
     if (next.page > 1) params.set("page", String(next.page));
-    if (next.pageSize !== 24) params.set("pageSize", String(next.pageSize));
+    if (next.pageSize !== DEFAULT_CATALOG_PAGE_SIZE) params.set("pageSize", String(next.pageSize));
     const nextUrl = `/browse${params.size ? `?${params.toString()}` : ""}`;
     window.history[replace ? "replaceState" : "pushState"]({}, "", nextUrl);
     setQuery(next.query);
@@ -5108,7 +5129,7 @@ function BrowseView({
     Boolean(minimumChapters && Number(minimumChapters) > 0),
     hideFollowed,
     sort !== "latest",
-    pageSize !== 24,
+    pageSize !== DEFAULT_CATALOG_PAGE_SIZE,
   ].filter(Boolean).length;
 
   return (
@@ -5259,7 +5280,12 @@ function BrowseView({
               onChange={(value) => navigate({ creator: value, page: 1 })}
               placeholder="Search artist, author, publisher..."
             />
-            <details className="minimum-chapters-field">
+              <details
+                className="minimum-chapters-field"
+                onToggle={(event) => {
+                  if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget);
+                }}
+              >
               <summary>
                 <span>Minimum Chapters</span>
                 <CaretDown size={15} />
@@ -5331,7 +5357,7 @@ function BrowseView({
                   hideFollowed: false,
                   sort: "latest",
                   page: 1,
-                  pageSize: 24,
+                  pageSize: DEFAULT_CATALOG_PAGE_SIZE,
                 });
                 setGenreSearch("");
                 setCreatorSearch("");
@@ -5387,10 +5413,6 @@ function BrowseView({
                   <span className="cover-shade" />
                   <span className="catalog-cover-top-badges">
                     <SeriesTypeBadge type={item.type} flagOnly />
-                    <span className="catalog-chapter-badge">
-                      <Books size={13} />
-                      {Number(item.chapterCount ?? 0)}
-                    </span>
                     <span className="catalog-rating-badge">
                       <Star size={13} weight="fill" />
                       {(Number(item.ratingTenths) / 10).toFixed(1)}
@@ -5398,6 +5420,10 @@ function BrowseView({
                   </span>
                   <span className="catalog-cover-bottom-badges">
                     <SeriesStatusBadge status={item.status} />
+                    <span className="catalog-chapter-badge">
+                      <Books size={13} />
+                      {Number(item.chapterCount ?? 0)}
+                    </span>
                   </span>
                   <span className="catalog-cover-title" title={item.title}>
                     {item.title}
@@ -5415,9 +5441,6 @@ function BrowseView({
                   <CatalogCover item={item} compact />
                 </a>
                 <div className="series-list-content">
-                  <a href={`/title/${item.slug}`}>
-                    <h2>{item.title}</h2>
-                  </a>
                   <div className="catalog-badge-row">
                     <SeriesTypeBadge type={item.type} />
                     <SeriesStatusBadge status={item.status} />
@@ -5425,6 +5448,9 @@ function BrowseView({
                       <Star size={14} weight="fill" /> {(Number(item.ratingTenths) / 10).toFixed(1)}
                     </span>
                   </div>
+                  <a href={`/title/${item.slug}`}>
+                    <h2>{item.title}</h2>
+                  </a>
                   <div className="list-stats">
                     <span><Books size={15} /> {Number(item.chapterCount ?? 0)}</span>
                     <span><ChatCircle size={15} /> {Number(item.commentCount ?? 0)}</span>
