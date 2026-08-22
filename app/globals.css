@@ -57047,3 +57047,149 @@ body:has(.catalog-toolbar) .catalog-summary {
     min-height: 3rem;
   }
 }
+
+
+/* Browse v49.7 — compact three-column mobile cards and equal filter triggers */
+@media (max-width: 760px) {
+  body:has(.catalog-toolbar) .catalog-results.catalog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem 0.55rem;
+    align-items: start;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card {
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 0.68rem;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .cover-link {
+    aspect-ratio: 2 / 3;
+    min-height: 0;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .cover-link > img,
+  body:has(.catalog-toolbar) .catalog-series-card .cover-link > .catalog-cover-placeholder {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .series-card-copy {
+    min-width: 0;
+    padding: 0.48rem 0.42rem 0;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .series-card-copy h3 {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.64rem;
+    line-height: 1.2;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .catalog-card-meta {
+    justify-content: flex-start;
+    gap: 0.25rem;
+    margin-top: 0.38rem;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .catalog-status-pill {
+    display: none;
+  }
+
+  body:has(.catalog-toolbar) .catalog-series-card .catalog-chapters-pill {
+    min-height: 1.45rem;
+    padding-inline: 0.38rem;
+    font-size: 0.52rem;
+    white-space: nowrap;
+  }
+
+  body:has(.catalog-toolbar) .catalog-card-follow {
+    width: calc(100% - 0.84rem);
+    min-height: 2rem;
+    margin: 0.42rem;
+    padding-inline: 0.25rem;
+    gap: 0.22rem;
+    font-size: 0.58rem;
+  }
+
+  body:has(.catalog-toolbar) .catalog-card-follow svg {
+    width: 0.82rem;
+    height: 0.82rem;
+  }
+
+  .catalog-filter-grid > details,
+  .catalog-filter-footer > details {
+    display: block;
+    min-width: 0;
+  }
+
+  .catalog-filter-grid > details > summary,
+  .catalog-filter-footer > details > summary {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 3rem;
+  }
+}
+
+@media (min-width: 761px) {
+  .catalog-filter-grid > details > summary,
+  .catalog-filter-footer > details > summary {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.catalog-filter-grid > details > summary,
+.catalog-filter-footer > details > summary {
+  min-width: 0;
+}
+
+.catalog-filter-grid > details > summary > span,
+.catalog-filter-footer > details > summary > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-filter-grid > details,
+.catalog-filter-footer > details {
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:has(.catalog-toolbar) .catalog-card-follow {
+    transition: none;
+  }
+}
+
+
+/* Browse v49.7.1 — prevent filter triggers from stretching with taller companion fields */
+.catalog-filter-grid > details,
+.catalog-filter-footer > details {
+  align-self: start;
+  height: 3rem;
+}
+
+.catalog-filter-grid > details > summary,
+.catalog-filter-footer > details > summary {
+  height: 100%;
+  min-height: 3rem;
+}
+
+@media (max-width: 760px) {
+  .catalog-filter-grid > details,
+  .catalog-filter-footer > details {
+    width: 100%;
+  }
+}

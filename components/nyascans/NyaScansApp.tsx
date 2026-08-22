@@ -5134,7 +5134,6 @@ function BrowseView({
       <section className="browse-intro">
         <div className="browse-intro-heading">
           <div>
-            <p className="eyebrow">Catalog</p>
             <h1>
               Browse Series
               <span className="browse-count" aria-label={`${pagination.total} titles`}>
@@ -5213,7 +5212,6 @@ function BrowseView({
         >
           <header>
             <div>
-              <span className="filter-panel-kicker">Catalog controls</span>
               <strong>Filters</strong>
             </div>
             <button
