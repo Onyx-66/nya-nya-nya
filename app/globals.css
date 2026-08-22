@@ -48026,15 +48026,6 @@ body {
   color: #f2cc72;
 }
 
-.v481-pinned-section .v481-pinned-carousel {
-  scroll-padding-inline: .15rem;
-  scrollbar-color: color-mix(in srgb, var(--accent) 48%, var(--line)) transparent;
-}
-
-.v481-pinned-section .v481-pinned-carousel > .v481-pin-card {
-  scroll-snap-stop: always;
-}
-
 @media (max-width: 900px) {
   .event-campaign-modal.floating-home-ad {
     grid-template-columns: minmax(0, .92fr) minmax(22rem, 1.08fr);
@@ -50121,55 +50112,6 @@ body {
   line-height: 1;
 }
 
-/* Pinned cards keep the active series centered, with 90%-scale neighboring previews tucked behind the controls. */
-.v481-pinned-stage { padding-inline: clamp(1rem, 5vw, 5rem); }
-.v481-pinned-carousel {
-  position: relative;
-  display: block !important;
-  width: min(100%, 42rem);
-}
-.v481-pinned-carousel > .v481-pin-card {
-  inset: auto !important;
-  width: 100% !important;
-}
-.v481-pinned-carousel > .v481-pin-card[data-active="true"] {
-  position: relative !important;
-  z-index: 2;
-  opacity: 1;
-  transform: scale(.985) !important;
-}
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
-  position: absolute !important;
-  top: 50% !important;
-  z-index: 1;
-  width: 90% !important;
-  opacity: .5;
-  transform: translateY(-50%) scale(.9) !important;
-}
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"] {
-  right: auto !important;
-  left: -72% !important;
-}
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
-  right: -72% !important;
-  left: auto !important;
-}
-@media (max-width: 680px) {
-  .v481-pinned-stage { padding-inline: .25rem; }
-  .v481-pinned-carousel { width: min(calc(100% - 6.2rem), 17rem); }
-  .v481-pinned-carousel > .v481-pin-card[data-pin-position="0"] {
-    min-height: 0 !important;
-    aspect-ratio: 1 / 1 !important;
-  }
-  .v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
-  .v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
-    display: block;
-    min-height: 0 !important;
-    aspect-ratio: 1 / 1 !important;
-  }
-}
-
 /* New Series: slow automatic rail movement where the carousel layout is active. */
 [data-new-series-layout="carousel"] .new-series-grid {
   animation: new-series-slow-drift 42s linear infinite alternate;
@@ -51651,15 +51593,6 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
 .featured-main-card {
   justify-self: center;
 }
-.v481-pinned-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-}
-.v481-pinned-carousel {
-  justify-self: center;
-  margin-inline: auto;
-}
 .content-section.recent-reviews-section {
   overflow: visible !important;
   border: 0 !important;
@@ -51702,23 +51635,6 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
     border-radius: 13px;
   }
 }
-@media (max-width: 680px) {
-  .v481-pinned-stage {
-    width: 100%;
-    padding-inline: .25rem;
-  }
-  .v481-pinned-carousel {
-    width: min(calc(100% - 6.4rem), 38rem);
-    margin-inline: auto;
-  }
-  .v481-pinned-arrow {
-    width: 2.7rem;
-    height: 2.7rem;
-  }
-  .v481-pinned-arrow.is-previous { left: .35rem; }
-  .v481-pinned-arrow.is-next { right: .35rem; }
-}
-
 /* v48.15.1: Recent Reviews is intentionally frameless; Pinned Series presents banners only. */
 .recent-reviews-section {
   position: relative;
@@ -51811,18 +51727,6 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
   }
 }
 
-/* Side pins recede and leave equal breathing room around the centered active card. */
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"],
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
-  width: 88% !important;
-  transform: translateY(-50%) scale(.88) !important;
-}
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="-1"] {
-  left: -86% !important;
-}
-.v481-pinned-carousel > .v481-pin-card[data-pin-position="1"] {
-  right: -86% !important;
-}
 
 /* Live discount indicators sit at the cover bottom so they do not compete with type, status, Featured, or New labels. */
 .cover-link { position:relative; }
