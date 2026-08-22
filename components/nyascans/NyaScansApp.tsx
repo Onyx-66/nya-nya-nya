@@ -5133,25 +5133,35 @@ function BrowseView({
     <main className="page-main page-wrap">
       <section className="browse-intro">
         <div className="browse-intro-heading">
-          <div>
-            <h1>
-              Browse Series
-              <span className="browse-count" aria-label={`${pagination.total} titles`}>
-                {pagination.total.toLocaleString("en-US")}
-              </span>
-            </h1>
+          <h1>Browse Series</h1>
+          <div className="view-mode-toggle" role="group" aria-label="Catalog view">
+            <button
+              type="button"
+              onClick={() => setMode("grid")}
+              aria-pressed={mode === "grid"}
+              aria-label="Grid view"
+              title="Grid view"
+            >
+              <SquaresFour size={19} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("list")}
+              aria-pressed={mode === "list"}
+              aria-label="List view"
+              title="List view"
+            >
+              <List size={19} />
+            </button>
           </div>
-          <p className="browse-intro-note">
-            Find your next read from the NyaScans library.
-          </p>
         </div>
       </section>
 
-      <section className="catalog-toolbar" aria-label="Catalog search and filters">
+      <section className="catalog-toolbar" aria-label="Search and filters">
         <div className="catalog-search">
           <MagnifyingGlass size={19} />
           <label className="sr-only" htmlFor="catalog-query">
-            Search catalog
+            Search series
           </label>
           <input
             id="catalog-query"
@@ -5159,7 +5169,8 @@ function BrowseView({
             onChange={(event) =>
               navigate({ query: event.target.value, page: 1 }, true)
             }
-            placeholder="Search series, titles, or aliases..."
+            placeholder={`Search among ${pagination.total.toLocaleString("en-US")} series...`}
+
           />
         </div>
         <button
@@ -5179,31 +5190,6 @@ function BrowseView({
         </button>
       </section>
 
-      <div className="catalog-summary">
-        <span className="catalog-result-summary">
-          {pagination.total.toLocaleString("en-US")} series
-        </span>
-        <div className="view-mode-toggle" role="group" aria-label="Catalog view">
-          <button
-            type="button"
-            onClick={() => setMode("grid")}
-            aria-pressed={mode === "grid"}
-            aria-label="Grid view"
-            title="Grid view"
-          >
-            <SquaresFour size={19} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("list")}
-            aria-pressed={mode === "list"}
-            aria-label="List view"
-            title="List view"
-          >
-            <List size={19} />
-          </button>
-        </div>
-      </div>
       {moreOpen ? (
         <aside
           id="browse-filter-panel"
@@ -5290,22 +5276,47 @@ function BrowseView({
               onChange={(value) => navigate({ creator: value, page: 1 })}
               placeholder="Search artist, author, publisher..."
             />
-            <label className="minimum-chapters-field">
-              <span>Minimum Chapters</span>
-              <input
-                inputMode="numeric"
-                min="0"
-                max="10000"
-                pattern="[0-9]*"
-                value={minimumChapters}
-                onChange={(event) => {
-                  const value = event.target.value.replace(/[^0-9]/g, "").slice(0, 4);
-                  navigate({ minimumChapters: value, page: 1 }, true);
-                }}
-                placeholder="e.g. 20"
-              />
-              <small>Show series with at least this many published chapters.</small>
-            </label>
+            <details className="minimum-chapters-field">
+              <summary>
+                <span>Minimum Chapters</span>
+                <CaretDown size={15} />
+              </summary>
+              <div className="minimum-chapters-editor">
+                <button
+                  type="button"
+                  aria-label="Decrease minimum chapters"
+                  onClick={() => {
+                    const next = Math.max(0, Number(minimumChapters || 0) - 1);
+                    navigate({ minimumChapters: next ? String(next) : "", page: 1 }, true);
+                  }}
+                >
+                  <ArrowDown size={15} />
+                </button>
+                <input
+                  inputMode="numeric"
+                  min="0"
+                  max="10000"
+                  pattern="[0-9]*"
+                  value={minimumChapters}
+                  onChange={(event) => {
+                    const value = event.target.value.replace(/[^0-9]/g, "").slice(0, 4);
+                    navigate({ minimumChapters: value, page: 1 }, true);
+                  }}
+                  placeholder="e.g. 20"
+                  aria-label="Minimum chapters"
+                />
+                <button
+                  type="button"
+                  aria-label="Increase minimum chapters"
+                  onClick={() => {
+                    const next = Math.min(10000, Number(minimumChapters || 0) + 1);
+                    navigate({ minimumChapters: String(next), page: 1 }, true);
+                  }}
+                >
+                  <ArrowUp size={15} />
+                </button>
+              </div>
+            </details>
             <label className="hide-followed-field">
               <input
                 type="checkbox"
@@ -5318,22 +5329,10 @@ function BrowseView({
                   navigate({ hideFollowed: event.target.checked, page: 1 });
                 }}
               />
-              <span>
-                <strong>Hide Followed</strong>
-                <small>Remove series already in your follows.</small>
-              </span>
+              <span>Hide Followed</span>
             </label>
           </div>
           <footer className="catalog-filter-footer">
-            <CompactOptionMenu
-              label="Show"
-              value={pageSize}
-              options={[16, 24, 32, 48].map((entry) => ({
-                value: entry,
-                label: `${entry} results`,
-              }))}
-              onChange={(value) => navigate({ pageSize: Number(value), page: 1 })}
-            />
             <button
               className="mobile-filter-clear"
               type="button"
@@ -5396,32 +5395,34 @@ function BrowseView({
           {items.map((item) =>
             mode === "grid" ? (
               <article className="series-card catalog-series-card" key={item.id}>
-                <a className="cover-link" href={`/title/${item.slug}`}>
+                <a
+                  className="cover-link"
+                  href={`/title/${item.slug}`}
+                  aria-label={`Open ${item.title}`}
+                >
                   <CatalogCover item={item} />
                   <span className="cover-shade" />
-                  <span className="catalog-rating-badge">
-                    <Star size={13} weight="fill" />
-                    {(Number(item.ratingTenths) / 10).toFixed(1)}
+                  <span className="catalog-cover-top-badges">
+                    <SeriesTypeBadge type={item.type} flagOnly />
+                    <span className="catalog-rating-badge">
+                      <Star size={13} weight="fill" />
+                      {(Number(item.ratingTenths) / 10).toFixed(1)}
+                    </span>
+                  </span>
+                  <span className="catalog-cover-bottom-badges">
+                    <SeriesStatusBadge status={item.status} />
+                    <span className="catalog-chapter-badge">
+                      <Books size={13} />
+                      {Number(item.chapterCount ?? 0)}
+                    </span>
+                  </span>
+                  <span className="catalog-cover-title" title={item.title}>
+                    {item.title}
                   </span>
                   <span className="quick-read">
                     <Play size={14} weight="fill" /> Read
                   </span>
                 </a>
-                <div className="series-card-copy">
-                  <a href={`/title/${item.slug}`}>
-                    <h3 title={item.title}>{item.title}</h3>
-                  </a>
-                  <div className="catalog-card-meta">
-                    <span className="catalog-chapters-pill">
-                      {item.latestChapterNumber
-                        ? `${normalizeChapterNumber(item.latestChapterNumber)} Chs.`
-                        : `${Number(item.chapterCount)} Chs.`}
-                    </span>
-                    <span className="catalog-status-pill">
-                      {catalogLabel(item.status)}
-                    </span>
-                  </div>
-                </div>
                 <CatalogFollowButton
                   item={item}
                   actor={actor}
