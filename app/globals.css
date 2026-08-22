@@ -55961,13 +55961,13 @@ body:has(.catalog-toolbar) {
 /* Browse header, filter surface, and results */
 body:has(.catalog-toolbar) {
   --browse-bg: var(--bg);
-  --browse-panel: var(--surface);
-  --browse-panel-2: var(--surface-2);
-  --browse-card: var(--surface);
+  --browse-panel: #f7fbfe;
+  --browse-panel-2: #deedf5;
+  --browse-card: #ffffff;
   --browse-purple: var(--accent);
-  --browse-text: var(--text);
-  --browse-muted: var(--muted);
-  --browse-line: color-mix(in srgb, var(--line) 78%, transparent);
+  --browse-text: #effaff;
+  --browse-muted: #a7c2d2;
+  --browse-line: rgb(101 151 183 / 42%);
 }
 
 body:has(.catalog-toolbar) .page-main {
@@ -56199,9 +56199,10 @@ body:has(.catalog-toolbar) .catalog-series-card h3 {
   align-items: center;
   overflow: hidden;
   padding: 0 0.55rem;
+  border: 1px solid rgb(101 151 183 / 28%);
   border-radius: 0.42rem;
-  color: #f0edf8;
-  background: #302c42;
+  color: #0b2942;
+  background: #dcecf5;
   font-size: 0.62rem;
   font-weight: 760;
   text-overflow: ellipsis;
@@ -56209,8 +56210,8 @@ body:has(.catalog-toolbar) .catalog-series-card h3 {
 }
 
 .catalog-status-pill {
-  color: #a8ddff;
-  background: color-mix(in srgb, var(--accent) 18%, var(--browse-panel-2));
+  color: #075f99;
+  background: color-mix(in srgb, var(--accent) 18%, #effaff);
 }
 
 .catalog-card-follow {
