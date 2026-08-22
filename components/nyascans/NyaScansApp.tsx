@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   ArrowsOut,
   Bell,
+  BookmarkSimple,
   Books,
   CaretDown,
   CaretLeft,
@@ -4892,12 +4893,20 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
   return (
     <main className="page-main page-wrap">
       <section className="browse-intro">
-        <p className="eyebrow">Catalog</p>
-        <h1>Find the story that keeps you awake.</h1>
-        <p>
-          Search original titles, filter by reading format, and keep mature
-          content behind your account settings.
-        </p>
+        <div className="browse-intro-heading">
+          <div>
+            <p className="eyebrow">Catalog</p>
+            <h1>
+              Browse Series
+              <span className="browse-count" aria-label={`${pagination.total} titles`}>
+                {pagination.total.toLocaleString("en-US")}
+              </span>
+            </h1>
+          </div>
+          <p className="browse-intro-note">
+            Find your next read from the NyaScans library.
+          </p>
+        </div>
       </section>
 
       <section className="catalog-toolbar" aria-label="Catalog filters">
@@ -4912,37 +4921,39 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
             onChange={(event) =>
               navigate({ query: event.target.value, page: 1 }, true)
             }
-            placeholder="Search title, genre, creator, or team"
+            placeholder="Search series..."
           />
         </div>
-        <CompactOptionMenu
-          label="Format"
-          value={type}
-          className="catalog-format-menu"
-          options={[
-            { value: "All", label: "All formats" },
-            { value: "MANHWA", label: "Manhwa" },
-            { value: "MANGA", label: "Manga" },
-            { value: "MANHUA", label: "Manhua" },
-          ]}
-          onChange={(value) => navigate({ type: value, page: 1 })}
-        />
-        {premiumEconomyPublic ? (
-          <label>
-            <span>Access</span>
-            <select
-              value={access}
-              onChange={(event) =>
-                navigate({ access: event.target.value, page: 1 })
-              }
-            >
-              <option value="All">All access</option>
-              <option value="FREE">Free</option>
-              <option value="PAID">Paid</option>
-            </select>
-            <CaretDown size={15} />
-          </label>
-        ) : null}
+        <div className="catalog-desktop-filters">
+          <CompactOptionMenu
+            label="Format"
+            value={type}
+            className="catalog-format-menu"
+            options={[
+              { value: "All", label: "All formats" },
+              { value: "MANHWA", label: "Manhwa" },
+              { value: "MANGA", label: "Manga" },
+              { value: "MANHUA", label: "Manhua" },
+            ]}
+            onChange={(value) => navigate({ type: value, page: 1 })}
+          />
+          {premiumEconomyPublic ? (
+            <label>
+              <span>Access</span>
+              <select
+                value={access}
+                onChange={(event) =>
+                  navigate({ access: event.target.value, page: 1 })
+                }
+              >
+                <option value="All">All access</option>
+                <option value="FREE">Free</option>
+                <option value="PAID">Paid</option>
+              </select>
+              <CaretDown size={15} />
+            </label>
+          ) : null}
+        </div>
         <button
           className="filter-button"
           type="button"
@@ -4950,7 +4961,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           onClick={() => setMoreOpen((value) => !value)}
         >
           <SlidersHorizontal size={18} />
-          More filters
+          Filters
         </button>
       </section>
 
@@ -5000,30 +5011,72 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
         </div>
       </div>
       {moreOpen ? (
-        <div className="advanced-filter-bar">
-          {[
-            ["ONGOING", "Ongoing"],
-            ["COMPLETED", "Completed"],
-            ["HIATUS", "Hiatus"],
-            ["PAUSED", "Paused"],
-            ["CANCELLED", "Cancelled"],
-            ["UPCOMING", "Upcoming"],
-          ].map(([value, label]) => (
+        <aside className="advanced-filter-bar mobile-filter-drawer" aria-label="More catalog filters">
+          <header>
+            <strong>Filters</strong>
             <button
+              className="mobile-filter-close"
               type="button"
-              key={value}
-              aria-pressed={status === value}
-              onClick={() =>
-                navigate({
-                  status: status === value ? "All" : value,
-                  page: 1,
-                })
-              }
+              aria-label="Close filters"
+              onClick={() => setMoreOpen(false)}
             >
-              {label}
+              <X size={22} />
             </button>
-          ))}
+          </header>
+          <div className="mobile-filter-options">
+            <CompactOptionMenu
+              label="Latest Update"
+              value={sort}
+              options={[
+                { value: "latest", label: "Latest update" },
+                { value: "added", label: "Recently added" },
+                { value: "viewed", label: "Most viewed" },
+                { value: "followed", label: "Most followed" },
+                { value: "rated", label: "Highest rated" },
+                { value: "title", label: "Alphabetical" },
+              ]}
+              onChange={(value) => navigate({ sort: value, page: 1 })}
+            />
+            <CompactOptionMenu
+              label="Format"
+              value={type}
+              options={[
+                { value: "All", label: "All formats" },
+                { value: "MANHWA", label: "Manhwa" },
+                { value: "MANGA", label: "Manga" },
+                { value: "MANHUA", label: "Manhua" },
+              ]}
+              onChange={(value) => navigate({ type: value, page: 1 })}
+            />
+            {premiumEconomyPublic ? (
+              <CompactOptionMenu
+                label="Access"
+                value={access}
+                options={[
+                  { value: "All", label: "All access" },
+                  { value: "FREE", label: "Free" },
+                  { value: "PAID", label: "Paid" },
+                ]}
+                onChange={(value) => navigate({ access: value, page: 1 })}
+              />
+            ) : null}
+            <CompactOptionMenu
+              label="Status"
+              value={status}
+              options={[
+                { value: "All", label: "All statuses" },
+                { value: "ONGOING", label: "Ongoing" },
+                { value: "COMPLETED", label: "Completed" },
+                { value: "HIATUS", label: "Hiatus" },
+                { value: "PAUSED", label: "Paused" },
+                { value: "CANCELLED", label: "Cancelled" },
+                { value: "UPCOMING", label: "Upcoming" },
+              ]}
+              onChange={(value) => navigate({ status: value, page: 1 })}
+            />
+          </div>
           <button
+            className="mobile-filter-clear"
             type="button"
             onClick={() => {
               navigate({
@@ -5041,7 +5094,7 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
           >
             Clear filters
           </button>
-        </div>
+        </aside>
       ) : null}
 
       {loading ? (
@@ -5080,30 +5133,38 @@ function BrowseView({ showToast }: { showToast: (text: string) => void }) {
                 <a className="cover-link" href={`/title/${item.slug}`}>
                   <CatalogCover item={item} />
                   <span className="cover-shade" />
+                  <span className="catalog-rating-badge">
+                    <Star size={13} weight="fill" />
+                    {(Number(item.ratingTenths) / 10).toFixed(1)}
+                  </span>
                   <span className="quick-read">
                     <Play size={14} weight="fill" /> Read
                   </span>
                 </a>
                 <div className="series-card-copy">
                   <a href={`/title/${item.slug}`}>
-                    <h3>{item.title}</h3>
+                    <h3 title={item.title}>{item.title}</h3>
                   </a>
-                  <div className="catalog-badge-row">
-                    <SeriesTypeBadge type={item.type} />
-                    <SeriesStatusBadge status={item.status} />
-                  </div>
-                  <div className="series-meta">
-                    <span>
-                      <Star size={14} weight="fill" />{" "}
-                      {(Number(item.ratingTenths) / 10).toFixed(1)}
-                    </span>
-                    <span>
+                  <div className="catalog-card-meta">
+                    <span className="catalog-chapters-pill">
                       {item.latestChapterNumber
-                        ? `Ch. ${normalizeChapterNumber(item.latestChapterNumber)}`
-                        : `${Number(item.chapterCount)} chapters`}
+                        ? `${normalizeChapterNumber(item.latestChapterNumber)} Chs.`
+                        : `${Number(item.chapterCount)} Chs.`}
+                    </span>
+                    <span className="catalog-status-pill">
+                      {catalogLabel(item.status)}
                     </span>
                   </div>
                 </div>
+                <button
+                  className="catalog-card-bookmark"
+                  type="button"
+                  aria-label={`Bookmark ${item.title}`}
+                  onClick={() => showToast("Sign in to bookmark series.")}
+                >
+                  <BookmarkSimple size={18} />
+                  Bookmark
+                </button>
               </article>
             ) : (
               <a className="series-list-row" href={`/title/${item.slug}`} key={item.id}>

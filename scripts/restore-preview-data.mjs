@@ -149,6 +149,21 @@ for (const [id, name, email] of readers) {
   exec(`INSERT INTO user_profiles (user_id, username, normalized_username, bio, preferred_language) VALUES (?, ?, ?, ?, 'en')`, id, slug(name), slug(name), `Reader profile for ${name}.`);
 }
 
+const rankingFixtures = [
+  ["fixture-rank-zandervj", "Zandervj", "zandervj", "The preview leaderboard champion."],
+  ["fixture-rank-wanderer", "TheWanderer", "thewanderer", "A returning reader testing the ranking UI."],
+  ["fixture-rank-morning-star", "Morning Star Of Man", "morning-star-of-man", "A community tester with a growing score."],
+];
+for (const [id, name, username, bio] of rankingFixtures) {
+  exec(`INSERT INTO users (id, email, display_name, primary_role, status, email_verified_at) VALUES (?, ?, ?, 'USER', 'ACTIVE', CURRENT_TIMESTAMP)`, id, `${username}@fixtures.invalid`, name);
+  exec(`INSERT INTO user_roles (user_id, role, assigned_by_user_id) VALUES (?, 'USER', ?)`, id, owner.id);
+  exec(
+    `INSERT INTO user_profiles (user_id, username, normalized_username, bio, preferred_language, profile_visibility, followers_visibility, show_comments, show_reading_history)
+     VALUES (?, ?, ?, ?, 'en', 'PUBLIC', 'PUBLIC', 1, 1)`,
+    id, username, username, bio,
+  );
+}
+
 const teams = [
   ["team-onyx", "onyx-archive", "Onyx Archive", "A verified testing team focused on polished reader releases.", "/art/seed/cover-1.jpg", "/art/mangadex-preview/team-banner-00.jpg"],
   ["team-starlit", "starlit-forge", "Starlit Forge", "A verified team with weekly discovery releases.", "/art/seed/cover-2.png", "/art/mangadex-preview/team-banner-01.jpg"],
@@ -191,7 +206,7 @@ for (const [id, title, nativeTitle, synopsis, type, status, country, language, y
   exec(
     `INSERT INTO series (id, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RIGHT_TO_LEFT', ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
-    id, seriesSlug, title, nativeTitle, synopsis, type, status, country, language, year, paid ? "PAID" : "FREE", coverKey, bannerKey, coverKey, rating, followers, views, iso(-1440 - Math.floor(Math.random() * 5000)), iso(-20),
+    id, seriesSlug, title, nativeTitle, synopsis, type, status, country, language, year, paid ? "PAID" : "FREE", coverKey, bannerKey, coverKey, rating, followers, views, iso(-1440 - id.length * 5), iso(-20),
   );
   exec(
     `INSERT INTO series_team_assignments (series_id, team_id, can_upload, can_publish, is_primary, assigned_by_user_id, allowed_languages_json, upload_requires_review)
@@ -206,6 +221,50 @@ for (const [id, title, nativeTitle, synopsis, type, status, country, language, y
   for (const tag of tags) {
     const genreId = genreIdFor(tag);
     if (genreId) exec(`INSERT INTO series_genres (series_id, genre_id) VALUES (?, ?)`, id, genreId);
+  }
+}
+
+const mockBrowseSeries = Array.from({ length: 30 }, (_, index) => {
+  const number = String(index + 1).padStart(3, "0");
+  const titles = [
+    "Shadow Circuit", "The Return of the Crimson Demon", "Moonlit Vanguard", "Glass Horizon", "Ironbound Alchemist",
+    "The Fist of Tomorrow", "Azure Requiem", "Cinder Crown", "Starfall Academy", "The Last Gatekeeper",
+  ];
+  const title = `${titles[index % titles.length]} ${Math.floor(index / titles.length) + 1}`;
+  const types = ["MANGA", "MANHWA", "MANHUA"];
+  const statuses = ["ONGOING", "ONGOING", "COMPLETED", "HIATUS", "UPCOMING"];
+  const languages = ["en", "ja", "ko", "zh"];
+  const accessTypes = ["FREE", "FREE", "FREE", "PAID"];
+  return {
+    id: `mock-browse-series-${number}`,
+    title,
+    type: types[index % types.length],
+    status: statuses[index % statuses.length],
+    language: languages[index % languages.length],
+    access: accessTypes[index % accessTypes.length],
+    rating: 78 + (index % 21),
+    followers: 3200 + index * 713,
+    views: 98000 + index * 17321,
+    coverKey: `/art/mangadex-preview/cover-${number}.jpg`,
+    bannerKey: `/art/mangadex-preview/banner-${number}.jpg`,
+    tags: [genreNames[index % genreNames.length], genreNames[(index + 3) % genreNames.length]],
+  };
+});
+for (const [index, mock] of mockBrowseSeries.entries()) {
+  const seriesSlug = slug(mock.title);
+  exec(
+    `INSERT OR IGNORE INTO series (id, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'en', 'LTR', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
+    mock.id, seriesSlug, mock.title, mock.title, `A populated mock title for testing Browse cards, responsive filters, media loading, and long-page performance.`, mock.type, mock.status, ["US", "JP", "KR", "CN"][index % 4], 2026 - (index % 9), mock.access, mock.coverKey, mock.bannerKey, mock.bannerKey, mock.rating, mock.followers, mock.views, iso(-(index + 1) * 18), iso(-(index + 1) * 12),
+  );
+  exec(
+    `INSERT OR IGNORE INTO series_team_assignments (series_id, team_id, can_upload, can_publish, is_primary, assigned_by_user_id, allowed_languages_json, upload_requires_review)
+     VALUES (?, ?, 1, 1, 1, ?, '["en"]', 0)`,
+    mock.id, teams[index % teams.length][0], owner.id,
+  );
+  for (const tag of mock.tags) {
+    const genreId = genreIdFor(tag);
+    if (genreId) exec(`INSERT OR IGNORE INTO series_genres (series_id, genre_id) VALUES (?, ?)`, mock.id, genreId);
   }
 }
 
@@ -224,6 +283,45 @@ for (let index = 0; index < series.length; index += 1) {
   }
   if (index < 9) {
     exec(`INSERT INTO home_pinned_series (id, series_id, display_order, is_featured, created_by_user_id) VALUES (?, ?, ?, 1, ?)`, `pin-${index + 1}`, seriesId, index, owner.id);
+  }
+}
+
+for (const [index, mock] of mockBrowseSeries.entries()) {
+  for (let chapter = 1; chapter <= 3; chapter += 1) {
+    const paid = chapter === 3 && index % 4 === 3;
+    exec(
+      `INSERT OR IGNORE INTO chapters (id, series_id, team_id, uploader_user_id, slug, chapter_number, title, language, format, state, access_type, price_onyx, page_count, published_at, free_at, release_notes, credits_json, thumbnail_key, visibility, comments_enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'en', 'VERTICAL', 'PUBLISHED', ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLIC', 1)`,
+      `mock-chapter-${String(index + 1).padStart(3, "0")}-${chapter}`,
+      mock.id,
+      teams[index % teams.length][0],
+      owner.id,
+      `chapter-${chapter}`,
+      String(chapter),
+      `${mock.title} · Chapter ${chapter}`,
+      paid ? "PAID" : "FREE",
+      paid ? 30 : 0,
+      16 + chapter,
+      iso(-(index * 9 + chapter * 4)),
+      paid ? date(4) : null,
+      "Mock release for responsive Browse and reader performance testing.",
+      JSON.stringify({ team: teams[index % teams.length][2] }),
+      mock.coverKey,
+    );
+  }
+  if (index < 6) {
+    exec(
+      `INSERT OR IGNORE INTO homepage_sliders (id, series_id, title, category_label, short_description, destination_url, image_key, is_active, sort_order, created_by_user_id)
+       VALUES (?, ?, ?, 'Mock spotlight', ?, ?, ?, 0, ?, ?)`,
+      `mock-slider-${String(index + 1).padStart(3, "0")}`,
+      mock.id,
+      mock.title,
+      "Seeded banner and cover data for temporary performance testing.",
+      `/series/${slug(mock.title)}`,
+      mock.bannerKey,
+      20 + index,
+      owner.id,
+    );
   }
 }
 
@@ -262,6 +360,48 @@ for (let index = 0; index < readers.length; index += 1) {
   exec(`INSERT INTO discussion_comments (id, user_id, series_slug, chapter_slug, depth, body, spoiler, affiliation_team_id, moderation_status, created_at, updated_at) VALUES (?, ?, ?, 'chapter-4', 0, ?, 0, ?, 'VISIBLE', ?, ?)`, `discussion-${index + 1}`, userId, slug(series[seriesIndex][1]), `Latest discussion on ${series[seriesIndex][1]} for the populated testing preview.`, teams[index % teams.length][0], iso(-index * 24), iso(-index * 24));
   exec(`INSERT INTO analytics_events (id, session_id, visitor_id, event_type, series_slug, chapter_slug, region_code, created_at) VALUES (?, ?, ?, 'SERIES_VIEW', ?, 'chapter-4', 'GB', ?)`, `analytics-${index + 1}`, `session-${index + 1}`, userId, slug(series[seriesIndex][1]), iso(-index * 13));
 }
+
+for (const [rankIndex, [userId, name]] of rankingFixtures.entries()) {
+  const commentCount = [18, 13, 9][rankIndex];
+  const upvoteCount = [120, 86, 62][rankIndex];
+  const target = mockBrowseSeries[rankIndex];
+  for (let commentIndex = 0; commentIndex < commentCount; commentIndex += 1) {
+    const commentId = `fixture-ranking-comment-${rankIndex + 1}-${commentIndex + 1}`;
+    exec(
+      `INSERT OR IGNORE INTO discussion_comments (id, user_id, series_slug, chapter_slug, depth, body, spoiler, affiliation_team_id, moderation_status, created_at, updated_at)
+       VALUES (?, ?, ?, 'chapter-1', 0, ?, 0, ?, 'VISIBLE', ?, ?)`,
+      commentId,
+      userId,
+      slug(target.title),
+      `${name} shares a detailed preview note for ${target.title}; this fixture keeps ranking, discussion, and moderation screens populated.`,
+      teams[rankIndex % teams.length][0],
+      iso(-(rankIndex * 3 + commentIndex + 1)),
+      iso(-(rankIndex * 3 + commentIndex + 1)),
+    );
+    const reactor = readers[(commentIndex + rankIndex + 1) % readers.length][0];
+    exec(
+      `INSERT OR IGNORE INTO discussion_votes (user_id, comment_id, value, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?)`,
+      reactor,
+      commentId,
+      iso(-(rankIndex * 2 + commentIndex + 1)),
+      iso(-(rankIndex * 2 + commentIndex + 1)),
+    );
+  }
+  for (let voteIndex = commentCount; voteIndex < commentCount + upvoteCount; voteIndex += 1) {
+    const commentId = `fixture-ranking-comment-${rankIndex + 1}-${(voteIndex % commentCount) + 1}`;
+    const reactor = readers[(voteIndex + rankIndex + 2) % readers.length][0];
+    exec(
+      `INSERT OR IGNORE INTO discussion_votes (user_id, comment_id, value, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?)`,
+      reactor,
+      commentId,
+      iso(-(rankIndex + voteIndex % 5 + 1)),
+      iso(-(rankIndex + voteIndex % 5 + 1)),
+    );
+  }
+}
+
 for (let index = 0; index < readers.length; index += 1) {
   const reactor = readers[(index + 2) % readers.length][0];
   exec(`INSERT INTO review_reactions (user_id, review_id, reaction) VALUES (?, ?, 'LIKE')`, reactor, `review-${index + 1}`);

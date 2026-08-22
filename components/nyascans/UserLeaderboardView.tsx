@@ -36,14 +36,14 @@ type RankingResponse = {
   error?: { message?: string };
 };
 
-function rankingTier(rank: number) {
-  if (rank === 1) return "Nya Champion";
-  if (rank <= 3) return "Mythic";
-  if (rank <= 10) return "Diamond";
-  if (rank <= 25) return "Platinum";
-  if (rank <= 50) return "Gold";
-  if (rank <= 100) return "Silver";
-  return "Challenger";
+function rankingTier(entry: LeaderboardEntry) {
+  const score = Number(entry.score);
+  const upvotes = Number(entry.upvotes);
+  if (score >= 10000 || upvotes >= 10000) return "Legend";
+  if (score >= 5000 || upvotes >= 5000) return "Mythic";
+  if (score >= 2000 || upvotes >= 2000) return "Elite";
+  if (score >= 500 || upvotes >= 500) return "Veteran";
+  return "Rising";
 }
 
 function number(value: number) {
@@ -55,8 +55,13 @@ function profileHref(entry: LeaderboardEntry) {
 }
 
 function accessibleEntryLabel(entry: LeaderboardEntry) {
+  if (entry.rank > 3) {
+    return `Rank ${entry.rank}: ${entry.displayName}. Score ${number(entry.score)}.`;
+  }
   return `Rank ${entry.rank}: ${entry.displayName}. Score ${number(entry.score)}, ${
-    entry.communityVisible ? `${number(entry.commentCount)} comments and ${number(entry.upvotes)} upvotes` : "community metrics private"
+    entry.communityVisible
+      ? `${number(entry.commentCount)} comments and ${number(entry.upvotes)} upvotes`
+      : "community metrics private"
   }.`;
 }
 
@@ -109,7 +114,7 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
         </span>
         <RankingAvatar entry={entry} featured />
         <strong className="user-ranking-podium-name">{entry.displayName}</strong>
-        <span className="user-ranking-tier">{rankingTier(entry.rank)}</span>
+        <span className="user-ranking-tier">{rankingTier(entry)}</span>
         <div className="user-ranking-podium-metrics">
           <RankingMetric
             icon={<Fire weight="fill" aria-hidden="true" />}
@@ -151,16 +156,6 @@ function RankingListRow({ entry, viewer = false }: { entry: LeaderboardEntry; vi
             label="Score"
             value={number(entry.score)}
             accent
-          />
-          <RankingMetric
-            icon={<ChatCircle weight="fill" aria-hidden="true" />}
-            label="Comments"
-            value={entry.communityVisible ? number(entry.commentCount) : "Private"}
-          />
-          <RankingMetric
-            icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
-            label="Upvotes"
-            value={entry.communityVisible ? number(entry.upvotes) : "Private"}
           />
         </div>
       </a>
@@ -279,8 +274,6 @@ export function UserLeaderboardView() {
               </div>
               <div className="user-ranking-list-labels" aria-hidden="true">
                 <span>Score</span>
-                <span>Comments</span>
-                <span>Upvotes</span>
               </div>
             </div>
             <ol>
