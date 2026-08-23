@@ -284,7 +284,7 @@ function FeatureHeading({
 }) {
   return (
     <header className={`v481-feature-heading${tone ? ` tone-${tone}` : ""}`}>
-      <div>
+      <div className="section-heading-main">
         <span className="section-heading-icon" aria-hidden="true">{icon}</span>
         <span className="section-heading-divider" aria-hidden="true" />
         <h2>{title}</h2>
@@ -610,7 +610,7 @@ function DiscountStyleOne({
     >
       <span className="v481-ticket-cover">
         <CoverArtwork src={record.coverUrl} title={record.seriesTitle} />
-        <span className="v481-ticket-ribbon">{record.percentage}% OFF</span>
+        <span className="v481-ticket-ribbon">{record.percentage}% off</span>
       </span>
       <span className="v481-ticket-perforation" aria-hidden="true" />
       <span className="v481-ticket-copy">
@@ -643,7 +643,7 @@ function DiscountSpotlight({
     <article className={`v481-spotlight-card ${directory ? "is-directory" : ""}`}>
       <a className="v481-spotlight-cover" href={record.href} aria-label={`${record.percentage}% discount on ${record.seriesTitle}`}>
         <CoverArtwork src={record.coverUrl} title={record.seriesTitle} eager />
-        <span className="v481-ticket-ribbon">{record.percentage}% OFF</span>
+        <span className="v481-ticket-ribbon">{record.percentage}% off</span>
         <strong>{record.seriesTitle}</strong>
       </a>
       <div className="v481-spotlight-body">
@@ -675,7 +675,7 @@ function DiscountGridCard({
     <a className="v481-grid-discount-card" href={record.href} aria-label={`${record.percentage}% discount on ${record.targetLabel}`}>
       <span className="v481-grid-discount-cover">
         <CoverArtwork src={record.coverUrl} title={record.seriesTitle} />
-        <span className="v481-ticket-ribbon">{record.percentage}% OFF</span>
+        <span className="v481-ticket-ribbon">{record.percentage}% off</span>
       </span>
       <span className="v481-grid-discount-copy">
         <small>{record.genreLabel}</small>
@@ -938,14 +938,15 @@ export function DiscountsDirectory({
 
 const HOME_FEATURE_CSS = `
   .v481-feature-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
-  .v481-feature-heading > div:first-child { display:flex; align-items:center; min-width:0; gap:.65rem; }
-  .v481-feature-heading > div:first-child > span { display:grid; width:2.35rem; height:2.35rem; flex:0 0 auto; place-items:center; border:1px solid color-mix(in srgb,var(--accent) 36%,var(--line)); border-radius:var(--site-button-radius,var(--radius-small)); background:color-mix(in srgb,var(--accent) 9%,var(--surface)); color:var(--accent); }
-  .v481-feature-heading h2 { margin:0; font-size:clamp(1.25rem,2.3vw,1.8rem); letter-spacing:-.035em; }
+  .v481-feature-heading > .section-heading-main { display:flex; align-items:center; min-width:0; gap:.72rem; }
+  .v481-feature-heading > .section-heading-main > .section-heading-icon { display:grid; width:1.42rem; height:1.42rem; min-width:1.42rem; flex:0 0 1.42rem; place-items:center; padding:0; border:0; border-radius:0; background:transparent; color:var(--section-accent,var(--accent)); box-shadow:none; }
+  .v481-feature-heading > .section-heading-main > .section-heading-divider { display:block; width:1px; height:1.42rem; flex:0 0 1px; padding:0; border:0; border-radius:0; background:color-mix(in srgb,var(--section-accent,var(--accent)) 70%,var(--line)); opacity:.6; }
+  .v481-feature-heading h2 { margin:0; min-width:0; font-size:clamp(1.25rem,2.3vw,1.8rem); letter-spacing:-.035em; }
   .v481-heading-actions,.v481-rail-controls { display:flex; align-items:center; gap:.45rem; }
   .v481-feature-heading .latest-all-action { display:inline-flex; min-height:2.45rem; align-items:center; gap:.35rem; padding-inline:.9rem; border-radius:var(--site-button-radius,var(--radius-small)); }
   .v481-rail-controls button { display:grid; width:2.35rem; height:2.35rem; place-items:center; border:1px solid var(--line); border-radius:var(--site-button-radius,var(--radius-small)); background:var(--surface); color:var(--text); cursor:pointer; }
   .v481-rail-controls button:is(:hover,:focus-visible) { border-color:var(--accent); color:var(--accent); }
-  .v481-pinned-section .v481-feature-heading > div:first-child > span { border-color:rgb(255 216 119 / 58%); background:rgb(67 45 7 / 48%); color:#ffd877; box-shadow:0 0 1.15rem rgb(225 166 28 / 22%); }
+  .v481-pinned-section .v481-feature-heading > .section-heading-main > .section-heading-icon { color:#ffd877; }
   .v481-pinned-stage { position:relative; display:block !important; width:100% !important; min-width:0; padding:0 !important; overflow:visible; isolation:isolate; }
   .v481-pinned-track { display:flex; width:auto; min-width:0; margin-inline:clamp(2.8rem,6vw,4.4rem); overflow-x:auto; overscroll-behavior-inline:contain; padding:0 0 .8rem; scroll-snap-type:x mandatory; scroll-behavior:smooth; scrollbar-width:none; outline:none; }
   .v481-pinned-track::-webkit-scrollbar { display:none; }

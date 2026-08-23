@@ -54738,7 +54738,7 @@ body::-webkit-scrollbar {
   gap: .7rem !important;
 }
 
-.home-main .v481-feature-heading > :first-child > span {
+.home-main .v481-feature-heading > :first-child > .section-heading-icon {
   width: 2.55rem !important;
   height: 2.55rem !important;
   min-width: 2.55rem;
@@ -54784,7 +54784,7 @@ body::-webkit-scrollbar {
     min-height: 2.35rem;
   }
 
-  .home-main .v481-feature-heading > :first-child > span {
+  .home-main .v481-feature-heading > :first-child > .section-heading-icon {
     width: 2.35rem !important;
     height: 2.35rem !important;
     min-width: 2.35rem;
@@ -58483,4 +58483,163 @@ select:focus-visible {
   .library-workspace-controls .library-dropdown-field {
     flex: 1 1 9rem;
   }
+}
+
+
+/* v49.10.4 — shared icon | divider | title rhythm and compact Browse controls. */
+.home-main :is(
+  .section-heading .section-heading-main,
+  .trending-title,
+  .continue-reading-heading .section-heading-main,
+  .editors-pick-title-group,
+  .v481-feature-heading > .section-heading-main,
+  .hot-week-title-group
+) {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .72rem;
+}
+
+.home-main :is(
+  .section-heading .section-heading-icon,
+  .trending-title .section-heading-icon,
+  .continue-reading-heading .section-heading-icon,
+  .editors-pick-title-group .section-heading-icon,
+  .v481-feature-heading > .section-heading-main > .section-heading-icon,
+  .hot-week-title-group .hot-week-heading-icon
+) {
+  display: grid;
+  width: 1.42rem !important;
+  min-width: 1.42rem !important;
+  height: 1.42rem !important;
+  min-height: 1.42rem !important;
+  flex: 0 0 1.42rem !important;
+  box-sizing: border-box;
+  place-items: center;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--section-accent, var(--accent));
+  box-shadow: none !important;
+}
+
+.home-main :is(
+  .section-heading .section-heading-divider,
+  .trending-title .section-heading-divider,
+  .continue-reading-heading .section-heading-divider,
+  .editors-pick-title-group .section-heading-divider,
+  .v481-feature-heading > .section-heading-main > .section-heading-divider,
+  .hot-week-title-group .section-heading-divider
+) {
+  display: block;
+  width: 1px !important;
+  min-width: 1px !important;
+  height: 1.42rem !important;
+  min-height: 1.42rem !important;
+  flex: 0 0 1px !important;
+  background: color-mix(in srgb, var(--section-accent, var(--accent)) 70%, var(--line));
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none !important;
+  opacity: .6;
+  padding: 0;
+}
+
+.home-main .v481-feature-heading .section-heading-main > h2 {
+  min-width: 0;
+  margin: 0;
+}
+
+.home-main .editors-pick-title-group .section-heading-icon {
+  color: var(--section-accent, var(--accent));
+}
+
+.home-main :is(.active-discount-cover-badge, .v481-ticket-ribbon) {
+  border-color: rgb(255 166 197 / 78%);
+  background: linear-gradient(135deg, #e45692, #ff7aa9 56%, #ff9fbe);
+  color: #fff;
+  text-transform: none;
+}
+
+.home-main .continue-reading-heading {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .8rem;
+}
+
+.home-main .continue-reading-heading > .section-heading-main {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.home-main .continue-reading-actions {
+  display: grid !important;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  justify-items: stretch;
+  gap: .5rem;
+  min-width: max-content;
+}
+
+.home-main .continue-reading-actions > .latest-all-action {
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.home-main .continue-reading-view-switcher {
+  justify-self: stretch;
+}
+
+body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
+  width: min(calc(100% - 1.8rem), 7.2rem) !important;
+  min-width: 0 !important;
+  margin-inline: auto !important;
+}
+
+body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button {
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  line-height: 0 !important;
+  text-align: center;
+}
+
+body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button svg {
+  display: block;
+  margin: 0 !important;
+}
+
+@media (max-width: 720px) {
+  .home-main .continue-reading-heading {
+    column-gap: .58rem;
+  }
+
+  .home-main .continue-reading-actions {
+    gap: .42rem;
+  }
+
+  body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
+    width: min(calc(100% - 1.8rem), 7.2rem) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-main :is(.active-discount-cover-badge, .v481-ticket-ribbon) {
+    transition: none;
+  }
+}
+
+/* Percentage badges use one pink treatment wherever they are rendered. */
+.active-discount-cover-badge,
+.discount-card .discount-badge {
+  border-color: rgb(255 166 197 / 78%);
+  background: linear-gradient(135deg, #e45692, #ff7aa9 56%, #ff9fbe);
+  color: #fff;
+  text-transform: none;
 }

@@ -76,7 +76,7 @@ export function ActiveDiscountBadge({
       aria-label={`${percentage}% off`}
     >
       {showIcon ? <Percent size={12} weight="bold" aria-hidden="true" /> : null}
-      {percentage}% OFF
+      {percentage}% off
     </span>
   );
 }

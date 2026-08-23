@@ -1639,7 +1639,13 @@ function SeriesTypeBadge({
   );
 }
 
-function SeriesStatusBadge({ status }: { status: string }) {
+function SeriesStatusBadge({
+  status,
+  showIndicator = true,
+}: {
+  status: string;
+  showIndicator?: boolean;
+}) {
   const normalized = status.toUpperCase();
   const tone =
     normalized === "CANCELLED"
@@ -1653,7 +1659,7 @@ function SeriesStatusBadge({ status }: { status: string }) {
           : "upcoming";
   return (
     <span className={`series-status-badge status-${tone}`}>
-      <i aria-hidden="true" />
+      {showIndicator ? <i aria-hidden="true" /> : null}
       {catalogLabel(normalized)}
     </span>
   );
@@ -3936,8 +3942,8 @@ function EditorsPickSection({
   const editorsPickHeading = (
     <header className="editors-pick-heading">
       <div className="editors-pick-title-group">
-        <span className="editors-pick-fleur section-heading-icon" aria-hidden="true">
-          <CrownSimple size={21} weight="fill" />
+        <span className="section-heading-icon" aria-hidden="true">
+          <CrownSimple size={21} weight="regular" />
         </span>
         <span className="section-heading-divider" aria-hidden="true" />
         <div>
@@ -5434,7 +5440,7 @@ function BrowseView({
                     </span>
                   </span>
                   <span className="catalog-cover-bottom-badges">
-                    <SeriesStatusBadge status={item.status} />
+                    <SeriesStatusBadge status={item.status} showIndicator={false} />
                     <span className="catalog-chapter-badge">
                       <Books size={13} />
                       {Number(item.chapterCount ?? 0)}
@@ -5458,7 +5464,7 @@ function BrowseView({
                 <div className="series-list-content">
                   <div className="catalog-badge-row">
                     <SeriesTypeBadge type={item.type} />
-                    <SeriesStatusBadge status={item.status} />
+                    <SeriesStatusBadge status={item.status} showIndicator={false} />
                     <span className="catalog-rating-badge">
                       <Star size={14} weight="fill" /> {(Number(item.ratingTenths) / 10).toFixed(1)}
                     </span>

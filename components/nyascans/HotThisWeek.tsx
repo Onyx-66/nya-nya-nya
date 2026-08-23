@@ -167,6 +167,7 @@ export function HotThisWeek() {
       <header className="hot-week-heading">
         <div className="hot-week-title-group">
           <span className="hot-week-heading-icon" aria-hidden="true"><Fire size={20} weight="fill" /></span>
+          <span className="section-heading-divider" aria-hidden="true" />
           <div>
             <h2 id="most-popular-title">Most Popular</h2>
           </div>

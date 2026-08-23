@@ -282,13 +282,14 @@ export function NewSeriesSection() {
           <span className="section-heading-icon" aria-hidden="true">
             <BookOpenText size={20} weight="fill" />
           </span>
+          <span className="section-heading-divider" aria-hidden="true" />
           <div>
             <h2 id="new-series-title">New Series</h2>
           </div>
         </div>
         <div className="new-series-heading-actions">
           <a className="button button-secondary latest-all-action" href="/browse?sort=added">
-            View All <ArrowRight size={17} />
+            All <ArrowRight size={17} />
           </a>
         </div>
       </div>
@@ -452,6 +453,7 @@ export function PublishingTeamsCarousel() {
           <span className="section-heading-icon" aria-hidden="true">
             <UsersThree size={20} weight="fill" />
           </span>
+          <span className="section-heading-divider" aria-hidden="true" />
           <div>
             <h2 id="publishing-teams-title">Top Teams</h2>
           </div>
@@ -471,7 +473,7 @@ export function PublishingTeamsCarousel() {
               ))}
             </div>
           </details>
-          <a className="button button-secondary latest-all-action" href="/teams">Browse Teams <ArrowRight size={16} /></a>
+          <a className="button button-secondary latest-all-action" href="/teams">Teams <ArrowRight size={16} /></a>
         </div>
       </div>
       {loading ? (
