@@ -53,10 +53,10 @@ test("system notifications are global, stacked, colored, and shared by public, a
   assert.match(finalCss, /\.system-notification-region[\s\S]+position:\s*fixed/u);
   assert.match(finalCss, /top:\s*max\(18px, env\(safe-area-inset-top\)\)/u);
   assert.match(finalCss, /right:\s*max\(18px, env\(safe-area-inset-right\)\)/u);
-  assert.match(finalCss, /#39c98a/u);
-  assert.match(finalCss, /#55a7ff/u);
-  assert.match(finalCss, /#f1b94b/u);
-  assert.match(finalCss, /#f06a78/u);
+  assert.match(css, /\.system-notification-success\s*\{\s*--notice-color:\s*var\(--theme-status-green\)/u);
+  assert.match(css, /\.system-notification-info\s*\{\s*--notice-color:\s*var\(--theme-indication-blue\)/u);
+  assert.match(css, /\.system-notification-warning\s*\{\s*--notice-color:\s*var\(--theme-status-yellow\)/u);
+  assert.match(css, /\.system-notification-error\s*\{\s*--notice-color:\s*var\(--theme-danger\)/u);
   assert.match(finalCss, /@media \(max-width: 520px\)/u);
   assert.match(finalCss, /@media \(prefers-reduced-motion: reduce\)/u);
 });

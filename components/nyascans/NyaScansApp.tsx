@@ -41,7 +41,7 @@ import {
   LockSimple,
   MagnifyingGlass,
   Megaphone,
-  Moon,
+  Palette,
   Play,
   Plus,
   Pulse,
@@ -56,7 +56,6 @@ import {
   Sparkle,
   Star,
   Storefront,
-  Sun,
   Tag,
   TagSimple,
   ThumbsUp,
@@ -111,6 +110,11 @@ import {
   type NotificationSeries,
 } from "@/components/nyascans/NotificationArtwork";
 import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
+import { ThemeBuilderPage } from "@/components/nyascans/ThemeBuilderPage";
+import {
+  useUserThemeController,
+  type ThemeController,
+} from "@/components/nyascans/UserThemeSystem";
 import {
   NewSeriesSection,
   PublishingTeamsCarousel,
@@ -164,6 +168,10 @@ import {
 } from "@/lib/legal-documents";
 import { readingProgressTone } from "@/lib/reading-progress";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
+import {
+  userThemePresets,
+  type ActiveThemeId,
+} from "@/lib/theme-system";
 
 const OperationsControlPanel = lazy(() =>
   import("@/components/nyascans/OperationsControlPanel").then((module) => ({
@@ -177,6 +185,7 @@ export type AppView =
   | "library"
   | "store"
   | "account"
+  | "theme-builder"
   | "profile"
   | "login"
   | "signup"
@@ -879,24 +888,124 @@ function Logo() {
   );
 }
 
+function ThemeSelectionMenu({
+  controller,
+  onBack,
+  onClose,
+}: {
+  controller: ThemeController;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const choose = (id: ActiveThemeId) => {
+    if (!controller.hydrated || controller.syncing) return;
+    if (id === "custom" && !controller.customTheme) {
+      onClose();
+      window.location.assign("/theme-builder");
+      return;
+    }
+    void controller
+      .selectTheme(id)
+      .catch(() => {
+        // The shared controller keeps the local theme and exposes sync errors.
+      });
+    onClose();
+  };
+
+  return (
+    <div className="header-theme-selector">
+      <header>
+        <button
+          type="button"
+          role="menuitem"
+          aria-label="Back to site menu"
+          onClick={onBack}
+        >
+          <CaretLeft size={18} />
+        </button>
+        <strong>Select Theme</strong>
+        <span aria-hidden="true" />
+      </header>
+      <div className="header-theme-options" aria-label="Available themes">
+        {userThemePresets.map((preset) => {
+          const selected = controller.activeThemeId === preset.id;
+          return (
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={selected}
+              disabled={!controller.hydrated || controller.syncing}
+              className={selected ? "is-selected" : undefined}
+              key={preset.id}
+              onClick={() => choose(preset.id)}
+            >
+              <i
+                aria-hidden="true"
+                style={{
+                  background: `linear-gradient(135deg, ${preset.theme.tokens.mainBackground} 0 48%, ${preset.theme.tokens.primary} 50% 100%)`,
+                }}
+              />
+              <span>
+                <strong>{preset.theme.name}</strong>
+                <small>{preset.theme.type}</small>
+              </span>
+              {selected ? <Check size={17} weight="bold" /> : null}
+            </button>
+          );
+        })}
+        <div className="header-theme-custom-row">
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={controller.activeThemeId === "custom"}
+            disabled={!controller.hydrated || controller.syncing}
+            className={controller.activeThemeId === "custom" ? "is-selected" : undefined}
+            onClick={() => choose("custom")}
+          >
+            <i className="is-custom" aria-hidden="true"><Palette size={15} /></i>
+            <span>
+              <strong>Custom</strong>
+              <small>{controller.customTheme ? controller.customTheme.name : "Build your own"}</small>
+            </span>
+            {controller.activeThemeId === "custom" ? <Check size={17} weight="bold" /> : null}
+          </button>
+          <a
+            role="menuitem"
+            href="/theme-builder"
+            aria-label="Open Custom theme settings"
+            title="Custom theme settings"
+            onClick={onClose}
+          >
+            <GearSix size={18} />
+          </a>
+        </div>
+      </div>
+      {controller.syncError ? (
+        <p className="header-theme-sync-error" role="status">
+          {controller.syncError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SiteHeader({
   view,
   actor,
-  theme,
-  onTheme,
+  themeController,
   onSearch,
   lockAndPayVisible,
 }: {
   view: AppView;
   actor: Actor | null;
-  theme: "dark" | "light";
-  onTheme: () => void;
+  themeController: ThemeController;
   onSearch: () => void;
   lockAndPayVisible: boolean;
 }) {
   const elevated = elevatedDestination(actor);
   const canUpload = Boolean(actor?.canUseUploadCenter);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPanel, setMenuPanel] = useState<"main" | "theme">("main");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationRecords, setNotificationRecords] = useState<
     HeaderNotification[]
@@ -1054,7 +1163,7 @@ function SiteHeader({
     window.requestAnimationFrame(() => {
       const items = Array.from(
         menuRef.current?.querySelectorAll<HTMLElement>(
-          '.header-overflow-menu [role="menuitem"]',
+          '.header-overflow-menu [role="menuitem"], .header-overflow-menu [role="menuitemradio"]',
         ) ?? [],
       );
       const item = position === "first" ? items[0] : items.at(-1);
@@ -1065,7 +1174,9 @@ function SiteHeader({
   function handleMenuKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!menuOpen) return;
     const items = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="menuitemradio"]',
+      ),
     );
     if (!items.length) return;
     const current = items.indexOf(document.activeElement as HTMLElement);
@@ -1392,16 +1503,27 @@ function SiteHeader({
                   aria-label="Open profile and account menu"
                   onClick={() => {
                     setNotificationsOpen(false);
-                    setMenuOpen((value) => !value);
+                    if (menuOpen) {
+                      setMenuOpen(false);
+                    } else {
+                      setMenuPanel("main");
+                      setMenuOpen(true);
+                    }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "ArrowDown") {
                       event.preventDefault();
-                      if (!menuOpen) setMenuOpen(true);
+                      if (!menuOpen) {
+                        setMenuPanel("main");
+                        setMenuOpen(true);
+                      }
                       focusMenuItem("first");
                     } else if (event.key === "ArrowUp") {
                       event.preventDefault();
-                      if (!menuOpen) setMenuOpen(true);
+                      if (!menuOpen) {
+                        setMenuPanel("main");
+                        setMenuOpen(true);
+                      }
                       focusMenuItem("last");
                     }
                   }}
@@ -1425,6 +1547,14 @@ function SiteHeader({
                 </button>
                 {menuOpen ? (
                   <div className="header-overflow-menu" role="menu">
+                    {menuPanel === "theme" ? (
+                      <ThemeSelectionMenu
+                        controller={themeController}
+                        onBack={() => setMenuPanel("main")}
+                        onClose={() => setMenuOpen(false)}
+                      />
+                    ) : (
+                      <>
                     <div className="header-menu-profile">
                       <span aria-hidden="true">
                         {profileAvatarUrl ? (
@@ -1504,13 +1634,12 @@ function SiteHeader({
                     <button
                       role="menuitem"
                       type="button"
-                      onClick={() => {
-                        onTheme();
-                        setMenuOpen(false);
-                      }}
+                      className="header-change-theme"
+                      onClick={() => setMenuPanel("theme")}
                     >
-                      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-                      Use {theme === "dark" ? "light" : "dark"} theme
+                      <Palette size={18} />
+                      <span>Change Theme</span>
+                      <CaretRight size={16} />
                     </button>
                     <LogoutAction
                       className="is-danger"
@@ -1520,6 +1649,8 @@ function SiteHeader({
                     >
                       <SignOut size={18} /> Logout
                     </LogoutAction>
+                      </>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -1530,7 +1661,11 @@ function SiteHeader({
                 <span>Login</span>
                 <UserCircle size={22} />
               </a>
-              <div className="header-overflow" ref={menuRef}>
+              <div
+                className="header-overflow"
+                ref={menuRef}
+                onKeyDown={handleMenuKeys}
+              >
                 <button
                   className="icon-button"
                   ref={menuButtonRef}
@@ -1539,12 +1674,44 @@ function SiteHeader({
                   aria-expanded={menuOpen}
                   aria-label="Open site menu"
                   title="More actions"
-                  onClick={() => setMenuOpen((value) => !value)}
+                  onClick={() => {
+                    if (menuOpen) {
+                      setMenuOpen(false);
+                    } else {
+                      setMenuPanel("main");
+                      setMenuOpen(true);
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      if (!menuOpen) {
+                        setMenuPanel("main");
+                        setMenuOpen(true);
+                      }
+                      focusMenuItem("first");
+                    } else if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      if (!menuOpen) {
+                        setMenuPanel("main");
+                        setMenuOpen(true);
+                      }
+                      focusMenuItem("last");
+                    }
+                  }}
                 >
                   <DotsThree size={21} weight="bold" />
                 </button>
                 {menuOpen ? (
                   <div className="header-overflow-menu" role="menu">
+                    {menuPanel === "theme" ? (
+                      <ThemeSelectionMenu
+                        controller={themeController}
+                        onBack={() => setMenuPanel("main")}
+                        onClose={() => setMenuOpen(false)}
+                      />
+                    ) : (
+                      <>
                     <a role="menuitem" href="/browse" onClick={() => setMenuOpen(false)}>
                       <Compass size={18} /> Browse
                     </a>
@@ -1574,14 +1741,15 @@ function SiteHeader({
                     <button
                       role="menuitem"
                       type="button"
-                      onClick={() => {
-                        onTheme();
-                        setMenuOpen(false);
-                      }}
+                      className="header-change-theme"
+                      onClick={() => setMenuPanel("theme")}
                     >
-                      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-                      Use {theme === "dark" ? "light" : "dark"} theme
+                      <Palette size={18} />
+                      <span>Change Theme</span>
+                      <CaretRight size={16} />
                     </button>
+                      </>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -14342,7 +14510,9 @@ export function NyaScansApp({
   operationPath,
 }: AppProps) {
   useAnchoredMenuDismissal();
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const themeController = useUserThemeController(
+    actor ? actor.email.toLowerCase() : null,
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const shortcutPrefixRef = useRef<{ prefix: string; at: number } | null>(null);
@@ -14361,16 +14531,6 @@ export function NyaScansApp({
     },
     [notifyText],
   );
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem("nyascans-theme");
-    const next = stored === "light" || stored === "dark" ? stored : "dark";
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(next);
-      document.documentElement.dataset.theme = next;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -14486,13 +14646,6 @@ export function NyaScansApp({
     );
   }, [resourceSlug, view]);
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    window.localStorage.setItem("nyascans-theme", next);
-  }
-
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
   const commonOverlays = (
     <>
@@ -14527,8 +14680,7 @@ export function NyaScansApp({
           key={actor?.email ?? "guest"}
           view={view}
           actor={actor}
-          theme={theme}
-          onTheme={toggleTheme}
+          themeController={themeController}
           onSearch={() => setSearchOpen(true)}
           lockAndPayVisible={lockAndPayVisible}
         />
@@ -14577,7 +14729,9 @@ export function NyaScansApp({
   }
 
   const mainContent =
-    view === "home" ? (
+    view === "theme-builder" ? (
+      <ThemeBuilderPage controller={themeController} notify={showToast} />
+    ) : view === "home" ? (
       <HomeView actor={actor} showToast={showToast} />
     ) : view === "pinned" ? (
       <PinnedSeriesDirectory />
@@ -14653,8 +14807,7 @@ export function NyaScansApp({
         key={actor?.email ?? "guest"}
         view={view}
         actor={actor}
-        theme={theme}
-        onTheme={toggleTheme}
+        themeController={themeController}
         onSearch={() => setSearchOpen(true)}
         lockAndPayVisible={lockAndPayVisible}
       />

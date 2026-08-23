@@ -393,6 +393,13 @@
       "when": 1787504517190,
       "tag": "0055_colossal_luminals",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1787527574841,
+      "tag": "0056_clammy_firelord",
+      "breakpoints": true
     }
   ]
 }

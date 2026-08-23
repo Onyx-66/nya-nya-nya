@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { optimizeStaticMedia } from "@/lib/client/media-optimizer";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 
@@ -524,20 +525,6 @@ export function ProfileSettingsWorkspace({
   const [avatarCropSource, setAvatarCropSource] =
     useState<AvatarCropSource | null>(null);
   const [error, setError] = useState("");
-  const [profileTheme, setProfileTheme] = useState<"default" | "mangadex" | "crazy-orange-nya">(() => {
-    if (typeof window === "undefined") return "default";
-    const saved = window.localStorage.getItem("nyascans:profile-theme");
-    return saved === "mangadex" || saved === "crazy-orange-nya" ? saved : "default";
-  });
-
-  useEffect(() => {
-    document.documentElement.dataset.profileTheme = profileTheme;
-    window.localStorage.setItem("nyascans:profile-theme", profileTheme);
-  }, [profileTheme]);
-
-  function chooseProfileTheme(next: "default" | "mangadex" | "crazy-orange-nya") {
-    setProfileTheme(next);
-  }
 
   useEffect(
     () => () => {
@@ -1133,21 +1120,11 @@ export function ProfileSettingsWorkspace({
       <section className="profile-settings-card profile-theme-card">
         <div>
           <h3>Theme</h3>
-          <p>Choose a personal palette for this browser. Your preference applies instantly and stays separate from the site-wide admin appearance.</p>
+          <p>Choose a preset or build a complete custom palette. Your shared theme follows this account and applies instantly across NyaScans.</p>
         </div>
-        <div className="profile-theme-options" role="radiogroup" aria-label="Personal theme">
-          {([
-            ["default", "NyaScans Blue", "The standard NyaScans palette."],
-            ["mangadex", "MangaDex Classic", "Deep charcoal surfaces with blue actions."],
-            ["crazy-orange-nya", "Crazy Orange Nya", "A bright orange Nya accent system."],
-          ] as const).map(([value, title, body]) => (
-            <label className={`profile-theme-option${profileTheme === value ? " is-selected" : ""}`} key={value}>
-              <input type="radio" name="profile-theme" value={value} checked={profileTheme === value} onChange={() => chooseProfileTheme(value)} />
-              <span className="profile-theme-swatch" data-theme-swatch={value} aria-hidden="true" />
-              <span><strong>{title}</strong><small>{body}</small></span>
-            </label>
-          ))}
-        </div>
+        <Link className="button button-secondary" href="/theme-builder">
+          Change Theme <ArrowRight size={16} />
+        </Link>
       </section>
       <section className="profile-settings-card profile-privacy-card">
         <div>

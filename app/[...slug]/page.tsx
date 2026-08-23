@@ -40,6 +40,9 @@ function resolveView(slug: string[]): {
   }
   if (root === "checkout") return { view: "store", resourceSlug: "coins" };
   if (root === "account") return { view: "account" };
+  if (root === "theme-builder" || root === "themes") {
+    return { view: "theme-builder" };
+  }
   if (root === "login") return { view: "login" };
   if (root === "signup" || root === "register") return { view: "signup" };
   if (root === "wallet") return { view: "wallet" };
@@ -128,6 +131,7 @@ export async function generateMetadata({
     library: "Library",
     store: "Store",
     account: "Account",
+    "theme-builder": "Theme Builder",
     profile: "Reader Profile",
     login: "Sign In",
     signup: "Create Account",
@@ -149,6 +153,7 @@ export async function generateMetadata({
     robots:
       [
         "account",
+        "theme-builder",
         "login",
         "signup",
         "wallet",

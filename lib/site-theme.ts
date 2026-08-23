@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { themeCssVariables, themeDocumentSchema } from "@/lib/theme-system";
 
 const hexColor = z
   .string()
@@ -623,6 +624,53 @@ export function siteThemeVariables(theme: SiteTheme) {
   variables["--site-brand-gradient"] = theme.gradient.enabled
     ? `linear-gradient(${theme.gradient.angle}deg, ${theme.gradient.from}, color-mix(in srgb, ${theme.gradient.to} ${theme.gradient.intensity}%, ${theme.gradient.from}))`
     : theme.accent;
+  const bridgeTheme = themeDocumentSchema.parse({
+    schemaVersion: 1,
+    name: "Administrator base",
+    type: "dark",
+    tokens: {
+      textColor: theme.dark.text,
+      mainBackground: theme.dark.background,
+      accent: theme.dark.surface,
+      accentHover: theme.dark.surfaceRaised,
+      accentActive: theme.dark.surfaceStrong,
+      accentL1: theme.dark.surfaceRaised,
+      accentL1Hover: theme.dark.surfaceStrong,
+      accentL1Active: theme.dark.line,
+      accentL2: theme.dark.surfaceStrong,
+      accentL2Hover: theme.dark.line,
+      accentL2Active: theme.dark.lineStrong,
+      accentL3: theme.dark.line,
+      accentL3Hover: theme.dark.lineStrong,
+      accentL3Active: theme.dark.muted,
+      accentL4: theme.dark.lineStrong,
+      accentL4Hover: theme.dark.muted,
+      accentL4Active: theme.dark.textSoft,
+      accentL5: theme.dark.muted,
+      accentL5Hover: theme.dark.textSoft,
+      accentL5Active: theme.dark.text,
+      midTone: theme.dark.muted,
+      contrastL1: "#FFFFFF",
+      scrollbarColor: theme.dark.lineStrong,
+      scrollbarColorHover: theme.dark.muted,
+      buttonAccent: theme.accent,
+      buttonAccentAlternate: theme.accentInk,
+      primary: theme.accent,
+      primaryL1: theme.accentStrong,
+      primaryL2: theme.gradient.from,
+      statusRed: theme.danger,
+      statusGreen: theme.success,
+      statusYellow: theme.warning,
+      statusBlue: theme.premium,
+      statusPurple: theme.gradient.to,
+      statusGrey: theme.dark.muted,
+      indicationBlue: theme.premium,
+      danger: theme.danger,
+      dangerL1: theme.danger,
+      dangerL2: theme.danger,
+    },
+  });
+  Object.assign(variables, themeCssVariables(bridgeTheme));
   return variables;
 }
 

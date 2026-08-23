@@ -1,22 +1,21 @@
-/* Update 48.4.0 — scoped administration design system.
-   Imported after globals.css so the public theme cannot dilute admin semantics. */
+/* Update 49.12.0 — administration semantics bridged to the active user theme. */
 
 .ops-shell[data-operations-mode="admin"],
 .admin-mfa-page {
-  --admin-bg-app: #0A0E14;
-  --admin-bg-surface: #111826;
-  --admin-bg-card: #151E2E;
-  --admin-bg-card-hover: #1B2536;
-  --admin-border-subtle: #232F42;
-  --admin-border-strong: #37475F;
-  --admin-accent: #4C8DFF;
-  --admin-accent-soft: rgb(76 141 255 / 15%);
-  --admin-success: #33C481;
-  --admin-warning: #F5A623;
-  --admin-danger: #F1495B;
-  --admin-text-primary: #F4F6FA;
-  --admin-text-secondary: #93A1B8;
-  --admin-text-tertiary: #5C6A82;
+  --admin-bg-app: var(--theme-main-background);
+  --admin-bg-surface: var(--theme-accent);
+  --admin-bg-card: var(--theme-accent-l1);
+  --admin-bg-card-hover: var(--theme-accent-l2);
+  --admin-border-subtle: var(--theme-accent-l3);
+  --admin-border-strong: var(--theme-accent-l4);
+  --admin-accent: var(--theme-primary);
+  --admin-accent-soft: color-mix(in srgb, var(--theme-primary) 15%, transparent);
+  --admin-success: var(--theme-status-green);
+  --admin-warning: var(--theme-status-yellow);
+  --admin-danger: var(--theme-danger);
+  --admin-text-primary: var(--theme-text-color);
+  --admin-text-secondary: color-mix(in srgb, var(--theme-text-color) 76%, var(--theme-main-background));
+  --admin-text-tertiary: var(--theme-mid-tone);
   --admin-type-display: 30px;
   --admin-type-heading: 20px;
   --admin-type-subheading: 15px;
@@ -62,7 +61,7 @@
   --site-button-radius: var(--admin-radius-control);
   --shadow: none;
   color: var(--admin-text);
-  color-scheme: dark;
+  color-scheme: inherit;
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   font-size: var(--admin-type-body);
   line-height: 1.5;
@@ -330,6 +329,140 @@
   border-right: 1px solid var(--admin-border) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
+}
+
+.admin-inventory-toolbar {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(8rem, auto) auto;
+  gap: .65rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--admin-border-subtle);
+}
+
+.admin-inventory-toolbar > label {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .55rem;
+  padding: 0 .75rem;
+  border: 1px solid var(--admin-border-subtle);
+  border-radius: var(--admin-radius-control);
+  color: var(--admin-text-secondary);
+  background: var(--admin-bg-app);
+}
+
+.admin-inventory-toolbar input,
+.admin-inventory-toolbar select {
+  min-width: 0;
+  min-height: 2.65rem;
+  border: 1px solid var(--admin-border-subtle);
+  border-radius: var(--admin-radius-control);
+  outline: 0;
+  color: var(--admin-text-primary);
+  background: var(--admin-bg-app);
+}
+
+.admin-inventory-toolbar input {
+  min-height: 2.45rem;
+  border: 0;
+  background: transparent;
+}
+
+.admin-inventory-toolbar select {
+  padding-inline: .7rem;
+}
+
+.admin-inventory-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--admin-text-secondary);
+  font-size: .75rem;
+}
+
+.admin-inventory-table th,
+.admin-inventory-table td {
+  padding: .8rem 1rem;
+  border-bottom: 1px solid var(--admin-border-subtle);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-inventory-table th {
+  color: var(--admin-text-tertiary);
+  background: var(--admin-bg-surface);
+  font-size: .62rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.admin-inventory-table td > :is(strong, small, code) {
+  display: block;
+}
+
+.admin-inventory-table td > strong {
+  color: var(--admin-text-primary);
+}
+
+.admin-inventory-table td > :is(small, code) {
+  margin-top: .2rem;
+  color: var(--admin-text-tertiary);
+  font-size: .64rem;
+}
+
+.admin-inventory-empty {
+  margin: 0;
+  padding: 3rem 1rem;
+  color: var(--admin-text-secondary);
+  text-align: center;
+}
+
+.admin-inventory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .75rem;
+  padding: .8rem 1rem;
+}
+
+.admin-inventory-pagination button {
+  display: inline-flex;
+  min-height: 2.35rem;
+  align-items: center;
+  gap: .35rem;
+  padding: 0 .7rem;
+  border: 1px solid var(--admin-border-subtle);
+  border-radius: var(--admin-radius-control);
+  color: var(--admin-text-primary);
+  background: var(--admin-bg-card);
+}
+
+.admin-inventory-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.admin-inventory-pagination span {
+  color: var(--admin-text-secondary);
+  font-size: .68rem;
+}
+
+@media (max-width: 720px) {
+  .admin-inventory-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inventory-toolbar .button {
+    width: 100%;
+  }
+
+  .admin-inventory-pagination {
+    justify-content: space-between;
+  }
 }
 
 .ops-shell[data-operations-mode="admin"] .ops-sidebar-head {
@@ -2711,19 +2844,19 @@
 }
 
 .system-notification {
-  --notice-color: #4C8DFF;
-  color: #F4F6FA;
-  background: #151E2E !important;
+  --notice-color: var(--theme-indication-blue);
+  color: var(--theme-text-color);
+  background: var(--theme-accent-l1) !important;
   background-image: none !important;
-  border: 1px solid #232F42 !important;
+  border: 1px solid var(--theme-accent-l3) !important;
   border-radius: 12px !important;
   box-shadow: none !important;
 }
 
-.system-notification-success { --notice-color: #33C481; }
-.system-notification-info { --notice-color: #4C8DFF; }
-.system-notification-warning { --notice-color: #F5A623; }
-.system-notification-error { --notice-color: #F1495B; }
+.system-notification-success { --notice-color: var(--theme-status-green); }
+.system-notification-info { --notice-color: var(--theme-indication-blue); }
+.system-notification-warning { --notice-color: var(--theme-status-yellow); }
+.system-notification-error { --notice-color: var(--theme-danger); }
 
 .system-notification-icon,
 .system-notification > button {
@@ -2731,13 +2864,13 @@
 }
 
 .system-notification-copy strong {
-  color: #F4F6FA !important;
+  color: var(--theme-text-color) !important;
   font-size: 15px !important;
   font-weight: 600 !important;
 }
 
 .system-notification-copy p {
-  color: #93A1B8 !important;
+  color: var(--theme-mid-tone) !important;
   font-size: 14px !important;
   font-weight: 400 !important;
   line-height: 1.5;
@@ -4936,31 +5069,31 @@
 
 /* Admin experience refresh — responsive shell, navigation drawer and MFA gate. */
 :root {
-  --admin-bg-app: #07111f;
-  --admin-bg-surface: #0b1728;
-  --admin-bg-card: #102039;
-  --admin-bg-card-hover: #162b49;
-  --admin-elevated-2: #142743;
-  --admin-border: rgb(126 167 222 / 18%);
-  --admin-border-strong: rgb(126 167 222 / 34%);
-  --admin-text: #f2f6ff;
-  --admin-text-muted: #a7b7d0;
-  --admin-text-faint: #7286a4;
-  --admin-primary: #5b9dff;
-  --admin-primary-hover: #80b6ff;
-  --admin-accent: #4ce1d0;
-  --admin-accent-soft: rgb(76 225 208 / 12%);
+  --admin-bg-app: var(--theme-main-background);
+  --admin-bg-surface: var(--theme-accent);
+  --admin-bg-card: var(--theme-accent-l1);
+  --admin-bg-card-hover: var(--theme-accent-l2);
+  --admin-elevated-2: var(--theme-accent-l2);
+  --admin-border: color-mix(in srgb, var(--theme-accent-l4) 62%, transparent);
+  --admin-border-strong: var(--theme-accent-l4);
+  --admin-text: var(--theme-text-color);
+  --admin-text-muted: color-mix(in srgb, var(--theme-text-color) 76%, var(--theme-main-background));
+  --admin-text-faint: var(--theme-mid-tone);
+  --admin-primary: var(--theme-primary);
+  --admin-primary-hover: var(--theme-primary-l1);
+  --admin-accent: var(--theme-indication-blue);
+  --admin-accent-soft: color-mix(in srgb, var(--theme-indication-blue) 12%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] {
   background:
-    radial-gradient(circle at 78% -10%, rgb(91 157 255 / 12%), transparent 34rem),
-    radial-gradient(circle at 10% 100%, rgb(159 117 255 / 9%), transparent 34rem),
+    radial-gradient(circle at 78% -10%, color-mix(in srgb, var(--theme-primary) 12%, transparent), transparent 34rem),
+    radial-gradient(circle at 10% 100%, color-mix(in srgb, var(--theme-status-purple) 9%, transparent), transparent 34rem),
     var(--admin-bg-app) !important;
 }
 .ops-shell[data-operations-mode="admin"] .ops-sidebar {
-  background: linear-gradient(180deg, rgb(13 29 51 / 98%), rgb(8 19 34 / 98%)) !important;
-  border-right-color: rgb(126 167 222 / 22%) !important;
-  box-shadow: 1rem 0 3rem rgb(0 0 0 / 12%) !important;
+  background: linear-gradient(180deg, var(--theme-accent-l1), var(--theme-accent)) !important;
+  border-right-color: color-mix(in srgb, var(--theme-accent-l4) 56%, transparent) !important;
+  box-shadow: 1rem 0 3rem color-mix(in srgb, var(--theme-main-background) 52%, transparent) !important;
 }
 .ops-shell[data-operations-mode="admin"] .ops-sidebar-head {
   min-height: 56px;
@@ -4977,11 +5110,11 @@
 .ops-shell[data-operations-mode="admin"] :is(.ops-sidebar-collapse, .ops-sidebar-mobile-close) {
   border-color: var(--admin-border);
   border-radius: .75rem;
-  background: rgb(255 255 255 / 3%);
+  background: color-mix(in srgb, var(--admin-text) 3%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] :is(.ops-sidebar-collapse, .ops-sidebar-mobile-close):hover {
-  border-color: rgb(91 157 255 / 48%);
-  background: rgb(91 157 255 / 12%);
+  border-color: color-mix(in srgb, var(--admin-primary) 48%, transparent);
+  background: color-mix(in srgb, var(--admin-primary) 12%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] .ops-admin-navigation-tools {
   gap: .65rem;
@@ -4991,12 +5124,12 @@
 .ops-shell[data-operations-mode="admin"] .ops-sidebar-search {
   min-height: 44px;
   border-radius: .8rem;
-  background: rgb(5 13 25 / 48%);
+  background: color-mix(in srgb, var(--admin-bg-app) 48%, transparent);
   border-color: var(--admin-border);
 }
 .ops-shell[data-operations-mode="admin"] .ops-command-trigger:hover {
-  border-color: rgb(91 157 255 / 48%);
-  background: rgb(91 157 255 / 10%);
+  border-color: color-mix(in srgb, var(--admin-primary) 48%, transparent);
+  background: color-mix(in srgb, var(--admin-primary) 10%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] .ops-nav-group {
   margin-bottom: 1.25rem;
@@ -5008,7 +5141,7 @@
 }
 .ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle:hover {
   color: var(--admin-text) !important;
-  background: rgb(255 255 255 / 4%) !important;
+  background: color-mix(in srgb, var(--admin-text) 4%, transparent) !important;
 }
 .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned) {
   min-height: 44px;
@@ -5019,17 +5152,21 @@
 }
 .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned):hover {
   transform: translateX(2px);
-  box-shadow: inset 0 0 0 1px rgb(91 157 255 / 18%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-primary) 18%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a[aria-current="page"], .ops-active-pinned) {
-  background: linear-gradient(90deg, rgb(91 157 255 / 17%), rgb(76 225 208 / 7%)) !important;
-  box-shadow: inset 0 0 0 1px rgb(91 157 255 / 20%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--admin-primary) 17%, transparent),
+    color-mix(in srgb, var(--theme-indication-blue) 7%, transparent)
+  ) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-primary) 20%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a[aria-current="page"], .ops-active-pinned)::before {
   inset: .5rem auto .5rem 0;
   width: 3px;
   border-radius: 0 999px 999px 0;
-  background: linear-gradient(180deg, var(--admin-primary), var(--admin-accent));
+  background: linear-gradient(180deg, var(--admin-primary), var(--theme-indication-blue));
 }
 .ops-shell[data-operations-mode="admin"] .ops-main {
   padding: clamp(1rem, 3vw, 2.75rem) clamp(1rem, 3vw, 2.5rem) 4rem !important;
@@ -5038,13 +5175,17 @@
 .ops-shell[data-operations-mode="admin"] :is(.admin-workspace-header, .panel-header, .control-panel-header) {
   border: 1px solid var(--admin-border-strong);
   border-radius: 1.25rem;
-  background: linear-gradient(135deg, rgb(16 32 57 / 94%), rgb(11 23 40 / 90%));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--admin-bg-card) 94%, transparent),
+    color-mix(in srgb, var(--admin-bg-surface) 90%, transparent)
+  );
   box-shadow: 0 1.2rem 3rem rgb(0 0 0 / 18%);
 }
 .ops-shell[data-operations-mode="admin"] :is(.admin-section-card, .admin-workspace-card, .control-panel-section, .admin-stat-tile) {
   border-color: var(--admin-border);
   border-radius: 1rem;
-  background: rgb(16 32 57 / 78%);
+  background: color-mix(in srgb, var(--admin-bg-card) 78%, transparent);
   box-shadow: 0 .7rem 2rem rgb(0 0 0 / 12%);
 }
 .ops-shell[data-operations-mode="admin"] :is(.admin-section-card, .admin-workspace-card, .control-panel-section) > header,
@@ -5056,14 +5197,18 @@
   padding: .4rem;
   border: 1px solid var(--admin-border);
   border-radius: .95rem;
-  background: rgb(5 13 25 / 40%);
+  background: color-mix(in srgb, var(--admin-bg-app) 40%, transparent);
 }
 .ops-shell[data-operations-mode="admin"] .admin-subnav button {
   min-height: 2.5rem;
   border-radius: .7rem;
 }
 .ops-shell[data-operations-mode="admin"] .admin-subnav button[aria-selected="true"] {
-  background: linear-gradient(100deg, rgb(91 157 255 / 22%), rgb(76 225 208 / 12%));
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--admin-primary) 22%, transparent),
+    color-mix(in srgb, var(--theme-indication-blue) 12%, transparent)
+  );
   color: var(--admin-text);
 }
 .admin-mfa-page {
@@ -5071,8 +5216,8 @@
   isolation: isolate;
   padding: clamp(1rem, 4vw, 3rem);
   background:
-    radial-gradient(circle at 15% 10%, rgb(91 157 255 / 16%), transparent 28rem),
-    radial-gradient(circle at 90% 90%, rgb(159 117 255 / 14%), transparent 30rem),
+    radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--admin-primary) 16%, transparent), transparent 28rem),
+    radial-gradient(circle at 90% 90%, color-mix(in srgb, var(--theme-status-purple) 14%, transparent), transparent 30rem),
     var(--admin-bg-app);
 }
 .admin-mfa-card {
@@ -5080,13 +5225,22 @@
   min-height: 0;
   border: 1px solid var(--admin-border-strong);
   border-radius: 1.5rem;
-  background: linear-gradient(135deg, rgb(16 32 57 / 96%), rgb(10 22 39 / 96%));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--admin-bg-card) 96%, transparent),
+    color-mix(in srgb, var(--admin-bg-surface) 96%, transparent)
+  );
   box-shadow: 0 2rem 6rem rgb(0 0 0 / 28%);
 }
 .admin-mfa-visual {
   padding: clamp(1.5rem, 4vw, 3rem);
   background:
-    linear-gradient(160deg, rgb(20 55 92 / 72%), rgb(17 29 52 / 92%) 58%, rgb(49 30 91 / 82%)),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--admin-primary) 30%, var(--admin-bg-surface)),
+      color-mix(in srgb, var(--admin-bg-card) 92%, var(--admin-bg-surface)) 58%,
+      color-mix(in srgb, var(--theme-status-purple) 28%, var(--admin-bg-surface))
+    ),
     var(--admin-bg-surface);
   border-right-color: var(--admin-border);
 }
@@ -5094,22 +5248,22 @@
 .admin-mfa-visual::after {
   display: block;
   position: absolute;
-  border: 1px solid rgb(91 157 255 / 20%);
+  border: 1px solid color-mix(in srgb, var(--admin-primary) 20%, transparent);
   border-radius: 50%;
   content: "";
 }
-.admin-mfa-visual::before { top: 7rem; left: 50%; width: 16rem; height: 16rem; transform: translateX(-50%); box-shadow: 0 0 5rem rgb(91 157 255 / 16%); }
-.admin-mfa-visual::after { top: 9rem; left: 50%; width: 11rem; height: 11rem; transform: translateX(-50%); border-color: rgb(76 225 208 / 24%); }
-.admin-mfa-visual-mark { background: linear-gradient(135deg, rgb(91 157 255 / 24%), rgb(76 225 208 / 14%)); border-color: rgb(91 157 255 / 50%); border-radius: 1rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / 22%); }
+.admin-mfa-visual::before { top: 7rem; left: 50%; width: 16rem; height: 16rem; transform: translateX(-50%); box-shadow: 0 0 5rem color-mix(in srgb, var(--admin-primary) 16%, transparent); }
+.admin-mfa-visual::after { top: 9rem; left: 50%; width: 11rem; height: 11rem; transform: translateX(-50%); border-color: color-mix(in srgb, var(--theme-indication-blue) 24%, transparent); }
+.admin-mfa-visual-mark { background: linear-gradient(135deg, color-mix(in srgb, var(--admin-primary) 24%, transparent), color-mix(in srgb, var(--theme-indication-blue) 14%, transparent)); border-color: color-mix(in srgb, var(--admin-primary) 50%, transparent); border-radius: 1rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / 22%); }
 .admin-mfa-content { gap: 1.35rem; padding: clamp(1.25rem, 4vw, 3rem); }
 .admin-mfa-content h1 { font-size: clamp(1.8rem, 4vw, 2.7rem); letter-spacing: -.06em; }
 .admin-mfa-progress li { min-height: 2.75rem; padding: .55rem .7rem; border-radius: .7rem .7rem 0 0; }
-.admin-mfa-identity { padding: .9rem; border-radius: .9rem; background: rgb(255 255 255 / 4%); }
+.admin-mfa-identity { padding: .9rem; border-radius: .9rem; background: color-mix(in srgb, var(--admin-text) 4%, transparent); }
 .admin-mfa-code-tools { display: flex; align-items: center; justify-content: space-between; gap: .75rem; color: var(--admin-text-muted); font-size: .75rem; }
-.admin-mfa-paste { display: inline-flex; min-height: 2.25rem; align-items: center; gap: .4rem; padding: .45rem .7rem; border: 1px solid rgb(91 157 255 / 30%); border-radius: .65rem; background: rgb(91 157 255 / 10%); color: var(--admin-primary-hover); cursor: pointer; transition: background .2s ease, border-color .2s ease, transform .2s ease; }
-.admin-mfa-paste:hover:not(:disabled) { border-color: rgb(91 157 255 / 62%); background: rgb(91 157 255 / 18%); transform: translateY(-1px); }
-.admin-mfa-code input { height: clamp(3.6rem, 8vw, 4.4rem); border-radius: .9rem; background: rgb(4 12 23 / 55%); border-color: var(--admin-border-strong); }
-.admin-mfa-error { padding: .8rem .9rem; border-radius: .8rem; background: rgb(241 73 91 / 10%); }
+.admin-mfa-paste { display: inline-flex; min-height: 2.25rem; align-items: center; gap: .4rem; padding: .45rem .7rem; border: 1px solid color-mix(in srgb, var(--admin-primary) 30%, transparent); border-radius: .65rem; background: color-mix(in srgb, var(--admin-primary) 10%, transparent); color: var(--admin-primary-hover); cursor: pointer; transition: background .2s ease, border-color .2s ease, transform .2s ease; }
+.admin-mfa-paste:hover:not(:disabled) { border-color: color-mix(in srgb, var(--admin-primary) 62%, transparent); background: color-mix(in srgb, var(--admin-primary) 18%, transparent); transform: translateY(-1px); }
+.admin-mfa-code input { height: clamp(3.6rem, 8vw, 4.4rem); border-radius: .9rem; background: color-mix(in srgb, var(--admin-bg-app) 55%, transparent); border-color: var(--admin-border-strong); }
+.admin-mfa-error { padding: .8rem .9rem; border-radius: .8rem; background: color-mix(in srgb, var(--theme-danger) 10%, transparent); }
 .admin-mfa-content .button { min-height: 3rem; border-radius: .8rem; }
 @media (max-width: 1023px) {
   .ops-shell[data-operations-mode="admin"] .ops-sidebar,
@@ -5122,7 +5276,7 @@
   .ops-shell[data-operations-mode="admin"] .ops-admin-mobile-bar {
     min-height: 4.25rem;
     padding: .7rem max(.85rem, env(safe-area-inset-left)) .7rem max(.85rem, env(safe-area-inset-right));
-    background: rgb(8 19 34 / 88%);
+    background: color-mix(in srgb, var(--admin-bg-surface) 88%, transparent);
     border-bottom-color: var(--admin-border-strong);
     box-shadow: 0 .65rem 2rem rgb(0 0 0 / 15%);
   }
@@ -5130,9 +5284,9 @@
     width: 2.7rem;
     height: 2.7rem;
     border-radius: .8rem;
-    background: rgb(255 255 255 / 5%);
+    background: color-mix(in srgb, var(--admin-text) 5%, transparent);
   }
-  .ops-shell[data-operations-mode="admin"] .ops-sidebar-backdrop { background: rgb(3 8 17 / 66%); backdrop-filter: blur(7px); }
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar-backdrop { background: color-mix(in srgb, var(--admin-bg-app) 66%, transparent); backdrop-filter: blur(7px); }
   .ops-shell[data-operations-mode="admin"] .ops-main { min-height: calc(100dvh - 4.25rem); padding: 1rem max(.85rem, env(safe-area-inset-right)) 4rem max(.85rem, env(safe-area-inset-left)) !important; }
   .ops-shell[data-operations-mode="admin"] :is(.admin-workspace-header, .panel-header, .control-panel-header) { border-radius: 1rem; }
 }

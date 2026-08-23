@@ -83,12 +83,21 @@ test("admin design tokens and responsive primitives follow the panel specificati
     read("components/nyascans/OperationsControlPanel.tsx"),
   ]);
   assert.ok(layout.indexOf('import "./admin.css"') > layout.indexOf('import "./globals.css"'));
-  for (const color of [
-    "#0a0e14", "#111826", "#151e2e", "#1b2536", "#232f42",
-    "#37475f", "#4c8dff", "#33c481", "#f5a623", "#f1495b",
-    "#f4f6fa", "#93a1b8", "#5c6a82",
+  for (const tokenBridge of [
+    "--admin-bg-app: var(--theme-main-background)",
+    "--admin-bg-surface: var(--theme-accent)",
+    "--admin-bg-card: var(--theme-accent-l1)",
+    "--admin-bg-card-hover: var(--theme-accent-l2)",
+    "--admin-border-subtle: var(--theme-accent-l3)",
+    "--admin-border-strong: var(--theme-accent-l4)",
+    "--admin-accent: var(--theme-primary)",
+    "--admin-success: var(--theme-status-green)",
+    "--admin-warning: var(--theme-status-yellow)",
+    "--admin-danger: var(--theme-danger)",
+    "--admin-text-primary: var(--theme-text-color)",
+    "--admin-text-tertiary: var(--theme-mid-tone)",
   ]) {
-    assert.match(css, new RegExp(color, "iu"));
+    assert.match(css, new RegExp(tokenBridge.replaceAll(/[()]/gu, "\\$&"), "u"));
   }
   assert.match(css, /@media \(max-width: 767px\)/u);
   assert.match(css, /table\[data-mobile-cards="true"\]/u);

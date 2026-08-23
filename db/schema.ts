@@ -187,6 +187,7 @@ export const userPreferences = sqliteTable("user_preferences", {
     .notNull()
     .default(false),
   settingsJson: text("settings_json").notNull().default("{}"),
+  customThemeJson: text("custom_theme_json"),
   updatedAt,
 });
 

@@ -315,22 +315,21 @@ test("Store destructive and discard actions use accessible shared confirmations"
 
 test("admin CSS enforces the 48.4 token system and responsive thresholds", async () => {
   const css = await read("app/admin.css");
-  for (const token of [
-    "#0A0E14",
-    "#111826",
-    "#151E2E",
-    "#1B2536",
-    "#232F42",
-    "#37475F",
-    "#4C8DFF",
-    "#33C481",
-    "#F5A623",
-    "#F1495B",
-    "#F4F6FA",
-    "#93A1B8",
-    "#5C6A82",
+  for (const tokenBridge of [
+    "--admin-bg-app: var(--theme-main-background)",
+    "--admin-bg-surface: var(--theme-accent)",
+    "--admin-bg-card: var(--theme-accent-l1)",
+    "--admin-bg-card-hover: var(--theme-accent-l2)",
+    "--admin-border-subtle: var(--theme-accent-l3)",
+    "--admin-border-strong: var(--theme-accent-l4)",
+    "--admin-accent: var(--theme-primary)",
+    "--admin-success: var(--theme-status-green)",
+    "--admin-warning: var(--theme-status-yellow)",
+    "--admin-danger: var(--theme-danger)",
+    "--admin-text-primary: var(--theme-text-color)",
+    "--admin-text-tertiary: var(--theme-mid-tone)",
   ]) {
-    assert.match(css, new RegExp(token, "iu"));
+    assert.match(css, new RegExp(tokenBridge.replaceAll(/[()]/gu, "\\$&"), "u"));
   }
   const literalSizes = [...css.matchAll(/font-size:\s*(\d+)px/gu)].map(
     (match) => Number(match[1]),

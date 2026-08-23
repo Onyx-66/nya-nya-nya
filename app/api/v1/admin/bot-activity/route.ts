@@ -32,7 +32,12 @@ export async function GET(request: Request) {
     });
     const term = `%${query.query.toLowerCase()}%`;
     const resultFilter = query.result === "ALL" ? "1 = 1" : "al.result = ?";
-    const args = query.result === "ALL" ? [term, term, term] : [query.result, term, term, term];
+    const args = [
+      ...(query.result === "ALL" ? [] : [query.result]),
+      query.query,
+      term,
+      term,
+    ];
     const db = database();
     const [rows, count] = await Promise.all([
       db.prepare(
@@ -49,7 +54,7 @@ export async function GET(request: Request) {
             AND (? = '' OR LOWER(al.action) LIKE ? OR LOWER(COALESCE(al.target_label, '')) LIKE ?)
           ORDER BY datetime(al.created_at) DESC, al.id DESC
           LIMIT ? OFFSET ?`,
-      ).bind(...args, query.query, term, term, query.limit, (query.page - 1) * query.limit).all<Record<string, unknown>>(),
+      ).bind(...args, query.limit, (query.page - 1) * query.limit).all<Record<string, unknown>>(),
       db.prepare(
         `SELECT COUNT(*) AS count FROM audit_logs al
           WHERE al.source_area = 'BOT_API' AND ${resultFilter}

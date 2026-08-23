@@ -41,14 +41,15 @@ test("all Home data sections use the bounded helper and render a terminal branch
 });
 
 test("dark mode is the first-run default and the dark tokens are near-black", async () => {
-  const app = await readProjectFile("components/nyascans/NyaScansApp.tsx");
   const theme = await readProjectFile("lib/site-theme.ts");
+  const userTheme = await readProjectFile("lib/theme-system.ts");
   const css = await readProjectFile("app/globals.css");
-  assert.match(app, /const next = stored === "light" \|\| stored === "dark" \? stored : "dark"/);
-  assert.doesNotMatch(app, /prefers-color-scheme/);
+  assert.match(userTheme, /activeThemeId: "nya-midnight"/);
+  assert.doesNotMatch(userTheme, /prefers-color-scheme/);
   assert.match(theme, /background: "#070708"/);
   assert.match(theme, /surface: "#111216"/);
-  assert.match(css, /--bg: var\(--site-dark-bg, #070708\)/);
+  assert.match(css, /--theme-main-background: var\(--site-dark-bg, #070708\)/);
+  assert.match(css, /--bg: var\(--theme-main-background\)/);
 });
 
 test("logged-out meatball menu exposes public destinations and conditional Store", async () => {
@@ -60,7 +61,7 @@ test("logged-out meatball menu exposes public destinations and conditional Store
   }
   assert.match(menu, /lockAndPayVisible/);
   assert.ok(menu.includes('href="/store"'));
-  assert.ok(menu.includes('Use {theme === "dark" ? "light" : "dark"} theme'));
+  assert.ok(menu.includes("Change Theme"));
   assert.ok(app.includes('href="/account"'));
   assert.ok(app.includes("Open Admin Panel"));
   assert.ok(app.includes("Preferences &amp; language"));
