@@ -36,6 +36,8 @@ export const ADMIN_PERMISSION_REGISTRY = [
   ["admin.audit.read", "Security", "Read immutable administrator audit events"],
   ["admin.audit.export", "Security", "Export immutable administrator audit events"],
   ["api.manage", "Security", "Manage external API credentials"],
+  ["admin.identifiers.read", "Security", "Read immutable series, team, and chapter identifiers"],
+  ["admin.bot-actions.read", "Security", "Read Discord Bot API actions and results"],
   ["team.manage.own", "Teams", "Manage assigned teams"],
   ["series.create", "Publishing", "Create series"],
   ["series.edit.assigned", "Publishing", "Edit assigned series"],
@@ -56,6 +58,8 @@ export const NON_DELEGABLE_CAPABILITIES = new Set<string>([
   "roles.owner.manage",
   "roles.manage",
   "api.manage",
+  "admin.identifiers.read",
+  "admin.bot-actions.read",
   "security.sessions.manage",
 ]);
 

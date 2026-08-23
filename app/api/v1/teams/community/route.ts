@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, auditStatement, requestIdFor } from "@/lib/server/admin-utils";
 import { requireActor, type Actor } from "@/lib/server/policy";
+import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -80,7 +81,7 @@ function canEdit(actor: Actor, team: Record<string, unknown>) {
 async function snapshot(actor: Actor) {
   const db = database();
   const teams = await db.prepare(
-    `SELECT t.id, t.slug, t.name, t.description, t.verification_status AS verificationStatus,
+    `SELECT t.id, t.public_ref AS publicRef, t.slug, t.name, t.description, t.verification_status AS verificationStatus,
             t.revision, t.created_at AS createdAt, t.updated_at AS updatedAt,
             tm.membership_role AS membershipRole, tm.status AS membershipStatus,
             CASE WHEN t.logo_key IS NULL THEN NULL ELSE '/api/v1/team-media?id=' || t.id || '&slot=logo&v=' || t.revision END AS logoUrl,
@@ -146,10 +147,12 @@ export async function POST(request: Request) {
     if (payload.action === "CREATE") {
       if (!payload.links.some((link) => link.url === payload.proofUrl)) throw new ApiError(422, "TEAM_PROOF_LINK_REQUIRED", "The ownership proof URL must be one of the team links.");
       const id = `team_${randomId()}`;
+      const publicRef = newPublicReference("TEAM");
       const claimId = `team_claim_${randomId()}`;
       const slug = await uniqueSlug(payload.name);
       await db.batch([
-        db.prepare("INSERT INTO teams (id, slug, name, description, created_by_user_id, verification_status) VALUES (?, ?, ?, ?, ?, 'PENDING')").bind(id, slug, payload.name, payload.description, actor.id),
+        db.prepare("INSERT INTO teams (id, public_ref, slug, name, description, created_by_user_id, verification_status) VALUES (?, ?, ?, ?, ?, ?, 'PENDING')").bind(id, publicRef, slug, payload.name, payload.description, actor.id),
+        publicReferenceReservationStatement(db, "TEAM", publicRef, id),
         ...payload.links.map((link, index) => db.prepare("INSERT INTO team_links (id, team_id, label, url, link_type, sort_order) VALUES (?, ?, ?, ?, ?, ?)").bind(`team_link_${randomId()}`, id, link.label, link.url, link.linkType, index)),
         db.prepare("INSERT INTO team_memberships (team_id, user_id, membership_role, status, invited_by_user_id, invited_at) VALUES (?, ?, 'OWNER', 'PENDING', ?, CURRENT_TIMESTAMP)").bind(id, actor.id, actor.id),
         db.prepare("INSERT INTO team_ownership_claims (id, team_id, claimant_user_id, proof_type, proof_value, statement) VALUES (?, ?, ?, 'LINK_CONTROL', ?, ?)").bind(claimId, id, actor.id, payload.proofUrl, payload.statement),

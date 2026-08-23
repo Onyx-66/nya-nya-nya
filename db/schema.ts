@@ -34,6 +34,28 @@ export const users = sqliteTable(
   ],
 );
 
+export const publicIdentifierReservations = sqliteTable(
+  "public_identifier_reservations",
+  {
+    publicRef: text("public_ref").primaryKey(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    reservedAt: createdAt,
+    releasedAt: text("released_at"),
+  },
+  (table) => [
+    uniqueIndex("public_identifier_entity_uidx").on(
+      table.entityType,
+      table.entityId,
+    ),
+    index("public_identifier_type_idx").on(table.entityType, table.reservedAt),
+    check(
+      "public_identifier_type_check",
+      sql`${table.entityType} IN ('SERIES', 'TEAM', 'CHAPTER')`,
+    ),
+  ],
+);
+
 export const userPasswordCredentials = sqliteTable(
   "user_password_credentials",
   {
@@ -316,6 +338,7 @@ export const teams = sqliteTable(
   "teams",
   {
     id: text("id").primaryKey(),
+    publicRef: text("public_ref").notNull(),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
@@ -354,6 +377,7 @@ export const teams = sqliteTable(
   },
   (table) => [
     uniqueIndex("teams_slug_uidx").on(table.slug),
+    uniqueIndex("teams_public_ref_uidx").on(table.publicRef),
     index("teams_status_idx").on(
       table.isArchived,
       table.verificationStatus,
@@ -783,6 +807,7 @@ export const series = sqliteTable(
   "series",
   {
     id: text("id").primaryKey(),
+    publicRef: text("public_ref").notNull(),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     nativeTitle: text("native_title"),
@@ -821,6 +846,7 @@ export const series = sqliteTable(
       table.accessType,
     ),
     index("series_title_lookup_idx").on(table.title, table.updatedAt),
+    uniqueIndex("series_public_ref_uidx").on(table.publicRef),
     index("series_publisher_idx").on(table.publisherId),
   ],
 );
@@ -1622,6 +1648,7 @@ export const chapters = sqliteTable(
   "chapters",
   {
     id: text("id").primaryKey(),
+    publicRef: text("public_ref").notNull(),
     seriesId: text("series_id")
       .notNull()
       .references(() => series.id, { onDelete: "cascade" }),
@@ -1689,6 +1716,7 @@ export const chapters = sqliteTable(
       table.state,
       table.publishedAt,
     ),
+    uniqueIndex("chapters_public_ref_uidx").on(table.publicRef),
     check(
       "chapters_visibility_check",
       sql`${table.visibility} IN ('PUBLIC', 'UNLISTED', 'HIDDEN')`,
@@ -4048,6 +4076,7 @@ export const apiKeys = sqliteTable(
   "api_keys",
   {
     id: text("id").primaryKey(),
+    clientType: text("client_type").notNull().default("EXTERNAL_API"),
     appName: text("app_name").notNull(),
     keyPrefix: text("key_prefix").notNull(),
     secretHash: text("secret_hash").notNull(),
@@ -4073,8 +4102,74 @@ export const apiKeys = sqliteTable(
     index("api_keys_status_idx").on(table.status, table.createdAt),
     index("api_keys_team_idx").on(table.allowedTeamId),
     check(
+      "api_keys_client_type_check",
+      sql`${table.clientType} IN ('EXTERNAL_API', 'DISCORD_BOT')`,
+    ),
+    check(
       "api_keys_status_check",
       sql`${table.status} IN ('ACTIVE', 'REVOKED', 'ROTATED')`,
+    ),
+  ],
+);
+
+export const botIdempotencyKeys = sqliteTable(
+  "bot_idempotency_keys",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    status: text("status").notNull().default("PROCESSING"),
+    responseJson: text("response_json"),
+    resourceRefsJson: text("resource_refs_json").notNull().default("[]"),
+    expiresAt: text("expires_at").notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("bot_idempotency_actor_endpoint_key_uidx").on(
+      table.actorUserId,
+      table.endpoint,
+      table.idempotencyKey,
+    ),
+    index("bot_idempotency_expiry_idx").on(table.expiresAt, table.status),
+    check(
+      "bot_idempotency_status_check",
+      sql`${table.status} IN ('PROCESSING', 'SUCCEEDED', 'FAILED')`,
+    ),
+  ],
+);
+
+export const botOperations = sqliteTable(
+  "bot_operations",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(),
+    status: text("status").notNull().default("PROCESSING"),
+    jobId: text("job_id").references(() => uploadJobs.id, { onDelete: "set null" }),
+    idempotencyKey: text("idempotency_key"),
+    requestJson: text("request_json").notNull().default("{}"),
+    resultJson: text("result_json"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    createdAt,
+    updatedAt,
+    completedAt: text("completed_at"),
+  },
+  (table) => [
+    index("bot_operations_actor_idx").on(table.actorUserId, table.createdAt),
+    index("bot_operations_status_idx").on(table.status, table.updatedAt),
+    index("bot_operations_job_idx").on(table.jobId),
+    check(
+      "bot_operations_status_check",
+      sql`${table.status} IN ('PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED')`,
     ),
   ],
 );

@@ -21,6 +21,7 @@ import {
   type Statement,
 } from "@/lib/server/series-request-common";
 import type { Actor } from "@/lib/server/policy";
+import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 
 type AdminRequestRow = {
@@ -1155,6 +1156,7 @@ export async function approveSeriesRequest(
     );
   }
   const seriesId = randomId();
+  const publicRef = newPublicReference("SERIES");
   const slug = slugForApproval(current.primaryTitle, input.requestId);
   const nextRevision = current.revision + 1;
   const operationTime = new Date().toISOString();
@@ -1174,11 +1176,11 @@ export async function approveSeriesRequest(
     db
       .prepare(
         `INSERT INTO series
-         (id, slug, title, native_title, synopsis, type, status, publication_year,
+         (id, public_ref, slug, title, native_title, synopsis, type, status, publication_year,
           origin_country, original_language, reading_direction,
           age_rating, access_type, cover_key, banner_key, rights_status,
           is_published, revision, created_at, updated_at)
-         SELECT ?, ?, r.primary_title,
+         SELECT ?, ?, ?, r.primary_title,
                 json_extract(r.alternative_titles_json, '$[0]'),
                 r.description, r.series_type, r.publication_status, r.publication_year,
                 r.origin_country, r.original_language, r.reading_direction,
@@ -1207,6 +1209,7 @@ export async function approveSeriesRequest(
       )
       .bind(
         seriesId,
+        publicRef,
         slug,
         operationTime,
         operationTime,
@@ -1216,6 +1219,7 @@ export async function approveSeriesRequest(
         input.teamRights.length,
       ),
   ];
+  statements.push(publicReferenceReservationStatement(db, "SERIES", publicRef, seriesId));
   statements.push(
     ...relationshipStatements(db, seriesId, metadata, seriesGuard),
   );

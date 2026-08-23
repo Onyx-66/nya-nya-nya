@@ -30,6 +30,7 @@ import {
   FileText,
   Fire,
   GearSix,
+  HashStraight,
   Gift,
   Heart,
   House,
@@ -122,7 +123,9 @@ import { SeriesReportDialog } from "@/components/nyascans/SeriesReportDialog";
 import { UserLeaderboardView } from "@/components/nyascans/UserLeaderboardView";
 import { mockAvatarUrl } from "@/lib/mock-media";
 import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
+import { BotActivityPanel } from "@/components/nyascans/admin/BotActivityPanel";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
+import { IdentifiersPanel } from "@/components/nyascans/admin/IdentifiersPanel";
 import { RewardSettingsPanel } from "@/components/nyascans/admin/RewardSettingsPanel";
 import {
   defaultReaderSettings,
@@ -12258,6 +12261,8 @@ const ADMIN_NAVIGATION_ICONS: Readonly<Record<string, PhosphorIcon>> = {
   "keyboard-shortcuts": Key,
   "feature-flags": SquaresFour,
   security: Key,
+  identifiers: HashStraight,
+  "bot-activity": Pulse,
   "integrations-api": CreditCard,
   "activity-log": Pulse,
 };
@@ -13565,6 +13570,10 @@ function OperationsView({
             workspace="keyboard-shortcuts"
             initialTab="shortcuts"
           />
+        ) : admin && activeNavigationItem?.slug === "identifiers" ? (
+          <IdentifiersPanel />
+        ) : admin && activeNavigationItem?.slug === "bot-activity" ? (
+          <BotActivityPanel />
         ) : (
           <Suspense
             fallback={

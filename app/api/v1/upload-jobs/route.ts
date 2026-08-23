@@ -29,6 +29,7 @@ import {
   uploadJobMutationSchema,
 } from "@/lib/server/upload-jobs";
 import { requireActor, type Actor } from "@/lib/server/policy";
+import { newPublicReference } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 import { getFeatureStates } from "@/lib/server/feature-flags";
 
@@ -2114,8 +2115,16 @@ export async function PATCH(request: Request) {
         ),
       );
     }
+    const reservedChapterRefs = await env.DB.prepare(
+      `SELECT public_ref AS publicRef, entity_id AS entityId
+         FROM public_identifier_reservations
+        WHERE entity_type = 'CHAPTER'
+          AND entity_id IN (${items.map(() => "?").join(", ")})`,
+    ).bind(...items.map((item) => item.id)).all<{ publicRef: string; entityId: string }>();
+    const reservedRefByItem = new Map(reservedChapterRefs.results.map((row) => [row.entityId, row.publicRef]));
     for (const item of items) {
       const newChapterId = `ch_${randomId()}`;
+      const newChapterPublicRef = reservedRefByItem.get(item.id) ?? newPublicReference("CHAPTER");
       const forced = forcedAccess.get(item.id);
       const isReplacement = Boolean(item.replacementChapterId);
       const chapterState = isReplacement
@@ -2129,13 +2138,13 @@ export async function PATCH(request: Request) {
       statements.push(
         env.DB.prepare(
           `INSERT INTO chapters
-           (id, series_id, team_id, uploader_user_id, slug, volume,
+           (id, public_ref, series_id, team_id, uploader_user_id, slug, volume,
             chapter_number, title, language, format, state, access_type,
             price_onyx, page_count, published_at, free_at, version,
             release_notes, credits_json, thumbnail_key, visibility,
             comments_enabled, revision, include_fixed_first_page,
             include_fixed_last_page)
-           SELECT ?, uji.series_id, uji.team_id, ?, ?, uji.volume,
+           SELECT ?, ?, uji.series_id, uji.team_id, ?, ?, uji.volume,
                   uji.chapter_number, uji.title, uji.language, 'VERTICAL',
                   ?, uji.access_type, uji.price_onyx, uji.page_count, ?,
                   CASE
@@ -2214,6 +2223,7 @@ export async function PATCH(request: Request) {
               )`,
         ).bind(
           newChapterId,
+          newChapterPublicRef,
           actor.id,
           chapterSlug(
             item.chapterNumber,
@@ -2230,6 +2240,17 @@ export async function PATCH(request: Request) {
           nextRevision,
           ...(forced ? [forced.reference.priceOnyx] : []),
         ),
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO public_identifier_reservations (public_ref, entity_type, entity_id)
+           SELECT ?, 'CHAPTER', ?
+            WHERE EXISTS (SELECT 1 FROM chapters WHERE id = ?)`,
+        ).bind(newChapterPublicRef, newChapterId, newChapterId),
+        env.DB.prepare(
+          `UPDATE public_identifier_reservations
+              SET entity_id = ?
+            WHERE public_ref = ? AND entity_type = 'CHAPTER' AND entity_id = ?
+              AND EXISTS (SELECT 1 FROM chapters WHERE id = ?)`,
+        ).bind(newChapterId, newChapterPublicRef, item.id, newChapterId),
         env.DB.prepare(
           `INSERT INTO chapter_pages
            (id, chapter_id, page_index, object_key, width, height, sha256,

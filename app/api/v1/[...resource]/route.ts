@@ -54,6 +54,7 @@ import {
   requireAdminCapability,
   requireOwner,
 } from "@/lib/server/policy";
+import { newPublicReference } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 import {
   decideChapterAccess,
@@ -10632,6 +10633,7 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
       const seriesId = `ser_${randomId()}`;
+      const publicRef = newPublicReference("SERIES");
       let coverKey: string | null = null;
       if (cover) {
         if (!env.BUCKET) {
@@ -10709,14 +10711,15 @@ export async function POST(request: Request, context: RouteContext) {
         const statements = [
           env.DB.prepare(
             `INSERT INTO series
-             (id, slug, title, native_title, synopsis, type, status,
+             (id, public_ref, slug, title, native_title, synopsis, type, status,
               origin_country, original_language, reading_direction, age_rating,
               access_type, cover_key, rights_status, is_published)
-             SELECT ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?,
+             SELECT ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?,
                     'PENDING_REVIEW', 0
               WHERE ${eligibilitySql}`,
           ).bind(
             seriesId,
+            publicRef,
             payload.slug,
             payload.title,
             payload.nativeTitle,
@@ -10730,6 +10733,10 @@ export async function POST(request: Request, context: RouteContext) {
             coverKey,
             ...eligibilityBindings,
           ),
+          env.DB.prepare(
+            `INSERT INTO public_identifier_reservations (public_ref, entity_type, entity_id)
+             SELECT ?, 'SERIES', ? WHERE EXISTS (SELECT 1 FROM series WHERE id = ?)`,
+          ).bind(publicRef, seriesId, seriesId),
         ];
         if (payload.nativeTitle) {
           statements.push(
@@ -12321,6 +12328,7 @@ export async function POST(request: Request, context: RouteContext) {
       }
 
       const seriesId = `ser_${randomId()}`;
+      const publicRef = newPublicReference("SERIES");
       if (payload.teamId) {
         const team = await env.DB.prepare(
           "SELECT id FROM teams WHERE id = ? AND verification_status <> 'SUSPENDED' LIMIT 1",
@@ -12371,13 +12379,14 @@ export async function POST(request: Request, context: RouteContext) {
         const statements = [
           env.DB.prepare(
             `INSERT INTO series
-             (id, slug, title, native_title, synopsis, type, status,
+             (id, public_ref, slug, title, native_title, synopsis, type, status,
               origin_country, original_language, reading_direction, age_rating,
               access_type, cover_key, rights_status, is_published)
-             VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?,
+             VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'TEEN', ?, ?,
                      'PENDING_REVIEW', 0)`,
           ).bind(
             seriesId,
+            publicRef,
             payload.slug,
             payload.title,
             payload.nativeTitle,
@@ -12406,6 +12415,10 @@ export async function POST(request: Request, context: RouteContext) {
               hasCover: Boolean(coverKey),
             }),
           ),
+          env.DB.prepare(
+            `INSERT INTO public_identifier_reservations (public_ref, entity_type, entity_id)
+             SELECT ?, 'SERIES', ? WHERE EXISTS (SELECT 1 FROM series WHERE id = ?)`,
+          ).bind(publicRef, seriesId, seriesId),
         ];
         if (payload.nativeTitle) {
           statements.push(

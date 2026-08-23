@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertApiTeam, requireApiKey } from "@/lib/server/api-keys";
 import { requestIdFor } from "@/lib/server/admin-utils";
+import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
   try {
     const principal = await requireApiKey(request, "series:read");
     const rows = await db().prepare(
-      `SELECT s.id, s.slug, s.title, s.type, s.status, s.original_language AS originalLanguage,
+      `SELECT s.id, s.public_ref AS publicRef, s.slug, s.title, s.type, s.status, s.original_language AS originalLanguage,
               s.is_published AS isPublished, sta.team_id AS teamId
          FROM series s
          JOIN series_team_assignments sta ON sta.series_id = s.id
@@ -52,13 +53,15 @@ export async function POST(request: Request) {
     ).bind(payload.teamId).first();
     if (!team) throw new ApiError(422, "TEAM_NOT_AVAILABLE", "The selected team is not available.");
     const id = `series_${randomId()}`;
+    const publicRef = newPublicReference("SERIES");
     await db().batch([
       db().prepare(
         `INSERT INTO series
-         (id, slug, title, synopsis, type, status, origin_country,
+         (id, public_ref, slug, title, synopsis, type, status, origin_country,
           original_language, reading_direction, rights_status, is_published)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DEMO_ORIGINAL', 0)`,
-      ).bind(id, payload.slug, payload.title, payload.synopsis, payload.type, payload.status, payload.originCountry.toUpperCase(), payload.originalLanguage.toLowerCase(), payload.readingDirection),
+      ).bind(id, publicRef, payload.slug, payload.title, payload.synopsis, payload.type, payload.status, payload.originCountry.toUpperCase(), payload.originalLanguage.toLowerCase(), payload.readingDirection),
+      publicReferenceReservationStatement(db(), "SERIES", publicRef, id),
       db().prepare(
         `INSERT INTO series_team_assignments
          (series_id, team_id, can_upload, can_publish, is_primary, assigned_by_user_id)
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
                  'SERIES', ?, ?, 'Created through a scoped API key.', ?, ?)`,
       ).bind(randomId(), principal.actorUserId, id, payload.title, requestId, JSON.stringify({ apiKeyId: principal.keyId, appName: principal.appName, teamId: payload.teamId })),
     ]);
-    return json(requestId, { data: { id, slug: payload.slug, state: "DRAFT", reviewRequired: true } }, { status: 201 });
+    return json(requestId, { data: { id: publicRef, publicRef, slug: payload.slug, state: "DRAFT", reviewRequired: true } }, { status: 201 });
   } catch (error) {
     return errorResponse(requestId, error);
   }

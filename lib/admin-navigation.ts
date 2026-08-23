@@ -336,6 +336,20 @@ export const ADMIN_NAVIGATION_GROUPS = [
         keywords: ["two-factor", "sessions", "login alerts", "protections"],
       },
       {
+        slug: "identifiers",
+        label: "Identifiers",
+        capability: "admin.identifiers.read",
+        aliases: ["public-identifiers", "stable-ids"],
+        keywords: ["public references", "series IDs", "team IDs", "chapter IDs"],
+      },
+      {
+        slug: "bot-activity",
+        label: "Bot Activity",
+        capability: "admin.bot-actions.read",
+        aliases: ["bot-actions", "discord-api"],
+        keywords: ["discord", "bot", "api actions", "uploads"],
+      },
+      {
         slug: "integrations-api",
         label: "Integrations & API",
         capability: "api.manage",

@@ -444,6 +444,99 @@ export async function getActor(): Promise<Actor | null> {
   };
 }
 
+export async function getActorForUserId(userId: string): Promise<Actor | null> {
+  if (!env.DB) {
+    throw new ApiError(503, "DATABASE_UNAVAILABLE", "Identity storage is unavailable.");
+  }
+  const row = await env.DB.prepare(
+    `SELECT u.id, u.email, u.display_name, u.primary_role, u.status,
+            p.avatar_key, p.username AS profile_username, p.revision AS profile_revision
+       FROM users u
+       LEFT JOIN user_profiles p ON p.user_id = u.id
+      WHERE u.id = ?
+      LIMIT 1`,
+  ).bind(userId).first<{
+    id: string;
+    email: string;
+    display_name: string;
+    primary_role: keyof typeof ROLES;
+    status: string;
+    avatar_key: string | null;
+    profile_username: string | null;
+    profile_revision: number | null;
+  }>();
+  if (!row) return null;
+  if (row.status !== "ACTIVE") {
+    throw new ApiError(403, "ACCOUNT_SUSPENDED", "This account cannot access NyaScans.");
+  }
+  if (!validRoles.has(row.primary_role)) {
+    throw new ApiError(403, "ROLE_INVALID", "This account has an unsupported authorization role.");
+  }
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO user_roles (user_id, role, assigned_by_user_id)
+     VALUES (?, ?, NULL)`,
+  ).bind(row.id, row.primary_role).run();
+  const [roleRows, permissionRows, membershipRows] = await Promise.all([
+    env.DB.prepare(
+      `SELECT role FROM user_roles WHERE user_id = ?
+       ORDER BY CASE role WHEN 'OWNER' THEN 6 WHEN 'ADMINISTRATOR' THEN 5
+         WHEN 'MANAGER' THEN 4 WHEN 'MODERATOR' THEN 3
+         WHEN 'TEAM_LEADER' THEN 2 WHEN 'UPLOADER' THEN 1 ELSE 0 END DESC`,
+    ).bind(row.id).all<{ role: keyof typeof ROLES }>(),
+    env.DB.prepare("SELECT role, capability, allowed FROM role_permission_rules").all<{
+      role: string;
+      capability: string;
+      allowed: number;
+    }>(),
+    env.DB.prepare(
+      `SELECT tm.team_id, tm.membership_role, tm.can_request_series, t.verification_status
+         FROM team_memberships tm
+         JOIN teams t ON t.id = tm.team_id
+        WHERE tm.user_id = ? AND tm.status = 'ACTIVE'
+          AND t.verification_status <> 'SUSPENDED' AND t.is_archived = 0`,
+    ).bind(row.id).all<MembershipRow>(),
+  ]);
+  const roles = [...new Set((roleRows.results ?? [])
+    .map((entry) => entry.role)
+    .filter((role) => validRoles.has(role)))] as Array<keyof typeof ROLES>;
+  const effectiveRoles = roles.length ? roles : [row.primary_role];
+  const permissionOverrides = (permissionRows.results ?? [])
+    .filter((entry) => effectiveRoles.includes(entry.role as keyof typeof ROLES))
+    .map((entry) => ({ role: entry.role, capability: entry.capability, allowed: Boolean(entry.allowed) }));
+  const memberships = membershipRows.results as MembershipRow[];
+  const managedTeamIds = memberships
+    .filter((membership) => ["OWNER", "LEADER"].includes(membership.membership_role.toUpperCase()))
+    .map((membership) => membership.team_id);
+  const requestTeamIds = memberships
+    .filter((membership) => Boolean(membership.can_request_series) || ["OWNER", "LEADER"].includes(membership.membership_role.toUpperCase()))
+    .map((membership) => membership.team_id);
+  const uploadTeamIds = memberships
+    .filter((membership) => membership.verification_status === "VERIFIED" && ["OWNER", "LEADER", "UPLOADER"].includes(membership.membership_role.toUpperCase()))
+    .map((membership) => membership.team_id);
+  const primaryRole = highestRole(effectiveRoles) as keyof typeof ROLES;
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    primaryRole,
+    roles: effectiveRoles,
+    avatarUrl: row.avatar_key && row.profile_username
+      ? `/api/v1/profile-media?username=${encodeURIComponent(row.profile_username)}&slot=avatar&v=${Number(row.profile_revision ?? 1)}`
+      : null,
+    teamIds: memberships.map((membership) => membership.team_id),
+    managedTeamIds,
+    requestTeamIds,
+    uploadTeamIds,
+    canUseUploadCenter: requestTeamIds.length > 0 || uploadTeamIds.length > 0 || managedTeamIds.length > 0 || effectiveRoles.some((role) => role === ROLES.OWNER || role === ROLES.ADMINISTRATOR),
+    authMethod: "PASSWORD",
+    adminMfaRequired: false,
+    adminMfaEnrolled: false,
+    adminMfaVerified: false,
+    adminMfaExpiresAt: null,
+    permissionOverrides,
+  };
+}
+
 export function actorHasCapability(actor: Actor, capability: string) {
   if (actor.roles.includes(ROLES.OWNER)) return true;
   if (NON_DELEGABLE_CAPABILITIES.has(capability)) return false;

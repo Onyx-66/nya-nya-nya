@@ -1,18 +1,38 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import { API_KEY_SCOPES, createApiKeyMaterial } from "@/lib/server/api-keys";
+import {
+  API_KEY_SCOPES,
+  BOT_API_KEY_SCOPES,
+  createApiKeyMaterial,
+  createBotApiKeyMaterial,
+} from "@/lib/server/api-keys";
 import { assertSameOrigin, auditStatement, requestIdFor } from "@/lib/server/admin-utils";
 import { requireActor, requireOwner } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
 
-const scopesSchema = z.array(z.enum(API_KEY_SCOPES)).min(1).max(API_KEY_SCOPES.length);
+const ALL_API_KEY_SCOPES = [...API_KEY_SCOPES, ...BOT_API_KEY_SCOPES] as const;
+const scopesSchema = z.array(z.enum(ALL_API_KEY_SCOPES)).min(1).max(ALL_API_KEY_SCOPES.length);
 const createSchema = z.object({
+  clientType: z.enum(["EXTERNAL_API", "DISCORD_BOT"]).default("EXTERNAL_API"),
   appName: z.string().trim().min(2).max(100),
   scopes: scopesSchema,
   allowedTeamId: z.string().trim().min(3).max(160).nullable().default(null),
   expiresAt: z.string().datetime().nullable().default(null),
+}).superRefine((value, context) => {
+  const allowed = value.clientType === "DISCORD_BOT"
+    ? new Set<string>(BOT_API_KEY_SCOPES)
+    : new Set<string>(API_KEY_SCOPES);
+  value.scopes.forEach((scope, index) => {
+    if (!allowed.has(scope)) {
+      context.addIssue({
+        code: "custom",
+        path: ["scopes", index],
+        message: `This scope is not valid for ${value.clientType.toLowerCase()}.`,
+      });
+    }
+  });
 });
 
 function database() {
@@ -32,8 +52,9 @@ async function listKeys() {
   const db = database();
   const [keys, teams] = await Promise.all([
     db.prepare(
-      `SELECT ak.id, ak.app_name AS appName, ak.key_prefix AS keyPrefix,
-              ak.scopes_json AS scopesJson, ak.allowed_team_id AS allowedTeamId,
+      `SELECT ak.id, ak.client_type AS clientType, ak.app_name AS appName,
+              ak.key_prefix AS keyPrefix, ak.scopes_json AS scopesJson,
+              ak.allowed_team_id AS allowedTeamId,
               t.name AS allowedTeamName, ak.status, ak.expires_at AS expiresAt,
               ak.last_used_at AS lastUsedAt, ak.request_count AS requestCount,
               ak.revision, ak.created_at AS createdAt, ak.updated_at AS updatedAt,
@@ -49,12 +70,12 @@ async function listKeys() {
   return {
     keys: keys.results.map((row) => ({
       ...row,
-      maskedKey: `nya_live_${String(row.keyPrefix)}_••••••••`,
+      maskedKey: `${row.clientType === "DISCORD_BOT" ? "nya_bot" : "nya_live"}_${String(row.keyPrefix)}_••••••••`,
       scopes: (() => { try { return JSON.parse(String(row.scopesJson)); } catch { return []; } })(),
       scopesJson: undefined,
     })),
     teams: teams.results,
-    availableScopes: API_KEY_SCOPES,
+    availableScopes: ALL_API_KEY_SCOPES,
   };
 }
 
@@ -72,13 +93,15 @@ export async function GET(request: Request) {
 async function insertKey(payload: z.infer<typeof createSchema>, actorUserId: string) {
   const db = database();
   await validateTeam(payload.allowedTeamId);
-  const material = await createApiKeyMaterial();
+  const material = payload.clientType === "DISCORD_BOT"
+    ? await createBotApiKeyMaterial()
+    : await createApiKeyMaterial();
   await db.prepare(
     `INSERT INTO api_keys
-     (id, app_name, key_prefix, secret_hash, scopes_json, allowed_team_id,
+     (id, client_type, app_name, key_prefix, secret_hash, scopes_json, allowed_team_id,
       status, created_by_user_id, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`,
-  ).bind(material.id, payload.appName, material.prefix, material.secretHash, JSON.stringify([...new Set(payload.scopes)]), payload.allowedTeamId, actorUserId, payload.expiresAt).run();
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`,
+  ).bind(material.id, payload.clientType, payload.appName, material.prefix, material.secretHash, JSON.stringify([...new Set(payload.scopes)]), payload.allowedTeamId, actorUserId, payload.expiresAt).run();
   return material;
 }
 
@@ -117,10 +140,11 @@ export async function PATCH(request: Request) {
     const id = z.string().trim().min(3).max(160).parse(raw.id);
     const revision = z.coerce.number().int().min(1).parse(raw.revision);
     const current = await db.prepare(
-      `SELECT id, app_name AS appName, scopes_json AS scopesJson,
-              allowed_team_id AS allowedTeamId, expires_at AS expiresAt,
+      `SELECT id, client_type AS clientType, app_name AS appName,
+              scopes_json AS scopesJson, allowed_team_id AS allowedTeamId,
+              expires_at AS expiresAt,
               status, revision FROM api_keys WHERE id = ? LIMIT 1`,
-    ).bind(id).first<{ id: string; appName: string; scopesJson: string; allowedTeamId: string | null; expiresAt: string | null; status: string; revision: number }>();
+    ).bind(id).first<{ id: string; clientType: "EXTERNAL_API" | "DISCORD_BOT"; appName: string; scopesJson: string; allowedTeamId: string | null; expiresAt: string | null; status: string; revision: number }>();
     if (!current || Number(current.revision) !== revision) throw new ApiError(409, "STALE_VERSION", "This API key changed. Reload and try again.");
     if (current.status !== "ACTIVE") throw new ApiError(409, "API_KEY_INACTIVE", "Only an active key can be reset or revoked.");
     if (action === "REVOKE") {
@@ -132,14 +156,16 @@ export async function PATCH(request: Request) {
       return json(requestId, await listKeys());
     }
     const scopes = scopesSchema.parse(JSON.parse(current.scopesJson));
-    const material = await createApiKeyMaterial();
+    const material = current.clientType === "DISCORD_BOT"
+      ? await createBotApiKeyMaterial()
+      : await createApiKeyMaterial();
     const results = await db.batch([
       db.prepare(
         `INSERT INTO api_keys
-         (id, app_name, key_prefix, secret_hash, scopes_json, allowed_team_id,
+         (id, client_type, app_name, key_prefix, secret_hash, scopes_json, allowed_team_id,
           status, created_by_user_id, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`,
-      ).bind(material.id, current.appName, material.prefix, material.secretHash, JSON.stringify(scopes), current.allowedTeamId, actor.id, current.expiresAt),
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`,
+      ).bind(material.id, current.clientType, current.appName, material.prefix, material.secretHash, JSON.stringify(scopes), current.allowedTeamId, actor.id, current.expiresAt),
       db.prepare(
         `UPDATE api_keys SET status = 'ROTATED', replaced_by_key_id = ?,
                 revision = revision + 1, updated_at = CURRENT_TIMESTAMP

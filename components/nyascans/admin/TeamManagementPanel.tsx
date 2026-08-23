@@ -8,6 +8,7 @@ import {
   CaretLeft,
   CaretRight,
   ChatCircle,
+  Copy,
   Clock,
   Eye,
   EyeSlash,
@@ -40,6 +41,7 @@ import {
 
 type TeamRecord = {
   id: string;
+  publicRef: string;
   slug: string;
   name: string;
   description: string;
@@ -108,6 +110,7 @@ type TeamRecord = {
 type TeamDraft = Pick<
   TeamRecord,
   | "id"
+  | "publicRef"
   | "revision"
   | "name"
   | "slug"
@@ -134,6 +137,7 @@ type TeamConfirmation =
 
 const emptyDraft: TeamDraft = {
   id: "",
+  publicRef: "",
   revision: 1,
   name: "",
   slug: "",
@@ -756,6 +760,11 @@ export function TeamManagementPanel() {
                 </div>
               </div>
               <div className="admin-form-grid">
+                <label>
+                  Public team reference
+                  <output className="admin-readonly-value"><code>{draft.publicRef || "Assigned after creation"}</code>{draft.publicRef ? <button className="button button-secondary" type="button" onClick={() => void navigator.clipboard.writeText(draft.publicRef)}><Copy size={15} /> Copy</button> : null}</output>
+                  <small>Immutable TM- reference used by Bot API integrations. It cannot be edited or regenerated.</small>
+                </label>
                 <label>
                   Team name <b>Required</b>
                   <input

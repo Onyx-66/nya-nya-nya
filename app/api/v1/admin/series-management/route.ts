@@ -17,6 +17,7 @@ import {
   sha256Hex,
 } from "@/lib/server/admin-utils";
 import { requireActor, requireAdminCapability } from "@/lib/server/policy";
+import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 import { findNormalizedEquivalent } from "@/lib/server/taxonomy-equivalence";
 
@@ -728,7 +729,7 @@ async function saveSeries(
   const current = input.id
     ? await db
         .prepare(
-          `SELECT id, title, native_title AS nativeTitle, revision,
+          `SELECT id, public_ref AS publicRef, title, native_title AS nativeTitle, revision,
                   cover_key AS coverKey,
                   banner_key AS bannerKey, slider_key AS sliderKey,
                   archived_at AS archivedAt
@@ -737,6 +738,7 @@ async function saveSeries(
         .bind(input.id)
         .first<{
           id: string;
+          publicRef: string;
           title: string;
           nativeTitle: string | null;
           revision: number;
@@ -772,6 +774,7 @@ async function saveSeries(
       "Series media cannot be removed while object storage is unavailable.",
     );
   }
+  const publicRef = current?.publicRef ?? newPublicReference("SERIES");
   const relationships = await resolveRelationships(
     db,
     input,
@@ -875,7 +878,7 @@ async function saveSeries(
     : db
         .prepare(
           `INSERT INTO series
-           (id, slug, title, native_title, synopsis, type, status,
+           (id, public_ref, slug, title, native_title, synopsis, type, status,
             origin_country, original_language, reading_direction,
             publication_year, publisher_id, age_rating, access_type,
             rights_status, is_published, revision, created_at, updated_at)
@@ -883,6 +886,7 @@ async function saveSeries(
         )
         .bind(
           id,
+          publicRef,
           input.slug,
           input.title,
           nativeTitle,
@@ -902,6 +906,9 @@ async function saveSeries(
         );
   const coreIndex = statements.length;
   statements.push(coreStatement);
+  if (!current) {
+    statements.push(publicReferenceReservationStatement(db, "SERIES", publicRef, id));
+  }
 
   const gate = gatedWhere(id, nextRevision, operationTime);
   const gateValues = gate.values;

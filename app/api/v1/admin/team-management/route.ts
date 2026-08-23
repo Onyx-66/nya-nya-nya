@@ -8,6 +8,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { requireActor, requireAdminCapability } from "@/lib/server/policy";
+import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ const teamSchema = z.object({
 
 type TeamRow = {
   id: string;
+  publicRef: string;
   slug: string;
   name: string;
   description: string;
@@ -113,6 +115,7 @@ function assetUrl(
 function mapTeam(row: TeamRow) {
   return {
     id: row.id,
+    publicRef: row.publicRef,
     slug: row.slug,
     name: row.name,
     description: row.description,
@@ -145,7 +148,7 @@ function mapTeam(row: TeamRow) {
 }
 
 const teamSelect = `
-  SELECT t.id, t.slug, t.name, t.description,
+  SELECT t.id, t.public_ref AS publicRef, t.slug, t.name, t.description,
          t.logo_key AS logoKey, t.banner_key AS bannerKey,
          t.staff_badge_key AS staffBadgeKey,
          t.comment_effect_type AS commentEffectType,
@@ -366,10 +369,10 @@ async function saveTeam(
   const current = payload.id
     ? await db
         .prepare(
-          "SELECT name, slug, verification_status AS verificationStatus, revision FROM teams WHERE id = ? LIMIT 1",
+          "SELECT name, slug, public_ref AS publicRef, verification_status AS verificationStatus, revision FROM teams WHERE id = ? LIMIT 1",
         )
         .bind(payload.id)
-        .first<{ name: string; slug: string; verificationStatus: string; revision: number }>()
+        .first<{ name: string; slug: string; publicRef: string; verificationStatus: string; revision: number }>()
     : null;
   if (payload.id && !current) {
     throw new ApiError(
@@ -405,6 +408,7 @@ async function saveTeam(
     ).bind(id).first();
     if (!verifiedClaim) throw new ApiError(409, "TEAM_OWNERSHIP_REVIEW_REQUIRED", "Approve a valid ownership claim before verifying this team.");
   }
+  const publicRef = current?.publicRef ?? newPublicReference("TEAM");
   const effectConfig = JSON.stringify({
     accentColor: payload.effect.accentColor,
     intensity: payload.effect.intensity,
@@ -448,7 +452,7 @@ async function saveTeam(
     : db
         .prepare(
           `INSERT INTO teams
-           (id, slug, name, description, verification_status, is_archived,
+           (id, public_ref, slug, name, description, verification_status, is_archived,
             can_control_fixed_reader_pages,
             comment_effect_type, comment_effect_enabled,
             comment_effect_config_json, revision)
@@ -456,6 +460,7 @@ async function saveTeam(
         )
         .bind(
           id,
+          publicRef,
           payload.slug,
           payload.name,
           payload.description,
@@ -468,6 +473,7 @@ async function saveTeam(
         );
   const results = await db.batch([
     mutation,
+    ...(current ? [] : [publicReferenceReservationStatement(db, "TEAM", publicRef, id)]),
     auditStatement(
       db,
       actor,

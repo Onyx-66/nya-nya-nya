@@ -15,6 +15,7 @@ import { AdminCombobox, AdminPageScaffold, ConfirmActionDialog } from "@/compone
 
 type ApiKeyRecord = {
   id: string;
+  clientType: "EXTERNAL_API" | "DISCORD_BOT";
   appName: string;
   maskedKey: string;
   scopes: string[];
@@ -44,8 +45,9 @@ async function readJson(response: Response): Promise<ApiPayload> {
 export function ApiControlPanel() {
   const [data, setData] = useState<ApiPayload>({ keys: [], teams: [], availableScopes: [] });
   const [appName, setAppName] = useState("");
+  const [clientType, setClientType] = useState<"EXTERNAL_API" | "DISCORD_BOT">("DISCORD_BOT");
   const [teamId, setTeamId] = useState("");
-  const [scopes, setScopes] = useState<string[]>(["series:read", "upload:chapter"]);
+  const [scopes, setScopes] = useState<string[]>(["bot:series:create", "bot:chapter:create"]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [revealedSecret, setRevealedSecret] = useState("");
@@ -81,11 +83,13 @@ export function ApiControlPanel() {
       const next = await readJson(await fetch("/api/v1/admin/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ appName, scopes, allowedTeamId: teamId || null, expiresAt: null }),
+        body: JSON.stringify({ clientType, appName, scopes, allowedTeamId: teamId || null, expiresAt: null }),
       }));
       setData(next);
       setRevealedSecret(next.created?.secret ?? "");
       setAppName("");
+      setClientType("DISCORD_BOT");
+      setScopes(["bot:series:create", "bot:chapter:create"]);
       setMessage({ kind: "success", text: "API key created. Copy it now; the full value will never be shown again." });
     } catch (error) {
       setMessage({ kind: "error", text: error instanceof Error ? error.message : "API key could not be created." });
@@ -196,9 +200,10 @@ export function ApiControlPanel() {
       <section className="v46-api-create">
         <header><span>New application</span><h3>Create a scoped API key</h3></header>
         <div className="v46-api-form">
+          <label><span>Credential type</span><select value={clientType} onChange={(event) => { const next = event.target.value as "EXTERNAL_API" | "DISCORD_BOT"; setClientType(next); setScopes(next === "DISCORD_BOT" ? ["bot:series:create", "bot:chapter:create"] : ["series:read", "upload:chapter"]); }}><option value="DISCORD_BOT">Discord Bot</option><option value="EXTERNAL_API">Trusted external API</option></select></label>
           <label><span>Application name</span><input value={appName} placeholder="NyaScans Discord Bot" maxLength={100} onChange={(event) => setAppName(event.target.value)} /></label>
           <label><span>Publishing team</span><AdminCombobox ariaLabel="Publishing team" value={teamId} emptyLabel="All verified teams" options={data.teams.map((team) => ({ value: team.id, label: team.name, description: team.slug }))} onChange={setTeamId} /></label>
-          <fieldset><legend>Scopes</legend>{data.availableScopes.map((scope) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} /><span><strong>{scope}</strong><small>{scope === "series:create" ? "Create private series drafts" : scope === "upload:chapter" ? "Create chapter upload jobs" : "Read series metadata"}</small></span></label>)}</fieldset>
+          <fieldset><legend>Scopes</legend>{data.availableScopes.filter((scope) => clientType === "DISCORD_BOT" ? scope.startsWith("bot:") : !scope.startsWith("bot:")).map((scope) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} /><span><strong>{scope}</strong><small>{scope.includes(":series:") ? "Create or read series metadata" : scope.includes(":thumbnail") ? "Set or replace chapter thumbnails" : scope.includes(":publish") ? "Publish assigned chapters" : "Create or manage chapter upload jobs"}</small></span></label>)}</fieldset>
           <button className="button button-primary" type="button" disabled={busy || !appName.trim() || !scopes.length} onClick={() => void createKey()}>{busy ? <SpinnerGap className="spin" /> : <Plus />} Create key</button>
         </div>
       </section>
@@ -214,7 +219,7 @@ export function ApiControlPanel() {
           ))}
         </div>
       </section>
-      <section className="v46-api-docs"><h3>Bot endpoints</h3><code>GET /api/external/v1/series</code><code>POST /api/external/v1/series</code><code>POST /api/external/v1/upload-jobs</code><p>Send <code>Authorization: Bearer …</code>. Mutating calls also require an <code>Idempotency-Key</code>.</p></section>
+      <section className="v46-api-docs"><h3>Bot endpoints</h3><code>GET /api/v1/bot/series</code><code>POST /api/v1/bot/series</code><code>POST /api/v1/bot/chapters</code><code>POST /api/v1/bot/chapters/bulk</code><p>Use a Discord Bot key with <code>Authorization: Bearer …</code>. Mutating calls require an <code>Idempotency-Key</code>; uploads may return <code>202 PROCESSING</code>.</p></section>
       <ConfirmActionDialog open={Boolean(confirm)} title={confirm?.action === "RESET" ? "Reset this API key?" : "Revoke this API key?"} description={confirm?.action === "RESET" ? "The current key will stop working immediately and a replacement secret will be shown once." : "The application will lose access immediately. This cannot be undone."} confirmLabel={confirm?.action === "RESET" ? "Reset and reveal new key" : "Revoke key"} destructive={confirm?.action === "REVOKE"} busy={busy} onCancel={() => setConfirm(null)} onConfirm={() => void applyAction()} />
     </AdminPageScaffold>
   );
