@@ -51681,7 +51681,7 @@ html[data-profile-theme="crazy-orange-nya"] .recent-review-card:hover { border-c
 
 /* v48.15.8: Recent Reviews must not own a painted outer container. */
 .recent-reviews-section {
-  display: contents !important;
+  display: block !important;
 }
 .recent-reviews-section > .v481-feature-heading,
 .recent-reviews-section > .recent-reviews-rail {
@@ -58642,4 +58642,87 @@ body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button sv
   background: linear-gradient(135deg, #e45692, #ff7aa9 56%, #ff9fbe);
   color: #fff;
   text-transform: none;
+}
+
+
+/* v49.10.6 — align Recent Reviews with the shared homepage page-wrap and refine Browse controls. */
+.home-main .recent-reviews-section {
+  display: block !important;
+  width: var(--page) !important;
+  margin-inline: auto !important;
+  padding-block: 0 !important;
+}
+
+.home-main .recent-reviews-section > .v481-feature-heading,
+.home-main .recent-reviews-section > .recent-reviews-rail {
+  width: 100% !important;
+  margin-inline: 0 !important;
+}
+
+.home-main .recent-reviews-section > .v481-feature-heading {
+  margin-top: clamp(2rem, 3vw, 2.75rem) !important;
+}
+
+.home-main .recent-reviews-section > .recent-reviews-rail {
+  margin-bottom: clamp(2rem, 3vw, 2.75rem) !important;
+}
+
+/* The two Latest Updates view buttons stay visible; only their shared outer frame is removed. */
+.home-main .latest-style-choices {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.home-main .latest-style-choices .latest-style-toggle {
+  box-shadow: none;
+}
+
+/* Recent Reviews uses the same compact pink badge contract as the other homepage cards. */
+.home-main .recent-review-discount-badge {
+  border-color: rgb(255 166 197 / 78%) !important;
+  background: linear-gradient(135deg, #e45692, #ff7aa9 56%, #ff9fbe) !important;
+  color: #fff !important;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+
+/* Restore the v49.10.4 grid width while reducing the control height. */
+body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
+  width: min(calc(100% - 1.8rem), 7.2rem) !important;
+  min-width: 0 !important;
+  height: 2.2rem !important;
+  min-height: 2.2rem !important;
+  margin-inline: auto !important;
+}
+
+/* Status badges size to their own text instead of sharing a fixed width. */
+body:has(.catalog-toolbar) .catalog-cover-bottom-badges .series-status-badge,
+body:has(.catalog-toolbar) .series-list-content .series-status-badge {
+  width: max-content !important;
+  min-width: max-content !important;
+  max-width: calc(100% - 2.8rem) !important;
+  flex: 0 1 auto !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 720px) {
+  body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
+    width: min(calc(100% - 1.8rem), 7.2rem) !important;
+    height: 2.15rem !important;
+    min-height: 2.15rem !important;
+  }
+}
+
+
+/* v49.10.7 — the list heart must occupy one centered grid track; hidden text cannot create a second row. */
+body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button {
+  grid-template-rows: 1fr !important;
+  font-size: 0 !important;
+}
+
+body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button svg {
+  grid-row: 1 !important;
 }

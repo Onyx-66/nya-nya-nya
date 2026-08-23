@@ -4831,6 +4831,8 @@ function CatalogFollowButton({
     return () => controller.abort();
   }, [actor, item.slug]);
 
+  const isListMode = className.split(/\s+/).includes("list-follow-button");
+
   async function toggleFollow() {
     if (!actor) {
       window.location.href = authEntryPath("login", `/title/${item.slug}`);
@@ -4870,7 +4872,7 @@ function CatalogFollowButton({
       onClick={() => void toggleFollow()}
     >
       <Heart size={18} weight={following ? "fill" : "regular"} />
-      {busy ? "Saving…" : following ? "Following" : "Follow"}
+      {isListMode ? null : busy ? "Saving…" : following ? "Following" : "Follow"}
     </button>
   );
 }

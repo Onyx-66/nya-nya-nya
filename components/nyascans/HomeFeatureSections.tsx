@@ -845,7 +845,7 @@ export function RecentReviewsSection() {
               >
                 <div className="recent-review-cover">
                   <CoverArtwork src={review.coverUrl} title={review.seriesTitle} />
-                  <ActiveDiscountBadge seriesSlug={review.seriesSlug} />
+                  <ActiveDiscountBadge seriesSlug={review.seriesSlug} className="recent-review-discount-badge" />
                 </div>
                 <div className="recent-review-copy">
                   <strong>{review.seriesTitle}</strong>
