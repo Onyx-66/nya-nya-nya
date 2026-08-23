@@ -58597,7 +58597,7 @@ select:focus-visible {
 }
 
 body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
-  width: min(calc(100% - 1.8rem), 7.2rem) !important;
+  width: min(calc(100% - 1.8rem), 6rem) !important;
   min-width: 0 !important;
   margin-inline: auto !important;
 }
@@ -58625,7 +58625,7 @@ body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button sv
   }
 
   body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
-    width: min(calc(100% - 1.8rem), 7.2rem) !important;
+    width: min(calc(100% - 1.8rem), 6rem) !important;
   }
 }
 
