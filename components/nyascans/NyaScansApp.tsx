@@ -3230,13 +3230,9 @@ function continueReadingRelativeTime(value: string) {
 
 function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
   const [records, setRecords] = useState<ContinueReadingRecord[]>([]);
-  const [viewMode, setViewMode] = useState<"LIST" | "SHELF">("LIST");
   const [loading, setLoading] = useState(signedIn);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [savingViewMode, setSavingViewMode] = useState(false);
-  const [preferenceError, setPreferenceError] = useState("");
-  const viewModeRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -3248,7 +3244,6 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
       .then(async (response) => {
         const payload = (await response.json()) as {
           data?: ContinueReadingRecord[];
-          preferences?: { viewMode?: "LIST" | "SHELF" };
           error?: { message?: string };
         };
         if (!response.ok) {
@@ -3257,9 +3252,6 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
           );
         }
         setRecords(payload.data ?? []);
-        setViewMode(
-          payload.preferences?.viewMode === "SHELF" ? "SHELF" : "LIST",
-        );
       })
       .catch((loadError: unknown) => {
         if (!controller.signal.aborted) {
@@ -3276,50 +3268,10 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
     return () => controller.abort();
   }, [revision, signedIn]);
 
-  useEffect(
-    () => () => {
-      viewModeRequest.current?.abort();
-    },
-    [],
-  );
-
-  async function chooseViewMode(next: "LIST" | "SHELF") {
-    if (next === viewMode || loading || savingViewMode) return;
-    const previous = viewMode;
-    const controller = new AbortController();
-    viewModeRequest.current?.abort();
-    viewModeRequest.current = controller;
-    setPreferenceError("");
-    setSavingViewMode(true);
-    setViewMode(next);
-    try {
-      const response = await fetch("/api/v1/continue-reading", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ viewMode: next }),
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error("Preference was not saved.");
-    } catch (saveError) {
-      if (!controller.signal.aborted) {
-        setViewMode(previous);
-        setPreferenceError(
-          saveError instanceof Error
-            ? saveError.message
-            : "View preference was not saved.",
-        );
-      }
-    } finally {
-      if (viewModeRequest.current === controller) {
-        viewModeRequest.current = null;
-        setSavingViewMode(false);
-      }
-    }
-  }
 
   return (
     <section
-      className={`continue-reading-section page-wrap tone-continue is-${viewMode.toLowerCase()}`}
+      className="continue-reading-section page-wrap tone-continue is-list"
       aria-labelledby="continue-reading-title"
     >
       <header className="continue-reading-heading">
@@ -3330,11 +3282,6 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
           <span className="section-heading-divider" aria-hidden="true" />
           <div>
             <h2 id="continue-reading-title">Continue reading</h2>
-          {preferenceError ? (
-            <p className="continue-reading-preference-error" role="alert">
-              {preferenceError}
-            </p>
-          ) : null}
           </div>
         </div>
         {signedIn ? (
@@ -3342,34 +3289,6 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
             <a className="button button-secondary latest-all-action" href="/library">
               Library <ArrowRight size={15} />
             </a>
-            <div
-              className="continue-reading-view-switcher"
-              role="group"
-              aria-label="Continue Reading view"
-              aria-busy={savingViewMode}
-            >
-              <button
-                type="button"
-                aria-label="List view"
-                title="List view"
-                disabled={loading || savingViewMode}
-                aria-pressed={viewMode === "LIST"}
-                onClick={() => void chooseViewMode("LIST")}
-              >
-                <List size={18} />
-              </button>
-              <button
-                type="button"
-                aria-label="Cover shelf"
-                title="Cover shelf"
-                disabled={loading || savingViewMode}
-                aria-pressed={viewMode === "SHELF"}
-                onClick={() => void chooseViewMode("SHELF")}
-              >
-                <SquaresFour size={18} />
-              </button>
-            </div>
-
           </div>
         ) : null}
       </header>

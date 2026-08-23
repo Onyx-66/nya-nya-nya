@@ -58651,6 +58651,10 @@ body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button sv
   width: var(--page) !important;
   margin-inline: auto !important;
   padding-block: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }
 
 .home-main .recent-reviews-section > .v481-feature-heading,
@@ -58693,8 +58697,8 @@ body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button sv
 body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
   width: min(calc(100% - 1.8rem), 7.2rem) !important;
   min-width: 0 !important;
-  height: 2.2rem !important;
-  min-height: 2.2rem !important;
+  height: 1.95rem !important;
+  min-height: 1.95rem !important;
   margin-inline: auto !important;
 }
 
@@ -58711,8 +58715,8 @@ body:has(.catalog-toolbar) .series-list-content .series-status-badge {
 @media (max-width: 720px) {
   body:has(.catalog-toolbar) .catalog-grid .catalog-series-card .catalog-card-follow {
     width: min(calc(100% - 1.8rem), 7.2rem) !important;
-    height: 2.15rem !important;
-    min-height: 2.15rem !important;
+    height: 1.9rem !important;
+    min-height: 1.9rem !important;
   }
 }
 

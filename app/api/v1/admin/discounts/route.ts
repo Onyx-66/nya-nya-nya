@@ -73,11 +73,13 @@ const deleteSchema = z.object({
 
 async function requireDiscountsActive() {
   const states = await getFeatureStates();
-  if (!states.premium_unlocks.effective || !states.payments.effective) {
+  if (!states.premium_unlocks.effective) {
     throw new ApiError(
       404,
       "DISCOUNTS_UNAVAILABLE",
-      "Discounts are hidden while the paid system is unavailable.",
+      "Discounts are hidden while the paid system is private.",
+      undefined,
+      { feature: "premium_unlocks", reason: states.premium_unlocks.reason },
     );
   }
 }

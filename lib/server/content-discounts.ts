@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
 import { auditStatement } from "@/lib/server/admin-utils";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
+import { getFeatureStates } from "@/lib/server/feature-flags";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
@@ -224,7 +225,7 @@ export async function listAdminDiscounts(query = "") {
   const db = database();
   const normalized = query.trim().toLowerCase();
   const escaped = `%${normalized.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
-  const [discounts, targets, commercial] = await Promise.all([
+  const [discounts, targets, commercial, featureStates] = await Promise.all([
     db
       .prepare(
         `${discountSelect}
@@ -273,6 +274,7 @@ export async function listAdminDiscounts(query = "") {
         chapterPrice: number | null;
       }>(),
     getCommercialSettingsDocument(),
+    getFeatureStates(db),
   ]);
   return {
     discounts: discounts.results.map(serializeDiscount),
@@ -289,9 +291,7 @@ export async function listAdminDiscounts(query = "") {
         target.seriesRevision,
       ),
     })),
-    paidSystemEnabled:
-      commercial.settings.economy.premiumEconomyPublic &&
-      !commercial.recoveredFromInvalid,
+    paidSystemEnabled: featureStates.premium_unlocks.effective,
   };
 }
 
