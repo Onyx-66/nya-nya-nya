@@ -58753,3 +58753,58 @@ body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button sv
 .editors-pick-state-card span {
   color: var(--text);
 }
+
+/* Desktop-only navigation for horizontally scrollable Home rails. The buttons reuse the
+   Pinned Series arrow treatment; mobile keeps the original touch/swipe-only rows. */
+.home-scroll-row {
+  position: relative;
+  min-width: 0;
+  padding-inline: 1.45rem;
+}
+
+.home-scroll-row > .home-rail-controls {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.home-rail-controls .v481-pinned-arrow {
+  position: relative;
+  inset: auto;
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.8rem;
+  height: 2.8rem;
+  padding: 0;
+  transform: none;
+  pointer-events: auto;
+}
+
+.home-rail-controls .v481-pinned-arrow.is-previous,
+.home-rail-controls .v481-pinned-arrow.is-next {
+  right: auto;
+  left: auto;
+}
+
+.home-scroll-row > .series-rail,
+.home-scroll-row > .recent-reviews-rail,
+.home-scroll-row > .new-series-grid {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .home-scroll-row {
+    padding-inline: 0;
+  }
+
+  .home-scroll-row > .home-rail-controls {
+    display: none;
+  }
+}

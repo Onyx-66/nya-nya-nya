@@ -22,6 +22,7 @@ import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { languageName } from "@/lib/language-flags";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
+import { HomeRailControls } from "@/components/nyascans/HomeRailControls";
 
 type NewSeriesRecord = {
   id: string;
@@ -307,9 +308,11 @@ export function NewSeriesSection() {
           <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
         </div>
       ) : records.length ? (
-        <div
-          className="new-series-grid"
-          ref={railRef}
+        <div className="home-scroll-row">
+          <HomeRailControls railRef={railRef} label="New Series" />
+          <div
+            className="new-series-grid"
+            ref={railRef}
           tabIndex={0}
           aria-label="New series carousel"
           onKeyDown={(event) => {
@@ -344,7 +347,8 @@ export function NewSeriesSection() {
                 ) : null}
               </span>
             </a>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
         <div className="public-discovery-empty">

@@ -101,6 +101,7 @@ import {
   PinnedSeriesDirectory,
   PinnedSeriesSection,
 } from "@/components/nyascans/HomeFeatureSections";
+import { HomeRailControls } from "@/components/nyascans/HomeRailControls";
 import { SupportTicketPanel } from "@/components/nyascans/SupportTicketPanel";
 import { useSystemNotifications } from "@/components/nyascans/SystemNotifications";
 import { LibraryWorkspace } from "@/components/nyascans/LibraryWorkspace";
@@ -3047,9 +3048,11 @@ function TrendingShowcase() {
             <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
           </div>
         ) : ordered.length ? (
-        <div
-          className="series-rail trending-rail"
-          ref={railRef}
+        <div className="home-scroll-row">
+          <HomeRailControls railRef={railRef} label="Trending" />
+          <div
+            className="series-rail trending-rail"
+            ref={railRef}
           aria-live="polite"
           aria-label="Trending series"
           tabIndex={0}
@@ -3062,22 +3065,23 @@ function TrendingShowcase() {
               moveRail(1);
             }
           }}
-        >
-          {ordered.map((item, index) => (
-            <div
-              className={`ranked-card${index < 3 ? ` is-top-${index + 1}` : ""}`}
-              key={item.id}
-            >
-              <SeriesCardView
-                item={liveSeriesCard(item)}
-                hideSubtitle
-                trendingStats={{
-                  views: Number(item.viewCount ?? 0),
-                  followers: Number(item.followerCount ?? 0),
-                }}
-              />
-            </div>
-          ))}
+          >
+            {ordered.map((item, index) => (
+              <div
+                className={`ranked-card${index < 3 ? ` is-top-${index + 1}` : ""}`}
+                key={item.id}
+              >
+                <SeriesCardView
+                  item={liveSeriesCard(item)}
+                  hideSubtitle
+                  trendingStats={{
+                    views: Number(item.viewCount ?? 0),
+                    followers: Number(item.followerCount ?? 0),
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
         ) : (
           <EmptyState

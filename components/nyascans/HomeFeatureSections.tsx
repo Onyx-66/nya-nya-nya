@@ -27,6 +27,7 @@ import {
   type CommercialSettings,
 } from "@/lib/commercial-settings";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
+import { HomeRailControls } from "@/components/nyascans/HomeRailControls";
 
 export type PinnedSeriesRecord = {
   id: string;
@@ -851,13 +852,15 @@ export function RecentReviewsSection() {
         title="Recent Reviews"
         allHref="/latest?view=reviews"
       />
-      <div
-        ref={railRef}
-        className="recent-reviews-rail"
-        aria-busy={loading}
-        onScroll={syncActiveReview}
-        onPointerUp={syncActiveReview}
-      >
+      <div className="home-scroll-row">
+        <HomeRailControls railRef={railRef} label="Recent Reviews" />
+        <div
+          ref={railRef}
+          className="recent-reviews-rail"
+          aria-busy={loading}
+          onScroll={syncActiveReview}
+          onPointerUp={syncActiveReview}
+        >
         {loading
           ? Array.from({ length: 3 }, (_, index) => <span className="recent-review-skeleton" key={index} />)
           : error ? (
@@ -894,6 +897,7 @@ export function RecentReviewsSection() {
               </a>
             ))
             : <div className="recent-reviews-empty"><Star size={26} /><strong>No reviews yet</strong><span>Reader reviews will appear here as the community rates published series.</span></div>}
+        </div>
       </div>
     </div>
   );
