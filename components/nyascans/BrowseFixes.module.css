@@ -28,10 +28,10 @@
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-top-badges .series-type-badge.is-flag-only) {
-    width: 2rem;
-    min-width: 2rem;
-    height: 1.65rem;
-    min-height: 1.65rem;
+    width: 1.78rem;
+    min-width: 1.78rem;
+    height: 1.48rem;
+    min-height: 1.48rem;
     box-sizing: border-box;
     justify-content: center;
     padding: 0;
@@ -40,15 +40,15 @@
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-top-badges .catalog-rating-badge) {
     position: static !important;
     width: auto;
-    min-width: 3.35rem;
-    height: 1.65rem;
-    min-height: 1.65rem;
+    min-width: 3.05rem;
+    height: 1.48rem;
+    min-height: 1.48rem;
     box-sizing: border-box;
     justify-content: center;
     gap: 0.22rem;
     margin-left: auto;
-    padding-inline: 0.46rem;
-    font-size: 0.58rem;
+    padding-inline: 0.38rem;
+    font-size: 0.53rem;
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-bottom-badges) {
@@ -65,20 +65,20 @@
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-bottom-badges .series-status-badge),
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-bottom-badges .catalog-chapter-badge) {
-    min-height: 1.55rem;
+    min-height: 1.45rem;
     box-sizing: border-box;
-    border-radius: 0.48rem;
-    padding-inline: 0.46rem;
-    font-size: 0.56rem;
+    border-radius: 0.44rem;
+    padding-inline: 0.38rem;
+    font-size: 0.52rem;
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-bottom-badges .series-status-badge) {
-    max-width: calc(100% - 3.1rem);
-    flex: 0 1 auto;
+    max-width: calc(100% - 2.5rem);
+    flex: 1 1 auto;
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-cover-bottom-badges .catalog-chapter-badge) {
-    min-width: 2.5rem;
+    min-width: 2.25rem;
     margin-left: 0;
     justify-content: center;
   }

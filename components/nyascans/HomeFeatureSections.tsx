@@ -285,7 +285,8 @@ function FeatureHeading({
   return (
     <header className={`v481-feature-heading${tone ? ` tone-${tone}` : ""}`}>
       <div>
-        <span aria-hidden="true">{icon}</span>
+        <span className="section-heading-icon" aria-hidden="true">{icon}</span>
+        <span className="section-heading-divider" aria-hidden="true" />
         <h2>{title}</h2>
       </div>
       <div className="v481-heading-actions">
@@ -314,7 +315,7 @@ function PinnedSeriesCard({
       aria-label={`Open ${record.title}`}
     >
       <CoverArtwork src={bannerUrl} mobileSrc={mobileSliderUrl} title={record.title} eager={featured} />
-      <ActiveDiscountBadge seriesSlug={record.slug} />
+      <ActiveDiscountBadge seriesSlug={record.slug} className="is-pinned" showIcon={false} />
       <span className="v481-pin-shade" aria-hidden="true" />
       {featured ? <span className="v481-featured-badge">Featured</span> : null}
       <span className="v481-pin-copy">

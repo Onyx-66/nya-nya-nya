@@ -19,6 +19,7 @@ import { FormattedCommentText } from "@/components/nyascans/EnhancedDiscussionSe
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { TeamDiscussionPanel } from "@/components/nyascans/TeamDiscussionPanel";
 import { languageName } from "@/lib/language-flags";
+import { mockAvatarUrl, mockTeamBannerUrl, mockTeamLogoUrl } from "@/lib/mock-media";
 
 type PublicTeamSeries = {
   id: string;
@@ -132,15 +133,15 @@ function chapterLabel(chapter: string) {
 
 function TeamBanner({ team }: { team: PublicTeam }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const showImage = Boolean(
-    team.bannerUrl && failedUrl !== team.bannerUrl,
-  );
+  const fallbackUrl = mockTeamBannerUrl(team.id || team.name);
+  const imageUrl = failedUrl ? fallbackUrl : team.bannerUrl || fallbackUrl;
+  const showImage = Boolean(imageUrl);
 
   return (
     <span className="public-team-banner">
       {showImage ? (
         <img
-          src={team.bannerUrl!}
+          src={imageUrl}
           alt={`${team.name} banner`}
           onError={() => setFailedUrl(team.bannerUrl)}
         />
@@ -153,13 +154,15 @@ function TeamBanner({ team }: { team: PublicTeam }) {
 
 function TeamLogo({ team }: { team: PublicTeam }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const showImage = Boolean(team.logoUrl && failedUrl !== team.logoUrl);
+  const fallbackUrl = mockTeamLogoUrl(team.id || team.name);
+  const imageUrl = failedUrl ? fallbackUrl : team.logoUrl || fallbackUrl;
+  const showImage = Boolean(imageUrl);
 
   return (
     <span className="public-team-logo">
       {showImage ? (
         <img
-          src={team.logoUrl!}
+          src={imageUrl}
           alt={`${team.name} logo`}
           onError={() => setFailedUrl(team.logoUrl)}
         />
@@ -721,11 +724,17 @@ export function PublicTeamView({
                 const content = (
                   <>
                     <span className="public-team-member-avatar">
-                      {member.avatarUrl ? (
-                        <img src={member.avatarUrl} alt="" loading="lazy" />
-                      ) : (
-                        member.displayName.slice(0, 2).toUpperCase()
-                      )}
+                      <img
+                        src={member.avatarUrl || mockAvatarUrl(member.username || member.displayName)}
+                        alt=""
+                        loading="lazy"
+                        onError={(event) => {
+                          const fallback = mockAvatarUrl(member.username || member.displayName);
+                          if (event.currentTarget.src !== new URL(fallback, window.location.href).href) {
+                            event.currentTarget.src = fallback;
+                          }
+                        }}
+                      />
                     </span>
                     <span>
                       <strong>{member.displayName}</strong>

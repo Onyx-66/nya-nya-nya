@@ -3,6 +3,7 @@
 
 import {
   ArrowClockwise,
+  CaretDown,
   CheckCircle,
   DownloadSimple,
   GridFour,
@@ -54,6 +55,95 @@ function relativeDate(value: string | null) {
   if (days === 1) return "Yesterday";
   return `${days} days ago`;
 }
+
+type LibraryOption = { value: string; label: string };
+
+function LibraryDropdown({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: LibraryOption[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="library-dropdown-field" ref={rootRef}>
+      <span>{label}</span>
+      <div className={`library-dropdown${open ? " is-open" : ""}`}>
+        <button
+          className="library-dropdown-trigger"
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span>{selected?.label ?? "Choose an option"}</span>
+          <CaretDown size={16} aria-hidden="true" />
+        </button>
+        {open ? (
+          <div className="library-dropdown-menu" role="listbox" aria-label={label}>
+            {options.map((option) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span>{option.label}</span>
+                {option.value === value ? <CheckCircle size={16} weight="fill" aria-hidden="true" /> : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const libraryStatusOptions: LibraryOption[] = [
+  { value: "ALL", label: "All" },
+  { value: "READING", label: "Reading" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "PLANNING", label: "Plan to read" },
+  { value: "ON_HOLD", label: "On hold" },
+  { value: "DROPPED", label: "Dropped" },
+  { value: "UNREAD", label: "Unread updates" },
+];
+
+const librarySortOptions: LibraryOption[] = [
+  { value: "ACTIVITY", label: "Recently read" },
+  { value: "ADDED", label: "Recently added" },
+  { value: "TITLE", label: "Title" },
+  { value: "LATEST", label: "Latest update" },
+  { value: "PROGRESS", label: "Reading progress" },
+];
 
 export function LibraryWorkspace() {
   const [records, setRecords] = useState<LibraryRecord[]>([]);
@@ -241,28 +331,18 @@ export function LibraryWorkspace() {
         </p>
       ) : null}
       <div className="library-workspace-controls">
-        <label>
-          <span>Status</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="ALL">All</option>
-            <option value="READING">Reading</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="PLANNING">Plan to read</option>
-            <option value="ON_HOLD">On hold</option>
-            <option value="DROPPED">Dropped</option>
-            <option value="UNREAD">Unread updates</option>
-          </select>
-        </label>
-        <label>
-          <span>Sort</span>
-          <select value={sort} onChange={(event) => setSort(event.target.value)}>
-            <option value="ACTIVITY">Recently read</option>
-            <option value="ADDED">Recently added</option>
-            <option value="TITLE">Title</option>
-            <option value="LATEST">Latest update</option>
-            <option value="PROGRESS">Reading progress</option>
-          </select>
-        </label>
+        <LibraryDropdown
+          label="Status"
+          value={status}
+          options={libraryStatusOptions}
+          onChange={setStatus}
+        />
+        <LibraryDropdown
+          label="Sort"
+          value={sort}
+          options={librarySortOptions}
+          onChange={setSort}
+        />
         <div className="library-view-switcher" aria-label="Library view mode">
           {modes.map(({ value, label, icon: Icon }) => (
             <button

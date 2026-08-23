@@ -24,6 +24,7 @@ import {
 } from "react";
 import { FormattedCommentText } from "@/components/nyascans/EnhancedDiscussionSection";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
+import { mockAvatarUrl, mockProfileBannerUrl } from "@/lib/mock-media";
 
 type ProfileSection =
   | "overview"
@@ -370,24 +371,33 @@ export function PublicProfileView({ username }: { username: string }) {
     ? profile.comments
     : profile.comments.slice(0, 6);
 
+  const profileBannerFallback = mockProfileBannerUrl(profile.username || profile.displayName);
+  const avatarFallback = mockAvatarUrl(profile.username || profile.displayName);
   return (
     <main className="page-main public-profile-page">
       <section className="public-profile-hero">
         <span className="public-profile-banner">
-          {profile.bannerUrl ? <img src={profile.bannerUrl} alt="" /> : null}
+          <img
+            src={profile.bannerUrl || profileBannerFallback}
+            alt=""
+            onError={(event) => {
+              if (event.currentTarget.src !== new URL(profileBannerFallback, window.location.href).href) {
+                event.currentTarget.src = profileBannerFallback;
+              }
+            }}
+          />
         </span>
         <div className="page-wrap public-profile-identity">
           <span className="public-profile-avatar">
-            {profile.avatarUrl ? (
-              <img
-                src={profile.avatarUrl}
-                alt={`${profile.displayName} avatar`}
-              />
-            ) : (
-              <span aria-hidden="true">
-                {profile.displayName.slice(0, 2).toUpperCase()}
-              </span>
-            )}
+            <img
+              src={profile.avatarUrl || avatarFallback}
+              alt={`${profile.displayName} avatar`}
+              onError={(event) => {
+                if (event.currentTarget.src !== new URL(avatarFallback, window.location.href).href) {
+                  event.currentTarget.src = avatarFallback;
+                }
+              }}
+            />
           </span>
           <div>
             <p className="eyebrow">@{profile.username}</p>

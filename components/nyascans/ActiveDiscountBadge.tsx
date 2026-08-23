@@ -48,8 +48,12 @@ async function loadActiveDiscounts() {
 
 export function ActiveDiscountBadge({
   seriesSlug,
+  className,
+  showIcon = true,
 }: {
   seriesSlug: string;
+  className?: string;
+  showIcon?: boolean;
 }) {
   const [percentage, setPercentage] = useState(
     () => activeDiscountsCache.get(seriesSlug) ?? 0,
@@ -67,9 +71,12 @@ export function ActiveDiscountBadge({
 
   if (percentage <= 0) return null;
   return (
-    <span className="active-discount-cover-badge" aria-label={`${percentage}% off`}>
-      <Percent size={12} weight="bold" aria-hidden="true" />
-      {percentage}% off
+    <span
+      className={`active-discount-cover-badge${className ? ` ${className}` : ""}`}
+      aria-label={`${percentage}% off`}
+    >
+      {showIcon ? <Percent size={12} weight="bold" aria-hidden="true" /> : null}
+      {percentage}% OFF
     </span>
   );
 }

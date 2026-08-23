@@ -42,7 +42,24 @@ export async function GET(request: Request) {
     }
     const [entries, preferences] = await env.DB.batch([
       env.DB.prepare(
-        `SELECT l.series_id AS seriesId, l.list_type AS listType,
+        `WITH library_membership AS (
+           SELECT le.user_id, le.series_id, le.list_type, le.is_favorite,
+                  le.created_at, le.updated_at
+             FROM library_entries le
+            WHERE le.user_id = ?
+           UNION ALL
+           SELECT f.user_id, f.series_id, 'PLANNING' AS list_type, 0 AS is_favorite,
+                  f.created_at, f.created_at AS updated_at
+             FROM follows f
+            WHERE f.user_id = ?
+              AND NOT EXISTS (
+                SELECT 1
+                  FROM library_entries existing_entry
+                 WHERE existing_entry.user_id = f.user_id
+                   AND existing_entry.series_id = f.series_id
+              )
+         )
+         SELECT l.series_id AS seriesId, l.list_type AS listType,
                 l.is_favorite AS favorite, l.created_at AS addedAt,
                 l.updated_at AS updatedAt,
                 s.slug, s.title, s.status, s.revision,
@@ -124,7 +141,7 @@ export async function GET(request: Request) {
                        OR rp.progress_basis_points >= 9200
                      )
                 ) AS chaptersRead
-           FROM library_entries l
+           FROM library_membership l
            JOIN series s ON s.id = l.series_id
           WHERE l.user_id = ?
             AND s.is_published = 1
@@ -135,7 +152,7 @@ export async function GET(request: Request) {
               ('LICENSED', 'AUTHORIZED', 'DEMO_ORIGINAL', 'TEST_ORIGINAL')
           ORDER BY datetime(COALESCE(lastActivity, l.updated_at)) DESC,
                    s.title COLLATE NOCASE, s.id`,
-      ).bind(actor.id),
+      ).bind(actor.id, actor.id, actor.id),
       env.DB.prepare(
         "SELECT settings_json AS settingsJson FROM user_preferences WHERE user_id = ? LIMIT 1",
       ).bind(actor.id),

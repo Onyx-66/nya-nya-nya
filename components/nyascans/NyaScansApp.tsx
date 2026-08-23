@@ -120,6 +120,7 @@ import { RouletteView } from "@/components/nyascans/RouletteView";
 import { SeriesGallerySections } from "@/components/nyascans/SeriesGallerySections";
 import { SeriesReportDialog } from "@/components/nyascans/SeriesReportDialog";
 import { UserLeaderboardView } from "@/components/nyascans/UserLeaderboardView";
+import { mockAvatarUrl } from "@/lib/mock-media";
 import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorkspace";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 import { RewardSettingsPanel } from "@/components/nyascans/admin/RewardSettingsPanel";
@@ -2210,9 +2211,12 @@ function SectionHeading({
     <div className={`section-heading${tone ? ` tone-${tone}` : ""}`}>
       <div className="section-heading-main">
         {icon ? (
-          <span className="section-heading-icon" aria-hidden="true">
-            {icon}
-          </span>
+          <>
+            <span className="section-heading-icon" aria-hidden="true">
+              {icon}
+            </span>
+            <span className="section-heading-divider" aria-hidden="true" />
+          </>
         ) : null}
         <div>
           <h2 id={id}>{title}</h2>
@@ -2518,6 +2522,7 @@ function LatestUpdatesGrid({
             <span className="section-heading-icon" aria-hidden="true">
               <List size={20} weight="fill" />
             </span>
+            <span className="section-heading-divider" aria-hidden="true" />
             <div>
               <h2>Latest Updates</h2>
             </div>
@@ -2981,6 +2986,7 @@ function TrendingShowcase() {
           <span className="section-heading-icon" aria-hidden="true">
             <ChartLineUp size={20} weight="fill" />
           </span>
+          <span className="section-heading-divider" aria-hidden="true" />
           <div>
             <h2>Trending</h2>
           </div>
@@ -3137,7 +3143,11 @@ function CommunityHighlights() {
               key={item.id}
             >
               <span className="community-highlight-avatar" aria-hidden="true">
-                {item.displayName.trim().slice(0, 1).toUpperCase() || "N"}
+                <img
+                  src={mockAvatarUrl(item.displayName || item.id)}
+                  alt=""
+                  loading="lazy"
+                />
               </span>
               <span className="community-highlight-copy">
                 <span className="community-highlight-source">
@@ -3311,6 +3321,7 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
           <span className="section-heading-icon" aria-hidden="true">
             <ClockCounterClockwise size={20} weight="fill" />
           </span>
+          <span className="section-heading-divider" aria-hidden="true" />
           <div>
             <h2 id="continue-reading-title">Continue reading</h2>
           {preferenceError ? (
@@ -3322,7 +3333,11 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
         </div>
         {signedIn ? (
           <div className="continue-reading-actions">
+            <a className="button button-secondary latest-all-action" href="/library">
+              Library <ArrowRight size={15} />
+            </a>
             <div
+              className="continue-reading-view-switcher"
               role="group"
               aria-label="Continue Reading view"
               aria-busy={savingViewMode}
@@ -3348,9 +3363,7 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
                 <SquaresFour size={18} />
               </button>
             </div>
-            <a className="button button-secondary latest-all-action" href="/library">
-              View library <ArrowRight size={15} />
-            </a>
+
           </div>
         ) : null}
       </header>
@@ -3923,9 +3936,10 @@ function EditorsPickSection({
   const editorsPickHeading = (
     <header className="editors-pick-heading">
       <div className="editors-pick-title-group">
-        <span className="editors-pick-fleur" aria-hidden="true">
+        <span className="editors-pick-fleur section-heading-icon" aria-hidden="true">
           <CrownSimple size={21} weight="fill" />
         </span>
+        <span className="section-heading-divider" aria-hidden="true" />
         <div>
           <h2 id="editors-pick-title">Editor&apos;s Pick</h2>
         </div>
@@ -14403,7 +14417,8 @@ export function NyaScansApp({
       ) {
         return;
       }
-      const key = event.key.toLowerCase();
+      const key = typeof event.key === "string" ? event.key.toLowerCase() : "";
+      if (!key) return;
       if (
         view === "admin" &&
         key === "k" &&
