@@ -15,6 +15,7 @@ import {
   Star,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
+import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 
 type HotSeries = {
   id: string;
@@ -95,7 +96,7 @@ export function HotThisWeek() {
       if (firstLoad) setLoading(true);
       setError("");
       try {
-        const response = await fetch(`/api/v1/hot-this-week?period=${period}`, {
+        const response = await fetchWithHomeTimeout(`/api/v1/hot-this-week?period=${period}`, {
           signal: controller.signal,
           cache: "no-store",
         });
@@ -141,9 +142,10 @@ export function HotThisWeek() {
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Weekly activity could not be loaded.",
+            homeRequestMessage(
+            loadError,
+            "Weekly activity could not be loaded.",
+          ),
           );
         }
       } finally {

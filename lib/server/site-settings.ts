@@ -14,6 +14,26 @@ export type SiteThemeDocument = {
   recoveredFromInvalid?: boolean;
 };
 
+const legacyDefaultDark = {
+  background: "#07111f",
+  backgroundSoft: "#0a1728",
+  surface: "#0d1d31",
+  surfaceRaised: "#12263f",
+  surfaceStrong: "#18314f",
+  text: "#f4f9fd",
+  textSoft: "#bfd1df",
+  muted: "#829db1",
+  line: "#244563",
+  lineStrong: "#376789",
+} as const;
+
+function migrateLegacyDefaultTheme(theme: SiteTheme): SiteTheme {
+  const isLegacyDark = Object.entries(legacyDefaultDark).every(
+    ([key, value]) => theme.dark[key as keyof typeof legacyDefaultDark] === value,
+  );
+  return isLegacyDark ? { ...theme, dark: { ...defaultSiteTheme.dark } } : theme;
+}
+
 export async function getSiteThemeDocument(): Promise<SiteThemeDocument> {
   if (!env.DB) {
     return { settings: defaultSiteTheme, revision: 0, updatedAt: null };
@@ -46,7 +66,7 @@ export async function getSiteThemeDocument(): Promise<SiteThemeDocument> {
   }
   try {
     return {
-      settings: parseSiteTheme(JSON.parse(row.settings_json)),
+      settings: migrateLegacyDefaultTheme(parseSiteTheme(JSON.parse(row.settings_json))),
       revision: Number(row.revision),
       updatedAt: row.updated_at,
     };

@@ -21,6 +21,7 @@ import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { languageName } from "@/lib/language-flags";
+import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 
 type NewSeriesRecord = {
   id: string;
@@ -233,6 +234,7 @@ export function NewSeriesSection() {
   const [records, setRecords] = useState<NewSeriesRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
   const railRef = useRef<HTMLDivElement | null>(null);
 
   function move(direction: -1 | 1) {
@@ -246,7 +248,7 @@ export function NewSeriesSection() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch("/api/v1/new-series?limit=8", {
+        const response = await fetchWithHomeTimeout("/api/v1/new-series?limit=8", {
           signal: controller.signal,
         });
         const payload = (await response.json()) as {
@@ -260,9 +262,10 @@ export function NewSeriesSection() {
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "New series are unavailable.",
+            homeRequestMessage(
+            loadError,
+            "New series are unavailable.",
+          ),
           );
         }
       } finally {
@@ -270,7 +273,7 @@ export function NewSeriesSection() {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [revision]);
 
   return (
     <section
@@ -301,6 +304,7 @@ export function NewSeriesSection() {
         <div className="public-discovery-error" role="alert">
           <strong>New series could not be loaded</strong>
           <span>{error}</span>
+          <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
         </div>
       ) : records.length ? (
         <div
@@ -357,6 +361,7 @@ export function PublishingTeamsCarousel() {
   const [records, setRecords] = useState<PublicTeamRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [language, setLanguage] = useState("");
@@ -366,7 +371,7 @@ export function PublishingTeamsCarousel() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch("/api/v1/public-teams?limit=7", {
+        const response = await fetchWithHomeTimeout("/api/v1/public-teams?limit=7", {
           signal: controller.signal,
         });
         const payload = (await response.json()) as {
@@ -387,9 +392,10 @@ export function PublishingTeamsCarousel() {
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Publishing teams are unavailable.",
+            homeRequestMessage(
+            loadError,
+            "Publishing teams are unavailable.",
+          ),
           );
         }
       } finally {
@@ -397,7 +403,7 @@ export function PublishingTeamsCarousel() {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [revision]);
 
   const visibleRecords = language
     ? records.filter((record) => record.releaseLanguages.includes(language))
@@ -441,8 +447,6 @@ export function PublishingTeamsCarousel() {
       ?.removeAttribute("open");
   }
 
-  if (!loading && !error && records.length === 0) return null;
-
   return (
     <section
       className="content-section page-wrap public-teams"
@@ -484,6 +488,7 @@ export function PublishingTeamsCarousel() {
         <div className="public-discovery-error" role="alert">
           <strong>Publishing teams could not be loaded</strong>
           <span>{error}</span>
+          <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
         </div>
       ) : visibleRecords.length ? (
         <div className="teams-carousel-shell">

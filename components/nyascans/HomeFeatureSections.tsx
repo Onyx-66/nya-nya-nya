@@ -26,6 +26,7 @@ import {
   coinLabel,
   type CommercialSettings,
 } from "@/lib/commercial-settings";
+import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 
 export type PinnedSeriesRecord = {
   id: string;
@@ -134,23 +135,27 @@ function usePinnedSeries(initialRecords?: PinnedSeriesRecord[]) {
   const [fetchedRecords, setFetchedRecords] = useState<PinnedSeriesRecord[]>([]);
   const [loading, setLoading] = useState(initialRecords === undefined);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     if (initialRecords !== undefined) return;
+    setLoading(true);
+    setError("");
     const controller = new AbortController();
     void (async () => {
       try {
         const next = await readPublicData<PinnedSeriesRecord>(
-          await fetch("/api/v1/pinned-series", { signal: controller.signal }),
+          await fetchWithHomeTimeout("/api/v1/pinned-series", { signal: controller.signal }),
           "Pinned Series is temporarily unavailable.",
         );
         setFetchedRecords(next);
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Pinned Series is temporarily unavailable.",
+            homeRequestMessage(
+            loadError,
+            "Pinned Series is temporarily unavailable.",
+          ),
           );
         }
       } finally {
@@ -158,12 +163,13 @@ function usePinnedSeries(initialRecords?: PinnedSeriesRecord[]) {
       }
     })();
     return () => controller.abort();
-  }, [initialRecords]);
+  }, [initialRecords, revision]);
 
   return {
     records: initialRecords ?? fetchedRecords,
     loading: initialRecords === undefined && loading,
     error: initialRecords === undefined ? error : "",
+    retry: () => setRevision((value) => value + 1),
   };
 }
 
@@ -185,7 +191,7 @@ function useDiscounts(
     void (async () => {
       try {
         const next = await readPublicData<DiscountRecord>(
-          await fetch(`/api/v1/discounts?sort=${sort}`, {
+          await fetchWithHomeTimeout(`/api/v1/discounts?sort=${sort}`, {
             signal: controller.signal,
           }),
           "Discounts are temporarily unavailable.",
@@ -204,9 +210,10 @@ function useDiscounts(
           setUnavailable(true);
         } else {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Discounts are temporarily unavailable.",
+            homeRequestMessage(
+              loadError,
+              "Discounts are temporarily unavailable.",
+            ),
           );
         }
       } finally {
@@ -350,7 +357,7 @@ export function PinnedSeriesSection({
   initialRecords,
   allHref = "/pinned-series",
 }: PinnedSeriesSectionProps = {}) {
-  const { records, loading, error } = usePinnedSeries(initialRecords);
+  const { records, loading, error, retry } = usePinnedSeries(initialRecords);
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const featuredRecords = useMemo(
@@ -413,7 +420,6 @@ export function PinnedSeriesSection({
     goToPinnedSeries(activeIndex + direction);
   }
 
-  if (!loading && (error || !records.length)) return null;
   return (
     <section className="content-section page-wrap v481-pinned-section">
       <HomeFeatureStyles />
@@ -492,12 +498,24 @@ export function PinnedSeriesSection({
               ))}
             </div>
           ) : null}
+                </div>
+      ) : error ? (
+        <div className="v481-empty-state" role="alert">
+          <PushPin size={28} />
+          <h3>Pinned Series could not be loaded</h3>
+          <p>{error}</p>
+          <button type="button" onClick={retry}>Try again</button>
         </div>
-      ) : null}
+      ) : (
+        <div className="v481-empty-state">
+          <PushPin size={28} />
+          <h3>No active Pinned Series</h3>
+          <p>Curated titles will appear here after an editor assigns a pin.</p>
+        </div>
+      )}
     </section>
   );
 }
-
 export function PinnedSeriesDirectory({
   initialRecords,
 }: PinnedSeriesDirectoryProps = {}) {
@@ -773,6 +791,8 @@ export function DiscountsSection({
 export function RecentReviewsSection() {
   const [records, setRecords] = useState<RecentReviewRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
 
@@ -796,20 +816,26 @@ export function RecentReviewsSection() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/v1/recent-reviews?limit=6", { signal: controller.signal, cache: "no-store" })
+    setLoading(true);
+    setError("");
+    void fetchWithHomeTimeout("/api/v1/recent-reviews?limit=6", { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json()) as PublicDataResponse<RecentReviewRecord>;
         if (!response.ok) throw new Error(payload.error?.message ?? "Recent reviews are unavailable.");
         setRecords(payload.data ?? []);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setRecords([]);
+      .catch((loadError) => {
+        if (!controller.signal.aborted) {
+          setError(
+            homeRequestMessage(loadError, "Recent reviews are unavailable."),
+          );
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [revision]);
 
   useEffect(() => {
     if (!records.length) return;
@@ -834,7 +860,16 @@ export function RecentReviewsSection() {
       >
         {loading
           ? Array.from({ length: 3 }, (_, index) => <span className="recent-review-skeleton" key={index} />)
-          : records.length
+          : error ? (
+            <div className="recent-reviews-empty" role="alert">
+              <Star size={26} />
+              <strong>Recent reviews could not be loaded</strong>
+              <span>{error}</span>
+              <button type="button" onClick={() => setRevision((value) => value + 1)}>
+                Try again
+              </button>
+            </div>
+          ) : records.length
             ? records.map((review) => (
               <a
                 className="recent-review-card"

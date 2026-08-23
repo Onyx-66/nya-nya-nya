@@ -223,16 +223,16 @@ export type SiteAppearanceSavedDetail = {
 
 export const defaultSiteTheme: SiteTheme = {
   dark: {
-    background: "#07111f",
-    backgroundSoft: "#0a1728",
-    surface: "#0d1d31",
-    surfaceRaised: "#12263f",
-    surfaceStrong: "#18314f",
-    text: "#f4f9fd",
-    textSoft: "#bfd1df",
-    muted: "#829db1",
-    line: "#244563",
-    lineStrong: "#376789",
+    background: "#070708",
+    backgroundSoft: "#0d0e11",
+    surface: "#111216",
+    surfaceRaised: "#17191f",
+    surfaceStrong: "#1f222a",
+    text: "#f7f8fb",
+    textSoft: "#c7cbd5",
+    muted: "#9198a6",
+    line: "#2b2f39",
+    lineStrong: "#454b59",
   },
   light: {
     background: "#f3f8fc",

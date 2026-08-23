@@ -162,6 +162,7 @@ import {
   LEGAL_DOCUMENTS_BY_SLUG,
 } from "@/lib/legal-documents";
 import { readingProgressTone } from "@/lib/reading-progress";
+import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 
 const OperationsControlPanel = lazy(() =>
   import("@/components/nyascans/OperationsControlPanel").then((module) => ({
@@ -1543,6 +1544,32 @@ function SiteHeader({
                 </button>
                 {menuOpen ? (
                   <div className="header-overflow-menu" role="menu">
+                    <a role="menuitem" href="/browse" onClick={() => setMenuOpen(false)}>
+                      <Compass size={18} /> Browse
+                    </a>
+                    <a role="menuitem" href="/latest" onClick={() => setMenuOpen(false)}>
+                      <Pulse size={18} /> Latest Updates
+                    </a>
+                    <a role="menuitem" href="/rankings" onClick={() => setMenuOpen(false)}>
+                      <Trophy size={18} /> Ranking
+                    </a>
+                    <a role="menuitem" href="/teams" onClick={() => setMenuOpen(false)}>
+                      <UsersThree size={18} /> Teams
+                    </a>
+                    <a role="menuitem" href="/support" onClick={() => setMenuOpen(false)}>
+                      <Lifebuoy size={18} /> Support
+                    </a>
+                    <a role="menuitem" href="/pinned" onClick={() => setMenuOpen(false)}>
+                      <PushPin size={18} /> Pinned Series
+                    </a>
+                    <a role="menuitem" href="/discounts" onClick={() => setMenuOpen(false)}>
+                      <Tag size={18} /> Discounts
+                    </a>
+                    {lockAndPayVisible ? (
+                      <a role="menuitem" href="/store" onClick={() => setMenuOpen(false)}>
+                        <Storefront size={18} /> Store
+                      </a>
+                    ) : null}
                     <button
                       role="menuitem"
                       type="button"
@@ -2409,7 +2436,7 @@ function LatestUpdatesGrid({
       if (showLoading) setError("");
       setRefreshWarning("");
       try {
-        const response = await fetch(
+        const response = await fetchWithHomeTimeout(
           `/api/v1/latest-releases?page=${page}&pageSize=${useHomeTable ? 15 : pageSize}&period=${effectivePeriod}&mode=${useHomeTable ? "table" : "cards"}${releaseLanguages.length ? `&languages=${encodeURIComponent(releaseLanguages.join(","))}` : ""}`,
           { signal: controller.signal, cache: "no-store" },
         );
@@ -2435,10 +2462,10 @@ function LatestUpdatesGrid({
         }
       } catch (loadError) {
         if (active && !controller.signal.aborted) {
-          const message =
-            loadError instanceof Error
-              ? loadError.message
-              : "Latest releases could not be loaded.";
+          const message = homeRequestMessage(
+            loadError,
+            "Latest releases could not be loaded.",
+          );
           if (showLoading || !hasRecordsRef.current) {
             setError(message);
           } else {
@@ -2924,11 +2951,13 @@ function TrendingShowcase() {
   const railRef = useRef<HTMLDivElement | null>(null);
   const [ordered, setOrdered] = useState<LiveSeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
+    const [loadError, setLoadError] = useState("");
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/v1/catalog?page=1&pageSize=12&sort=viewed", {
+    setLoading(true);
+    setLoadError("");
+    void fetchWithHomeTimeout("/api/v1/catalog?page=1&pageSize=12&sort=viewed", {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -2947,9 +2976,10 @@ function TrendingShowcase() {
       .catch((error) => {
         if (!controller.signal.aborted) {
           setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Trending titles could not be loaded.",
+            homeRequestMessage(
+            error,
+            "Trending titles could not be loaded.",
+          ),
           );
         }
       })
@@ -2957,8 +2987,7 @@ function TrendingShowcase() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
-
+    }, [revision]);
   function moveRail(direction: -1 | 1) {
     const rail = railRef.current;
     if (!rail) return;
@@ -3015,6 +3044,7 @@ function TrendingShowcase() {
           <div className="catalog-error" role="alert">
             <WarningCircle size={24} />
             <span>{loadError}</span>
+            <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
           </div>
         ) : ordered.length ? (
         <div
@@ -3082,13 +3112,17 @@ function CommunityHighlights() {
   const [items, setItems] = useState<CommunityHighlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     async function load(background = false) {
       if (!background) setLoading(true);
       try {
-        const response = await fetch("/api/v1/community-highlights");
+        const response = await fetchWithHomeTimeout("/api/v1/community-highlights", {
+          signal: controller.signal,
+        });
         const payload = (await response.json()) as {
           data?: CommunityHighlight[];
           error?: { message?: string };
@@ -3110,9 +3144,10 @@ function CommunityHighlights() {
       } catch (loadError) {
         if (!active || background) return;
         setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Community highlights could not be loaded.",
+          homeRequestMessage(
+          loadError,
+          "Community highlights could not be loaded.",
+        ),
         );
       } finally {
         if (active && !background) setLoading(false);
@@ -3124,10 +3159,10 @@ function CommunityHighlights() {
     }, 20_000);
     return () => {
       active = false;
+      controller.abort();
       window.clearInterval(interval);
     };
-  }, []);
-
+    }, [revision]);
   return (
     <section className="content-section page-wrap community-highlights">
       <SectionHeading
@@ -3142,6 +3177,7 @@ function CommunityHighlights() {
       ) : error ? (
         <div className="community-highlight-loading" role="alert">
           {error}
+          <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
         </div>
       ) : items.length ? (
         <div className="community-highlight-grid">
@@ -3796,6 +3832,7 @@ function EditorsPickSection({
   const [active, setActive] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
   const [librarySeries, setLibrarySeries] = useState<Set<string>>(
     () => new Set(),
   );
@@ -3804,9 +3841,11 @@ function EditorsPickSection({
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoading(true);
+    setError("");
     void (async () => {
       try {
-        const response = await fetch("/api/v1/editor-picks", {
+        const response = await fetchWithHomeTimeout("/api/v1/editor-picks", {
           signal: controller.signal,
         });
         const payload = (await response.json()) as {
@@ -3823,9 +3862,10 @@ function EditorsPickSection({
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Editor's Picks could not be loaded.",
+            homeRequestMessage(
+            loadError,
+            "Editor's Picks could not be loaded.",
+          ),
           );
         }
       } finally {
@@ -3833,7 +3873,7 @@ function EditorsPickSection({
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [revision]);
 
   useEffect(() => {
     if (!actor) return;
@@ -3879,9 +3919,10 @@ function EditorsPickSection({
     return (
       <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
         {editorsPickHeading}
-        <div className="editors-pick-state-card" role={loading ? "status" : "alert"}>
-          <strong>{loading ? "Loading Editor's Pick" : "Editor's Pick unavailable"}</strong>
-          <span>{loading ? "Finding a standout series for you." : error || "No Editor's Pick is available right now."}</span>
+        <div className="editors-pick-state-card" role={loading ? "status" : error ? "alert" : "status"}>
+          <strong>{loading ? "Loading Editor's Pick" : error ? "Editor's Pick unavailable" : "No Editor's Pick assigned yet"}</strong>
+          <span>{loading ? "Finding a standout series for you." : error || "An editor can feature a standout series here when one is assigned."}</span>
+          {!loading && error ? <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button> : null}
         </div>
       </section>
     );
@@ -14319,12 +14360,7 @@ export function NyaScansApp({
 
   useEffect(() => {
     const stored = window.localStorage.getItem("nyascans-theme");
-    const next =
-      stored === "light" || stored === "dark"
-        ? stored
-        : window.matchMedia("(prefers-color-scheme: light)").matches
-          ? "light"
-          : "dark";
+    const next = stored === "light" || stored === "dark" ? stored : "dark";
     const frame = window.requestAnimationFrame(() => {
       setTheme(next);
       document.documentElement.dataset.theme = next;

@@ -2,18 +2,18 @@
 
 :root {
   color-scheme: dark;
-  --bg: var(--site-dark-bg, #07111f);
-  --bg-soft: var(--site-dark-bg-soft, #0a1728);
-  --surface: var(--site-dark-surface, #0d1d31);
-  --surface-2: var(--site-dark-surface-2, #12263f);
-  --surface-3: var(--site-dark-surface-3, #18314f);
+  --bg: var(--site-dark-bg, #070708);
+  --bg-soft: var(--site-dark-bg-soft, #0d0e11);
+  --surface: var(--site-dark-surface, #111216);
+  --surface-2: var(--site-dark-surface-2, #17191f);
+  --surface-3: var(--site-dark-surface-3, #1f222a);
   --surface-raised: var(--surface-2);
   --surface-strong: var(--surface-3);
-  --text: var(--site-dark-text, #f4f9fd);
-  --text-soft: var(--site-dark-text-soft, #bfd1df);
-  --muted: var(--site-dark-muted, #829db1);
-  --line: var(--site-dark-line, #244563);
-  --line-strong: var(--site-dark-line-strong, #376789);
+  --text: var(--site-dark-text, #f7f8fb);
+  --text-soft: var(--site-dark-text-soft, #c7cbd5);
+  --muted: var(--site-dark-muted, #9198a6);
+  --line: var(--site-dark-line, #2b2f39);
+  --line-strong: var(--site-dark-line-strong, #454b59);
   --accent: var(--site-accent, #39a9ff);
   --accent-strong: var(--site-accent-strong, #168de2);
   --accent-ink: var(--site-accent-ink, #03111f);
@@ -22,7 +22,7 @@
   --warning: var(--site-warning, #e6bd61);
   --brand-gradient: var(--site-brand-gradient, linear-gradient(135deg, #168de2, #68d5ff));
   --shadow: rgba(1, 10, 24, 0.5);
-  --header: rgba(7, 17, 31, 0.88);
+  --header: color-mix(in srgb, var(--bg) 88%, transparent);
   --radius: var(--site-radius, 14px);
   --radius-small: 9px;
   --z-dropdown: 850;
@@ -53,7 +53,7 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent, #45b8ff) 48%, transparent);
   border-radius: 24px;
-  background: #06111e;
+  background: var(--surface-strong);
   box-shadow: 0 40px 120px rgb(0 0 0 / 70%);
   animation: v482-modal-in .34s cubic-bezier(.22, 1, .36, 1) both;
 }
@@ -2505,7 +2505,7 @@ img {
   min-height: calc(100dvh - 107px);
   max-height: 900px;
   overflow: hidden;
-  background: #101310;
+  background: var(--bg);
   isolation: isolate;
 }
 
@@ -4985,7 +4985,7 @@ img {
   place-items: center;
   align-content: center;
   padding: 70px 24px 110px;
-  background: #101310;
+  background: var(--bg);
   text-align: center;
 }
 
@@ -56280,7 +56280,7 @@ body:has(.catalog-toolbar) .catalog-pagination > div button[aria-current="page"]
   overflow: auto;
   border: 1px solid var(--browse-line);
   border-radius: 1.2rem 0 0 1.2rem;
-  background: #07111f;
+  background: var(--surface);
   box-shadow: -1.2rem 0 3rem rgb(0 0 0 / 35%);
 }
 
@@ -58729,4 +58729,27 @@ body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button {
 
 body:has(.catalog-toolbar) .catalog-list .series-list-row .list-follow-button svg {
   grid-row: 1 !important;
+}
+
+/* Home reliability states use the same semantic control treatment across sections. */
+:is(.community-highlight-loading, .recent-reviews-empty, .editors-pick-state-card, .v481-empty-state, .public-discovery-error) button {
+  justify-self: center;
+  min-height: 2.4rem;
+  padding: 0 .9rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: var(--site-control-weight, 650);
+}
+:is(.community-highlight-loading, .recent-reviews-empty, .editors-pick-state-card, .v481-empty-state, .public-discovery-error) button:hover,
+:is(.community-highlight-loading, .recent-reviews-empty, .editors-pick-state-card, .v481-empty-state, .public-discovery-error) button:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface-2) 82%, var(--accent) 18%);
+}
+.editors-pick-state-card strong,
+.editors-pick-state-card span {
+  color: var(--text);
 }
