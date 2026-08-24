@@ -5445,7 +5445,6 @@ function BrowseView({
         <div className="browse-intro-heading">
           <div className="browse-title-group">
             <h1>Browse Series</h1>
-            <span className="browse-result-count">{pagination.total.toLocaleString("en-US")} results</span>
           </div>
           <div className="view-mode-toggle" role="group" aria-label="Catalog view">
             <button
