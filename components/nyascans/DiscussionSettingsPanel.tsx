@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ChatCenteredDots,
   FloppyDisk,
@@ -254,7 +256,7 @@ export function DiscussionSettingsPanel() {
             <div className="discussion-limit-grid">
             <label>
               <span>Attachments per comment</span>
-              <select
+              <UnifiedSingleSelect
                 value={settings.maxAttachments}
                 onChange={(event) => {
                   setSettings((current) => ({
@@ -269,11 +271,11 @@ export function DiscussionSettingsPanel() {
                     {value}
                   </option>
                 ))}
-              </select>
+              </UnifiedSingleSelect>
             </label>
             <label>
               <span>Reply depth</span>
-              <select
+              <UnifiedSingleSelect
                 value={settings.maxReplyDepth}
                 onChange={(event) => {
                   setSettings((current) => ({
@@ -288,7 +290,7 @@ export function DiscussionSettingsPanel() {
                     {value} level{value === 1 ? "" : "s"}
                   </option>
                 ))}
-              </select>
+              </UnifiedSingleSelect>
             </label>
             </div>
           </section>

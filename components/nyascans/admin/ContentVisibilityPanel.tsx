@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   ArrowRight,
@@ -533,7 +535,7 @@ export function ContentVisibilityPanel(_props: {
             </div>
             <label>
               <span>Default access</span>
-              <select
+              <UnifiedSingleSelect
                 value={rulesDraft.defaultAccessType}
                 onChange={(event) =>
                   setRulesDraft({
@@ -544,7 +546,7 @@ export function ContentVisibilityPanel(_props: {
               >
                 <option value="FREE">Free</option>
                 <option value="PAID">Paid</option>
-              </select>
+              </UnifiedSingleSelect>
             </label>
             <label>
               <span>Default Onyx price</span>
@@ -661,7 +663,7 @@ export function ContentVisibilityPanel(_props: {
                         </td>
                         <td>{item.effectiveAccessType}</td>
                         <td>
-                          <select
+                          <UnifiedSingleSelect
                             aria-label={`Access for ${item.seriesTitle} chapter ${item.chapterNumber}`}
                             value={draft.accessType}
                             onChange={(event) =>
@@ -677,7 +679,7 @@ export function ContentVisibilityPanel(_props: {
                             <option value="FREE">Free</option>
                             <option value="PAID">Paid</option>
                             <option value="PREMIUM">Premium</option>
-                          </select>
+                          </UnifiedSingleSelect>
                           <label>
                             <input
                               type="checkbox"

@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1148,7 +1150,7 @@ export function NewSeriesQueuePanel() {
         </label>
         <label>
           Status
-          <select
+          <UnifiedSingleSelect
             value={filters.status}
             onChange={(event) =>
               setFilters((current) => ({
@@ -1163,7 +1165,7 @@ export function NewSeriesQueuePanel() {
                 {humanize(status)}
               </option>
             ))}
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Team
@@ -1206,7 +1208,7 @@ export function NewSeriesQueuePanel() {
         </label>
         <label>
           Series type
-          <select
+          <UnifiedSingleSelect
             value={filters.type}
             onChange={(event) =>
               setFilters((current) => ({
@@ -1219,11 +1221,11 @@ export function NewSeriesQueuePanel() {
             <option value="MANGA">Manga</option>
             <option value="MANHWA">Manhwa</option>
             <option value="MANHUA">Manhua</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Duplicate risk
-          <select
+          <UnifiedSingleSelect
             value={filters.duplicateRisk}
             onChange={(event) =>
               setFilters((current) => ({
@@ -1236,11 +1238,11 @@ export function NewSeriesQueuePanel() {
             <option value="ALL">Any risk</option>
             <option value="POSSIBLE">Possible duplicate</option>
             <option value="NONE">No detected match</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Source
-          <select
+          <UnifiedSingleSelect
             value={filters.source}
             onChange={(event) =>
               setFilters((current) => ({
@@ -1254,7 +1256,7 @@ export function NewSeriesQueuePanel() {
             <option value="NONE">No source</option>
             <option value="MANGADEX">MangaDex</option>
             <option value="MANGAUPDATES">MangaUpdates</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Submitted from
@@ -2060,7 +2062,7 @@ export function NewSeriesQueuePanel() {
                         <div className="nsq-feedback-composer">
                           <label>
                             Visibility
-                            <select
+                            <UnifiedSingleSelect
                               value={feedbackVisibility}
                               onChange={(event) =>
                                 setFeedbackVisibility(
@@ -2076,7 +2078,7 @@ export function NewSeriesQueuePanel() {
                               <option value="INTERNAL">
                                 Administrator-only note
                               </option>
-                            </select>
+                            </UnifiedSingleSelect>
                           </label>
                           <label>
                             Related field, optional

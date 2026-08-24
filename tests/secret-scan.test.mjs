@@ -65,7 +65,7 @@ test("secret scanner blocks committed environment files", () => {
   );
 });
 
-test("Version 49.14.0 is shared by package metadata, the public footer, and admin", async () => {
+test("Version 49.15.2 is shared by package metadata, the public footer, and admin", async () => {
   const [packageSource, versionSource, appSource] = await Promise.all([
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../lib/app-version.ts", import.meta.url), "utf8"),
@@ -74,8 +74,8 @@ test("Version 49.14.0 is shared by package metadata, the public footer, and admi
       "utf8",
     ),
   ]);
-  assert.equal(JSON.parse(packageSource).version, "49.14.0");
-  assert.match(versionSource, /APP_VERSION = "49\.14\.0"/u);
+  assert.equal(JSON.parse(packageSource).version, "49.15.2");
+  assert.match(versionSource, /APP_VERSION = "49\.15\.2"/u);
   assert.match(appSource, /footer-release-version/u);
   assert.match(appSource, /ops-release-version/u);
 });

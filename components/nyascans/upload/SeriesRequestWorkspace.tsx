@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -844,7 +846,7 @@ export function AddSeriesRequestPanel() {
           <div className="upload-form-grid">
             <label>
               <span>Series type</span>
-              <select
+              <UnifiedSingleSelect
                 value={form.seriesType}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -856,11 +858,11 @@ export function AddSeriesRequestPanel() {
                 <option value="MANGA">Manga</option>
                 <option value="MANHWA">Manhwa</option>
                 <option value="MANHUA">Manhua</option>
-              </select>
+              </UnifiedSingleSelect>
             </label>
             <label>
               <span>Publication status</span>
-              <select
+              <UnifiedSingleSelect
                 value={form.publicationStatus}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -874,7 +876,7 @@ export function AddSeriesRequestPanel() {
                 <option value="COMPLETED">Completed</option>
                 <option value="HIATUS">Hiatus</option>
                 <option value="UPCOMING">Upcoming</option>
-              </select>
+              </UnifiedSingleSelect>
             </label>
             <label>
               <span>Original publication year</span>
@@ -968,7 +970,7 @@ export function AddSeriesRequestPanel() {
             </label>
             <label>
               <span>Reading direction</span>
-              <select
+              <UnifiedSingleSelect
                 value={form.readingDirection}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -981,7 +983,7 @@ export function AddSeriesRequestPanel() {
                 <option value="RIGHT_TO_LEFT">Right to left</option>
                 <option value="LEFT_TO_RIGHT">Left to right</option>
                 <option value="VERTICAL">Vertical strip</option>
-              </select>
+              </UnifiedSingleSelect>
             </label>
           </div>
         </fieldset>
@@ -1441,7 +1443,7 @@ export function SeriesRequestsPanel() {
       <div className="upload-filter-row">
         <label>
           <span>Status</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <UnifiedSingleSelect value={status} onChange={(event) => setStatus(event.target.value)}>
             {[
               "ALL",
               "DRAFT",
@@ -1456,7 +1458,7 @@ export function SeriesRequestsPanel() {
                 {value.replaceAll("_", " ")}
               </option>
             ))}
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <span>{records.length} shown</span>
         {Object.entries(counts).map(([key, value]) => (

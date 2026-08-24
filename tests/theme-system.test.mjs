@@ -6,7 +6,7 @@ import test from "node:test";
 const root = new URL("..", import.meta.url);
 const readProjectFile = (path) => readFile(new URL(path, root), "utf8");
 
-const exactTokenKeys = [
+const exactCoreTokenKeys = [
   "textColor",
   "mainBackground",
   "accent",
@@ -48,6 +48,59 @@ const exactTokenKeys = [
   "dangerL2",
 ];
 
+const exactHomeSectionTokenKeys = [
+  "homeFeaturedAccent",
+  "homeTrendingAccent",
+  "homeContinueReadingAccent",
+  "homePinnedSeriesAccent",
+  "homeRecentReviewsAccent",
+  "homeDiscountsAccent",
+  "homeAnnouncementsAccent",
+  "homeLatestUpdatesAccent",
+  "homeEditorsPickAccent",
+  "homeNewSeriesAccent",
+  "homePublishingTeamsAccent",
+  "homeCommunityAccent",
+  "homeHotThisWeekAccent",
+];
+
+const exactEffectTokenKeys = [
+  "effectMovingLight",
+  "effectMovingLightSecondary",
+  "effectBadgeGlow",
+  "effectSectionHeaderGlow",
+  "effectIconGlow",
+  "effectCoverGlow",
+  "effectButtonGlow",
+  "effectGoldGlow",
+  "effectSilverGlow",
+  "effectBronzeGlow",
+  "effectPaidGlow",
+  "effectDiscountGlow",
+  "effectAnnouncementGlow",
+];
+
+const exactNotificationTokenKeys = [
+  "notificationToastSurface",
+  "notificationToastText",
+  "notificationBellBadge",
+  "notificationDropdownSurface",
+  "notificationDropdownBorder",
+  "notificationUnread",
+  "notificationRead",
+  "notificationSuccess",
+  "notificationInfo",
+  "notificationWarning",
+  "notificationError",
+];
+
+const exactTokenKeys = [
+  ...exactCoreTokenKeys,
+  ...exactHomeSectionTokenKeys,
+  ...exactEffectTokenKeys,
+  ...exactNotificationTokenKeys,
+];
+
 function runThemeModel(script) {
   return JSON.parse(
     execFileSync(
@@ -58,21 +111,47 @@ function runThemeModel(script) {
   );
 }
 
-test("theme schema preserves the exact 39-token contract and adds logo metadata", async () => {
+test("theme schema preserves the original 39-token core and exposes complete section, effect, and notification groups", async () => {
   const source = await readProjectFile("lib/theme-system.ts");
-  const keyBlock = source.match(/export const themeTokenKeys = \[([\s\S]*?)\] as const;/u)?.[1] ?? "";
-  const keys = [...keyBlock.matchAll(/"([A-Za-z0-9]+)"/gu)].map((match) => match[1]);
-  assert.deepEqual(keys, exactTokenKeys);
+  const result = runThemeModel(`
+    import {
+      coreThemeTokenKeys,
+      effectThemeTokenKeys,
+      homeSectionThemeTokenKeys,
+      notificationThemeTokenKeys,
+      themeTokenGroups,
+      themeTokenKeys,
+    } from "./lib/theme-system.ts";
+    console.log(JSON.stringify({
+      core: coreThemeTokenKeys,
+      sections: homeSectionThemeTokenKeys,
+      effects: effectThemeTokenKeys,
+      notifications: notificationThemeTokenKeys,
+      all: themeTokenKeys,
+      groupNames: themeTokenGroups.map((group) => group.name),
+    }));
+  `);
+  assert.deepEqual(result.core, exactCoreTokenKeys);
+  assert.deepEqual(result.sections, exactHomeSectionTokenKeys);
+  assert.deepEqual(result.effects, exactEffectTokenKeys);
+  assert.deepEqual(result.notifications, exactNotificationTokenKeys);
+  assert.deepEqual(result.all, exactTokenKeys);
+  assert.ok(result.groupNames.includes("Home Sections"));
+  assert.ok(result.groupNames.includes("Effects & Glows"));
+  assert.ok(result.groupNames.includes("Notifications"));
   assert.match(source, /themeTokensSchema[\s\S]*?\.strict\(\)/u);
-  assert.match(source, /themeDocumentSchema[\s\S]*?logoColorOverride: hexColor\.nullable\(\)\.default\(null\)/u);
-  assert.match(source, /themeDocumentSchema[\s\S]*?\.strict\(\)/u);
+  assert.match(source, /canonicalThemeDocumentSchema[\s\S]*?logoColorOverride: hexColor\.nullable\(\)\.default\(null\)/u);
+  assert.match(source, /canonicalThemeDocumentSchema[\s\S]*?\.strict\(\)/u);
+  assert.match(source, /upgradeLegacyThemeDocument/u);
   assert.match(source, /\^#\[0-9a-fA-F\]\{6\}\$/u);
   assert.match(source, /The theme is incomplete or invalid/u);
 });
 
-test("portable themes round-trip, migrate logo metadata, and reject malformed or partial input atomically", () => {
+test("portable themes round-trip, upgrade legacy core themes, and reject malformed or partial input atomically", () => {
   const result = runThemeModel(`
     import {
+      blankThemeTemplate,
+      coreThemeTokenKeys,
       encodeThemeForUrl,
       parseThemeImport,
       themeContrastWarnings,
@@ -84,6 +163,8 @@ test("portable themes round-trip, migrate logo metadata, and reject malformed or
     const theme = userThemePresets[3].theme;
     const legacy = structuredClone(theme);
     delete legacy.logoColorOverride;
+    const legacyCore = structuredClone(theme);
+    legacyCore.tokens = Object.fromEntries(coreThemeTokenKeys.map((key) => [key, theme.tokens[key]]));
     const missing = structuredClone(theme);
     delete missing.tokens.dangerL2;
     const extra = structuredClone(theme);
@@ -94,7 +175,14 @@ test("portable themes round-trip, migrate logo metadata, and reject malformed or
     });
     let malformed = "";
     try { parseThemeImport("A"); } catch (error) { malformed = error.message; }
+    const blank = blankThemeTemplate();
+    let blankError = "";
+    try { parseThemeImport(JSON.stringify(blank)); } catch (error) { blankError = error.message; }
+    const filledBlank = structuredClone(blank);
+    for (const key of themeTokenKeys) filledBlank.tokens[key] = theme.tokens[key];
+    const parsedFilledBlank = parseThemeImport(JSON.stringify(filledBlank));
     const parsedLegacy = parseThemeImport(JSON.stringify(legacy));
+    const parsedLegacyCore = parseThemeImport(JSON.stringify(legacyCore));
     console.log(JSON.stringify({
       tokenCount: themeTokenKeys.length,
       runtimeVariableCount: Object.keys(themeCssVariables(theme)).length,
@@ -102,18 +190,26 @@ test("portable themes round-trip, migrate logo metadata, and reject malformed or
       codeRoundTrip: JSON.stringify(parseThemeImport(encodeThemeForUrl(theme))) === JSON.stringify(theme),
       urlRoundTrip: JSON.stringify(parseThemeImport(themeShareUrl(theme, "https://example.test/account"))) === JSON.stringify(theme),
       legacyLogoDefault: parsedLegacy.logoColorOverride,
+      legacyCoreExpanded: Object.keys(parsedLegacyCore.tokens).length,
+      blankTokenCount: Object.keys(blank.tokens).length,
+      blankError,
+      filledBlankAccepted: Object.keys(parsedFilledBlank.tokens).length === themeTokenKeys.length,
       rejected,
       malformed,
       presetWarnings: userThemePresets.flatMap(({ theme }) => themeContrastWarnings(theme)).length,
     }));
   `);
   assert.deepEqual(result, {
-    tokenCount: 39,
-    runtimeVariableCount: 42,
+    tokenCount: 76,
+    runtimeVariableCount: 79,
     presetCount: 5,
     codeRoundTrip: true,
     urlRoundTrip: true,
     legacyLogoDefault: null,
+    legacyCoreExpanded: 76,
+    blankTokenCount: 76,
+    blankError: "The theme is incomplete or invalid. tokens.textColor: Use a six-digit hexadecimal color.",
+    filledBlankAccepted: true,
     rejected: true,
     malformed: "The shared theme code is malformed.",
     presetWarnings: 0,
@@ -123,6 +219,7 @@ test("portable themes round-trip, migrate logo metadata, and reject malformed or
 test("preference v2 enforces a combined five-theme shortlist and fifteen saved custom themes", () => {
   const result = runThemeModel(`
     import {
+      coreThemeTokenKeys,
       customThemeReference,
       defaultThemePreference,
       MAX_SAVED_CUSTOM_THEMES,
@@ -178,6 +275,14 @@ test("preference v2 enforces a combined five-theme shortlist and fifteen saved c
       activeThemeId: "custom",
       customTheme: userThemePresets[1].theme,
     });
+    const legacyStoredTheme = structuredClone(customs[0].theme);
+    legacyStoredTheme.tokens = Object.fromEntries(coreThemeTokenKeys.map((key) => [key, legacyStoredTheme.tokens[key]]));
+    const normalizedStored = themePreferenceSchema.parse({
+      schemaVersion: 2,
+      activeThemeId: firstRef,
+      shortlist: [firstRef],
+      customThemes: [{ ...customs[0], theme: legacyStoredTheme }],
+    });
     console.log(JSON.stringify({
       maxSaved: MAX_SAVED_CUSTOM_THEMES,
       maxShortlist: MAX_SHORTLISTED_THEMES,
@@ -192,6 +297,7 @@ test("preference v2 enforces a combined five-theme shortlist and fifteen saved c
       migratedCount: migrated.customThemes.length,
       migratedActiveOwned: migrated.activeThemeId === customThemeReference(migrated.customThemes[0].id),
       migratedActiveShortlisted: migrated.shortlist.includes(migrated.activeThemeId),
+      normalizedStoredTokenCount: Object.keys(normalizedStored.customThemes[0].theme.tokens).length,
     }));
   `);
   assert.deepEqual(result, {
@@ -208,6 +314,7 @@ test("preference v2 enforces a combined five-theme shortlist and fifteen saved c
     migratedCount: 1,
     migratedActiveOwned: true,
     migratedActiveShortlisted: true,
+    normalizedStoredTokenCount: 76,
   });
 });
 
@@ -249,6 +356,7 @@ test("Theme Identity exposes all five safe actions and a manual-delete saved lib
     "Create new",
     "Copy theme URL",
     "Export theme",
+    "Download blank template",
     "Import theme",
     "Import system theme",
     "Preview",
@@ -259,6 +367,8 @@ test("Theme Identity exposes all five safe actions and a manual-delete saved lib
   assert.match(builder, /saveCustomTheme\(document, editingThemeId\)/u);
   assert.match(builder, /Edits stay in this builder until you choose Save/u);
   assert.match(builder, /Create new never overwrites the loaded theme/u);
+  assert.match(builder, /blankThemeTemplate\(\)/u);
+  assert.match(builder, /nyascans-blank-theme-template\.json/u);
   assert.match(builder, /customThemes\.length\} \/ \{MAX_SAVED_CUSTOM_THEMES\} saved/u);
   assert.match(builder, /Delete “\$\{saved\.theme\.name\}” permanently/u);
   assert.match(builder, /controller\.deleteCustomTheme\(saved\.id\)/u);
@@ -313,7 +423,7 @@ test("D1 migration preserves valid legacy themes, rejects damaged capacity, enfo
   const result = runThemeModel(`
     import { DatabaseSync } from "node:sqlite";
     import { readFileSync } from "node:fs";
-    import { userThemePresets } from "./lib/theme-system.ts";
+    import { coreThemeTokenKeys, userThemePresets } from "./lib/theme-system.ts";
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys=ON");
     db.exec(\`CREATE TABLE users (id text PRIMARY KEY);
@@ -328,8 +438,10 @@ test("D1 migration preserves valid legacy themes, rejects damaged capacity, enfo
         updated_at text NOT NULL DEFAULT CURRENT_TIMESTAMP
       );\`);
     db.prepare("INSERT INTO users(id) VALUES (?),(?),(?)").run("valid", "invalid", "cas");
+    const legacyTheme = structuredClone(userThemePresets[0].theme);
+    legacyTheme.tokens = Object.fromEntries(coreThemeTokenKeys.map((key) => [key, legacyTheme.tokens[key]]));
     db.prepare("INSERT INTO user_preferences(user_id,theme,custom_theme_json) VALUES (?,?,?)")
-      .run("valid", "custom", JSON.stringify(userThemePresets[0].theme));
+      .run("valid", "custom", JSON.stringify(legacyTheme));
     db.prepare("INSERT INTO user_preferences(user_id,theme,custom_theme_json) VALUES (?,?,?)")
       .run("invalid", "custom", '{"broken":true}');
     const migration = readFileSync("drizzle/0058_eager_sentinel.sql", "utf8");
@@ -428,8 +540,9 @@ test("logo placeholder is inline, part-addressable, live-token-bound, and manual
 });
 
 test("notification and browser chrome states are driven by editable theme tokens", async () => {
-  const [css, adminCss, browseCss] = await Promise.all([
+  const [css, themeSurfaces, adminCss, browseCss] = await Promise.all([
     readProjectFile("app/globals.css"),
+    readProjectFile("app/theme-surfaces.css"),
     readProjectFile("app/admin.css"),
     readProjectFile("components/nyascans/BrowseFixes.module.css"),
   ]);
@@ -452,15 +565,51 @@ test("notification and browser chrome states are driven by editable theme tokens
   ]) {
     assert.ok(css.includes(selectorOrVariable), `${selectorOrVariable} must be tokenized`);
   }
-  assert.match(css, /system-notification-success \{ --notice-color: var\(--theme-status-green\)/u);
-  assert.match(css, /system-notification-warning \{ --notice-color: var\(--theme-status-yellow\)/u);
-  assert.match(css, /header-notification-action-error[\s\S]*?var\(--theme-danger\)/u);
+  for (const token of exactNotificationTokenKeys) {
+    const cssVariable = `--theme-${token.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
+    assert.ok(themeSurfaces.includes(cssVariable), `${cssVariable} must render a notification surface`);
+  }
+  assert.match(themeSurfaces, /system-notification-success \{ --notice-color: var\(--theme-notification-success\)/u);
+  assert.match(themeSurfaces, /system-notification-warning \{ --notice-color: var\(--theme-notification-warning\)/u);
+  assert.match(themeSurfaces, /header-notification-action-error[\s\S]*?var\(--theme-notification-error\)/u);
+  assert.match(themeSurfaces, /header-notifications > span[\s\S]*?var\(--theme-notification-bell-badge\)/u);
+  assert.match(themeSurfaces, /notification-card\.is-unread[\s\S]*?var\(--theme-notification-unread\)/u);
   assert.match(adminCss, /--theme-placeholder/u);
   assert.match(adminCss, /--theme-disabled-surface/u);
   assert.doesNotMatch(browseCss, /#[0-9a-fA-F]{3,8}\b/u);
 });
 
-test("first-paint cache accepts dynamic custom references and all 42 runtime variables", async () => {
+test("Home section accents and active moving-light families are editable and visible in the live preview", async () => {
+  const [builder, css, layout] = await Promise.all([
+    readProjectFile("components/nyascans/ThemeBuilderPage.tsx"),
+    readProjectFile("app/theme-surfaces.css"),
+    readProjectFile("app/layout.tsx"),
+  ]);
+  for (const token of [...exactHomeSectionTokenKeys, ...exactEffectTokenKeys]) {
+    const cssVariable = `--theme-${token.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
+    assert.ok(css.includes(cssVariable), `${cssVariable} must be consumed by rendered UI`);
+  }
+  for (const selector of [
+    ".trending-section",
+    ".recent-reviews-section",
+    ".home-announcement-slider",
+    ".latest-chapters li.is-paid::after",
+    ".editors-pick-card::before",
+    ".v481-discounts-section .v481-ticket::after",
+    ".home-announcement-banner::after",
+    ".header-notification-menu",
+  ]) {
+    assert.ok(css.includes(selector), `${selector} must be covered by the extension stylesheet`);
+  }
+  assert.match(builder, /Home sections[\s\S]*?Section accents/u);
+  assert.match(builder, /Effects &amp; glows[\s\S]*?Moving light/u);
+  assert.match(builder, /Notification system[\s\S]*?Bell, list &amp; toasts/u);
+  assert.match(builder, /previewHomeSections\.map/u);
+  assert.match(builder, /previewNotificationKinds\.map/u);
+  assert.match(layout, /import "\.\/theme-surfaces\.css"/u);
+});
+
+test("first-paint cache accepts dynamic custom references and all 79 runtime variables", async () => {
   const layout = await readProjectFile("app/layout.tsx");
   assert.match(layout, /nyascans:user-theme-cache:v2/u);
   assert.match(layout, /schemaVersion!==2/u);
@@ -472,13 +621,15 @@ test("first-paint cache accepts dynamic custom references and all 42 runtime var
 });
 
 test("all canonical CSS variables bridge into app semantics and legacy profile themes stay retired", async () => {
-  const [model, css, profile] = await Promise.all([
+  const [model, globalsCss, themeSurfacesCss, profile] = await Promise.all([
     readProjectFile("lib/theme-system.ts"),
     readProjectFile("app/globals.css"),
+    readProjectFile("app/theme-surfaces.css"),
     readProjectFile("components/nyascans/ProfileSettingsWorkspace.tsx"),
   ]);
+  const css = `${globalsCss}\n${themeSurfacesCss}`;
   const cssNames = [...model.matchAll(/: "(--theme-[a-z0-9-]+)"/gu)].map((match) => match[1]);
-  assert.equal(new Set(cssNames).size, 39);
+  assert.equal(new Set(cssNames).size, 76);
   for (const name of new Set(cssNames)) {
     assert.ok(
       css.split(name).length - 1 >= 2,

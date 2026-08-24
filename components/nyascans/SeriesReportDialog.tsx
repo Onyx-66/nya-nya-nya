@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   SpinnerGap,
   WarningCircle,
@@ -48,10 +50,9 @@ export function SeriesReportDialog({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const frame = window.requestAnimationFrame(() => {
-      const categorySelect = dialogRef.current?.querySelector("select") as
-        | HTMLSelectElement
-        | null;
-      categorySelect?.focus();
+      dialogRef.current
+        ?.querySelector<HTMLButtonElement>(".unified-single-select-trigger")
+        ?.focus();
     });
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !submittingRef.current) {
@@ -61,7 +62,7 @@ export function SeriesReportDialog({
       if (event.key !== "Tab") return;
       const focusable = Array.from(
         dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          'button:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
       if (!focusable.length) return;
@@ -166,7 +167,7 @@ export function SeriesReportDialog({
         </p>
         <label>
           <span>Report category</span>
-          <select
+          <UnifiedSingleSelect
             value={category}
             disabled={submitting}
             onChange={(event) =>
@@ -178,7 +179,7 @@ export function SeriesReportDialog({
                 {SERIES_REPORT_CATEGORY_LABELS[value]}
               </option>
             ))}
-          </select>
+          </UnifiedSingleSelect>
         </label>
         {category === "CHILD_SEXUAL_ABUSE_MATERIAL" ? (
           <div className="series-report-critical-note" role="note">

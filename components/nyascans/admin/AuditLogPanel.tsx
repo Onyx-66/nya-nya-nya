@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   CaretLeft,
@@ -386,7 +388,7 @@ export function AuditLogPanel({
         </label>
         <label>
           Result
-          <select
+          <UnifiedSingleSelect
             value={filters.result}
             onChange={(event) =>
               setFilters((current) => ({ ...current, result: event.target.value }))
@@ -396,7 +398,7 @@ export function AuditLogPanel({
             <option value="SUCCESS">Success</option>
             <option value="FAILURE">Failure</option>
             <option value="DENIED">Denied</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Actor

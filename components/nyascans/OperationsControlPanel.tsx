@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1107,7 +1109,7 @@ export function TeamsManager() {
                     <span className={`control-status status-${team.verificationStatus.toLowerCase()}`}>
                       {humanize(team.verificationStatus)}
                     </span>
-                    <select
+                    <UnifiedSingleSelect
                       aria-label={`Change ${team.name} verification`}
                       value={team.verificationStatus}
                       disabled={busy === team.id}
@@ -1121,7 +1123,7 @@ export function TeamsManager() {
                       <option value="PENDING">Pending</option>
                       <option value="VERIFIED">Verified</option>
                       <option value="SUSPENDED">Suspended</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                 </article>
               ))}
@@ -1144,7 +1146,7 @@ export function TeamsManager() {
           </div>
           <label>
             <span>Team</span>
-            <select
+            <UnifiedSingleSelect
               value={membershipForm.teamId}
               onChange={(event) =>
                 {
@@ -1159,11 +1161,11 @@ export function TeamsManager() {
               {teams.map((team) => (
                 <option value={team.id} key={team.id}>{team.name}</option>
               ))}
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             <span>User</span>
-            <select
+            <UnifiedSingleSelect
               value={membershipForm.userId}
               onChange={(event) =>
                 {
@@ -1180,11 +1182,11 @@ export function TeamsManager() {
                   {user.displayName} · {user.email}
                 </option>
               ))}
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             <span>Team role</span>
-            <select
+            <UnifiedSingleSelect
               value={membershipForm.membershipRole}
               onChange={(event) =>
                 {
@@ -1199,11 +1201,11 @@ export function TeamsManager() {
               <option value="OWNER">Owner</option>
               <option value="LEADER">Leader</option>
               <option value="UPLOADER">Uploader</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             <span>Status</span>
-            <select
+            <UnifiedSingleSelect
               value={membershipForm.status}
               onChange={(event) =>
                 {
@@ -1217,7 +1219,7 @@ export function TeamsManager() {
             >
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <button className="button button-primary" disabled={busy === "membership"}>
             Save membership
@@ -1274,7 +1276,7 @@ export function TeamsManager() {
           </div>
           <label>
             <span>Series</span>
-            <select
+            <UnifiedSingleSelect
               value={assignmentForm.seriesId}
               onChange={(event) =>
                 {
@@ -1289,11 +1291,11 @@ export function TeamsManager() {
               {series.map((item) => (
                 <option value={item.id} key={item.id}>{item.title}</option>
               ))}
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             <span>Team</span>
-            <select
+            <UnifiedSingleSelect
               value={assignmentForm.teamId}
               onChange={(event) =>
                 {
@@ -1308,7 +1310,7 @@ export function TeamsManager() {
               {teams.map((team) => (
                 <option value={team.id} key={team.id}>{team.name}</option>
               ))}
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label className="settings-check">
             <input
@@ -1754,7 +1756,7 @@ function UsersManager({
                   </section>
                   <label className="user-admin-status-control">
                     <span>Status</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={user.status}
                       disabled={accessDisabled}
                       onChange={(event) =>
@@ -1765,7 +1767,7 @@ function UsersManager({
                     >
                       <option value="ACTIVE">Active</option>
                       <option value="SUSPENDED">Suspended</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <section className="user-recent-activity">
                     <span>Recent activity</span>
@@ -3077,7 +3079,7 @@ function PayoutsPanel() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search team name or slug"
             />
-            <select
+            <UnifiedSingleSelect
               aria-label="Filter payout status"
               value={status}
               onChange={(event) => {
@@ -3088,7 +3090,7 @@ function PayoutsPanel() {
               }}
             >
               {payoutStatuses.map((entry) => <option key={entry} value={entry}>{humanize(entry)}</option>)}
-            </select>
+            </UnifiedSingleSelect>
             <button type="submit" disabled={loading}>Search</button>
           </form>
         }
@@ -4207,7 +4209,7 @@ function ChapterAccessPanel() {
                   </label>
                   <label className="chapter-editor-wide">
                     <span>Reader format</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={form.format}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -4218,7 +4220,7 @@ function ChapterAccessPanel() {
                     >
                       <option value="VERTICAL">Vertical / manhwa</option>
                       <option value="PAGED">Paged / manga</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label className="chapter-editor-wide">
                     <span>Release notes</span>
@@ -4245,7 +4247,7 @@ function ChapterAccessPanel() {
                 <div className="chapter-editor-grid">
                   <label>
                     <span>Publication state</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={form.state}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -4257,7 +4259,7 @@ function ChapterAccessPanel() {
                       <option value="DRAFT">Draft</option>
                       <option value="READY_FOR_REVIEW">Ready for review</option>
                       <option value="PUBLISHED">Published</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     <span>Release date</span>
@@ -4284,7 +4286,7 @@ function ChapterAccessPanel() {
                 <div className="chapter-editor-grid">
                   <label>
                     <span>Reader access</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={form.accessType}
                       onChange={(event) =>
                         setForm((current) => ({
@@ -4296,7 +4298,7 @@ function ChapterAccessPanel() {
                     >
                       <option value="FREE">Free</option>
                       <option value="PAID">Paid</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   {form.accessType === "PAID" ? (
                     <label>
@@ -6048,7 +6050,7 @@ function WorkspacePanel({
             ) : (
               <label>
                 <span>Series discussion</span>
-                <select
+                <UnifiedSingleSelect
                   value={commentSeries}
                   onChange={(event) => {
                     setCommentSeries(event.target.value);
@@ -6065,7 +6067,7 @@ function WorkspacePanel({
                       {String(seriesRecord.title)}
                     </option>
                   ))}
-                </select>
+                </UnifiedSingleSelect>
               </label>
             )}
             {commentSeries ? (
@@ -6460,7 +6462,7 @@ function WorkspacePanel({
         <form className="workspace-settings-form" onSubmit={saveSettings}>
           <label>
             Default team
-            <select
+            <UnifiedSingleSelect
               value={settings.defaultTeamId}
               onChange={(event) =>
                 setSettings((current) => ({
@@ -6475,7 +6477,7 @@ function WorkspacePanel({
                   {String(team.name)}
                 </option>
               ))}
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             Default release language

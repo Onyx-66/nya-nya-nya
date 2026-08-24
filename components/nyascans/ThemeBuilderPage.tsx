@@ -23,7 +23,9 @@ import {
 import { ThemeAwareLogo } from "@/components/nyascans/ThemeAwareLogo";
 import type { ThemeController } from "@/components/nyascans/UserThemeSystem";
 import { themeForPreset } from "@/components/nyascans/UserThemeSystem";
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import {
+  blankThemeTemplate,
   cloneTheme,
   cssVariableForToken,
   customThemeReference,
@@ -44,6 +46,29 @@ import {
   type ThemeDocument,
   type ThemeTokenKey,
 } from "@/lib/theme-system";
+
+const previewHomeSections = [
+  ["featured", "Featured"],
+  ["trending", "Trending"],
+  ["continue", "Continue reading"],
+  ["pinned", "Pinned Series"],
+  ["reviews", "Recent Reviews"],
+  ["discounts", "Discounts"],
+  ["announcements", "Announcements"],
+  ["latest", "Latest Updates"],
+  ["editors", "Editor's Pick"],
+  ["new-series", "New Series"],
+  ["teams", "Publishing Teams"],
+  ["community", "Recent Comments"],
+  ["hot", "Hot This Week"],
+] as const;
+
+const previewNotificationKinds = [
+  ["success", "Saved"],
+  ["info", "Information"],
+  ["warning", "Needs attention"],
+  ["error", "Action failed"],
+] as const;
 
 type ThemeBuilderProps = {
   controller: ThemeController;
@@ -179,6 +204,69 @@ function ThemePreview({ theme }: { theme: ThemeDocument }) {
             <span key={tone} data-status={tone}><i />{label}</span>
           ))}
         </div>
+        <section className="theme-preview-audit-block" aria-labelledby="theme-preview-sections-title">
+          <div className="theme-preview-audit-heading">
+            <small>Home sections</small>
+            <h3 id="theme-preview-sections-title">Section accents</h3>
+          </div>
+          <div className="theme-preview-section-grid">
+            {previewHomeSections.map(([section, label]) => (
+              <span key={section} data-preview-section={section}>
+                <i aria-hidden="true" />
+                {label}
+              </span>
+            ))}
+          </div>
+        </section>
+        <section className="theme-preview-audit-block" aria-labelledby="theme-preview-effects-title">
+          <div className="theme-preview-audit-heading">
+            <small>Effects &amp; glows</small>
+            <h3 id="theme-preview-effects-title">Moving light</h3>
+          </div>
+          <div className="theme-preview-effect-stage">
+            <div className="theme-preview-effect-header">
+              <span aria-hidden="true">✦</span>
+              <strong>Animated section header</strong>
+              <button type="button">View all</button>
+            </div>
+            <div className="theme-preview-effect-specimens">
+              <span className="is-badge">Badge</span>
+              <span className="is-cover">Cover</span>
+              <span className="is-button">Button</span>
+              <span className="is-paid">Paid</span>
+              <span className="is-discount">−25%</span>
+              <span className="is-announcement">Notice</span>
+            </div>
+            <div className="theme-preview-rank-glows" aria-label="Rank glow colors">
+              <span className="is-gold">1</span>
+              <span className="is-silver">2</span>
+              <span className="is-bronze">3</span>
+            </div>
+          </div>
+        </section>
+        <section className="theme-preview-audit-block" aria-labelledby="theme-preview-notifications-title">
+          <div className="theme-preview-audit-heading">
+            <small>Notification system</small>
+            <h3 id="theme-preview-notifications-title">Bell, list &amp; toasts</h3>
+          </div>
+          <div className="theme-preview-notification-stage">
+            <div className="theme-preview-notification-bell" aria-label="Notification bell badge preview">
+              <span aria-hidden="true">♢</span><b>3</b>
+            </div>
+            <div className="theme-preview-notification-menu">
+              <strong>Notifications</strong>
+              <span className="is-unread"><i />New chapter released</span>
+              <span className="is-read"><i />Review received</span>
+            </div>
+            <div className="theme-preview-toast-list">
+              {previewNotificationKinds.map(([kind, label]) => (
+                <span key={kind} data-notification-kind={kind}>
+                  <i aria-hidden="true" />{label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
       </div>
     </section>
   );
@@ -508,6 +596,23 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
     setError("");
   }
 
+  function downloadBlankTemplate() {
+    const template = blankThemeTemplate();
+    const blob = new Blob([`${JSON.stringify(template, null, 2)}\n`], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "nyascans-blank-theme-template.json";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setMessage(
+      `Blank template downloaded with every ${Object.keys(template.tokens).length} token key. Fill every color before importing it.`,
+    );
+    setError("");
+  }
+
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -559,7 +664,7 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
               </label>
               <label>
                 <span>Theme type</span>
-                <select
+                <UnifiedSingleSelect
                   value={draft.type}
                   onChange={(event) =>
                     updateDraft({ ...draft, type: event.target.value as "dark" | "light" })
@@ -567,26 +672,26 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
                 >
                   <option value="dark">Dark</option>
                   <option value="light">Light</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label>
                 <span>Import system theme</span>
                 <span className="theme-builder-inline-control">
-                  <select
+                  <UnifiedSingleSelect
                     value={basePreset}
                     onChange={(event) => setBasePreset(event.target.value as PresetThemeId)}
                   >
                     {userThemePresets.map((preset) => (
                       <option value={preset.id} key={preset.id}>{preset.theme.name}</option>
                     ))}
-                  </select>
+                  </UnifiedSingleSelect>
                   <button type="button" onClick={createNew}>Use as new base</button>
                 </span>
               </label>
               <label>
                 <span>Load theme</span>
                 <span className="theme-builder-inline-control">
-                  <select
+                  <UnifiedSingleSelect
                     value={loadThemeId}
                     onChange={(event) => setLoadThemeId(event.target.value as CustomThemeId | "")}
                     disabled={!customThemes.length}
@@ -595,7 +700,7 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
                     {customThemes.map((saved) => (
                       <option key={saved.id} value={saved.id}>{saved.theme.name}</option>
                     ))}
-                  </select>
+                  </UnifiedSingleSelect>
                   <button type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>Load</button>
                 </span>
               </label>
@@ -660,6 +765,9 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
               </button>
               <button className="button button-secondary" type="button" onClick={exportTheme}>
                 <DownloadSimple size={17} /> Export theme
+              </button>
+              <button className="button button-secondary" type="button" onClick={downloadBlankTemplate}>
+                <DownloadSimple size={17} /> Download blank template
               </button>
             </div>
             <p className="theme-builder-save-note">

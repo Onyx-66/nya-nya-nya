@@ -9,7 +9,7 @@ export const THEME_IMPORT_LIMIT = 64 * 1024;
 export const MAX_SAVED_CUSTOM_THEMES = 15;
 export const MAX_SHORTLISTED_THEMES = 5;
 
-export const themeTokenKeys = [
+export const coreThemeTokenKeys = [
   "textColor",
   "mainBackground",
   "accent",
@@ -49,6 +49,59 @@ export const themeTokenKeys = [
   "danger",
   "dangerL1",
   "dangerL2",
+] as const;
+
+export const homeSectionThemeTokenKeys = [
+  "homeFeaturedAccent",
+  "homeTrendingAccent",
+  "homeContinueReadingAccent",
+  "homePinnedSeriesAccent",
+  "homeRecentReviewsAccent",
+  "homeDiscountsAccent",
+  "homeAnnouncementsAccent",
+  "homeLatestUpdatesAccent",
+  "homeEditorsPickAccent",
+  "homeNewSeriesAccent",
+  "homePublishingTeamsAccent",
+  "homeCommunityAccent",
+  "homeHotThisWeekAccent",
+] as const;
+
+export const effectThemeTokenKeys = [
+  "effectMovingLight",
+  "effectMovingLightSecondary",
+  "effectBadgeGlow",
+  "effectSectionHeaderGlow",
+  "effectIconGlow",
+  "effectCoverGlow",
+  "effectButtonGlow",
+  "effectGoldGlow",
+  "effectSilverGlow",
+  "effectBronzeGlow",
+  "effectPaidGlow",
+  "effectDiscountGlow",
+  "effectAnnouncementGlow",
+] as const;
+
+export const notificationThemeTokenKeys = [
+  "notificationToastSurface",
+  "notificationToastText",
+  "notificationBellBadge",
+  "notificationDropdownSurface",
+  "notificationDropdownBorder",
+  "notificationUnread",
+  "notificationRead",
+  "notificationSuccess",
+  "notificationInfo",
+  "notificationWarning",
+  "notificationError",
+] as const;
+
+export const themeTokenKeys = [
+  ...coreThemeTokenKeys,
+  ...homeSectionThemeTokenKeys,
+  ...effectThemeTokenKeys,
+  ...notificationThemeTokenKeys,
 ] as const;
 
 export type ThemeTokenKey = (typeof themeTokenKeys)[number];
@@ -99,10 +152,118 @@ export const themeTokensSchema = z
     danger: hexColor,
     dangerL1: hexColor,
     dangerL2: hexColor,
+    homeFeaturedAccent: hexColor,
+    homeTrendingAccent: hexColor,
+    homeContinueReadingAccent: hexColor,
+    homePinnedSeriesAccent: hexColor,
+    homeRecentReviewsAccent: hexColor,
+    homeDiscountsAccent: hexColor,
+    homeAnnouncementsAccent: hexColor,
+    homeLatestUpdatesAccent: hexColor,
+    homeEditorsPickAccent: hexColor,
+    homeNewSeriesAccent: hexColor,
+    homePublishingTeamsAccent: hexColor,
+    homeCommunityAccent: hexColor,
+    homeHotThisWeekAccent: hexColor,
+    effectMovingLight: hexColor,
+    effectMovingLightSecondary: hexColor,
+    effectBadgeGlow: hexColor,
+    effectSectionHeaderGlow: hexColor,
+    effectIconGlow: hexColor,
+    effectCoverGlow: hexColor,
+    effectButtonGlow: hexColor,
+    effectGoldGlow: hexColor,
+    effectSilverGlow: hexColor,
+    effectBronzeGlow: hexColor,
+    effectPaidGlow: hexColor,
+    effectDiscountGlow: hexColor,
+    effectAnnouncementGlow: hexColor,
+    notificationToastSurface: hexColor,
+    notificationToastText: hexColor,
+    notificationBellBadge: hexColor,
+    notificationDropdownSurface: hexColor,
+    notificationDropdownBorder: hexColor,
+    notificationUnread: hexColor,
+    notificationRead: hexColor,
+    notificationSuccess: hexColor,
+    notificationInfo: hexColor,
+    notificationWarning: hexColor,
+    notificationError: hexColor,
   })
   .strict();
 
-export const themeDocumentSchema = z
+type LegacyCoreTokens = Record<(typeof coreThemeTokenKeys)[number], string>;
+
+function extensionDefaults(tokens: LegacyCoreTokens) {
+  return {
+    homeFeaturedAccent: tokens.primary,
+    homeTrendingAccent: tokens.statusYellow,
+    homeContinueReadingAccent: tokens.statusBlue,
+    homePinnedSeriesAccent: tokens.statusYellow,
+    homeRecentReviewsAccent: tokens.statusPurple,
+    homeDiscountsAccent: tokens.statusRed,
+    homeAnnouncementsAccent: tokens.indicationBlue,
+    homeLatestUpdatesAccent: tokens.primary,
+    homeEditorsPickAccent: tokens.statusPurple,
+    homeNewSeriesAccent: tokens.statusGreen,
+    homePublishingTeamsAccent: tokens.statusPurple,
+    homeCommunityAccent: tokens.indicationBlue,
+    homeHotThisWeekAccent: tokens.statusRed,
+    effectMovingLight: tokens.primary,
+    effectMovingLightSecondary: tokens.primaryL2,
+    effectBadgeGlow: tokens.statusPurple,
+    effectSectionHeaderGlow: tokens.primary,
+    effectIconGlow: tokens.indicationBlue,
+    effectCoverGlow: tokens.primary,
+    effectButtonGlow: tokens.primaryL1,
+    effectGoldGlow: tokens.statusYellow,
+    effectSilverGlow: tokens.statusGrey,
+    effectBronzeGlow: tokens.dangerL1,
+    effectPaidGlow: tokens.statusYellow,
+    effectDiscountGlow: tokens.statusRed,
+    effectAnnouncementGlow: tokens.indicationBlue,
+    notificationToastSurface: tokens.accentL1,
+    notificationToastText: tokens.textColor,
+    notificationBellBadge: tokens.danger,
+    notificationDropdownSurface: tokens.accent,
+    notificationDropdownBorder: tokens.accentL3,
+    notificationUnread: tokens.primary,
+    notificationRead: tokens.accentL1,
+    notificationSuccess: tokens.statusGreen,
+    notificationInfo: tokens.indicationBlue,
+    notificationWarning: tokens.statusYellow,
+    notificationError: tokens.danger,
+  } satisfies Record<
+    | (typeof homeSectionThemeTokenKeys)[number]
+    | (typeof effectThemeTokenKeys)[number]
+    | (typeof notificationThemeTokenKeys)[number],
+    string
+  >;
+}
+
+function upgradeLegacyThemeDocument(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const document = value as Record<string, unknown>;
+  const rawTokens = document.tokens;
+  if (!rawTokens || typeof rawTokens !== "object" || Array.isArray(rawTokens)) {
+    return value;
+  }
+  const tokens = rawTokens as Record<string, unknown>;
+  const tokenNames = Object.keys(tokens);
+  const isExactLegacyTokenSet =
+    tokenNames.length === coreThemeTokenKeys.length &&
+    coreThemeTokenKeys.every((key) => Object.hasOwn(tokens, key));
+  if (!isExactLegacyTokenSet) return value;
+  return {
+    ...document,
+    tokens: {
+      ...tokens,
+      ...extensionDefaults(tokens as LegacyCoreTokens),
+    },
+  };
+}
+
+const canonicalThemeDocumentSchema = z
   .object({
     schemaVersion: z.literal(THEME_SCHEMA_VERSION),
     name: z.string().trim().min(1).max(48),
@@ -111,6 +272,11 @@ export const themeDocumentSchema = z
     logoColorOverride: hexColor.nullable().default(null),
   })
   .strict();
+
+export const themeDocumentSchema = z.preprocess(
+  upgradeLegacyThemeDocument,
+  canonicalThemeDocumentSchema,
+);
 
 export type ThemeTokens = z.infer<typeof themeTokensSchema>;
 export type ThemeDocument = z.infer<typeof themeDocumentSchema>;
@@ -174,6 +340,18 @@ export const themeTokenGroups = [
     name: "Danger",
     tokens: ["danger", "dangerL1", "dangerL2"] as const,
   },
+  {
+    name: "Home Sections",
+    tokens: homeSectionThemeTokenKeys,
+  },
+  {
+    name: "Effects & Glows",
+    tokens: effectThemeTokenKeys,
+  },
+  {
+    name: "Notifications",
+    tokens: notificationThemeTokenKeys,
+  },
 ] as const;
 
 export const themeTokenLabels: Record<ThemeTokenKey, string> = {
@@ -216,6 +394,43 @@ export const themeTokenLabels: Record<ThemeTokenKey, string> = {
   danger: "Danger",
   dangerL1: "Danger L1",
   dangerL2: "Danger L2",
+  homeFeaturedAccent: "Featured Slider Accent",
+  homeTrendingAccent: "Trending Accent",
+  homeContinueReadingAccent: "Continue Reading Accent",
+  homePinnedSeriesAccent: "Pinned Series Accent",
+  homeRecentReviewsAccent: "Recent Reviews Accent",
+  homeDiscountsAccent: "Discounts Accent",
+  homeAnnouncementsAccent: "Announcements Accent",
+  homeLatestUpdatesAccent: "Latest Updates Accent",
+  homeEditorsPickAccent: "Editor's Pick Accent",
+  homeNewSeriesAccent: "New Series Accent",
+  homePublishingTeamsAccent: "Publishing Teams Accent",
+  homeCommunityAccent: "Recent Comments Accent",
+  homeHotThisWeekAccent: "Hot This Week Accent",
+  effectMovingLight: "Moving Light",
+  effectMovingLightSecondary: "Moving Light (secondary)",
+  effectBadgeGlow: "Badge Glow",
+  effectSectionHeaderGlow: "Section Header Glow",
+  effectIconGlow: "Icon Glow",
+  effectCoverGlow: "Cover Glow",
+  effectButtonGlow: "Button Glow",
+  effectGoldGlow: "Gold Rank Glow",
+  effectSilverGlow: "Silver Rank Glow",
+  effectBronzeGlow: "Bronze Rank Glow",
+  effectPaidGlow: "Paid Release Glow",
+  effectDiscountGlow: "Discount Glow",
+  effectAnnouncementGlow: "Announcement Glow",
+  notificationToastSurface: "Toast Surface",
+  notificationToastText: "Toast Text",
+  notificationBellBadge: "Notification Bell Badge",
+  notificationDropdownSurface: "Notification Dropdown Surface",
+  notificationDropdownBorder: "Notification Dropdown Border",
+  notificationUnread: "Unread Notification",
+  notificationRead: "Read Notification",
+  notificationSuccess: "Notification Success",
+  notificationInfo: "Notification Info",
+  notificationWarning: "Notification Warning",
+  notificationError: "Notification Error",
 };
 
 type PaletteSeed = {
@@ -245,53 +460,57 @@ type PaletteSeed = {
 
 function defineTheme(seed: PaletteSeed): ThemeDocument {
   const [a0, a1, a2, a3, a4, a5, a6, a7] = seed.accents;
+  const statusPalette = {
+    statusRed: "#EF8175",
+    statusGreen: "#39C98A",
+    statusYellow: "#E6BD61",
+    statusBlue: "#5AB7FF",
+    statusPurple: "#B39AF4",
+    statusGrey: a6,
+    indicationBlue: "#8ECBFF",
+    danger: "#D95F55",
+    dangerL1: "#B94236",
+    dangerL2: "#913128",
+    ...seed.statuses,
+  };
+  const coreTokens = {
+    textColor: seed.text,
+    mainBackground: seed.background,
+    accent: a0,
+    accentHover: a1,
+    accentActive: a2,
+    accentL1: a1,
+    accentL1Hover: a2,
+    accentL1Active: a3,
+    accentL2: a2,
+    accentL2Hover: a3,
+    accentL2Active: a4,
+    accentL3: a3,
+    accentL3Hover: a4,
+    accentL3Active: a5,
+    accentL4: a4,
+    accentL4Hover: a5,
+    accentL4Active: a6,
+    accentL5: a5,
+    accentL5Hover: a6,
+    accentL5Active: a7,
+    midTone: a6,
+    contrastL1: seed.type === "dark" ? "#FFFFFF" : "#070708",
+    scrollbarColor: a4,
+    scrollbarColorHover: a6,
+    buttonAccent: seed.primary[0],
+    buttonAccentAlternate: seed.buttonInk,
+    primary: seed.primary[0],
+    primaryL1: seed.primary[1],
+    primaryL2: seed.primary[2],
+    ...statusPalette,
+  } satisfies LegacyCoreTokens;
   return themeDocumentSchema.parse({
     schemaVersion: THEME_SCHEMA_VERSION,
     name: seed.name,
     type: seed.type,
     logoColorOverride: null,
-    tokens: {
-      textColor: seed.text,
-      mainBackground: seed.background,
-      accent: a0,
-      accentHover: a1,
-      accentActive: a2,
-      accentL1: a1,
-      accentL1Hover: a2,
-      accentL1Active: a3,
-      accentL2: a2,
-      accentL2Hover: a3,
-      accentL2Active: a4,
-      accentL3: a3,
-      accentL3Hover: a4,
-      accentL3Active: a5,
-      accentL4: a4,
-      accentL4Hover: a5,
-      accentL4Active: a6,
-      accentL5: a5,
-      accentL5Hover: a6,
-      accentL5Active: a7,
-      midTone: a6,
-      contrastL1: seed.type === "dark" ? "#FFFFFF" : "#070708",
-      scrollbarColor: a4,
-      scrollbarColorHover: a6,
-      buttonAccent: seed.primary[0],
-      buttonAccentAlternate: seed.buttonInk,
-      primary: seed.primary[0],
-      primaryL1: seed.primary[1],
-      primaryL2: seed.primary[2],
-      statusRed: "#EF8175",
-      statusGreen: "#39C98A",
-      statusYellow: "#E6BD61",
-      statusBlue: "#5AB7FF",
-      statusPurple: "#B39AF4",
-      statusGrey: a6,
-      indicationBlue: "#8ECBFF",
-      danger: "#D95F55",
-      dangerL1: "#B94236",
-      dangerL2: "#913128",
-      ...seed.statuses,
-    },
+    tokens: { ...coreTokens, ...extensionDefaults(coreTokens) },
   });
 }
 
@@ -714,6 +933,43 @@ const cssTokenNames: Record<ThemeTokenKey, string> = {
   danger: "--theme-danger",
   dangerL1: "--theme-danger-l1",
   dangerL2: "--theme-danger-l2",
+  homeFeaturedAccent: "--theme-home-featured-accent",
+  homeTrendingAccent: "--theme-home-trending-accent",
+  homeContinueReadingAccent: "--theme-home-continue-reading-accent",
+  homePinnedSeriesAccent: "--theme-home-pinned-series-accent",
+  homeRecentReviewsAccent: "--theme-home-recent-reviews-accent",
+  homeDiscountsAccent: "--theme-home-discounts-accent",
+  homeAnnouncementsAccent: "--theme-home-announcements-accent",
+  homeLatestUpdatesAccent: "--theme-home-latest-updates-accent",
+  homeEditorsPickAccent: "--theme-home-editors-pick-accent",
+  homeNewSeriesAccent: "--theme-home-new-series-accent",
+  homePublishingTeamsAccent: "--theme-home-publishing-teams-accent",
+  homeCommunityAccent: "--theme-home-community-accent",
+  homeHotThisWeekAccent: "--theme-home-hot-this-week-accent",
+  effectMovingLight: "--theme-effect-moving-light",
+  effectMovingLightSecondary: "--theme-effect-moving-light-secondary",
+  effectBadgeGlow: "--theme-effect-badge-glow",
+  effectSectionHeaderGlow: "--theme-effect-section-header-glow",
+  effectIconGlow: "--theme-effect-icon-glow",
+  effectCoverGlow: "--theme-effect-cover-glow",
+  effectButtonGlow: "--theme-effect-button-glow",
+  effectGoldGlow: "--theme-effect-gold-glow",
+  effectSilverGlow: "--theme-effect-silver-glow",
+  effectBronzeGlow: "--theme-effect-bronze-glow",
+  effectPaidGlow: "--theme-effect-paid-glow",
+  effectDiscountGlow: "--theme-effect-discount-glow",
+  effectAnnouncementGlow: "--theme-effect-announcement-glow",
+  notificationToastSurface: "--theme-notification-toast-surface",
+  notificationToastText: "--theme-notification-toast-text",
+  notificationBellBadge: "--theme-notification-bell-badge",
+  notificationDropdownSurface: "--theme-notification-dropdown-surface",
+  notificationDropdownBorder: "--theme-notification-dropdown-border",
+  notificationUnread: "--theme-notification-unread",
+  notificationRead: "--theme-notification-read",
+  notificationSuccess: "--theme-notification-success",
+  notificationInfo: "--theme-notification-info",
+  notificationWarning: "--theme-notification-warning",
+  notificationError: "--theme-notification-error",
 };
 
 export function themeCssVariables(theme: ThemeDocument) {
@@ -730,6 +986,16 @@ export function themeCssVariables(theme: ThemeDocument) {
 
 export function cssVariableForToken(key: ThemeTokenKey) {
   return cssTokenNames[key];
+}
+
+export function blankThemeTemplate() {
+  return {
+    schemaVersion: THEME_SCHEMA_VERSION,
+    name: "My custom theme",
+    type: "dark" as const,
+    tokens: Object.fromEntries(themeTokenKeys.map((key) => [key, ""])),
+    logoColorOverride: null,
+  };
 }
 
 function base64UrlEncode(value: string) {

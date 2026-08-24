@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -367,7 +369,7 @@ export function SeriesReportsPanel() {
         </label>
         <label>
           Status
-          <select
+          <UnifiedSingleSelect
             value={status}
             onChange={(event) => {
               setStatus(event.target.value as StatusFilter);
@@ -380,7 +382,7 @@ export function SeriesReportsPanel() {
                 {SERIES_REPORT_STATUS_LABELS[entry]}
               </option>
             ))}
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Category
@@ -397,7 +399,7 @@ export function SeriesReportsPanel() {
         </label>
         <label>
           Results per page
-          <select
+          <UnifiedSingleSelect
             value={pagination.limit}
             onChange={(event) =>
               setPagination((current) => ({
@@ -410,7 +412,7 @@ export function SeriesReportsPanel() {
             <option value={10}>10</option>
             <option value={20}>20</option>
             <option value={50}>50</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <div className="audit-filter-actions">
           <button

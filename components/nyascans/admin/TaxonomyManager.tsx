@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   CaretLeft,
@@ -344,7 +346,7 @@ export function TaxonomyManager() {
       <div className="admin-filter-bar">
         <label>
           Entity type
-          <select
+          <UnifiedSingleSelect
             value={type}
             onChange={(event) => {
               const nextType = event.target.value as EntityType;
@@ -369,7 +371,7 @@ export function TaxonomyManager() {
             <option value="GENRE">Genres & tags</option>
             <option value="CREATOR">Authors and artists</option>
             <option value="PUBLISHER">Publishing studios</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <label>
           Search

@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -472,7 +474,7 @@ export function EnhancedDiscussionSection({
       );
       const focusable = Array.from(
         picker?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
       if (focusable.length === 0) return;
@@ -1240,7 +1242,7 @@ export function EnhancedDiscussionSection({
                   </label>
                   {gifCategories.length > 1 ? <label>
                     <span className="sr-only">GIF category</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={gifCategory}
                       onChange={(event) => setGifCategory(event.target.value)}
                     >
@@ -1249,7 +1251,7 @@ export function EnhancedDiscussionSection({
                           {category === "ALL" ? "All categories" : category}
                         </option>
                       ))}
-                    </select>
+                    </UnifiedSingleSelect>
                   </label> : null}
                 </div>
                 {loading ? (
@@ -1359,7 +1361,7 @@ export function EnhancedDiscussionSection({
                   </label>
                   <label>
                     <span className="sr-only">Emoji category</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={emojiGroup}
                       onChange={(event) => {
                         setEmojiGroup(event.target.value);
@@ -1371,7 +1373,7 @@ export function EnhancedDiscussionSection({
                           {group.name}
                         </option>
                       ))}
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                 </div>
                 {emojiLoading ? (
@@ -1597,7 +1599,7 @@ export function EnhancedDiscussionSection({
             {eligibleAffiliations.length > 1 ? (
               <label className="comment-affiliation-select">
                 <span>Team affiliation</span>
-                <select
+                <UnifiedSingleSelect
                   value={affiliationTeamId}
                   onChange={(event) =>
                     setAffiliationTeamId(event.target.value)
@@ -1609,7 +1611,7 @@ export function EnhancedDiscussionSection({
                       {team.name}
                     </option>
                   ))}
-                </select>
+                </UnifiedSingleSelect>
               </label>
             ) : null}
           </div>
@@ -2085,7 +2087,7 @@ export function EnhancedDiscussionSection({
             <div className="comment-inline-action">
               <label>
                 <span>Reason</span>
-                <select
+                <UnifiedSingleSelect
                   value={reportReason}
                   onChange={(event) => setReportReason(event.target.value)}
                 >
@@ -2093,7 +2095,7 @@ export function EnhancedDiscussionSection({
                   <option>Harassment or hate</option>
                   <option>Spam or promotion</option>
                   <option>Illegal content</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <button
                 type="button"

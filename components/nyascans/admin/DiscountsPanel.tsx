@@ -23,6 +23,8 @@ import {
   ConfirmActionDialog,
   useUnsavedChanges,
 } from "@/components/nyascans/admin/AdminPageScaffold";
+import { DISCOUNTS_UPDATED_EVENT } from "@/components/nyascans/ActiveDiscountBadge";
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import { coinLabel } from "@/lib/commercial-settings";
 
@@ -101,7 +103,11 @@ type DiscountDraft = {
 };
 
 type AdminErrorPayload = {
-  error?: { message?: string; code?: string };
+  error?: {
+    message?: string;
+    code?: string;
+    fields?: Array<{ path?: string; message?: string }>;
+  };
 };
 
 const EMPTY_PAYLOAD: DiscountsAdminPayload = {
@@ -115,10 +121,18 @@ async function readPayload(response: Response) {
     | DiscountsAdminPayload
     | AdminErrorPayload;
   if (!response.ok) {
+    const fieldMessages = "error" in payload
+      ? (payload.error?.fields ?? [])
+          .map((field) => field.message?.trim())
+          .filter((message): message is string => Boolean(message))
+      : [];
+    const message = "error" in payload
+      ? payload.error?.message ?? "The discount could not be saved."
+      : "The discount could not be saved.";
     throw new Error(
-      "error" in payload
-        ? payload.error?.message ?? "The discount could not be saved."
-        : "The discount could not be saved.",
+      fieldMessages.length
+        ? `${message} ${fieldMessages.join(" ")}`
+        : message,
     );
   }
   return payload as DiscountsAdminPayload;
@@ -224,6 +238,44 @@ function formatScheduleDate(value: string) {
   }).format(new Date(timestamp));
 }
 
+function validateDiscountDraft(
+  draft: DiscountDraft,
+  reducedPrice: number | null,
+) {
+  const issues: string[] = [];
+  if (!draft.seriesId) {
+    issues.push("Select the paid chapter or series to discount.");
+  } else if (!Number.isSafeInteger(draft.originalPrice) || draft.originalPrice <= 0) {
+    issues.push(
+      "The selected content does not have an eligible positive paid-chapter price. Reload the content list or choose another target.",
+    );
+  }
+  if (draft.targetType === "CHAPTER" && !draft.chapterId) {
+    issues.push("Select a paid chapter.");
+  }
+  const discountValue = Number(draft.discountValue);
+  if (!Number.isSafeInteger(discountValue) || discountValue < 1) {
+    issues.push("Enter a whole-number discount value of at least 1.");
+  } else if (draft.discountType === "PERCENT" && discountValue > 99) {
+    issues.push("Percentage discounts must be between 1 and 99.");
+  }
+  if (
+    draft.seriesId &&
+    draft.originalPrice > 0 &&
+    (reducedPrice === null || reducedPrice <= 0 || reducedPrice >= draft.originalPrice)
+  ) {
+    issues.push("The reduced price must be lower than the current original price.");
+  }
+  const startsAt = Date.parse(draft.startsAt);
+  const endsAt = Date.parse(draft.endsAt);
+  if (!Number.isFinite(startsAt)) issues.push("Choose a valid start date and time.");
+  if (!Number.isFinite(endsAt)) issues.push("Choose a valid end date and time.");
+  if (Number.isFinite(startsAt) && Number.isFinite(endsAt) && endsAt <= startsAt) {
+    issues.push("The end date must be after the start date.");
+  }
+  return issues;
+}
+
 export function DiscountsPanel({
   endpoint = "/api/v1/admin/discounts",
   onSaved,
@@ -237,6 +289,7 @@ export function DiscountsPanel({
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DiscountAdminRecord | null>(null);
   const [message, setMessage] = useState<{
     kind: "success" | "error" | "neutral";
@@ -370,25 +423,18 @@ export function DiscountsPanel({
       : value;
   }, [draft]);
 
-  const draftIsValid = Boolean(
-    draft &&
-      draft.seriesId &&
-      (draft.targetType === "SERIES" || draft.chapterId) &&
-      Number(draft.discountValue) >= 1 &&
-      (draft.discountType === "FIXED" || Number(draft.discountValue) <= 99) &&
-      reducedPrice !== null &&
-      reducedPrice > 0 &&
-      reducedPrice < draft.originalPrice &&
-      draft.startsAt &&
-      draft.endsAt &&
-      new Date(draft.endsAt).getTime() > new Date(draft.startsAt).getTime(),
+  const draftValidationIssues = useMemo(
+    () => draft ? validateDiscountDraft(draft, reducedPrice) : [],
+    [draft, reducedPrice],
   );
+  const draftIsValid = Boolean(draft && draftValidationIssues.length === 0);
 
   function openNew() {
     const next = blankDraft();
     setDraft(next);
     setInitialDraftSignature(draftSignature(next));
     setQuery("");
+    setValidationAttempted(false);
   }
 
   function openEdit(record: DiscountAdminRecord) {
@@ -396,12 +442,14 @@ export function DiscountsPanel({
     setDraft(next);
     setInitialDraftSignature(draftSignature(next));
     setQuery("");
+    setValidationAttempted(false);
   }
 
   function closeEditor() {
     setDraft(null);
     setInitialDraftSignature("");
     setQuery("");
+    setValidationAttempted(false);
   }
 
   function selectTarget(key: string) {
@@ -422,10 +470,19 @@ export function DiscountsPanel({
   function applyPayload(next: DiscountsAdminPayload) {
     setPayload(next);
     onSaved?.(next);
+    window.dispatchEvent(new Event(DISCOUNTS_UPDATED_EVENT));
   }
 
   async function saveDraft() {
-    if (!draft || !draftIsValid) return;
+    if (!draft) return;
+    if (!draftIsValid) {
+      setValidationAttempted(true);
+      setMessage({
+        kind: "error",
+        text: draftValidationIssues[0] ?? "Check the discount values and try again.",
+      });
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
@@ -482,6 +539,7 @@ export function DiscountsPanel({
             chapterId: record.chapterId,
             discountType: record.discountType,
             discountValue: record.discountValue,
+            headline: record.headline,
             startsAt: record.startsAt,
             endsAt: record.endsAt,
             active: !record.active,
@@ -586,9 +644,10 @@ export function DiscountsPanel({
               <div className="admin-form-grid v481-discount-form">
                 <label>
                   Target type
-                  <select
+                  <UnifiedSingleSelect
                     value={draft.targetType}
                     disabled={Boolean(draft.id)}
+                    aria-label="Discount target type"
                     onChange={(event) => setDraft((current) => current ? {
                       ...current,
                       targetType: event.target.value as "SERIES" | "CHAPTER",
@@ -602,7 +661,7 @@ export function DiscountsPanel({
                   >
                     <option value="CHAPTER">Paid chapter</option>
                     <option value="SERIES">All paid chapters in a series</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   Search content
@@ -631,8 +690,9 @@ export function DiscountsPanel({
                 </label>
                 <label>
                   Reduction type
-                  <select
+                  <UnifiedSingleSelect
                     value={draft.discountType}
+                    aria-label="Discount reduction type"
                     onChange={(event) => setDraft((current) => current ? {
                       ...current,
                       discountType: event.target.value as "PERCENT" | "FIXED",
@@ -641,7 +701,7 @@ export function DiscountsPanel({
                   >
                     <option value="PERCENT">Percentage off</option>
                     <option value="FIXED">Fixed reduced price</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   {draft.discountType === "PERCENT" ? "Discount percentage" : "Reduced price"}
@@ -683,6 +743,18 @@ export function DiscountsPanel({
                   <input type="checkbox" checked={draft.active} onChange={(event) => setDraft((current) => current ? { ...current, active: event.target.checked } : current)} />
                   <span>Active — make this discount eligible during its scheduled window</span>
                 </label>
+                {validationAttempted && draftValidationIssues.length ? (
+                  <div
+                    className="v481-discount-validation v481-span-two"
+                    id="discount-validation-summary"
+                    role="alert"
+                  >
+                    <strong>Complete these details before saving:</strong>
+                    <ul>
+                      {draftValidationIssues.map((issue) => <li key={issue}>{issue}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
               <aside className="v481-discount-preview">
                 <span className="v481-discount-preview-cover">
@@ -700,7 +772,13 @@ export function DiscountsPanel({
             </div>
             <footer className="admin-sticky-actions v481-editor-actions">
               <button className="button button-secondary" type="button" disabled={busy} onClick={closeEditor}>Cancel</button>
-              <button className="button button-primary" type="button" disabled={busy || !draftIsValid} onClick={() => void saveDraft()}>
+              <button
+                className="button button-primary"
+                type="button"
+                disabled={busy}
+                aria-describedby={validationAttempted && draftValidationIssues.length ? "discount-validation-summary" : undefined}
+                onClick={() => void saveDraft()}
+              >
                 {busy ? <SpinnerGap className="spin" /> : <Tag />}
                 {busy ? "Saving…" : draft.id ? "Update discount" : "Create discount"}
               </button>
@@ -789,6 +867,9 @@ const DISCOUNTS_ADMIN_CSS = `
   .v481-search-field > svg:first-child { position:absolute; z-index:1; left:.8rem; color:var(--muted); }
   .v481-search-field > input { padding-left:2.45rem !important; }
   .v481-search-field > svg:last-child { position:absolute; right:.8rem; color:var(--accent); }
+  .v481-discount-validation { display:grid; gap:.45rem; padding:.8rem .9rem; border:1px solid color-mix(in srgb,var(--danger) 48%,var(--line)); border-radius:var(--site-card-radius,var(--radius-small)); background:color-mix(in srgb,var(--danger) 9%,var(--surface)); color:var(--danger); }
+  .v481-discount-validation strong { font-size:.78rem; }
+  .v481-discount-validation ul { display:grid; gap:.25rem; margin:0; padding-left:1.15rem; color:var(--text-soft); font-size:.72rem; line-height:1.5; }
   .v481-discount-preview { display:grid; grid-template-columns:minmax(6.8rem,.7fr) minmax(0,1.3fr); min-height:13rem; overflow:hidden; border:1px solid color-mix(in srgb,var(--warning) 35%,var(--line)); border-radius:var(--site-card-radius,var(--radius)); background:color-mix(in srgb,var(--warning) 6%,var(--surface)); }
   .v481-discount-preview-cover { position:relative; display:grid; min-height:13rem; place-items:center; overflow:hidden; border-right:1px dashed color-mix(in srgb,var(--warning) 60%,var(--line)); background:var(--surface-strong); color:var(--muted); }
   .v481-discount-preview-cover img { width:100%; height:100%; object-fit:cover; }

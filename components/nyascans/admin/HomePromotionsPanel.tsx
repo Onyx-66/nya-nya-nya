@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, SpinnerGap, TextB, TextItalic, Trash } from "@phosphor-icons/react";
@@ -217,7 +219,7 @@ export function HomePromotionsPanel() {
         <section className="v46-promo-editor">
           <header><Megaphone /><div><span>Announcements</span><h3>Add a site notice</h3></div></header>
           <div className="v46-promo-form">
-            <label><span>Type</span><select value={announcement.type} onChange={(event) => setAnnouncement((current) => ({ ...current, type: event.target.value as Announcement["type"] }))}><option value="UPDATE">Update</option><option value="ISSUE">Issue</option><option value="SUPPORT">Support</option><option value="NOTICE">Notice</option></select></label>
+            <label><span>Type</span><UnifiedSingleSelect value={announcement.type} onChange={(event) => setAnnouncement((current) => ({ ...current, type: event.target.value as Announcement["type"] }))}><option value="UPDATE">Update</option><option value="ISSUE">Issue</option><option value="SUPPORT">Support</option><option value="NOTICE">Notice</option></UnifiedSingleSelect></label>
             <label><span>Title</span><input value={announcement.title} onChange={(event) => setAnnouncement((current) => ({ ...current, title: event.target.value }))} /></label>
             <div className="v46-span-two announcement-rich-field">
               <span>Message</span>
@@ -266,7 +268,7 @@ export function HomePromotionsPanel() {
             data-accent-line={ad.accentLinePosition}
           >{selectedAdImage ? <img src={selectedAdImage} alt="Floating campaign preview" /> : <span className="home-announcement-icon">{ad.sideIcon || "✦"}</span>}<div><small><i />{ad.eyebrow || "Announcement"}</small><strong>{ad.title || "Campaign title"}</strong><p>{ad.body || "Your campaign message appears here."}</p>{ad.infoBlocks.length ? <div className="ad-admin-block-preview">{ad.infoBlocks.map((block, index) => <span key={`${index}:${block.title}`}><b>{block.icon}</b><em>{block.title || "Chip label"}</em></span>)}</div> : null}<button type="button">{ad.actionLabel || "Explore event"}</button>{ad.secondaryActions.length ? <div className="ad-admin-secondary-preview">{ad.secondaryActions.map((action, index) => <span key={`${index}:${action.label}`}>{action.label || "Secondary"}</span>)}</div> : null}</div></div>
           <div className="v46-promo-form">
-            <label><span>Display slot</span><select value={ad.displaySlot} onChange={(event) => setAd((current) => ({ ...current, displaySlot: Number(event.target.value) }))}><option value={1}>Ad 1 · shown first</option><option value={2}>Ad 2 · shown after Ad 1</option></select></label>
+            <label><span>Display slot</span><UnifiedSingleSelect value={ad.displaySlot} onChange={(event) => setAd((current) => ({ ...current, displaySlot: Number(event.target.value) }))}><option value={1}>Ad 1 · shown first</option><option value={2}>Ad 2 · shown after Ad 1</option></UnifiedSingleSelect></label>
             <label><span>Eyebrow</span><input value={ad.eyebrow} onChange={(event) => setAd((current) => ({ ...current, eyebrow: event.target.value }))} /></label>
             <label><span>Side icon</span><input maxLength={8} value={ad.sideIcon} placeholder="✦" onChange={(event) => setAd((current) => ({ ...current, sideIcon: event.target.value }))} /></label>
             <label><span>Title</span><input value={ad.title} onChange={(event) => setAd((current) => ({ ...current, title: event.target.value }))} /></label>
@@ -277,12 +279,12 @@ export function HomePromotionsPanel() {
             <label><span>Starts at (optional)</span><input type="datetime-local" value={localDateTimeValue(ad.startsAt)} onChange={(event) => setAd((current) => ({ ...current, startsAt: utcDateTimeValue(event.target.value) }))} /></label>
             <label><span>Ends at (optional)</span><input type="datetime-local" value={localDateTimeValue(ad.endsAt)} onChange={(event) => setAd((current) => ({ ...current, endsAt: utcDateTimeValue(event.target.value) }))} /></label>
             <label><span>Fallback image URL</span><input value={ad.fallbackImageUrl} placeholder="https://…" onChange={(event) => setAd((current) => ({ ...current, fallbackImageUrl: event.target.value }))} /></label>
-            <label><span>Visual effect</span><select value={ad.effect} onChange={(event) => setAd((current) => ({ ...current, effect: event.target.value as FloatingAd["effect"] }))}><option value="WAVE">Wave</option><option value="PULSE">Pulse</option><option value="GLOW">Glow</option></select></label>
+            <label><span>Visual effect</span><UnifiedSingleSelect value={ad.effect} onChange={(event) => setAd((current) => ({ ...current, effect: event.target.value as FloatingAd["effect"] }))}><option value="WAVE">Wave</option><option value="PULSE">Pulse</option><option value="GLOW">Glow</option></UnifiedSingleSelect></label>
             <label className="campaign-color-field"><span>Primary light</span><span><input type="color" value={ad.primaryColor} onChange={(event) => setAd((current) => ({ ...current, primaryColor: event.target.value.toUpperCase() }))} /><code>{ad.primaryColor}</code></span></label>
             <label className="campaign-color-field"><span>Secondary light</span><span><input type="color" value={ad.secondaryColor} onChange={(event) => setAd((current) => ({ ...current, secondaryColor: event.target.value.toUpperCase() }))} /><code>{ad.secondaryColor}</code></span></label>
                         <label className="campaign-color-field"><span>Background</span><span><input type="color" value={ad.backgroundColor} onChange={(event) => setAd((current) => ({ ...current, backgroundColor: event.target.value.toUpperCase() }))} /><code>{ad.backgroundColor}</code></span></label>
             <label className="campaign-color-field"><span>Border / accent</span><span><input type="color" value={ad.borderColor || ad.primaryColor} onChange={(event) => setAd((current) => ({ ...current, borderColor: event.target.value.toUpperCase() }))} /><code>{ad.borderColor || ad.primaryColor}</code></span></label>
-            <label><span>Accent line edge</span><select value={ad.accentLinePosition} onChange={(event) => setAd((current) => ({ ...current, accentLinePosition: event.target.value as FloatingAdDraft["accentLinePosition"] }))}><option value="top">Top</option><option value="left">Left</option><option value="bottom">Bottom</option></select></label>
+            <label><span>Accent line edge</span><UnifiedSingleSelect value={ad.accentLinePosition} onChange={(event) => setAd((current) => ({ ...current, accentLinePosition: event.target.value as FloatingAdDraft["accentLinePosition"] }))}><option value="top">Top</option><option value="left">Left</option><option value="bottom">Bottom</option></UnifiedSingleSelect></label>
             <label><span>Upload image</span>
 <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => setAdImage(event.target.files?.[0] ?? null)} /><small>{adImage?.name ?? "Static PNG, JPEG or WebP · 500×400px minimum · 8 MB maximum"}</small></label>
             <div className="v46-span-two ad-admin-info-editor">

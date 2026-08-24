@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   CaretLeft,
@@ -120,12 +122,12 @@ export function BotActivityPanel() {
             <MagnifyingGlass size={17} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Action or target" />
           </label>
-          <select value={result} onChange={(event) => { setPage(1); setResult(event.target.value); }} aria-label="Result">
+          <UnifiedSingleSelect value={result} onChange={(event) => { setPage(1); setResult(event.target.value); }} aria-label="Result">
             <option value="ALL">All results</option>
             <option value="SUCCESS">Success</option>
             <option value="DENIED">Denied</option>
             <option value="FAILURE">Failure</option>
-          </select>
+          </UnifiedSingleSelect>
           <button className="button button-primary" type="submit">Search</button>
         </form>
         {records.length ? (

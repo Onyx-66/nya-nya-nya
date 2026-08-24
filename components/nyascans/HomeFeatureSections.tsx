@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import {
   coinLabel,
@@ -940,13 +941,13 @@ export function DiscountsDirectory({
         </div>
         <label className="v481-sort-control">
           <span>Sort by</span>
-          <select
+          <UnifiedSingleSelect
             value={sort}
             onChange={(event) => setSort(event.target.value as "discount" | "expiry")}
           >
             <option value="discount">Highest discount</option>
             <option value="expiry">Ending soon</option>
-          </select>
+          </UnifiedSingleSelect>
         </label>
       </header>
       {loading ? (

@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -318,7 +320,7 @@ export function SupportTicketsAdminPanel() {
         </label>
         <label>
           <span>Status</span>
-          <select
+          <UnifiedSingleSelect
             value={status}
             onChange={(event) => {
               setStatus(event.target.value as "ALL" | TicketStatus);
@@ -330,7 +332,7 @@ export function SupportTicketsAdminPanel() {
                 {option.label}
               </option>
             ))}
-          </select>
+          </UnifiedSingleSelect>
         </label>
         <button className="button button-primary" type="submit">
           Apply filters
@@ -468,7 +470,7 @@ export function SupportTicketsAdminPanel() {
               <div className="support-admin-controls">
                 <label>
                   <span>Status</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={selected.status}
                     disabled={busy}
                     onChange={(event) =>
@@ -483,11 +485,11 @@ export function SupportTicketsAdminPanel() {
                         {option.label}
                       </option>
                     ))}
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   <span>Priority</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={selected.priority}
                     disabled={busy}
                     onChange={(event) =>
@@ -500,7 +502,7 @@ export function SupportTicketsAdminPanel() {
                     <option value="LOW">Low</option>
                     <option value="NORMAL">Normal</option>
                     <option value="HIGH">High</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
               </div>
               <div className="support-admin-messages">

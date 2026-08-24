@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowSquareOut,
   Check,
@@ -200,7 +202,7 @@ export function ApiControlPanel() {
       <section className="v46-api-create">
         <header><span>New application</span><h3>Create a scoped API key</h3></header>
         <div className="v46-api-form">
-          <label><span>Credential type</span><select value={clientType} onChange={(event) => { const next = event.target.value as "EXTERNAL_API" | "DISCORD_BOT"; setClientType(next); setScopes(next === "DISCORD_BOT" ? ["bot:series:create", "bot:chapter:create"] : ["series:read", "upload:chapter"]); }}><option value="DISCORD_BOT">Discord Bot</option><option value="EXTERNAL_API">Trusted external API</option></select></label>
+          <label><span>Credential type</span><UnifiedSingleSelect value={clientType} onChange={(event) => { const next = event.target.value as "EXTERNAL_API" | "DISCORD_BOT"; setClientType(next); setScopes(next === "DISCORD_BOT" ? ["bot:series:create", "bot:chapter:create"] : ["series:read", "upload:chapter"]); }}><option value="DISCORD_BOT">Discord Bot</option><option value="EXTERNAL_API">Trusted external API</option></UnifiedSingleSelect></label>
           <label><span>Application name</span><input value={appName} placeholder="NyaScans Discord Bot" maxLength={100} onChange={(event) => setAppName(event.target.value)} /></label>
           <label><span>Publishing team</span><AdminCombobox ariaLabel="Publishing team" value={teamId} emptyLabel="All verified teams" options={data.teams.map((team) => ({ value: team.id, label: team.name, description: team.slug }))} onChange={setTeamId} /></label>
           <fieldset><legend>Scopes</legend>{data.availableScopes.filter((scope) => clientType === "DISCORD_BOT" ? scope.startsWith("bot:") : !scope.startsWith("bot:")).map((scope) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} /><span><strong>{scope}</strong><small>{scope.includes(":series:") ? "Create or read series metadata" : scope.includes(":thumbnail") ? "Set or replace chapter thumbnails" : scope.includes(":publish") ? "Publish assigned chapters" : "Create or manage chapter upload jobs"}</small></span></label>)}</fieldset>

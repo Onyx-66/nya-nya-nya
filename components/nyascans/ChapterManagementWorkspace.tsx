@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -575,7 +577,7 @@ export function ChapterManagementWorkspace({
           <div className="chapter-management-grid">
             <label>
               <span>Publication state</span>
-              <select
+              <UnifiedSingleSelect
                 value={form.state}
                 disabled={
                   !chapter.permissions.canPublish &&
@@ -594,11 +596,11 @@ export function ChapterManagementWorkspace({
                 chapter.state === "PUBLISHED" ? (
                   <option value="PUBLISHED">Published</option>
                 ) : null}
-              </select>
+              </UnifiedSingleSelect>
             </label>
             <label>
               <span>Visibility</span>
-              <select
+              <UnifiedSingleSelect
                 value={form.visibility}
                 disabled={!chapter.permissions.canPublish}
                 onChange={(event) =>
@@ -611,7 +613,7 @@ export function ChapterManagementWorkspace({
                 <option value="PUBLIC">Public</option>
                 <option value="UNLISTED">Unlisted</option>
                 <option value="HIDDEN">Hidden</option>
-              </select>
+              </UnifiedSingleSelect>
             </label>
             <label>
               <span>Release schedule</span>
@@ -640,7 +642,7 @@ export function ChapterManagementWorkspace({
           <div className="chapter-management-grid">
             <label>
               <span>Access type</span>
-              <select
+              <UnifiedSingleSelect
                 value={form.accessType}
                 disabled={!chapter.permissions.canManageCommerce}
                 onChange={(event) =>
@@ -652,7 +654,7 @@ export function ChapterManagementWorkspace({
               >
                 <option value="FREE">Free</option>
                 <option value="PAID">Paid</option>
-              </select>
+              </UnifiedSingleSelect>
             </label>
             {form.accessType === "PAID" ? (
               <label>

@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -582,7 +584,7 @@ export function CommerceOfferManager({
                     : "Memberships only"}
                 </span>
               ) : (
-                <select
+                <UnifiedSingleSelect
                   value={kind}
                   disabled={dirty}
                   title={
@@ -601,9 +603,9 @@ export function CommerceOfferManager({
                   <option value="PROMOTION">Promotions</option>
                   <option value="BUNDLE">Bundles</option>
                   <option value="OTHER">Other products</option>
-                </select>
+                </UnifiedSingleSelect>
               )}
-              <select
+              <UnifiedSingleSelect
                 value={status}
                 disabled={dirty}
                 title={
@@ -623,7 +625,7 @@ export function CommerceOfferManager({
                 <option value="EXPIRED">Expired</option>
                 <option value="HIDDEN">Hidden</option>
                 <option value="ARCHIVED">Archived</option>
-              </select>
+              </UnifiedSingleSelect>
               <button
                 className="button button-ghost"
                 type="button"
@@ -749,7 +751,7 @@ export function CommerceOfferManager({
                     </label>
                     <label>
                       Offer type
-                      <select
+                      <UnifiedSingleSelect
                         value={draft.kind}
                         disabled={Boolean(fixedKind)}
                         onChange={(event) =>
@@ -764,11 +766,11 @@ export function CommerceOfferManager({
                         <option value="PROMOTION">Promotion</option>
                         <option value="BUNDLE">Bundle</option>
                         <option value="OTHER">Other</option>
-                      </select>
+                      </UnifiedSingleSelect>
                     </label>
                     <label>
                       Lifecycle
-                      <select
+                      <UnifiedSingleSelect
                         value={draft.lifecycleStatus}
                         onChange={(event) =>
                           setDraft((current) => ({
@@ -783,7 +785,7 @@ export function CommerceOfferManager({
                         <option value="EXPIRED">Expired</option>
                         <option value="HIDDEN">Hidden</option>
                         <option value="ARCHIVED">Archived</option>
-                      </select>
+                      </UnifiedSingleSelect>
                     </label>
                     <label>
                       Price in minor units
@@ -945,7 +947,7 @@ export function CommerceOfferManager({
                     </label>
                     <label>
                       Theme
-                      <select
+                      <UnifiedSingleSelect
                         value={draft.themeKey}
                         onChange={(event) =>
                           setDraft((current) => ({
@@ -959,7 +961,7 @@ export function CommerceOfferManager({
                         <option value="AURORA">Aurora</option>
                         <option value="SUNSET">Sunset</option>
                         <option value="MINIMAL">Minimal</option>
-                      </select>
+                      </UnifiedSingleSelect>
                     </label>
                     <label>
                       Display order

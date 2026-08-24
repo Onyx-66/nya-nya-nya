@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -838,7 +840,7 @@ export function TeamManagementPanel() {
               </div>
               <label>
                 Verification status
-                <select
+                <UnifiedSingleSelect
                   value={draft.verificationStatus}
                   onChange={(event) =>
                     setDraft((current) => ({
@@ -859,7 +861,7 @@ export function TeamManagementPanel() {
                       : ""}
                   </option>
                   <option value="SUSPENDED">Suspended</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label className="admin-check-row">
                 <input
@@ -928,7 +930,7 @@ export function TeamManagementPanel() {
                     </label>
                     <label>
                       <span>Team role</span>
-                      <select
+                      <UnifiedSingleSelect
                         value={newMemberRole}
                         onChange={(event) =>
                           setNewMemberRole(
@@ -939,7 +941,7 @@ export function TeamManagementPanel() {
                         <option value="UPLOADER">Uploader</option>
                         <option value="LEADER">Leader</option>
                         <option value="OWNER">Owner</option>
-                      </select>
+                      </UnifiedSingleSelect>
                     </label>
                     <button
                       className="button button-secondary"
@@ -1010,7 +1012,7 @@ export function TeamManagementPanel() {
                       <span className="sr-only">
                         Role for {member.displayName}
                       </span>
-                      <select
+                      <UnifiedSingleSelect
                         value={member.role}
                         disabled={dirty || Boolean(memberBusy) || saving}
                         title={
@@ -1027,7 +1029,7 @@ export function TeamManagementPanel() {
                         <option value="OWNER">Owner</option>
                         <option value="LEADER">Leader</option>
                         <option value="UPLOADER">Uploader</option>
-                      </select>
+                      </UnifiedSingleSelect>
                     </label>
                     <button
                       type="button"
@@ -1214,7 +1216,7 @@ export function TeamManagementPanel() {
               <div className="admin-form-grid">
                 <label>
                   Effect type
-                  <select
+                  <UnifiedSingleSelect
                     value={draft.effect.type}
                     onChange={(event) =>
                       setDraft((current) => ({
@@ -1232,7 +1234,7 @@ export function TeamManagementPanel() {
                     <option value="ACCENT">Background accent</option>
                     <option value="SPARKLE">Small decoration</option>
                     <option value="VERIFIED">Verified treatment</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   Accent color
@@ -1249,7 +1251,7 @@ export function TeamManagementPanel() {
                 </label>
                 <label>
                   Intensity
-                  <select
+                  <UnifiedSingleSelect
                     value={draft.effect.intensity}
                     onChange={(event) =>
                       setDraft((current) => ({
@@ -1261,11 +1263,11 @@ export function TeamManagementPanel() {
                     <option value="1">Low</option>
                     <option value="2">Medium</option>
                     <option value="3">High</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   Motion
-                  <select
+                  <UnifiedSingleSelect
                     value={draft.effect.motion}
                     onChange={(event) =>
                       setDraft((current) => ({
@@ -1279,7 +1281,7 @@ export function TeamManagementPanel() {
                   >
                     <option value="NONE">No motion</option>
                     <option value="SUBTLE">Subtle motion</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
               </div>
               <label className="admin-check-row">

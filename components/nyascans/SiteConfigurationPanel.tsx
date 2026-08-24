@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1054,7 +1056,7 @@ export function SiteConfigurationPanel({
               <div className="legal-document-picker">
                 <label>
                   <span>Legal document</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={activeLegalDocument?.slug ?? ""}
                     onChange={(event) =>
                       setActiveLegalDocumentSlug(event.target.value)
@@ -1065,7 +1067,7 @@ export function SiteConfigurationPanel({
                         {document.title}
                       </option>
                     ))}
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 {activeLegalDocument ? (
                   <div className="legal-document-route">

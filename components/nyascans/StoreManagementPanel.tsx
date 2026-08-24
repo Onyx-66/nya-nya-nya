@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1192,7 +1194,7 @@ export function StoreManagementPanel({
               placeholder="Search items"
               aria-label="Search Store items"
             />
-            <select
+            <UnifiedSingleSelect
               value={itemStatus}
               disabled={dirty}
               title={
@@ -1210,7 +1212,7 @@ export function StoreManagementPanel({
               <option value="DRAFT">Draft</option>
               <option value="PUBLISHED">Published</option>
               <option value="HIDDEN">Hidden</option>
-            </select>
+            </UnifiedSingleSelect>
           </div>
           <section className="store-admin-collections">
             <div className="store-admin-collection-heading">
@@ -1692,7 +1694,7 @@ export function StoreManagementPanel({
               </label>
               <label>
                 {categoryEditorCopy(draft.category).slotLabel}
-                <select
+                <UnifiedSingleSelect
                   value={draft.category}
                   onChange={(event) => {
                     const category = event.target.value as StoreItem["category"];
@@ -1722,7 +1724,7 @@ export function StoreManagementPanel({
                       {categoryLabel(category as StoreItem["category"])}
                     </option>
                   ))}
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label>
                 Price amount
@@ -1738,7 +1740,7 @@ export function StoreManagementPanel({
               </label>
               <label>
                 Price currency
-                <select
+                <UnifiedSingleSelect
                   value={draft.priceCurrency}
                   onChange={(event) =>
                     setDraft({
@@ -1751,7 +1753,7 @@ export function StoreManagementPanel({
                 >
                   <option value="ONYX">{coinPlural}</option>
                   <option value="SHARDS">Shards</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label>
                 Display order
@@ -1768,7 +1770,7 @@ export function StoreManagementPanel({
                 <>
                   <label>
                     Banner placement
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.previewConfig.bannerPlacement ?? "PROFILE_HEADER"}
                       onChange={(event) =>
                         setDraft({
@@ -1783,7 +1785,7 @@ export function StoreManagementPanel({
                       <option value="PROFILE_HEADER">Profile header</option>
                       <option value="PROFILE_SHELF">Profile shelf</option>
                       <option value="PROFILE_BACKGROUND">Profile background</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     Display duration (days)
@@ -1829,7 +1831,7 @@ export function StoreManagementPanel({
                 <>
                   <label>
                     Animation type
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.previewConfig.animationType ?? "GLOW"}
                       onChange={(event) =>
                         setDraft({
@@ -1846,7 +1848,7 @@ export function StoreManagementPanel({
                       <option value="SHIMMER">Shimmer</option>
                       <option value="ORBIT">Orbit</option>
                       <option value="GLITCH">Glitch</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     Animation duration (ms)
@@ -1869,7 +1871,7 @@ export function StoreManagementPanel({
                   </label>
                   <label>
                     Unlock method
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.previewConfig.unlockMethod ?? "PURCHASE"}
                       onChange={(event) =>
                         setDraft({
@@ -1885,14 +1887,14 @@ export function StoreManagementPanel({
                       <option value="ROULETTE">Roulette reward</option>
                       <option value="MEMBERSHIP">Membership</option>
                       <option value="EVENT">Event grant</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                 </>
               ) : (
                 <>
                   <label>
                     Rarity
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.previewConfig.rarity ?? "RARE"}
                       onChange={(event) =>
                         setDraft({
@@ -1909,11 +1911,11 @@ export function StoreManagementPanel({
                       <option value="RARE">Rare</option>
                       <option value="EPIC">Epic</option>
                       <option value="LEGENDARY">Legendary</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     Unlock method
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.previewConfig.unlockMethod ?? "PURCHASE"}
                       onChange={(event) =>
                         setDraft({
@@ -1929,11 +1931,11 @@ export function StoreManagementPanel({
                       <option value="ROULETTE">Roulette reward</option>
                       <option value="MEMBERSHIP">Membership</option>
                       <option value="EVENT">Event grant</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     Equip slot
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.previewConfig.cosmeticSlot ?? cosmeticSlot(draft.category)}
                       onChange={(event) =>
                         setDraft({
@@ -1948,7 +1950,7 @@ export function StoreManagementPanel({
                       <option value={cosmeticSlot(draft.category)}>
                         {categoryLabel(draft.category)}
                       </option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                 </>
               )}

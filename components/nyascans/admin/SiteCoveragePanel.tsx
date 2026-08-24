@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   Bell,
   CheckCircle,
@@ -304,7 +306,7 @@ export function SiteCoveragePanel({
             <label><span>Slug</span><input value={achievement.slug} onChange={(event) => setAchievement((current) => ({ ...current, slug: event.target.value }))} /></label>
             <label><span>Name</span><input value={achievement.name} onChange={(event) => setAchievement((current) => ({ ...current, name: event.target.value }))} /></label>
             <label><span>Description</span><textarea value={achievement.description} onChange={(event) => setAchievement((current) => ({ ...current, description: event.target.value }))} /></label>
-            <label><span>Rarity</span><select value={achievement.rarity} onChange={(event) => setAchievement((current) => ({ ...current, rarity: event.target.value }))}>{["COMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC", "EXCLUSIVE"].map((rarity) => <option key={rarity}>{rarity}</option>)}</select></label>
+            <label><span>Rarity</span><UnifiedSingleSelect value={achievement.rarity} onChange={(event) => setAchievement((current) => ({ ...current, rarity: event.target.value }))}>{["COMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC", "EXCLUSIVE"].map((rarity) => <option key={rarity}>{rarity}</option>)}</UnifiedSingleSelect></label>
             <label><span>Icon reference (stored; public cards currently use the standard trophy)</span><input value={achievement.iconKey} onChange={(event) => setAchievement((current) => ({ ...current, iconKey: event.target.value }))} /></label>
             <label><span>Sort order</span><input type="number" min="0" value={achievement.sortOrder} onChange={(event) => setAchievement((current) => ({ ...current, sortOrder: Number(event.target.value) }))} /></label>
             <label className="settings-check"><input type="checkbox" checked={achievement.isActive} onChange={(event) => setAchievement((current) => ({ ...current, isActive: event.target.checked }))} /><span>Visible achievement</span></label>

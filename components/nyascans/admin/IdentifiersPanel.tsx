@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   CaretLeft,
@@ -116,17 +118,17 @@ export function IdentifiersPanel() {
             <MagnifyingGlass size={17} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Reference or title" />
           </label>
-          <select value={type} onChange={(event) => { setPage(1); setType(event.target.value); }} aria-label="Entity type">
+          <UnifiedSingleSelect value={type} onChange={(event) => { setPage(1); setType(event.target.value); }} aria-label="Entity type">
             <option value="ALL">All types</option>
             <option value="SERIES">Series</option>
             <option value="TEAM">Teams</option>
             <option value="CHAPTER">Chapters</option>
-          </select>
-          <select value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }} aria-label="Archive status">
+          </UnifiedSingleSelect>
+          <UnifiedSingleSelect value={status} onChange={(event) => { setPage(1); setStatus(event.target.value); }} aria-label="Archive status">
             <option value="ALL">All states</option>
             <option value="ACTIVE">Active</option>
             <option value="ARCHIVED">Archived</option>
-          </select>
+          </UnifiedSingleSelect>
           <button className="button button-primary" type="submit">Search</button>
         </form>
         {records.length ? (

@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1651,7 +1653,7 @@ export function SeriesManagementPanel({
                 <div className="series-create-fact-grid">
                   <label>
                     <span>Status</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={form.status}
                       onChange={(event) =>
                         setField(
@@ -1666,11 +1668,11 @@ export function SeriesManagementPanel({
                       <option value="PAUSED">Paused</option>
                       <option value="CANCELLED">Cancelled</option>
                       <option value="UPCOMING">Upcoming</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     <span>Type</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={form.type}
                       onChange={(event) =>
                         setField(
@@ -1682,7 +1684,7 @@ export function SeriesManagementPanel({
                       <option value="MANGA">Manga</option>
                       <option value="MANHWA">Manhwa</option>
                       <option value="MANHUA">Manhua</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     <span>Original language</span>
@@ -1965,7 +1967,7 @@ export function SeriesManagementPanel({
             <div className="series-create-advanced-grid">
               <label>
                 <span>Reading direction</span>
-                <select
+                <UnifiedSingleSelect
                   value={form.readingDirection}
                   onChange={(event) =>
                     setField(
@@ -1977,11 +1979,11 @@ export function SeriesManagementPanel({
                   <option value="VERTICAL">Vertical</option>
                   <option value="RIGHT_TO_LEFT">Right to left</option>
                   <option value="LEFT_TO_RIGHT">Left to right</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label>
                 <span>Default chapter access</span>
-                <select
+                <UnifiedSingleSelect
                   value={form.accessType}
                   onChange={(event) =>
                     setField(
@@ -1992,11 +1994,11 @@ export function SeriesManagementPanel({
                 >
                   <option value="FREE">Free</option>
                   <option value="PAID">Paid</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label>
                 <span>Rights status</span>
-                <select
+                <UnifiedSingleSelect
                   value={form.rightsStatus}
                   onChange={(event) =>
                     setField(
@@ -2019,7 +2021,7 @@ export function SeriesManagementPanel({
                       {value.replaceAll("_", " ")}
                     </option>
                   ))}
-                </select>
+                </UnifiedSingleSelect>
                 <small>
                   Publish requires Licensed, Authorized, Demo Original, or Test Original rights. Other statuses remain draft-only.
                 </small>
@@ -2267,7 +2269,7 @@ export function SeriesManagementPanel({
                 </label>
                 <label>
                   <span>Series type</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={form.type}
                     onChange={(event) =>
                       setField("type", event.target.value as FormState["type"])
@@ -2276,11 +2278,11 @@ export function SeriesManagementPanel({
                     <option value="MANGA">Manga</option>
                     <option value="MANHWA">Manhwa</option>
                     <option value="MANHUA">Manhua</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   <span>Publication status</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={form.status}
                     onChange={(event) =>
                       setField("status", event.target.value as FormState["status"])
@@ -2292,7 +2294,7 @@ export function SeriesManagementPanel({
                     <option value="PAUSED">Paused</option>
                     <option value="CANCELLED">Cancelled</option>
                     <option value="UPCOMING">Upcoming</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   <span>Original publication year</span>
@@ -2308,7 +2310,7 @@ export function SeriesManagementPanel({
                 </label>
                 <label>
                   <span>Reading direction</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={form.readingDirection}
                     onChange={(event) =>
                       setField(
@@ -2320,7 +2322,7 @@ export function SeriesManagementPanel({
                     <option value="VERTICAL">Vertical</option>
                     <option value="RIGHT_TO_LEFT">Right to left</option>
                     <option value="LEFT_TO_RIGHT">Left to right</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
               </div>
             </section>
@@ -2749,7 +2751,7 @@ export function SeriesManagementPanel({
               <div className="admin-import-controls">
                 <label>
                   <span>Source</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={importSource}
                     onChange={(event) =>
                       setImportSource(
@@ -2759,7 +2761,7 @@ export function SeriesManagementPanel({
                   >
                     <option value="MANGADEX">MangaDex</option>
                     <option value="MANGAUPDATES">MangaUpdates</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   <span>
@@ -2893,7 +2895,7 @@ export function SeriesManagementPanel({
               <div className="admin-form-grid">
                 <label>
                   <span>Default chapter access</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={form.accessType}
                     onChange={(event) =>
                       setField(
@@ -2904,11 +2906,11 @@ export function SeriesManagementPanel({
                   >
                     <option value="FREE">Free</option>
                     <option value="PAID">Paid</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label>
                   <span>Rights status</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={form.rightsStatus}
                     onChange={(event) =>
                       setField(
@@ -2931,7 +2933,7 @@ export function SeriesManagementPanel({
                         {value.replaceAll("_", " ")}
                       </option>
                     ))}
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
               </div>
               <label className="admin-toggle-row">

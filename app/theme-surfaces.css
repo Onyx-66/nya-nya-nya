@@ -1,0 +1,477 @@
+/* User-theme extension surfaces: Home accents, animated light, and notifications. */
+:root {
+  --theme-home-featured-accent: #39a9ff;
+  --theme-home-trending-accent: #e6bd61;
+  --theme-home-continue-reading-accent: #5ab7ff;
+  --theme-home-pinned-series-accent: #e6bd61;
+  --theme-home-recent-reviews-accent: #b39af4;
+  --theme-home-discounts-accent: #ef8175;
+  --theme-home-announcements-accent: #8ecbff;
+  --theme-home-latest-updates-accent: #39a9ff;
+  --theme-home-editors-pick-accent: #b39af4;
+  --theme-home-new-series-accent: #39c98a;
+  --theme-home-publishing-teams-accent: #b39af4;
+  --theme-home-community-accent: #8ecbff;
+  --theme-home-hot-this-week-accent: #ef8175;
+  --theme-effect-moving-light: #39a9ff;
+  --theme-effect-moving-light-secondary: #0876c5;
+  --theme-effect-badge-glow: #b39af4;
+  --theme-effect-section-header-glow: #39a9ff;
+  --theme-effect-icon-glow: #8ecbff;
+  --theme-effect-cover-glow: #39a9ff;
+  --theme-effect-button-glow: #168de2;
+  --theme-effect-gold-glow: #e6bd61;
+  --theme-effect-silver-glow: #9198a6;
+  --theme-effect-bronze-glow: #b94236;
+  --theme-effect-paid-glow: #e6bd61;
+  --theme-effect-discount-glow: #ef8175;
+  --theme-effect-announcement-glow: #8ecbff;
+  --theme-notification-toast-surface: #17191f;
+  --theme-notification-toast-text: #f7f8fb;
+  --theme-notification-bell-badge: #d95f55;
+  --theme-notification-dropdown-surface: #111216;
+  --theme-notification-dropdown-border: #2b2f39;
+  --theme-notification-unread: #39a9ff;
+  --theme-notification-read: #17191f;
+  --theme-notification-success: #39c98a;
+  --theme-notification-info: #8ecbff;
+  --theme-notification-warning: #e6bd61;
+  --theme-notification-error: #d95f55;
+}
+
+/* Every meaningful Home surface receives a distinct editable section accent. */
+.featured-slider { --section-accent: var(--theme-home-featured-accent); }
+.trending-section { --section-accent: var(--theme-home-trending-accent); }
+.continue-reading-section { --section-accent: var(--theme-home-continue-reading-accent); }
+.v481-pinned-section { --section-accent: var(--theme-home-pinned-series-accent); }
+.recent-reviews-section { --section-accent: var(--theme-home-recent-reviews-accent); }
+.v481-discounts-section { --section-accent: var(--theme-home-discounts-accent); }
+.home-announcement-slider,
+.home-announcement-stack { --section-accent: var(--theme-home-announcements-accent); }
+.updates-section,
+.latest-updates-block { --section-accent: var(--theme-home-latest-updates-accent); }
+.editors-pick-section { --section-accent: var(--theme-home-editors-pick-accent); }
+.public-new-series { --section-accent: var(--theme-home-new-series-accent); }
+.public-teams { --section-accent: var(--theme-home-publishing-teams-accent); }
+.community-highlights { --section-accent: var(--theme-home-community-accent); }
+.hot-this-week { --section-accent: var(--theme-home-hot-this-week-accent); }
+
+.trending-heading.tone-trending { --section-accent: var(--theme-home-trending-accent) !important; }
+.continue-reading-section.tone-continue { --section-accent: var(--theme-home-continue-reading-accent) !important; }
+.v481-feature-heading.tone-pinned { --section-accent: var(--theme-home-pinned-series-accent) !important; }
+.v481-feature-heading.tone-discounts { --section-accent: var(--theme-home-discounts-accent) !important; }
+.section-heading.tone-updates { --section-accent: var(--theme-home-latest-updates-accent) !important; }
+.public-new-series .section-heading.tone-new-series { --section-accent: var(--theme-home-new-series-accent) !important; }
+.public-teams .section-heading.tone-teams { --section-accent: var(--theme-home-publishing-teams-accent) !important; }
+.community-highlights .section-heading.tone-comments { --section-accent: var(--theme-home-community-accent) !important; }
+.hot-this-week .hot-week-heading { --section-accent: var(--theme-home-hot-this-week-accent) !important; }
+
+.home-main :is(
+  .trending-section,
+  .continue-reading-section,
+  .v481-pinned-section,
+  .recent-reviews-section,
+  .v481-discounts-section,
+  .latest-updates-block,
+  .editors-pick-section,
+  .public-new-series,
+  .public-teams,
+  .community-highlights,
+  .hot-this-week
+) {
+  --section-accent-strong: color-mix(in srgb, var(--section-accent) 82%, var(--theme-text-color));
+  --section-accent-soft: color-mix(in srgb, var(--section-accent) 48%, var(--theme-text-color));
+  --section-accent-wash: color-mix(in srgb, var(--section-accent) 14%, transparent);
+}
+
+.home-main :is(
+  .trending-heading,
+  .continue-reading-heading,
+  .v481-feature-heading,
+  .latest-updates-heading,
+  .editors-pick-heading,
+  .public-new-series .section-heading,
+  .public-teams .section-heading,
+  .community-highlights .section-heading,
+  .hot-week-heading
+) :is(.section-heading-icon, .hot-week-heading-icon),
+.home-main .editors-pick-title-group > :first-child {
+  border-color: color-mix(in srgb, var(--section-accent) 56%, var(--theme-accent-l3)) !important;
+  color: var(--section-accent) !important;
+  background: color-mix(in srgb, var(--section-accent) 14%, var(--theme-accent)) !important;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--theme-text-color) 8%, transparent),
+    0 0 1rem color-mix(in srgb, var(--theme-effect-icon-glow) 30%, transparent) !important;
+}
+
+.home-main :is(
+  .trending-heading,
+  .continue-reading-heading,
+  .v481-feature-heading,
+  .latest-updates-heading,
+  .editors-pick-heading,
+  .public-new-series .section-heading,
+  .public-teams .section-heading,
+  .community-highlights .section-heading,
+  .hot-week-heading
+) .section-heading-divider {
+  background: linear-gradient(180deg, transparent, var(--section-accent), transparent) !important;
+  box-shadow: 0 0 .85rem color-mix(in srgb, var(--theme-effect-section-header-glow) 44%, transparent);
+}
+
+.home-main :is(
+  .trending-heading,
+  .continue-reading-heading,
+  .v481-feature-heading,
+  .latest-updates-heading,
+  .editors-pick-heading,
+  .public-new-series .section-heading,
+  .public-teams .section-heading,
+  .community-highlights .section-heading,
+  .hot-week-heading
+) h2 {
+  text-shadow: 0 0 1rem color-mix(in srgb, var(--theme-effect-section-header-glow) 22%, transparent);
+}
+
+.featured-slider :is(.featured-slider-dots button[aria-pressed="true"], .featured-slider-arrows button) {
+  border-color: color-mix(in srgb, var(--theme-home-featured-accent) 64%, var(--theme-accent-l3)) !important;
+  color: var(--theme-home-featured-accent) !important;
+}
+
+.trending-section :is(.trending-actions a, .ranked-card > span:first-child),
+.continue-reading-section :is(.continue-reading-actions a, .continue-reading-progress > i),
+.v481-pinned-section :is(.v481-pinned-arrow, .v481-featured-badge),
+.recent-reviews-section :is(.recent-review-rating, .recent-review-reactions),
+.v481-discounts-section :is(.v481-feature-heading .latest-all-action, .v481-ticket-prices b),
+.latest-updates-block :is(.latest-style-toggle[aria-pressed="true"], .latest-page-dots button[aria-current="page"]),
+.editors-pick-section :is(.editors-pick-title-group h2, .editors-pick-controls button),
+.public-new-series :is(.new-series-heading-actions a, .new-series-badges),
+.public-teams :is(.teams-heading-actions a, .teams-carousel-controls button),
+.community-highlights :is(.community-highlight-meta svg, .community-highlight-source em),
+.hot-this-week :is(.hot-week-heading > a, .hot-week-metrics svg) {
+  color: var(--section-accent) !important;
+}
+
+.home-announcement-slider > article {
+  --announcement-tone: var(--theme-home-announcements-accent) !important;
+  border-color: color-mix(in srgb, var(--theme-home-announcements-accent) 48%, var(--theme-accent-l3)) !important;
+}
+
+.home-announcement-banner {
+  border-color: color-mix(in srgb, var(--theme-home-announcements-accent) 50%, var(--theme-accent-l3)) !important;
+}
+
+/* Active moving-light and glow families now resolve exclusively through builder tokens. */
+.home-main :is(
+  .trending-actions > a,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action,
+  .v481-feature-heading .latest-all-action
+)::after,
+.featured-slider-arrows button::after,
+.teams-carousel-controls button::after {
+  background: conic-gradient(
+    from var(--section-action-angle, var(--homepage-blue-angle, 0deg)),
+    transparent 0 54%,
+    color-mix(in srgb, var(--theme-effect-moving-light) 42%, var(--theme-text-color)) 63%,
+    var(--theme-effect-moving-light) 72%,
+    var(--theme-effect-moving-light-secondary) 81%,
+    transparent 89% 100%
+  ) !important;
+  box-shadow: 0 0 1rem color-mix(in srgb, var(--theme-effect-button-glow) 28%, transparent);
+}
+
+.featured-main-card::before {
+  background:
+    radial-gradient(ellipse at 18% 100%, color-mix(in srgb, var(--theme-home-featured-accent) 68%, transparent), transparent 42%),
+    radial-gradient(ellipse at 48% 100%, color-mix(in srgb, var(--theme-effect-cover-glow) 72%, transparent), transparent 45%),
+    radial-gradient(ellipse at 82% 100%, color-mix(in srgb, var(--theme-effect-moving-light-secondary) 62%, transparent), transparent 40%) !important;
+}
+
+.featured-main-card::after,
+.trending-rail .ranked-card:is(.is-top-1, .is-top-2, .is-top-3)::after,
+.trending-rail .ranked-card:is(.is-top-1, .is-top-2, .is-top-3) .cover-link::after,
+.public-teams .team-carousel-card::before {
+  background: conic-gradient(
+    from var(--homepage-blue-angle, var(--trend-cover-angle, 0deg)),
+    transparent 0 55%,
+    color-mix(in srgb, var(--theme-effect-cover-glow) 40%, var(--theme-text-color)) 64%,
+    var(--theme-effect-cover-glow) 73%,
+    var(--theme-effect-moving-light-secondary) 82%,
+    transparent 90%
+  ) !important;
+}
+
+.v481-pinned-arrow::before,
+.v481-pinned-slide > .v481-pin-card::after,
+.v481-pinned-carousel > .v481-pin-card[data-active="true"]::after {
+  background: conic-gradient(
+    from var(--v487-pin-angle, var(--homepage-blue-angle, 0deg)),
+    transparent 0 55%,
+    color-mix(in srgb, var(--theme-effect-moving-light) 44%, var(--theme-text-color)) 64%,
+    var(--theme-effect-moving-light) 73%,
+    var(--theme-effect-moving-light-secondary) 81%,
+    transparent 89%
+  ) !important;
+}
+
+.editors-pick-section::before,
+.editors-pick-card::before {
+  background: conic-gradient(
+    from var(--v488-orbit-angle),
+    transparent 0 49%,
+    color-mix(in srgb, var(--theme-home-editors-pick-accent) 42%, var(--theme-text-color)) 59%,
+    var(--theme-effect-moving-light) 69%,
+    var(--theme-effect-moving-light-secondary) 79%,
+    transparent 88%
+  ) !important;
+}
+
+.editors-pick-card::after {
+  background: linear-gradient(
+    135deg,
+    transparent 30%,
+    color-mix(in srgb, var(--theme-effect-section-header-glow) 0%, transparent) 42%,
+    color-mix(in srgb, var(--theme-effect-section-header-glow) 38%, transparent) 52%,
+    color-mix(in srgb, var(--theme-effect-moving-light-secondary) 18%, transparent) 59%,
+    transparent 72%
+  ) !important;
+}
+
+.editors-pick-section :is(.editors-pick-cover, .editors-pick-cover-back) {
+  border-color: color-mix(in srgb, var(--theme-home-editors-pick-accent) 44%, var(--theme-accent-l3)) !important;
+  box-shadow: 0 0 1.8rem color-mix(in srgb, var(--theme-effect-cover-glow) 42%, transparent) !important;
+}
+
+.editors-pick-section :is(.editors-pick-controls button, .editors-pick-actions .button) {
+  border-color: color-mix(in srgb, var(--theme-home-editors-pick-accent) 44%, var(--theme-accent-l3)) !important;
+  box-shadow: 0 0 1.1rem color-mix(in srgb, var(--theme-effect-button-glow) 30%, transparent) !important;
+}
+
+.editors-pick-actions .button-primary {
+  background: linear-gradient(135deg, var(--theme-home-editors-pick-accent), var(--theme-effect-moving-light-secondary)) !important;
+}
+
+.hot-week-card.is-top-1,
+.public-teams .team-carousel-card.is-ranked-1,
+.trending-rail .ranked-card.is-top-1,
+.hot-this-week .hot-week-list-card.is-top-1 { --hot-rank-a: var(--theme-effect-gold-glow); --hot-rank-b: color-mix(in srgb, var(--theme-effect-gold-glow) 66%, var(--theme-main-background)); --rank-a: var(--theme-effect-gold-glow); --rank-b: color-mix(in srgb, var(--theme-effect-gold-glow) 66%, var(--theme-main-background)); --team-rank-a: var(--theme-effect-gold-glow); --team-rank-b: color-mix(in srgb, var(--theme-effect-gold-glow) 66%, var(--theme-main-background)); --hot-rank-accent: var(--theme-effect-gold-glow); }
+.hot-week-card.is-top-2,
+.public-teams .team-carousel-card.is-ranked-2,
+.trending-rail .ranked-card.is-top-2,
+.hot-this-week .hot-week-list-card.is-top-2 { --hot-rank-a: var(--theme-effect-silver-glow); --hot-rank-b: color-mix(in srgb, var(--theme-effect-silver-glow) 64%, var(--theme-main-background)); --rank-a: var(--theme-effect-silver-glow); --rank-b: color-mix(in srgb, var(--theme-effect-silver-glow) 64%, var(--theme-main-background)); --team-rank-a: var(--theme-effect-silver-glow); --team-rank-b: color-mix(in srgb, var(--theme-effect-silver-glow) 64%, var(--theme-main-background)); --hot-rank-accent: var(--theme-effect-silver-glow); }
+.hot-week-card.is-top-3,
+.public-teams .team-carousel-card.is-ranked-3,
+.trending-rail .ranked-card.is-top-3,
+.hot-this-week .hot-week-list-card.is-top-3 { --hot-rank-a: var(--theme-effect-bronze-glow); --hot-rank-b: color-mix(in srgb, var(--theme-effect-bronze-glow) 64%, var(--theme-main-background)); --rank-a: var(--theme-effect-bronze-glow); --rank-b: color-mix(in srgb, var(--theme-effect-bronze-glow) 64%, var(--theme-main-background)); --team-rank-a: var(--theme-effect-bronze-glow); --team-rank-b: color-mix(in srgb, var(--theme-effect-bronze-glow) 64%, var(--theme-main-background)); --hot-rank-accent: var(--theme-effect-bronze-glow); }
+
+.latest-chapters li.is-paid::after,
+.chapter-release-group.is-paid::after,
+.chapter-variant-row.is-paid::after {
+  background: conic-gradient(
+    from var(--v487-gold-angle),
+    transparent 0 55%,
+    color-mix(in srgb, var(--theme-effect-paid-glow) 46%, var(--theme-text-color)) 64%,
+    var(--theme-effect-paid-glow) 74%,
+    transparent 85%
+  ) !important;
+}
+
+.v481-discounts-section {
+  --discount-pink: var(--theme-home-discounts-accent) !important;
+  --discount-pink-soft: color-mix(in srgb, var(--theme-home-discounts-accent) 58%, var(--theme-text-color)) !important;
+  --discount-pink-deep: color-mix(in srgb, var(--theme-home-discounts-accent) 76%, var(--theme-main-background)) !important;
+}
+
+.v481-discounts-section .v481-ticket::after {
+  background: conic-gradient(
+    from var(--discount-review-angle, var(--discount-pink-angle, 0deg)),
+    transparent 0 55%,
+    color-mix(in srgb, var(--theme-effect-discount-glow) 42%, var(--theme-text-color)) 64%,
+    var(--theme-effect-discount-glow) 73%,
+    var(--theme-home-discounts-accent) 80%,
+    transparent 88%
+  ) !important;
+}
+
+.v481-discounts-section :is(.v481-ticket-copy::after, .v481-ticket-ribbon::after),
+.active-discount-cover-badge::after,
+.discount-card .discount-badge::after {
+  background: linear-gradient(90deg, transparent, var(--theme-effect-discount-glow), transparent) !important;
+  box-shadow: 0 0 .85rem color-mix(in srgb, var(--theme-effect-discount-glow) 70%, transparent) !important;
+}
+
+:is(.active-discount-cover-badge, .v481-featured-badge, .chapter-status-badge) {
+  box-shadow: 0 0 .9rem color-mix(in srgb, var(--theme-effect-badge-glow) 30%, transparent);
+}
+
+.recent-review-card[data-active="true"] {
+  border-color: var(--theme-home-recent-reviews-accent) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--theme-home-recent-reviews-accent) 64%, transparent),
+    0 0 1.5rem color-mix(in srgb, var(--theme-effect-cover-glow) 34%, transparent) !important;
+}
+
+.home-announcement-slider > article::after,
+.home-announcement-banner::after,
+.event-campaign-modal.floating-home-ad::after {
+  background: conic-gradient(
+    from var(--home-announcement-angle, var(--v488-orbit-angle, 0deg)),
+    transparent 0 54%,
+    color-mix(in srgb, var(--theme-effect-announcement-glow) 42%, var(--theme-text-color)) 64%,
+    var(--theme-effect-announcement-glow) 74%,
+    var(--theme-effect-moving-light-secondary) 81%,
+    transparent 89%
+  ) !important;
+  box-shadow: 0 0 1rem color-mix(in srgb, var(--theme-effect-announcement-glow) 24%, transparent);
+}
+
+:is(.v46-floating-home-ad, .event-campaign-modal)[data-effect="glow"] {
+  box-shadow:
+    0 2.5rem 7.5rem color-mix(in srgb, var(--theme-main-background) 70%, transparent),
+    0 0 3.5rem color-mix(in srgb, var(--theme-effect-announcement-glow) 40%, transparent) !important;
+}
+
+/* Dedicated notification tokens: the feature is live (provider, header menu, and page list). */
+.header-notifications > span {
+  color: var(--theme-notification-toast-text) !important;
+  background: var(--theme-notification-bell-badge) !important;
+  box-shadow: 0 0 .8rem color-mix(in srgb, var(--theme-notification-bell-badge) 42%, transparent);
+}
+
+.header-notification-menu {
+  border-color: var(--theme-notification-dropdown-border) !important;
+  background: color-mix(in srgb, var(--theme-notification-dropdown-surface) 96%, transparent) !important;
+}
+
+.header-notification-menu > header {
+  border-color: var(--theme-notification-dropdown-border) !important;
+}
+
+.header-notification-list > li.is-unread,
+.notification-card.is-unread {
+  border-color: color-mix(in srgb, var(--theme-notification-unread) 44%, var(--theme-notification-dropdown-border)) !important;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--theme-notification-unread) 13%, var(--theme-notification-dropdown-surface)),
+    var(--theme-notification-dropdown-surface)
+  ) !important;
+  box-shadow: inset 3px 0 0 var(--theme-notification-unread);
+}
+
+.header-notification-list > li:not(.is-unread),
+.notification-card.is-read {
+  color: color-mix(in srgb, var(--theme-notification-toast-text) 74%, var(--theme-notification-read)) !important;
+  background: var(--theme-notification-read) !important;
+}
+
+.notification-card.is-unread::before {
+  background: var(--theme-notification-unread) !important;
+}
+
+.system-notification {
+  color: var(--theme-notification-toast-text) !important;
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--notice-color) 12%, transparent), transparent 48%),
+    var(--theme-notification-toast-surface) !important;
+}
+
+.system-notification-copy :is(strong, p) {
+  color: var(--theme-notification-toast-text) !important;
+}
+
+.system-notification-success { --notice-color: var(--theme-notification-success) !important; }
+.system-notification-info { --notice-color: var(--theme-notification-info) !important; }
+.system-notification-warning { --notice-color: var(--theme-notification-warning) !important; }
+.system-notification-error,
+.header-notification-action-error,
+.notifications-action-error { --notice-color: var(--theme-notification-error) !important; color: var(--theme-notification-error) !important; }
+
+/* Theme Builder: visible proof for each extension category. */
+.theme-preview-audit-block {
+  display: grid;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid var(--theme-accent-l3);
+  border-radius: .9rem;
+  background: color-mix(in srgb, var(--theme-accent-l1) 76%, var(--theme-main-background));
+}
+
+.theme-preview-audit-heading { display: grid; gap: .15rem; }
+.theme-preview-audit-heading small { color: var(--theme-primary); font-size: .58rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.theme-preview-audit-heading h3 { margin: 0; color: var(--theme-text-color); font-size: .86rem; }
+.theme-preview-section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .38rem; }
+.theme-preview-section-grid > span { --preview-section-accent: var(--theme-primary); display: flex; min-width: 0; align-items: center; gap: .38rem; padding: .42rem; border: 1px solid color-mix(in srgb, var(--preview-section-accent) 34%, var(--theme-accent-l3)); border-radius: .55rem; color: var(--theme-text-color); background: color-mix(in srgb, var(--preview-section-accent) 8%, var(--theme-accent)); font-size: .57rem; line-height: 1.2; }
+.theme-preview-section-grid > span > i { width: .5rem; height: .5rem; flex: 0 0 auto; border-radius: 50%; background: var(--preview-section-accent); box-shadow: 0 0 .55rem color-mix(in srgb, var(--preview-section-accent) 66%, transparent); }
+.theme-preview-section-grid [data-preview-section="featured"] { --preview-section-accent: var(--theme-home-featured-accent); }
+.theme-preview-section-grid [data-preview-section="trending"] { --preview-section-accent: var(--theme-home-trending-accent); }
+.theme-preview-section-grid [data-preview-section="continue"] { --preview-section-accent: var(--theme-home-continue-reading-accent); }
+.theme-preview-section-grid [data-preview-section="pinned"] { --preview-section-accent: var(--theme-home-pinned-series-accent); }
+.theme-preview-section-grid [data-preview-section="reviews"] { --preview-section-accent: var(--theme-home-recent-reviews-accent); }
+.theme-preview-section-grid [data-preview-section="discounts"] { --preview-section-accent: var(--theme-home-discounts-accent); }
+.theme-preview-section-grid [data-preview-section="announcements"] { --preview-section-accent: var(--theme-home-announcements-accent); }
+.theme-preview-section-grid [data-preview-section="latest"] { --preview-section-accent: var(--theme-home-latest-updates-accent); }
+.theme-preview-section-grid [data-preview-section="editors"] { --preview-section-accent: var(--theme-home-editors-pick-accent); }
+.theme-preview-section-grid [data-preview-section="new-series"] { --preview-section-accent: var(--theme-home-new-series-accent); }
+.theme-preview-section-grid [data-preview-section="teams"] { --preview-section-accent: var(--theme-home-publishing-teams-accent); }
+.theme-preview-section-grid [data-preview-section="community"] { --preview-section-accent: var(--theme-home-community-accent); }
+.theme-preview-section-grid [data-preview-section="hot"] { --preview-section-accent: var(--theme-home-hot-this-week-accent); }
+
+.theme-preview-effect-stage { display: grid; gap: .65rem; }
+.theme-preview-effect-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .45rem; }
+.theme-preview-effect-header > span { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid color-mix(in srgb, var(--theme-effect-icon-glow) 55%, var(--theme-accent-l3)); border-radius: .55rem; color: var(--theme-effect-icon-glow); background: color-mix(in srgb, var(--theme-effect-icon-glow) 12%, transparent); box-shadow: 0 0 .8rem color-mix(in srgb, var(--theme-effect-icon-glow) 38%, transparent); }
+.theme-preview-effect-header strong { color: var(--theme-text-color); font-size: .62rem; text-shadow: 0 0 .7rem color-mix(in srgb, var(--theme-effect-section-header-glow) 38%, transparent); }
+.theme-preview-effect-header button { position: relative; min-height: 1.9rem; overflow: hidden; border: 1px solid var(--theme-effect-button-glow); border-radius: .5rem; color: var(--theme-text-color); background: var(--theme-accent); font-size: .55rem; box-shadow: 0 0 .75rem color-mix(in srgb, var(--theme-effect-button-glow) 35%, transparent); }
+.theme-preview-effect-header button::after,
+.theme-preview-effect-specimens > span::after { position: absolute; inset: 0; padding: 1px; border-radius: inherit; background: conic-gradient(from var(--theme-preview-light-angle), transparent 0 52%, var(--theme-effect-moving-light) 64%, var(--theme-effect-moving-light-secondary) 77%, transparent 88%); content: ""; pointer-events: none; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: theme-preview-light-orbit 3s linear infinite; }
+.theme-preview-effect-specimens { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .38rem; }
+.theme-preview-effect-specimens > span { --preview-glow: var(--theme-effect-moving-light); position: relative; display: grid; min-height: 2.1rem; place-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--preview-glow) 48%, var(--theme-accent-l3)); border-radius: .55rem; color: var(--theme-text-color); background: color-mix(in srgb, var(--preview-glow) 9%, var(--theme-accent)); font-size: .55rem; box-shadow: 0 0 .75rem color-mix(in srgb, var(--preview-glow) 28%, transparent); }
+.theme-preview-effect-specimens > .is-badge { --preview-glow: var(--theme-effect-badge-glow); }
+.theme-preview-effect-specimens > .is-cover { --preview-glow: var(--theme-effect-cover-glow); min-height: 3.2rem; }
+.theme-preview-effect-specimens > .is-button { --preview-glow: var(--theme-effect-button-glow); }
+.theme-preview-effect-specimens > .is-paid { --preview-glow: var(--theme-effect-paid-glow); }
+.theme-preview-effect-specimens > .is-discount { --preview-glow: var(--theme-effect-discount-glow); }
+.theme-preview-effect-specimens > .is-announcement { --preview-glow: var(--theme-effect-announcement-glow); }
+.theme-preview-effect-specimens > span::after { background: conic-gradient(from var(--theme-preview-light-angle), transparent 0 54%, color-mix(in srgb, var(--preview-glow) 42%, var(--theme-text-color)) 65%, var(--preview-glow) 75%, transparent 86%); }
+.theme-preview-rank-glows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; }
+.theme-preview-rank-glows > span { --rank-glow: var(--theme-effect-gold-glow); display: grid; min-height: 1.8rem; place-items: center; border: 1px solid var(--rank-glow); border-radius: 999px; color: var(--theme-text-color); background: color-mix(in srgb, var(--rank-glow) 16%, var(--theme-accent)); box-shadow: 0 0 .8rem color-mix(in srgb, var(--rank-glow) 42%, transparent); font-size: .65rem; font-weight: 850; }
+.theme-preview-rank-glows > .is-silver { --rank-glow: var(--theme-effect-silver-glow); }
+.theme-preview-rank-glows > .is-bronze { --rank-glow: var(--theme-effect-bronze-glow); }
+
+@property --theme-preview-light-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes theme-preview-light-orbit { to { --theme-preview-light-angle: 360deg; } }
+
+.theme-preview-notification-stage { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .55rem; align-items: start; }
+.theme-preview-notification-bell { position: relative; display: grid; width: 2.45rem; height: 2.45rem; place-items: center; border: 1px solid var(--theme-notification-dropdown-border); border-radius: .7rem; color: var(--theme-notification-toast-text); background: var(--theme-notification-dropdown-surface); }
+.theme-preview-notification-bell b { position: absolute; top: -.3rem; right: -.3rem; display: grid; min-width: 1rem; height: 1rem; place-items: center; border-radius: 999px; color: var(--theme-notification-toast-text); background: var(--theme-notification-bell-badge); font-size: .5rem; box-shadow: 0 0 .6rem color-mix(in srgb, var(--theme-notification-bell-badge) 54%, transparent); }
+.theme-preview-notification-menu { display: grid; overflow: hidden; border: 1px solid var(--theme-notification-dropdown-border); border-radius: .65rem; background: var(--theme-notification-dropdown-surface); }
+.theme-preview-notification-menu > strong { padding: .45rem .55rem; border-bottom: 1px solid var(--theme-notification-dropdown-border); color: var(--theme-notification-toast-text); font-size: .58rem; }
+.theme-preview-notification-menu > span { display: flex; align-items: center; gap: .4rem; padding: .45rem .55rem; color: var(--theme-notification-toast-text); font-size: .54rem; }
+.theme-preview-notification-menu > span > i { width: .38rem; height: .38rem; border-radius: 50%; background: currentColor; }
+.theme-preview-notification-menu > .is-unread { color: var(--theme-notification-unread); background: color-mix(in srgb, var(--theme-notification-unread) 12%, var(--theme-notification-dropdown-surface)); }
+.theme-preview-notification-menu > .is-read { color: color-mix(in srgb, var(--theme-notification-toast-text) 68%, var(--theme-notification-read)); background: var(--theme-notification-read); }
+.theme-preview-toast-list { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .38rem; }
+.theme-preview-toast-list > span { --preview-notice: var(--theme-notification-info); display: flex; align-items: center; gap: .35rem; min-height: 2rem; padding: .45rem; border: 1px solid color-mix(in srgb, var(--preview-notice) 45%, var(--theme-notification-dropdown-border)); border-radius: .55rem; color: var(--theme-notification-toast-text); background: linear-gradient(100deg, color-mix(in srgb, var(--preview-notice) 11%, transparent), transparent), var(--theme-notification-toast-surface); font-size: .52rem; }
+.theme-preview-toast-list > span > i { width: .45rem; height: .45rem; flex: 0 0 auto; border-radius: 50%; background: var(--preview-notice); box-shadow: 0 0 .55rem color-mix(in srgb, var(--preview-notice) 55%, transparent); }
+.theme-preview-toast-list [data-notification-kind="success"] { --preview-notice: var(--theme-notification-success); }
+.theme-preview-toast-list [data-notification-kind="info"] { --preview-notice: var(--theme-notification-info); }
+.theme-preview-toast-list [data-notification-kind="warning"] { --preview-notice: var(--theme-notification-warning); }
+.theme-preview-toast-list [data-notification-kind="error"] { --preview-notice: var(--theme-notification-error); }
+
+@media (min-width: 1021px) {
+  .theme-builder-preview-column {
+    max-height: calc(100dvh - 7rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--theme-scrollbar-color) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-preview-effect-header button::after,
+  .theme-preview-effect-specimens > span::after { animation: none; }
+}

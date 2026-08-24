@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
 import { auditStatement } from "@/lib/server/admin-utils";
-import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { getFeatureStates } from "@/lib/server/feature-flags";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
@@ -92,17 +91,19 @@ function statusForDiscount(row: Pick<DiscountRow, "active" | "startsAt" | "endsA
 }
 
 function serializeDiscount(row: DiscountRow) {
-  const percentage = Math.max(
-    1,
-    Math.min(
-      99,
-      Math.round(
-        ((Number(row.originalPrice) - Number(row.reducedPrice)) /
-          Number(row.originalPrice)) *
-          100,
-      ),
-    ),
-  );
+  const percentage = row.discountType === "PERCENT"
+    ? Math.max(1, Math.min(99, Number(row.discountValue)))
+    : Math.max(
+        1,
+        Math.min(
+          99,
+          Math.round(
+            ((Number(row.originalPrice) - Number(row.reducedPrice)) /
+              Number(row.originalPrice)) *
+              100,
+          ),
+        ),
+      );
   return {
     id: row.id,
     targetType: row.targetType,
@@ -225,7 +226,7 @@ export async function listAdminDiscounts(query = "") {
   const db = database();
   const normalized = query.trim().toLowerCase();
   const escaped = `%${normalized.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
-  const [discounts, targets, commercial, featureStates] = await Promise.all([
+  const [discounts, targets, featureStates] = await Promise.all([
     db
       .prepare(
         `${discountSelect}
@@ -238,10 +239,16 @@ export async function listAdminDiscounts(query = "") {
                 s.slug AS seriesSlug, s.title AS seriesTitle,
                 NULL AS chapterSlug, NULL AS chapterNumber,
                 NULL AS chapterTitle, s.cover_key AS coverKey,
-                s.revision AS seriesRevision, NULL AS chapterPrice
+                s.revision AS seriesRevision, MIN(c.price_onyx) AS chapterPrice
            FROM series s
+           JOIN chapters c ON c.series_id = s.id
           WHERE s.archived_at IS NULL AND s.is_published = 1
+            AND c.access_type = 'PAID' AND c.price_onyx > 0
+            AND c.state = 'PUBLISHED' AND c.visibility = 'PUBLIC'
+            AND c.published_at IS NOT NULL
+            AND datetime(c.published_at) <= datetime('now')
             AND (? = '' OR LOWER(s.title) LIKE ? ESCAPE '\\')
+          GROUP BY s.id, s.slug, s.title, s.cover_key, s.revision
          UNION ALL
          SELECT 'CHAPTER' AS targetType, s.id AS seriesId, c.id AS chapterId,
                 s.slug AS seriesSlug, s.title AS seriesTitle,
@@ -252,7 +259,9 @@ export async function listAdminDiscounts(query = "") {
            JOIN series s ON s.id = c.series_id
           WHERE s.archived_at IS NULL AND s.is_published = 1
             AND c.access_type = 'PAID' AND c.price_onyx > 0
-            AND c.state = 'PUBLISHED'
+            AND c.state = 'PUBLISHED' AND c.visibility = 'PUBLIC'
+            AND c.published_at IS NOT NULL
+            AND datetime(c.published_at) <= datetime('now')
             AND (? = '' OR LOWER(s.title) LIKE ? ESCAPE '\\'
                  OR LOWER(c.chapter_number) LIKE ? ESCAPE '\\'
                  OR LOWER(c.title) LIKE ? ESCAPE '\\')
@@ -271,19 +280,15 @@ export async function listAdminDiscounts(query = "") {
         chapterTitle: string | null;
         coverKey: string | null;
         seriesRevision: number;
-        chapterPrice: number | null;
+        chapterPrice: number;
       }>(),
-    getCommercialSettingsDocument(),
     getFeatureStates(db),
   ]);
   return {
     discounts: discounts.results.map(serializeDiscount),
     targets: targets.results.map((target) => ({
       ...target,
-      originalPrice:
-        target.targetType === "CHAPTER"
-          ? Number(target.chapterPrice ?? 0)
-          : commercial.settings.economy.defaultChapterPrice,
+      originalPrice: Number(target.chapterPrice),
       coverUrl: seriesMediaUrl(
         target.seriesId,
         "cover",
@@ -308,7 +313,10 @@ async function priceForTarget(input: DiscountInput) {
            JOIN series s ON s.id = c.series_id
           WHERE c.id = ? AND c.series_id = ?
             AND c.access_type = 'PAID' AND c.price_onyx > 0
-            AND c.state = 'PUBLISHED' AND s.archived_at IS NULL
+            AND c.state = 'PUBLISHED' AND c.visibility = 'PUBLIC'
+            AND c.published_at IS NOT NULL
+            AND datetime(c.published_at) <= datetime('now')
+            AND s.archived_at IS NULL AND s.is_published = 1
           LIMIT 1`,
       )
       .bind(input.chapterId, input.seriesId)
@@ -324,24 +332,26 @@ async function priceForTarget(input: DiscountInput) {
   }
   const series = await db
     .prepare(
-      "SELECT id FROM series WHERE id = ? AND archived_at IS NULL AND is_published = 1 LIMIT 1",
+      `SELECT MIN(c.price_onyx) AS price
+         FROM series s
+         JOIN chapters c ON c.series_id = s.id
+        WHERE s.id = ?
+          AND s.archived_at IS NULL AND s.is_published = 1
+          AND c.access_type = 'PAID' AND c.price_onyx > 0
+          AND c.state = 'PUBLISHED' AND c.visibility = 'PUBLIC'
+          AND c.published_at IS NOT NULL
+          AND datetime(c.published_at) <= datetime('now')
+        GROUP BY s.id
+        LIMIT 1`,
     )
     .bind(input.seriesId)
-    .first();
-  if (!series) {
+    .first<{ price: number }>();
+  const price = Number(series?.price ?? 0);
+  if (!Number.isSafeInteger(price) || price <= 0) {
     throw new ApiError(
       409,
       "DISCOUNT_TARGET_CHANGED",
-      "The selected series is no longer published.",
-    );
-  }
-  const commercial = await getCommercialSettingsDocument();
-  const price = commercial.settings.economy.defaultChapterPrice;
-  if (price <= 0) {
-    throw new ApiError(
-      409,
-      "CHAPTER_PRICE_UNAVAILABLE",
-      "Configure a positive default chapter price before scheduling a series-wide chapter discount.",
+      "The selected series no longer has an eligible published paid chapter.",
     );
   }
   return price;

@@ -8162,30 +8162,68 @@ img {
   gap: 24px;
 }
 
+.review-collapse-toggle {
+  display: inline-flex;
+  min-height: 2.7rem;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  padding: .55rem .75rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: var(--site-button-radius, var(--radius-small));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+  color: var(--text);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color .18s ease, background-color .18s ease, transform .16s ease;
+}
+
+.review-collapse-toggle:hover,
+.review-collapse-toggle:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  outline: 2px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.review-collapse-toggle:active {
+  transform: scale(.98);
+}
+
+.review-collapse-toggle svg {
+  color: var(--accent);
+  transition: transform .18s ease;
+}
+
+.review-collapse-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.review-collapsible {
+  display: grid;
+  gap: 24px;
+}
+
+.review-collapsible[hidden] {
+  display: none;
+}
+
+.review-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.review-toolbar > label {
+  display: block;
+  width: min(100%, 12rem);
+}
+
 .review-heading h2 {
   margin: 0;
   font-size: clamp(24px, 3vw, 34px);
   letter-spacing: -0.045em;
-}
-
-.review-heading > label {
-  position: relative;
-}
-
-.review-heading select {
-  min-height: 40px;
-  padding: 0 38px 0 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  appearance: none;
-  background: var(--surface-2);
-  font-size: 12px;
-}
-
-.review-heading > label svg {
-  position: absolute;
-  right: 13px;
-  pointer-events: none;
 }
 
 .review-summary-grid {
@@ -31171,6 +31209,91 @@ button:disabled,
     align-items: center;
     gap: 8px;
   }
+}
+
+/* The persisted Following state follows the active theme without a reload. */
+.title-actions .series-secondary-action[aria-pressed="true"] {
+  border-color: var(--theme-primary-l1);
+  background: var(--theme-button-accent, var(--theme-primary));
+  color: var(--theme-button-accent-alternate);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-primary) 24%, transparent);
+}
+
+.title-actions .series-secondary-action[aria-pressed="true"]:hover,
+.title-actions .series-secondary-action[aria-pressed="true"]:focus-visible {
+  border-color: var(--theme-primary-l2);
+  background: var(--theme-primary-l1);
+  color: var(--theme-button-accent-alternate);
+}
+
+.title-actions .series-secondary-action[aria-pressed="true"] svg {
+  color: currentColor;
+}
+
+/* Browse's single-choice filters use the same Library listbox primitive. */
+.compact-single-select {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: .35rem;
+}
+
+.compact-single-select > label {
+  display: block;
+  min-width: 0;
+}
+
+.compact-single-select .unified-single-select-trigger {
+  padding-right: 2rem;
+}
+
+.compact-single-active-count {
+  position: absolute;
+  z-index: 1;
+  top: .38rem;
+  right: 2.15rem;
+  display: grid;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--theme-button-accent-alternate);
+  background: var(--theme-button-accent);
+  font-size: .62rem;
+  pointer-events: none;
+}
+
+.compact-single-select:has(.compact-sort-toggle) .compact-single-active-count {
+  right: 5.25rem;
+}
+
+.compact-sort-toggle {
+  display: grid;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: var(--site-button-radius, var(--radius-small));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  cursor: pointer;
+}
+
+.compact-sort-toggle:is(:hover, :focus-visible) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  outline: 2px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  outline-offset: 2px;
+}
+
+body:has(.browse-desktop-filter-bar) .browse-desktop-filter-bar > .compact-single-select {
+  flex: 1 1 0;
+}
+
+.catalog-filter-grid > .compact-single-select {
+  width: 100%;
 }
 
 .featured-card-banner:not(.featured-card-fallback),
@@ -58262,11 +58385,30 @@ select:focus-visible {
   font-weight: 750;
 }
 
-.library-dropdown {
+.unified-single-select {
   position: relative;
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  vertical-align: middle;
 }
 
-.library-dropdown-trigger {
+.unified-single-select-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  white-space: nowrap !important;
+}
+
+.unified-single-select-trigger {
   display: flex;
   width: 100%;
   min-height: 2.75rem;
@@ -58287,29 +58429,37 @@ select:focus-visible {
   transition: border-color .18s ease, background-color .18s ease, transform .16s ease;
 }
 
-.library-dropdown-trigger:hover,
-.library-dropdown.is-open .library-dropdown-trigger,
-.library-dropdown-trigger:focus-visible {
+.unified-single-select-trigger:hover,
+.unified-single-select.is-open .unified-single-select-trigger,
+.unified-single-select-trigger:focus-visible {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
   outline: none;
 }
 
-.library-dropdown-trigger:active {
+.unified-single-select-trigger:active {
   transform: scale(.98);
 }
 
-.library-dropdown-trigger svg {
+.unified-single-select-trigger svg {
   flex: 0 0 auto;
   color: var(--accent);
   transition: transform .18s ease;
 }
 
-.library-dropdown.is-open .library-dropdown-trigger svg {
+.unified-single-select.is-disabled .unified-single-select-trigger {
+  border-color: var(--theme-disabled-border, var(--line));
+  background: var(--theme-disabled-background, var(--surface));
+  color: var(--theme-disabled-text, var(--muted));
+  cursor: not-allowed;
+  opacity: .68;
+}
+
+.unified-single-select.is-open .unified-single-select-trigger svg {
   transform: rotate(180deg);
 }
 
-.library-dropdown-menu {
+.unified-single-select-menu {
   position: absolute;
   z-index: 1300;
   top: calc(100% + .4rem);
@@ -58325,7 +58475,7 @@ select:focus-visible {
   box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 32%);
 }
 
-.library-dropdown-menu button {
+.unified-single-select-menu button {
   display: flex;
   min-height: 2.45rem;
   align-items: center;
@@ -58342,20 +58492,36 @@ select:focus-visible {
   cursor: pointer;
 }
 
-.library-dropdown-menu button:hover,
-.library-dropdown-menu button:focus-visible,
-.library-dropdown-menu button[aria-selected="true"] {
+.unified-single-select-menu button:hover,
+.unified-single-select-menu button:focus-visible,
+.unified-single-select-menu button[aria-selected="true"] {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   outline: none;
 }
 
-.library-dropdown-menu button[aria-selected="true"] {
+.unified-single-select-menu button[aria-selected="true"] {
   color: var(--accent);
 }
 
-.library-dropdown-menu button svg {
+.unified-single-select-menu button svg {
   flex: 0 0 auto;
+}
+
+.unified-single-select-menu button:disabled {
+  color: var(--theme-disabled-text, var(--muted));
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.unified-single-select-group {
+  display: block;
+  padding: .65rem .6rem .3rem;
+  color: var(--muted);
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 680px) {
@@ -58365,8 +58531,8 @@ select:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .library-dropdown-trigger,
-  .library-dropdown-trigger svg {
+  .unified-single-select-trigger,
+  .unified-single-select-trigger svg {
     transition: none;
   }
 }
@@ -58381,27 +58547,27 @@ select:focus-visible {
   color-scheme: light;
 }
 
-.light .library-dropdown-menu,
-[data-theme="light"] .library-dropdown-menu {
+.light .unified-single-select-menu,
+[data-theme="light"] .unified-single-select-menu {
   box-shadow: 0 1rem 2.5rem rgb(28 61 89 / 18%);
 }
 
 .light select,
 [data-theme="light"] select,
-.light .library-dropdown-trigger,
-[data-theme="light"] .library-dropdown-trigger,
-.light .library-dropdown-menu,
-[data-theme="light"] .library-dropdown-menu {
+.light .unified-single-select-trigger,
+[data-theme="light"] .unified-single-select-trigger,
+.light .unified-single-select-menu,
+[data-theme="light"] .unified-single-select-menu {
   background-color: var(--surface);
   color: var(--text);
 }
 
-.light .library-dropdown-menu button:hover,
-[data-theme="light"] .library-dropdown-menu button:hover,
-.light .library-dropdown-menu button:focus-visible,
-[data-theme="light"] .library-dropdown-menu button:focus-visible,
-.light .library-dropdown-menu button[aria-selected="true"],
-[data-theme="light"] .library-dropdown-menu button[aria-selected="true"] {
+.light .unified-single-select-menu button:hover,
+[data-theme="light"] .unified-single-select-menu button:hover,
+.light .unified-single-select-menu button:focus-visible,
+[data-theme="light"] .unified-single-select-menu button:focus-visible,
+.light .unified-single-select-menu button[aria-selected="true"],
+[data-theme="light"] .unified-single-select-menu button[aria-selected="true"] {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 

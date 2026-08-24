@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   CaretDown,
@@ -706,7 +708,7 @@ export function RewardSettingsPanel() {
                         </label>
                         <label>
                           <span>Type</span>
-                          <select
+                          <UnifiedSingleSelect
                             value={reward.type}
                             onChange={(event) => {
                               const type = event.target
@@ -736,7 +738,7 @@ export function RewardSettingsPanel() {
                             <option value="SHARDS">Shards</option>
                             <option value="ONYX">{coinPlural}</option>
                             <option value="STORE_ITEM">Store item</option>
-                          </select>
+                          </UnifiedSingleSelect>
                         </label>
                         {reward.type === "STORE_ITEM" ? (
                           <label>
@@ -789,7 +791,7 @@ export function RewardSettingsPanel() {
                         )}
                         <label>
                           <span>Drop rule</span>
-                          <select
+                          <UnifiedSingleSelect
                             value={reward.distributionMode ?? "WEIGHT"}
                             onChange={(event) =>
                               setSettings({
@@ -819,7 +821,7 @@ export function RewardSettingsPanel() {
                             <option value="GLOBAL_INTERVAL">
                               Global spin interval
                             </option>
-                          </select>
+                          </UnifiedSingleSelect>
                         </label>
                         {(reward.distributionMode ?? "WEIGHT") ===
                         "GLOBAL_INTERVAL" ? (
@@ -1090,7 +1092,7 @@ export function RewardSettingsPanel() {
                         </label>
                         <label>
                           <span>Type</span>
-                          <select
+                          <UnifiedSingleSelect
                             value={reward.type}
                             onChange={(event) => {
                               const type = event.target
@@ -1121,7 +1123,7 @@ export function RewardSettingsPanel() {
                             <option value="SHARDS">Shards</option>
                             <option value="ONYX">{coinPlural}</option>
                             <option value="STORE_ITEM">Store item</option>
-                          </select>
+                          </UnifiedSingleSelect>
                         </label>
                         {reward.type === "STORE_ITEM" ? (
                           <label>
@@ -1178,7 +1180,7 @@ export function RewardSettingsPanel() {
                         )}
                         <label>
                           <span>Drop rule</span>
-                          <select
+                          <UnifiedSingleSelect
                             value={reward.distributionMode ?? "WEIGHT"}
                             onChange={(event) =>
                               setSettings({
@@ -1209,7 +1211,7 @@ export function RewardSettingsPanel() {
                             <option value="GLOBAL_INTERVAL">
                               Global spin interval
                             </option>
-                          </select>
+                          </UnifiedSingleSelect>
                         </label>
                         {(reward.distributionMode ?? "WEIGHT") ===
                         "GLOBAL_INTERVAL" ? (
@@ -1465,7 +1467,7 @@ export function RewardSettingsPanel() {
                       </label>
                       <label>
                         <span>Metric</span>
-                        <select
+                        <UnifiedSingleSelect
                           value={task.metric}
                           onChange={(event) =>
                             setSettings({
@@ -1490,7 +1492,7 @@ export function RewardSettingsPanel() {
                           <option value="UPVOTES_RECEIVED">
                             Upvotes received
                           </option>
-                        </select>
+                        </UnifiedSingleSelect>
                       </label>
                       <label>
                         <span>Target</span>

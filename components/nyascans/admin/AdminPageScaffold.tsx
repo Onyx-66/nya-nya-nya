@@ -558,7 +558,7 @@ export function ConfirmActionDialog({
       if (event.key !== "Tab") return;
       const focusable = Array.from(
         dialog.querySelectorAll<HTMLElement>(
-          "button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+          "button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
         ),
       );
       if (!focusable.length) {
@@ -700,7 +700,7 @@ function PromptActionDialogContent({
       if (event.key !== "Tab") return;
       const focusable = Array.from(
         dialog.querySelectorAll<HTMLElement>(
-          "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+          "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
         ),
       );
       if (!focusable.length) {

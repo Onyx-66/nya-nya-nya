@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -905,7 +907,7 @@ function ChapterMetadataFields({
       </label> : null}
       <label>
         <span>Availability</span>
-        <select
+        <UnifiedSingleSelect
           disabled={disabled}
           value={item.useVisibilityDefault ? "DEFAULT" : item.accessType}
           onChange={(event) => {
@@ -938,7 +940,7 @@ function ChapterMetadataFields({
           </option>
           <option value="FREE">Free exception</option>
           {showCommerce ? <option value="PAID">Paid exception</option> : null}
-        </select>
+        </UnifiedSingleSelect>
         <small>
           {item.useVisibilityDefault
             ? visibilityDefaults.autoFreeAfterDays == null
@@ -969,7 +971,7 @@ function ChapterMetadataFields({
       ) : null}
       <label>
         <span>Visibility</span>
-        <select
+        <UnifiedSingleSelect
           disabled={disabled}
           value={item.visibility}
           onChange={(event) =>
@@ -982,7 +984,7 @@ function ChapterMetadataFields({
           <option value="PUBLIC">Public</option>
           <option value="UNLISTED">Unlisted</option>
           <option value="HIDDEN">Hidden</option>
-        </select>
+        </UnifiedSingleSelect>
       </label>
       <label>
         <span>Schedule</span>
@@ -3081,7 +3083,7 @@ function UploadComposer({
                 </div>
                 <label>
                   <span>Release visibility</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={batchVisibility}
                     disabled={busy}
                     onChange={(event) =>
@@ -3093,7 +3095,7 @@ function UploadComposer({
                     <option value="PUBLIC">Public</option>
                     <option value="UNLISTED">Unlisted</option>
                     <option value="HIDDEN">Hidden</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <div className="upload-quick-format">
                   <span>Accepted sources</span>
@@ -3229,11 +3231,11 @@ function UploadComposer({
             <div className="v46-upload-method">
               <label>
                 <span>Select upload method</span>
-                <select value={ingestMethod} disabled={busy || Boolean(job)} onChange={(event) => setIngestMethod(event.target.value as ClientUploadMethod)}>
+                <UnifiedSingleSelect value={ingestMethod} disabled={busy || Boolean(job)} onChange={(event) => setIngestMethod(event.target.value as ClientUploadMethod)}>
                   <option value="DIRECT_IMAGES">Images</option>
                   <option value="ZIP">ZIP / CBZ archive</option>
                   <option value="GOOGLE_DRIVE">Google Drive link</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               {ingestMethod === "GOOGLE_DRIVE" ? (
                 <label><span>Google Drive folder or ZIP link</span><input type="url" required value={googleDriveUrl} placeholder="https://drive.google.com/…" disabled={busy || Boolean(job)} onChange={(event) => setGoogleDriveUrl(event.target.value)} /><small>Only drive.google.com and docs.google.com links are accepted.</small></label>

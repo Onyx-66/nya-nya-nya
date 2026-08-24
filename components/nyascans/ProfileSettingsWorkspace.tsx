@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -939,7 +941,7 @@ export function ProfileSettingsWorkspace({
           </label>
           <label>
             <span>Preferred language</span>
-            <select
+            <UnifiedSingleSelect
               value={profile.preferredLanguage}
               onChange={(event) =>
                 setProfile((current) =>
@@ -954,7 +956,7 @@ export function ProfileSettingsWorkspace({
               <option value="es">Español</option>
               <option value="ar">العربية</option>
               <option value="ja">日本語</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label className="profile-settings-wide">
             <span>Bio</span>
@@ -983,7 +985,7 @@ export function ProfileSettingsWorkspace({
         <div className="profile-favorites-editor">
           <label>
             <span>Add a series</span>
-            <select
+            <UnifiedSingleSelect
               value=""
               disabled={(profile.favorites?.length ?? 0) >= 10}
               onChange={(event) => {
@@ -1022,7 +1024,7 @@ export function ProfileSettingsWorkspace({
                     {candidate.seriesTitle}
                   </option>
                 ))}
-            </select>
+            </UnifiedSingleSelect>
           </label>
           {(profile.favorites ?? []).length ? (
             <ol aria-label="Favorite series order">
@@ -1134,7 +1136,7 @@ export function ProfileSettingsWorkspace({
         <div className="profile-privacy-grid">
           <label>
             <span>Profile visibility</span>
-            <select
+            <UnifiedSingleSelect
               value={profile.privacy?.profileVisibility ?? "PUBLIC"}
               onChange={(event) =>
                 setProfile((current) =>
@@ -1154,11 +1156,11 @@ export function ProfileSettingsWorkspace({
             >
               <option value="PUBLIC">Public</option>
               <option value="PRIVATE">Private</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             <span>Followers and following</span>
-            <select
+            <UnifiedSingleSelect
               value={profile.privacy?.followersVisibility ?? "PUBLIC"}
               onChange={(event) =>
                 setProfile((current) =>
@@ -1178,7 +1180,7 @@ export function ProfileSettingsWorkspace({
             >
               <option value="PUBLIC">Public counts</option>
               <option value="PRIVATE">Private</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           {(
             [

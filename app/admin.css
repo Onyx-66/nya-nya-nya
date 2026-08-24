@@ -5437,3 +5437,16 @@
   color: var(--theme-tooltip-text);
   background: var(--theme-tooltip-background);
 }
+
+/* Keep the canonical Library-style select geometry inside the admin radius reset. */
+.ops-shell[data-operations-mode="admin"] .unified-single-select-trigger {
+  border-radius: var(--site-button-radius, var(--radius-small)) !important;
+}
+
+.ops-shell[data-operations-mode="admin"] .unified-single-select-menu {
+  border-radius: var(--site-card-radius, var(--radius)) !important;
+}
+
+.ops-shell[data-operations-mode="admin"] .unified-single-select-menu button {
+  border-radius: .55rem !important;
+}

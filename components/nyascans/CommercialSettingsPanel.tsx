@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   Coins,
@@ -447,7 +449,7 @@ export function CommercialSettingsPanel({
         <div className="commercial-form-grid">
           <label>
             <span>Discount Card Style</span>
-            <select
+            <UnifiedSingleSelect
               value={discounts.cardStyle}
               onChange={(event) =>
                 update((current) => ({
@@ -462,7 +464,7 @@ export function CommercialSettingsPanel({
               <option value="STYLE_1">Style 1 — Horizontal Ticket</option>
               <option value="STYLE_2">Style 2 — Spotlight / Hero</option>
               <option value="STYLE_3">Style 3 — Two-up Grid</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label className="commercial-wide">
             <span>Style 2 default headline</span>

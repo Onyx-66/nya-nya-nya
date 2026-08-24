@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
 import {
@@ -315,7 +317,7 @@ export function GiftStorePanel({
             {recipientMode === "FOLLOWED" ? (
               <label>
                 <span>Followed reader</span>
-                <select
+                <UnifiedSingleSelect
                   value={recipientUserId}
                   onChange={(event) => {
                     touchGiftDraft();
@@ -328,7 +330,7 @@ export function GiftStorePanel({
                       {reader.username ? ` (@${reader.username})` : ""}
                     </option>
                   ))}
-                </select>
+                </UnifiedSingleSelect>
               </label>
             ) : (
               <label>
@@ -415,7 +417,7 @@ export function GiftStorePanel({
             <>
               <label>
                 <span>Translation Team</span>
-                <select
+                <UnifiedSingleSelect
                   value={teamId}
                   disabled={busy !== null}
                   onChange={(event) => {
@@ -427,7 +429,7 @@ export function GiftStorePanel({
                   {teams.map((team) => (
                     <option value={team.id} key={team.id}>{team.name}</option>
                   ))}
-                </select>
+                </UnifiedSingleSelect>
               </label>
               {chosenTeam?.series.length ? (
                 <fieldset

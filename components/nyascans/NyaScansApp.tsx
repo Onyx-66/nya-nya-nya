@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
 
 import {
@@ -2220,6 +2222,24 @@ function SeriesReviews({
   const [spoiler, setSpoiler] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash === "#reviews") setExpanded(true);
+    };
+    const openFromReviewLink = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('a[href="#reviews"]')) setExpanded(true);
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    document.addEventListener("click", openFromReviewLink);
+    return () => {
+      window.removeEventListener("hashchange", openFromHash);
+      document.removeEventListener("click", openFromReviewLink);
+    };
+  }, []);
 
   async function loadReviews() {
     setLoading(true);
@@ -2341,9 +2361,27 @@ function SeriesReviews({
           <p className="eyebrow">Reader ratings</p>
           <h2 id="reviews-title">Ratings & Reviews</h2>
         </div>
-        <label>
+        <button
+          className="review-collapse-toggle"
+          type="button"
+          aria-controls="reviews-content"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <span>{expanded ? "Collapse" : "Expand"}</span>
+          <CaretDown size={18} aria-hidden="true" />
+        </button>
+      </div>
+      <div
+        className="review-collapsible"
+        id="reviews-content"
+        hidden={!expanded}
+      >
+        <div className="review-toolbar">
+          <label>
           <span className="sr-only">Sort reviews</span>
-          <select
+          <UnifiedSingleSelect
+            aria-label="Sort reviews"
             value={sort}
             onChange={(event) =>
               setSort(
@@ -2354,11 +2392,10 @@ function SeriesReviews({
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
             <option value="highest">Highest rated</option>
-          </select>
-          <CaretDown size={15} />
-        </label>
-      </div>
-      <div className="review-summary-grid">
+          </UnifiedSingleSelect>
+          </label>
+        </div>
+        <div className="review-summary-grid">
         <div className="review-score">
           <strong>{summary.average.toFixed(1)}</strong>
           <ReviewStars value={summary.average} />
@@ -2431,8 +2468,8 @@ function SeriesReviews({
             </button>
           </div>
         </form>
-      </div>
-      <div className="review-list" aria-live="polite">
+        </div>
+        <div className="review-list" aria-live="polite">
         {loading ? (
           <div className="review-empty">Loading reader reviews...</div>
         ) : reviews.length ? (
@@ -2473,6 +2510,7 @@ function SeriesReviews({
             <span>Be the first reader to rate this series.</span>
           </div>
         )}
+        </div>
       </div>
     </section>
   );
@@ -4814,6 +4852,45 @@ function CompactOptionMenu({
     ? selectedLabels.join(", ") || label
     : options.find((option) => String(option.value) === String(value))?.label ?? String(value);
   const count = activeCount ?? (multiple ? selectedValues.length : 0);
+
+  if (!multiple) {
+    return (
+      <div
+        className={`compact-single-select ${count ? "has-active" : ""} ${className}`.trim()}
+      >
+        <label>
+          <span className="sr-only">{label}</span>
+          <UnifiedSingleSelect
+            aria-label={label}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </UnifiedSingleSelect>
+        </label>
+        {count ? <b className="catalog-filter-active-count compact-single-active-count">{count}</b> : null}
+        {sortDirection && onDirectionChange ? (
+          <button
+            className="compact-sort-toggle"
+            type="button"
+            aria-label={`${label} direction: ${sortDirection === "asc" ? "ascending" : "descending"}. Change direction.`}
+            onClick={() => onDirectionChange(sortDirection === "asc" ? "desc" : "asc")}
+          >
+            {sortDirection === "asc" ? (
+              <ArrowUp size={15} aria-hidden="true" />
+            ) : (
+              <ArrowDown size={15} aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <details
       className={`compact-option-menu ${multiple ? "is-multi-select" : ""} ${count ? "has-active" : ""} ${className}`.trim()}
@@ -7383,7 +7460,7 @@ export function LegacyDiscussionSection({
             <div className="comment-inline-action">
               <label>
                 <span>Reason</span>
-                <select
+                <UnifiedSingleSelect
                   value={reportReason}
                   onChange={(event) => setReportReason(event.target.value)}
                 >
@@ -7391,7 +7468,7 @@ export function LegacyDiscussionSection({
                   <option>Harassment or hate</option>
                   <option>Spam or promotion</option>
                   <option>Illegal content</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <button
                 type="button"
@@ -12339,7 +12416,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
               <div className="form-grid">
                 <label>
                   <span>Content language</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={accountSettings.contentLanguage}
                     onChange={(event) =>
                       setAccountSettings((current) => ({
@@ -12351,7 +12428,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                     <option value="en">English</option>
                     <option value="fr">French</option>
                     <option value="ar">Arabic</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
                 <label className="settings-check">
                   <input
@@ -12439,7 +12516,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
               {(["manga", "vertical"] as const).map((kind) => (
                 <label key={kind}>
                   <span>{kind === "manga" ? "Manga default" : "Manhwa / manhua default"}</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={accountSettings.readerTypeDefaults[kind]}
                     onChange={(event) => setAccountSettings((current) => ({
                       ...current,
@@ -12452,7 +12529,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                     <option value="SINGLE_LTR">Single page · left to right</option>
                     <option value="DOUBLE_RTL">Double page · right to left</option>
                     <option value="DOUBLE_LTR">Double page · left to right</option>
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
               ))}
             </div>
@@ -12799,7 +12876,6 @@ const ADMIN_FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not(:disabled)",
   "input:not(:disabled)",
-  "select:not(:disabled)",
   "textarea:not(:disabled)",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
@@ -13914,7 +13990,7 @@ function OperationsView({
       <section className="ops-main">
         {!admin ? <label className="ops-mobile-section">
           <span>Open section</span>
-          <select
+          <UnifiedSingleSelect
             value={activeSection}
             onChange={(event) => openSection(event.target.value)}
           >
@@ -13927,8 +14003,7 @@ function OperationsView({
                 ))}
               </optgroup>
             ))}
-          </select>
-          <CaretDown size={17} />
+          </UnifiedSingleSelect>
         </label> : null}
         {admin && activeNavigationItem?.slug === "roulette" ? (
           <RewardSettingsPanel />

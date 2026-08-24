@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -488,7 +490,7 @@ export function ReactionLibraryPanel({
               </label>
               <label className="admin-search-field">
                 <span>Status</span>
-                <select
+                <UnifiedSingleSelect
                   value={state}
                   disabled={dirty || optimizing}
                   title={
@@ -505,11 +507,11 @@ export function ReactionLibraryPanel({
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
                   <option value="ARCHIVED">Archived</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <label className="admin-search-field">
                 <span>Library type</span>
-                <select
+                <UnifiedSingleSelect
                   value={usageFilter}
                   disabled={dirty || optimizing}
                   onChange={(event) => {
@@ -525,7 +527,7 @@ export function ReactionLibraryPanel({
                   <option value="ALL">Reactions and GIFs</option>
                   <option value="REACTION">Reaction buttons</option>
                   <option value="COMMENT_GIF">Comment GIFs</option>
-                </select>
+                </UnifiedSingleSelect>
               </label>
               <button
                 className="button button-ghost"
@@ -718,7 +720,7 @@ export function ReactionLibraryPanel({
                   </label>
                   <label>
                     Library use
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.usageKind}
                       disabled={saving || optimizing || protectedChapterSlot}
                       onChange={(event) =>
@@ -738,7 +740,7 @@ export function ReactionLibraryPanel({
                     >
                       <option value="REACTION">Reaction button</option>
                       <option value="COMMENT_GIF">Comment GIF library</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     Display order
@@ -758,7 +760,7 @@ export function ReactionLibraryPanel({
                   </label>
                   <label>
                     Availability
-                    <select
+                    <UnifiedSingleSelect
                       value={draft.availability.scope}
                       disabled={protectedChapterSlot}
                       onChange={(event) =>
@@ -777,7 +779,7 @@ export function ReactionLibraryPanel({
                       <option value="GLOBAL">Everyone</option>
                       <option value="SIGNED_IN">Signed-in users</option>
                       <option value="TEAM">Selected teams</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   {draft.availability.scope === "TEAM" ? (
                     <fieldset className="admin-option-checklist">

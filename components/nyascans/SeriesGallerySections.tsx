@@ -1,4 +1,6 @@
 "use client";
+
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -210,7 +212,7 @@ export function SeriesGallerySections({
       if (event.key !== "Tab") return;
       const focusable = Array.from(
         dialogRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
       if (!focusable.length) return;
@@ -736,7 +738,7 @@ export function SeriesGallerySections({
                 <>
                   <label>
                     <span>Cover language</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={language}
                       required
                       onChange={(event) => setLanguage(event.target.value)}
@@ -747,11 +749,11 @@ export function SeriesGallerySections({
                           {name}
                         </option>
                       ))}
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                   <label>
                     <span>Cover type</span>
-                    <select
+                    <UnifiedSingleSelect
                       value={coverType}
                       required
                       onChange={(event) =>
@@ -761,14 +763,14 @@ export function SeriesGallerySections({
                       <option value="">Choose a type</option>
                       <option value="OFFICIAL">Official</option>
                       <option value="FAN_MADE">Fan Made</option>
-                    </select>
+                    </UnifiedSingleSelect>
                   </label>
                 </>
               ) : null}
               {kind === "COVER" && data.permissions.eligibleTeams.length ? (
                 <label>
                   <span>Publishing team</span>
-                  <select
+                  <UnifiedSingleSelect
                     value={teamId}
                     required={data.permissions.teamRequiredForCover}
                     onChange={(event) => setTeamId(event.target.value)}
@@ -781,7 +783,7 @@ export function SeriesGallerySections({
                         {team.name}
                       </option>
                     ))}
-                  </select>
+                  </UnifiedSingleSelect>
                 </label>
               ) : null}
             </div>

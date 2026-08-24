@@ -1,5 +1,7 @@
 "use client";
 
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+
 import {
   ArrowClockwise,
   ChatCircle,
@@ -278,7 +280,7 @@ export function SupportTicketPanel({
           </header>
           <label>
             Category
-            <select
+            <UnifiedSingleSelect
               value={category}
               onChange={(event) => setCategory(event.target.value)}
             >
@@ -289,7 +291,7 @@ export function SupportTicketPanel({
               ) : null}
               <option value="PUBLISHING">Publishing help</option>
               <option value="OTHER">Something else</option>
-            </select>
+            </UnifiedSingleSelect>
           </label>
           <label>
             Subject

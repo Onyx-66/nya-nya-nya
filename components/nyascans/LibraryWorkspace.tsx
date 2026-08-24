@@ -3,7 +3,6 @@
 
 import {
   ArrowClockwise,
-  CaretDown,
   CheckCircle,
   DownloadSimple,
   GridFour,
@@ -14,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readingProgressTone } from "@/lib/reading-progress";
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
 type LibraryMode = "cover" | "compact" | "list";
 
@@ -69,61 +69,21 @@ function LibraryDropdown({
   options: LibraryOption[];
   onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
   return (
-    <div className="library-dropdown-field" ref={rootRef}>
+    <label className="library-dropdown-field">
       <span>{label}</span>
-      <div className={`library-dropdown${open ? " is-open" : ""}`}>
-        <button
-          className="library-dropdown-trigger"
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-        >
-          <span>{selected?.label ?? "Choose an option"}</span>
-          <CaretDown size={16} aria-hidden="true" />
-        </button>
-        {open ? (
-          <div className="library-dropdown-menu" role="listbox" aria-label={label}>
-            {options.map((option) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected={option.value === value}
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-              >
-                <span>{option.label}</span>
-                {option.value === value ? <CheckCircle size={16} weight="fill" aria-hidden="true" /> : null}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
+      <UnifiedSingleSelect
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </UnifiedSingleSelect>
+    </label>
   );
 }
 
