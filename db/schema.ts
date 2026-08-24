@@ -188,8 +188,45 @@ export const userPreferences = sqliteTable("user_preferences", {
     .default(false),
   settingsJson: text("settings_json").notNull().default("{}"),
   customThemeJson: text("custom_theme_json"),
+  themeShortlistJson: text("theme_shortlist_json"),
+  themePreferenceRevision: integer("theme_preference_revision")
+    .notNull()
+    .default(0),
+  themeMutationMarker: text("theme_mutation_marker"),
   updatedAt,
 });
+
+export const userCustomThemes = sqliteTable(
+  "user_custom_themes",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    id: text("id").notNull(),
+    themeJson: text("theme_json").notNull(),
+    revision: integer("revision").notNull().default(1),
+    mutationMarker: text("mutation_marker"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.id] }),
+    index("user_custom_themes_updated_idx").on(
+      table.userId,
+      table.updatedAt,
+    ),
+    check(
+      "user_custom_themes_id_check",
+      sql`substr(${table.id}, 1, 6) = 'theme_'
+          AND length(${table.id}) = 38
+          AND substr(${table.id}, 7) NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "user_custom_themes_revision_check",
+      sql`${table.revision} >= 1`,
+    ),
+  ],
+);
 
 export const userProfiles = sqliteTable(
   "user_profiles",

@@ -1,9 +1,13 @@
 import { z } from "zod";
 
 export const THEME_SCHEMA_VERSION = 1 as const;
-export const THEME_STORAGE_KEY = "nyascans:user-theme:v1";
+export const THEME_PREFERENCE_SCHEMA_VERSION = 2 as const;
+export const THEME_STORAGE_KEY = "nyascans:user-theme:v2";
+export const LEGACY_THEME_STORAGE_KEY = "nyascans:user-theme:v1";
 export const THEME_SHARE_KEY = "theme";
 export const THEME_IMPORT_LIMIT = 64 * 1024;
+export const MAX_SAVED_CUSTOM_THEMES = 15;
+export const MAX_SHORTLISTED_THEMES = 5;
 
 export const themeTokenKeys = [
   "textColor",
@@ -104,6 +108,7 @@ export const themeDocumentSchema = z
     name: z.string().trim().min(1).max(48),
     type: z.enum(["dark", "light"]),
     tokens: themeTokensSchema,
+    logoColorOverride: hexColor.nullable().default(null),
   })
   .strict();
 
@@ -244,6 +249,7 @@ function defineTheme(seed: PaletteSeed): ThemeDocument {
     schemaVersion: THEME_SCHEMA_VERSION,
     name: seed.name,
     type: seed.type,
+    logoColorOverride: null,
     tokens: {
       textColor: seed.text,
       mainBackground: seed.background,
@@ -381,7 +387,6 @@ export const userThemePresets = [
 ] as const;
 
 export type PresetThemeId = (typeof userThemePresets)[number]["id"];
-export type ActiveThemeId = PresetThemeId | "custom";
 
 export const presetThemeIds = [
   "nya-midnight",
@@ -391,30 +396,111 @@ export const presetThemeIds = [
   "jade-night",
 ] as const satisfies readonly PresetThemeId[];
 
-export const activeThemeIdSchema = z.enum([
+export const presetThemeIdSchema = z.enum([
   "nya-midnight",
   "paper-daylight",
   "slate-rain",
   "dracula-bloom",
   "jade-night",
-  "custom",
 ]);
+
+export const customThemeIdSchema = z
+  .string()
+  .regex(/^theme_[0-9a-f]{32}$/u, "The custom theme identifier is invalid.");
+
+export type CustomThemeId = z.infer<typeof customThemeIdSchema>;
+export type CustomThemeReference = `custom:${CustomThemeId}`;
+
+export const customThemeReferenceSchema = z
+  .string()
+  .regex(
+    /^custom:theme_[0-9a-f]{32}$/u,
+    "The custom theme reference is invalid.",
+  )
+  .transform((value) => value as CustomThemeReference);
+
+export const activeThemeIdSchema = z.union([
+  presetThemeIdSchema,
+  customThemeReferenceSchema,
+]);
+
+export type ActiveThemeId = z.infer<typeof activeThemeIdSchema>;
+
+const isoDateTime = z.string().datetime({ offset: true });
+
+export const savedCustomThemeSchema = z
+  .object({
+    id: customThemeIdSchema,
+    theme: themeDocumentSchema,
+    revision: z.number().int().positive(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+  })
+  .strict();
+
+export type SavedCustomTheme = z.infer<typeof savedCustomThemeSchema>;
+
+export const themeShortlistSchema = z
+  .array(activeThemeIdSchema)
+  .max(
+    MAX_SHORTLISTED_THEMES,
+    `Choose no more than ${MAX_SHORTLISTED_THEMES} themes for quick switching.`,
+  )
+  .superRefine((value, context) => {
+    if (new Set(value).size !== value.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Each shortlisted theme must be unique.",
+      });
+    }
+  });
 
 export const themePreferenceSchema = z
   .object({
-    schemaVersion: z.literal(THEME_SCHEMA_VERSION),
+    schemaVersion: z.literal(THEME_PREFERENCE_SCHEMA_VERSION),
     activeThemeId: activeThemeIdSchema,
-    customTheme: themeDocumentSchema.nullable(),
+    shortlist: themeShortlistSchema,
+    customThemes: z.array(savedCustomThemeSchema).max(MAX_SAVED_CUSTOM_THEMES),
   })
   .strict()
   .superRefine((value, context) => {
-    if (value.activeThemeId === "custom" && !value.customTheme) {
+    const ids = value.customThemes.map((saved) => saved.id);
+    if (new Set(ids).size !== ids.length) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["customTheme"],
-        message: "Build or import a complete custom theme before selecting Custom.",
+        path: ["customThemes"],
+        message: "Every saved custom theme must have a unique identifier.",
       });
     }
+    const ownedReferences = new Set(
+      value.customThemes.map((saved) => customThemeReference(saved.id)),
+    );
+    if (
+      isCustomThemeReference(value.activeThemeId) &&
+      !ownedReferences.has(value.activeThemeId)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["activeThemeId"],
+        message: "The active custom theme is not in the saved theme library.",
+      });
+    }
+    if (!value.shortlist.includes(value.activeThemeId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["shortlist"],
+        message: "The active theme must remain in the quick-switch shortlist.",
+      });
+    }
+    value.shortlist.forEach((reference, index) => {
+      if (isCustomThemeReference(reference) && !ownedReferences.has(reference)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["shortlist", index],
+          message: "A shortlisted custom theme is not in the saved theme library.",
+        });
+      }
+    });
   });
 
 export type ThemePreference = z.infer<typeof themePreferenceSchema>;
@@ -423,59 +509,169 @@ export const themePreferenceMutationSchema = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("select"),
+      expectedPreferenceRevision: z.number().int().nonnegative(),
       activeThemeId: activeThemeIdSchema,
+      shortlist: themeShortlistSchema,
     })
     .strict(),
   z
     .object({
-      action: z.literal("save-custom"),
+      action: z.literal("create-custom"),
+      expectedPreferenceRevision: z.number().int().nonnegative(),
+      themeId: customThemeIdSchema,
       customTheme: themeDocumentSchema,
       activate: z.boolean(),
+      shortlist: themeShortlistSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("update-custom"),
+      expectedPreferenceRevision: z.number().int().nonnegative(),
+      themeId: customThemeIdSchema,
+      customTheme: themeDocumentSchema,
+      expectedRevision: z.number().int().positive(),
+      activate: z.boolean(),
+      shortlist: themeShortlistSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("delete-custom"),
+      expectedPreferenceRevision: z.number().int().nonnegative(),
+      themeId: customThemeIdSchema,
+      expectedRevision: z.number().int().positive(),
+      fallbackThemeId: activeThemeIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("set-shortlist"),
+      expectedPreferenceRevision: z.number().int().nonnegative(),
+      shortlist: themeShortlistSchema,
     })
     .strict(),
   z
     .object({
       action: z.literal("reconcile"),
-      activeThemeId: activeThemeIdSchema,
-      customTheme: themeDocumentSchema.nullable(),
+      preference: themePreferenceSchema,
     })
     .strict(),
-]).superRefine((value, context) => {
-  if (
-    value.action === "reconcile" &&
-    value.activeThemeId === "custom" &&
-    !value.customTheme
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["customTheme"],
-      message: "A complete custom theme is required when reconciling Custom.",
-    });
-  }
-});
+]);
 
 export type ThemePreferenceMutation = z.infer<
   typeof themePreferenceMutationSchema
 >;
 
 export const defaultThemePreference: ThemePreference = {
-  schemaVersion: THEME_SCHEMA_VERSION,
+  schemaVersion: THEME_PREFERENCE_SCHEMA_VERSION,
   activeThemeId: "nya-midnight",
-  customTheme: null,
+  shortlist: [...presetThemeIds],
+  customThemes: [],
 };
+
+const legacyThemePreferenceSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    activeThemeId: z.enum([
+      "nya-midnight",
+      "paper-daylight",
+      "slate-rain",
+      "dracula-bloom",
+      "jade-night",
+      "custom",
+    ]),
+    customTheme: themeDocumentSchema.nullable(),
+  })
+  .strict();
+
+export function parseThemePreference(value: unknown): ThemePreference {
+  const current = themePreferenceSchema.safeParse(value);
+  if (current.success) return current.data;
+  const legacy = legacyThemePreferenceSchema.safeParse(value);
+  if (!legacy.success) throw current.error;
+  if (!legacy.data.customTheme) {
+    return themePreferenceSchema.parse({
+      ...defaultThemePreference,
+      activeThemeId:
+        legacy.data.activeThemeId === "custom"
+          ? "nya-midnight"
+          : legacy.data.activeThemeId,
+    });
+  }
+  const id = createCustomThemeId();
+  const reference = customThemeReference(id);
+  const timestamp = new Date().toISOString();
+  return themePreferenceSchema.parse({
+    schemaVersion: THEME_PREFERENCE_SCHEMA_VERSION,
+    activeThemeId:
+      legacy.data.activeThemeId === "custom"
+        ? reference
+        : legacy.data.activeThemeId,
+    shortlist:
+      legacy.data.activeThemeId === "custom"
+        ? [...presetThemeIds.slice(0, MAX_SHORTLISTED_THEMES - 1), reference]
+        : [...presetThemeIds],
+    customThemes: [
+      {
+        id,
+        theme: legacy.data.customTheme,
+        revision: 1,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
+  });
+}
+
+export function createCustomThemeId(): CustomThemeId {
+  return customThemeIdSchema.parse(
+    `theme_${crypto.randomUUID().replaceAll("-", "")}`,
+  );
+}
+
+export function customThemeReference(
+  id: CustomThemeId,
+): CustomThemeReference {
+  return `custom:${id}`;
+}
+
+export function isCustomThemeReference(
+  value: string,
+): value is CustomThemeReference {
+  return customThemeReferenceSchema.safeParse(value).success;
+}
+
+export function customThemeIdFromReference(
+  reference: CustomThemeReference,
+): CustomThemeId {
+  return customThemeIdSchema.parse(reference.slice("custom:".length));
+}
 
 export function presetTheme(id: PresetThemeId) {
   return userThemePresets.find((preset) => preset.id === id)!.theme;
 }
 
 export function activeTheme(preference: ThemePreference): ThemeDocument {
-  if (preference.activeThemeId === "custom" && preference.customTheme) {
-    return preference.customTheme;
+  if (isCustomThemeReference(preference.activeThemeId)) {
+    const themeId = customThemeIdFromReference(preference.activeThemeId);
+    const saved = preference.customThemes.find((entry) => entry.id === themeId);
+    if (saved) return saved.theme;
   }
-  const id = preference.activeThemeId === "custom"
-    ? "nya-midnight"
-    : preference.activeThemeId;
-  return presetTheme(id);
+  return presetTheme(
+    presetThemeIdSchema.safeParse(preference.activeThemeId).success
+      ? (preference.activeThemeId as PresetThemeId)
+      : "nya-midnight",
+  );
+}
+
+export function themeForReference(
+  preference: ThemePreference,
+  reference: ActiveThemeId,
+): ThemeDocument | null {
+  if (!isCustomThemeReference(reference)) return presetTheme(reference);
+  const themeId = customThemeIdFromReference(reference);
+  return preference.customThemes.find((entry) => entry.id === themeId)?.theme ?? null;
 }
 
 const cssTokenNames: Record<ThemeTokenKey, string> = {
@@ -521,9 +717,15 @@ const cssTokenNames: Record<ThemeTokenKey, string> = {
 };
 
 export function themeCssVariables(theme: ThemeDocument) {
-  return Object.fromEntries(
-    themeTokenKeys.map((key) => [cssTokenNames[key], theme.tokens[key]]),
-  ) as Record<string, string>;
+  const override = theme.logoColorOverride;
+  return {
+    ...Object.fromEntries(
+      themeTokenKeys.map((key) => [cssTokenNames[key], theme.tokens[key]]),
+    ),
+    "--theme-logo-color": override ?? theme.tokens.textColor,
+    "--theme-logo-accent-color": override ?? theme.tokens.primary,
+    "--theme-logo-outline-color": override ?? theme.tokens.contrastL1,
+  } as Record<string, string>;
 }
 
 export function cssVariableForToken(key: ThemeTokenKey) {
@@ -642,11 +844,15 @@ export type ThemeContrastWarning = {
 };
 
 export function themeContrastWarnings(theme: ThemeDocument): ThemeContrastWarning[] {
+  const logoColor = theme.logoColorOverride ?? theme.tokens.textColor;
+  const logoAccent = theme.logoColorOverride ?? theme.tokens.primary;
   const pairs = [
     ["page-text", "Page text", theme.tokens.textColor, theme.tokens.mainBackground, 4.5],
     ["surface-text", "Surface text", theme.tokens.textColor, theme.tokens.accent, 4.5],
     ["primary-button", "Primary button", theme.tokens.buttonAccentAlternate, theme.tokens.buttonAccent, 3],
     ["danger-button", "Danger button", theme.tokens.contrastL1, theme.tokens.danger, 3],
+    ["logo-base", "Logo base", logoColor, theme.tokens.mainBackground, 3],
+    ["logo-accent", "Logo accent", logoAccent, theme.tokens.mainBackground, 3],
   ] as const;
   return pairs
     .map(([id, label, foreground, background, minimum]) => ({

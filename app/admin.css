@@ -200,9 +200,9 @@
 .team-request-queues > section > header > div { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; }
 .team-request-queues > section > header h3 { margin: 0; }
 .team-request-status { display: inline-flex; min-height: 26px; align-items: center; padding: 3px 8px; border-radius: 999px; background: var(--admin-bg-surface); color: var(--admin-text-muted); font-size: 12px; font-weight: 700; text-transform: capitalize; }
-.team-request-status.is-pending { background: color-mix(in srgb, #f5a623 16%, var(--admin-bg-card)); color: #ffc35a; }
-.team-request-status.is-approved { background: color-mix(in srgb, #33c481 15%, var(--admin-bg-card)); color: #67dfa8; }
-.team-request-status.is-rejected { background: color-mix(in srgb, #f1495b 15%, var(--admin-bg-card)); color: #ff8794; }
+.team-request-status.is-pending { background: color-mix(in srgb, var(--theme-status-yellow) 16%, var(--admin-bg-card)); color: var(--theme-status-yellow); }
+.team-request-status.is-approved { background: color-mix(in srgb, var(--theme-status-green) 15%, var(--admin-bg-card)); color: var(--theme-status-green); }
+.team-request-status.is-rejected { background: color-mix(in srgb, var(--theme-status-red) 15%, var(--admin-bg-card)); color: var(--theme-status-red); }
 .team-request-proof { display: inline-flex; width: fit-content; max-width: 100%; align-items: center; gap: 7px; overflow-wrap: anywhere; }
 .team-request-body ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .team-request-body li { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--admin-bg-card); }
@@ -5408,4 +5408,32 @@
   .ops-shell[data-operations-mode="admin"] .ops-sidebar {
     transition: none;
   }
+}
+
+/* v49.14.0 — admin state colors inherit the same editable user tokens. */
+.ops-shell[data-operations-mode="admin"] ::placeholder,
+.admin-mfa-page ::placeholder {
+  color: var(--theme-placeholder);
+  opacity: 1;
+}
+
+.ops-shell[data-operations-mode="admin"] :is(button, input, select, textarea):disabled,
+.admin-mfa-page :is(button, input):disabled {
+  border-color: var(--theme-accent-l3) !important;
+  color: var(--theme-disabled-text) !important;
+  background-color: var(--theme-disabled-surface) !important;
+}
+
+.ops-shell[data-operations-mode="admin"] :is(
+  .ops-sidebar-backdrop,
+  .admin-command-backdrop,
+  .admin-dialog-backdrop
+) {
+  background-color: var(--theme-overlay) !important;
+}
+
+.ops-shell[data-operations-mode="admin"] :is([role="tooltip"], .admin-tooltip) {
+  border-color: var(--theme-accent-l4);
+  color: var(--theme-tooltip-text);
+  background: var(--theme-tooltip-background);
 }

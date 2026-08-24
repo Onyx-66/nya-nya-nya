@@ -7,11 +7,11 @@
  */
 .browseScope {
   --browse-mobile-inset: 0.52rem;
-  --browse-control-surface: #102a43;
-  --browse-control-border: rgb(75 170 226 / 48%);
-  --browse-accent: #3aa9f4;
-  --browse-accent-ink: #061727;
-  --browse-selected-pink: #e45692;
+  --browse-control-surface: var(--theme-accent-l1);
+  --browse-control-border: color-mix(in srgb, var(--theme-primary) 48%, var(--theme-accent-l3));
+  --browse-accent: var(--theme-primary);
+  --browse-accent-ink: var(--theme-button-accent-alternate);
+  --browse-selected-pink: var(--theme-status-purple);
 }
 
 @media (max-width: 760px) {
@@ -93,8 +93,8 @@
 
   /* Grid follow state is pink only when the component has real follow state. */
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-card-follow.is-following) {
-    border-color: #f6a0c2 !important;
-    color: #ffffff !important;
+    border-color: color-mix(in srgb, var(--theme-status-purple) 62%, var(--theme-accent-l4)) !important;
+    color: var(--theme-contrast-l1) !important;
     background: var(--browse-selected-pink) !important;
     box-shadow: none !important;
   }
@@ -137,8 +137,8 @@
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.series-list-row .list-follow-button.is-following) {
-    border-color: #f6a0c2 !important;
-    color: #ffffff !important;
+    border-color: color-mix(in srgb, var(--theme-status-purple) 62%, var(--theme-accent-l4)) !important;
+    color: var(--theme-contrast-l1) !important;
     background: var(--browse-selected-pink) !important;
     box-shadow: none !important;
   }
@@ -163,14 +163,14 @@
     box-sizing: border-box;
     border: 1px solid var(--browse-control-border);
     border-radius: 0.78rem;
-    color: #e6f4fd !important;
+    color: var(--theme-text-color) !important;
     background: var(--browse-control-surface) !important;
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-filter-grid > details[open] > summary),
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-filter-footer > details[open] > summary) {
     border-radius: 0.78rem 0.78rem 0 0;
-    border-bottom-color: rgb(75 170 226 / 20%);
+    border-bottom-color: color-mix(in srgb, var(--theme-primary) 20%, var(--theme-accent-l3));
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-filter-grid > details > div),
@@ -186,8 +186,8 @@
     border: 1px solid var(--browse-control-border);
     border-top: 0;
     border-radius: 0 0 0.78rem 0.78rem;
-    color: #e6f4fd;
-    background: #0b2034 !important;
+    color: var(--theme-text-color);
+    background: var(--theme-accent) !important;
     box-shadow: none !important;
   }
 
@@ -206,13 +206,13 @@
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-facet-search input),
   :global(body:has(.catalog-toolbar)) .browseScope :global(.minimum-chapters-editor > input) {
-    color: #e6f4fd;
-    background: #102a43;
+    color: var(--theme-text-color);
+    background: var(--browse-control-surface);
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-facet-search input::placeholder),
   :global(body:has(.catalog-toolbar)) .browseScope :global(.minimum-chapters-editor > input::placeholder) {
-    color: #a9c7da;
+    color: var(--theme-mid-tone);
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-facet-menu > div > button[role="option"]) {
@@ -225,10 +225,10 @@
     gap: 0.3rem;
     margin: 0;
     padding: 0.38rem 0.62rem;
-    border-color: rgb(112 184 229 / 34%);
+    border-color: color-mix(in srgb, var(--theme-primary) 34%, var(--theme-accent-l3));
     border-radius: 999px;
-    color: #e6f4fd;
-    background: #102a43;
+    color: var(--theme-text-color);
+    background: var(--browse-control-surface);
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-facet-menu > div > button[role="option"][aria-selected="true"]) {
@@ -250,7 +250,7 @@
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-pagination > button),
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-pagination > div button) {
     border-color: var(--browse-control-border) !important;
-    color: #d9edf9 !important;
+    color: var(--theme-text-color) !important;
     background: var(--browse-control-surface) !important;
     box-shadow: none !important;
   }
@@ -262,10 +262,10 @@
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-pagination > button:disabled) {
-    border-color: rgb(104 139 163 / 28%) !important;
-    color: rgb(202 222 235 / 62%) !important;
-    background: #0c1c2d !important;
-    opacity: 1;
+    border-color: color-mix(in srgb, var(--theme-status-grey) 28%, var(--theme-accent-l3)) !important;
+    color: color-mix(in srgb, var(--theme-text-color) 62%, var(--theme-main-background)) !important;
+    background: var(--theme-accent-l1) !important;
+    opacity: .62;
   }
 }
 

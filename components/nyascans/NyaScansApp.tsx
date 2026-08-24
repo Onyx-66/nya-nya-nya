@@ -111,6 +111,7 @@ import {
 } from "@/components/nyascans/NotificationArtwork";
 import { ProfileSettingsWorkspace } from "@/components/nyascans/ProfileSettingsWorkspace";
 import { ThemeBuilderPage } from "@/components/nyascans/ThemeBuilderPage";
+import { ThemeAwareLogo } from "@/components/nyascans/ThemeAwareLogo";
 import {
   useUserThemeController,
   type ThemeController,
@@ -169,6 +170,9 @@ import {
 import { readingProgressTone } from "@/lib/reading-progress";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 import {
+  isCustomThemeReference,
+  MAX_SHORTLISTED_THEMES,
+  themeForReference,
   userThemePresets,
   type ActiveThemeId,
 } from "@/lib/theme-system";
@@ -880,7 +884,7 @@ function Logo() {
         </picture>
       ) : (
         <span className="brand-mark" aria-hidden="true">
-          <span />
+          <ThemeAwareLogo />
         </span>
       )}
       <span className="brand-name">{settings.brand.siteName}</span>
@@ -897,92 +901,166 @@ function ThemeSelectionMenu({
   onBack: () => void;
   onClose: () => void;
 }) {
-  const choose = (id: ActiveThemeId) => {
+  const [manageOpen, setManageOpen] = useState(false);
+  const [menuError, setMenuError] = useState("");
+  const backButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => backButtonRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const entryFor = (id: ActiveThemeId) => {
+    const theme = themeForReference(controller.preference, id);
+    if (!theme) return null;
+    return {
+      id,
+      theme,
+      source: isCustomThemeReference(id) ? "Custom" : "Preset",
+    } as const;
+  };
+  const shortlistEntries = controller.shortlist
+    .map(entryFor)
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const allEntries = [
+    ...userThemePresets.map((preset) => entryFor(preset.id)),
+    ...controller.customThemes.map((saved) =>
+      entryFor(`custom:${saved.id}` as ActiveThemeId),
+    ),
+  ].filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+  const choose = async (id: ActiveThemeId) => {
     if (!controller.hydrated || controller.syncing) return;
-    if (id === "custom" && !controller.customTheme) {
-      onClose();
-      window.location.assign("/theme-builder");
+    setMenuError("");
+    try {
+      const applied = await controller.selectTheme(id);
+      if (applied) onClose();
+    } catch (caught) {
+      setMenuError(
+        caught instanceof Error ? caught.message : "The theme could not be applied.",
+      );
+    }
+  };
+
+  const toggleShortlist = async (id: ActiveThemeId) => {
+    const selected = controller.shortlist.includes(id);
+    if (selected && controller.activeThemeId === id) {
+      setMenuError("Apply another theme before removing the active theme.");
       return;
     }
-    void controller
-      .selectTheme(id)
-      .catch(() => {
-        // The shared controller keeps the local theme and exposes sync errors.
-      });
-    onClose();
+    if (!selected && controller.shortlist.length >= MAX_SHORTLISTED_THEMES) {
+      setMenuError("Your shortlist is full. Remove a theme before adding another.");
+      return;
+    }
+    setMenuError("");
+    try {
+      await controller.setShortlist(
+        selected
+          ? controller.shortlist.filter((reference) => reference !== id)
+          : [...controller.shortlist, id],
+      );
+    } catch (caught) {
+      setMenuError(
+        caught instanceof Error ? caught.message : "The shortlist could not be changed.",
+      );
+    }
   };
 
   return (
     <div className="header-theme-selector">
       <header>
         <button
+          ref={backButtonRef}
           type="button"
           role="menuitem"
-          aria-label="Back to site menu"
-          onClick={onBack}
+          aria-label={manageOpen ? "Back to selected themes" : "Back to site menu"}
+          onClick={manageOpen ? () => setManageOpen(false) : onBack}
         >
           <CaretLeft size={18} />
         </button>
-        <strong>Select Theme</strong>
+        <strong>{manageOpen ? "Manage themes" : "Select Theme"}</strong>
         <span aria-hidden="true" />
       </header>
-      <div className="header-theme-options" aria-label="Available themes">
-        {userThemePresets.map((preset) => {
-          const selected = controller.activeThemeId === preset.id;
+      <div
+        className={manageOpen ? "header-theme-options is-managing" : "header-theme-options"}
+        aria-label={manageOpen ? "Manage quick-switch themes" : "Quick-switch themes"}
+      >
+        {(manageOpen ? allEntries : shortlistEntries).map((entry) => {
+          const selected = controller.activeThemeId === entry.id;
+          const shortlisted = controller.shortlist.includes(entry.id);
           return (
-            <button
-              type="button"
-              role="menuitemradio"
-              aria-checked={selected}
-              disabled={!controller.hydrated || controller.syncing}
-              className={selected ? "is-selected" : undefined}
-              key={preset.id}
-              onClick={() => choose(preset.id)}
-            >
-              <i
-                aria-hidden="true"
-                style={{
-                  background: `linear-gradient(135deg, ${preset.theme.tokens.mainBackground} 0 48%, ${preset.theme.tokens.primary} 50% 100%)`,
-                }}
-              />
-              <span>
-                <strong>{preset.theme.name}</strong>
-                <small>{preset.theme.type}</small>
-              </span>
-              {selected ? <Check size={17} weight="bold" /> : null}
-            </button>
+            <div className={selected ? "header-theme-option is-selected" : "header-theme-option"} key={entry.id}>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                disabled={!controller.hydrated || controller.syncing}
+                onClick={() => void choose(entry.id)}
+              >
+                <i
+                  aria-hidden="true"
+                  style={{
+                    background: `conic-gradient(from 35deg, ${entry.theme.tokens.primary}, ${entry.theme.tokens.accentL3}, ${entry.theme.tokens.mainBackground}, ${entry.theme.tokens.primary})`,
+                  }}
+                />
+                <span>
+                  <strong>{entry.theme.name}</strong>
+                  <small>{entry.source} · {entry.theme.type}</small>
+                </span>
+                {selected ? <Check size={17} weight="bold" /> : null}
+              </button>
+              {manageOpen ? (
+                <button
+                  className="header-theme-shortlist-toggle"
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={shortlisted}
+                  aria-label={`${shortlisted ? "Remove" : "Add"} ${entry.theme.name} ${shortlisted ? "from" : "to"} quick switching`}
+                  disabled={controller.syncing || (selected && shortlisted)}
+                  onClick={() => void toggleShortlist(entry.id)}
+                >
+                  {shortlisted ? <Check size={15} weight="bold" /> : <Plus size={15} />}
+                </button>
+              ) : null}
+            </div>
           );
         })}
-        <div className="header-theme-custom-row">
+        {!manageOpen ? (
+          <div className="header-theme-manage-row">
           <button
             type="button"
-            role="menuitemradio"
-            aria-checked={controller.activeThemeId === "custom"}
-            disabled={!controller.hydrated || controller.syncing}
-            className={controller.activeThemeId === "custom" ? "is-selected" : undefined}
-            onClick={() => choose("custom")}
+            role="menuitem"
+            onClick={() => {
+              setManageOpen(true);
+              window.requestAnimationFrame(() => backButtonRef.current?.focus());
+            }}
           >
             <i className="is-custom" aria-hidden="true"><Palette size={15} /></i>
             <span>
-              <strong>Custom</strong>
-              <small>{controller.customTheme ? controller.customTheme.name : "Build your own"}</small>
+              <strong>Manage themes</strong>
+              <small>{controller.shortlist.length} / {MAX_SHORTLISTED_THEMES} selected</small>
             </span>
-            {controller.activeThemeId === "custom" ? <Check size={17} weight="bold" /> : null}
+            <CaretRight size={16} />
           </button>
           <a
             role="menuitem"
-            href="/theme-builder"
-            aria-label="Open Custom theme settings"
-            title="Custom theme settings"
+            href="/theme-builder#manage-themes"
+            aria-label="Open saved custom theme settings"
+            title="Saved custom theme settings"
             onClick={onClose}
           >
             <GearSix size={18} />
           </a>
         </div>
+        ) : (
+          <a className="header-theme-builder-link" role="menuitem" href="/theme-builder#manage-themes" onClick={onClose}>
+            <GearSix size={17} /> Create, edit, or delete custom themes
+          </a>
+        )}
       </div>
-      {controller.syncError ? (
+      {menuError || controller.syncError ? (
         <p className="header-theme-sync-error" role="status">
-          {controller.syncError}
+          {menuError || controller.syncError}
         </p>
       ) : null}
     </div>
@@ -1163,7 +1241,7 @@ function SiteHeader({
     window.requestAnimationFrame(() => {
       const items = Array.from(
         menuRef.current?.querySelectorAll<HTMLElement>(
-          '.header-overflow-menu [role="menuitem"], .header-overflow-menu [role="menuitemradio"]',
+          '.header-overflow-menu [role="menuitem"]:not([disabled]), .header-overflow-menu [role="menuitemradio"]:not([disabled]), .header-overflow-menu [role="menuitemcheckbox"]:not([disabled])',
         ) ?? [],
       );
       const item = position === "first" ? items[0] : items.at(-1);
@@ -1171,11 +1249,25 @@ function SiteHeader({
     });
   }
 
+  function returnToMainMenu() {
+    setMenuPanel("main");
+    window.requestAnimationFrame(() => {
+      menuRef.current
+        ?.querySelector<HTMLButtonElement>(".header-change-theme")
+        ?.focus();
+    });
+  }
+
+  function closeMenuAndRestoreFocus() {
+    setMenuOpen(false);
+    window.requestAnimationFrame(() => menuButtonRef.current?.focus());
+  }
+
   function handleMenuKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!menuOpen) return;
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLElement>(
-        '[role="menuitem"], [role="menuitemradio"]',
+        '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled]), [role="menuitemcheckbox"]:not([disabled])',
       ),
     );
     if (!items.length) return;
@@ -1550,8 +1642,8 @@ function SiteHeader({
                     {menuPanel === "theme" ? (
                       <ThemeSelectionMenu
                         controller={themeController}
-                        onBack={() => setMenuPanel("main")}
-                        onClose={() => setMenuOpen(false)}
+                        onBack={returnToMainMenu}
+                        onClose={closeMenuAndRestoreFocus}
                       />
                     ) : (
                       <>
@@ -1707,8 +1799,8 @@ function SiteHeader({
                     {menuPanel === "theme" ? (
                       <ThemeSelectionMenu
                         controller={themeController}
-                        onBack={() => setMenuPanel("main")}
-                        onClose={() => setMenuOpen(false)}
+                        onBack={returnToMainMenu}
+                        onClose={closeMenuAndRestoreFocus}
                       />
                     ) : (
                       <>

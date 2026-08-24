@@ -628,6 +628,7 @@ export function siteThemeVariables(theme: SiteTheme) {
     schemaVersion: 1,
     name: "Administrator base",
     type: "dark",
+    logoColorOverride: null,
     tokens: {
       textColor: theme.dark.text,
       mainBackground: theme.dark.background,

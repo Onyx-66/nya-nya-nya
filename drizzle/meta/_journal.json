@@ -407,6 +407,13 @@
       "when": 1787531854821,
       "tag": "0057_home_announcement_banners",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1787533020205,
+      "tag": "0058_eager_sentinel",
+      "breakpoints": true
     }
   ]
 }

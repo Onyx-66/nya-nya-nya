@@ -19,16 +19,20 @@ import { SystemNotificationProvider } from "@/components/nyascans/SystemNotifica
 import "./globals.css";
 import "./admin.css";
 
-const cachedThemeVariableNames = themeTokenKeys.map(cssVariableForToken);
+const cachedThemeVariableNames = [
+  ...themeTokenKeys.map(cssVariableForToken),
+  "--theme-logo-color",
+  "--theme-logo-accent-color",
+  "--theme-logo-outline-color",
+];
 const cachedThemeIds = [
   "nya-midnight",
   "paper-daylight",
   "slate-rain",
   "dracula-bloom",
   "jade-night",
-  "custom",
 ];
-const themeBootstrapScript = `(()=>{try{const c=JSON.parse(localStorage.getItem("nyascans:user-theme-cache:v1")||"null");const v=c&&c.variables;const k=${JSON.stringify(cachedThemeVariableNames)};const i=${JSON.stringify(cachedThemeIds)};if(!c||c.schemaVersion!==1||!(c.type==="dark"||c.type==="light")||!i.includes(c.activeThemeId)||!v||Object.keys(v).length!==k.length||!k.every(n=>Object.prototype.hasOwnProperty.call(v,n)&&/^#[0-9A-Fa-f]{6}$/.test(String(v[n]))))return;const r=document.documentElement;for(const n of k)r.style.setProperty(n,String(v[n]));r.dataset.theme=c.type;r.dataset.userTheme=c.activeThemeId;r.style.colorScheme=c.type;const m=document.querySelector('meta[name="theme-color"]');if(m&&/^#[0-9A-Fa-f]{6}$/.test(String(c.background)))m.setAttribute("content",c.background)}catch{}})();`;
+const themeBootstrapScript = `(()=>{try{const c=JSON.parse(localStorage.getItem("nyascans:user-theme-cache:v2")||"null");const v=c&&c.variables;const k=${JSON.stringify(cachedThemeVariableNames)};const i=${JSON.stringify(cachedThemeIds)};const a=typeof c?.activeThemeId==="string"&&(i.includes(c.activeThemeId)||/^custom:theme_[0-9a-f]{32}$/.test(c.activeThemeId));if(!c||c.schemaVersion!==2||!(c.type==="dark"||c.type==="light")||!a||!v||Object.keys(v).length!==k.length||!k.every(n=>Object.prototype.hasOwnProperty.call(v,n)&&/^#[0-9A-Fa-f]{6}$/.test(String(v[n]))))return;const r=document.documentElement;for(const n of k)r.style.setProperty(n,String(v[n]));r.dataset.theme=c.type;r.dataset.userTheme=c.activeThemeId;r.dataset.logoColorMode=v["--theme-logo-color"]===v["--theme-logo-accent-color"]?"fixed":"auto";r.style.colorScheme=c.type;const m=document.querySelector('meta[name="theme-color"]');if(m&&/^#[0-9A-Fa-f]{6}$/.test(String(c.background)))m.setAttribute("content",c.background)}catch{}})();`;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
