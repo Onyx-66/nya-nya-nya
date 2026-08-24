@@ -3297,8 +3297,8 @@ function TrendingShowcase() {
             <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
           </div>
         ) : ordered.length ? (
-        <div className="home-scroll-row">
-          <HomeRailControls railRef={railRef} label="Trending" />
+        <div className="home-scroll-row" data-cover-anchor="true">
+          <HomeRailControls railRef={railRef} label="Trending" anchor="cover" />
           <div
             className="series-rail trending-rail"
             ref={railRef}
@@ -4794,6 +4794,9 @@ function CompactOptionMenu({
   onChange,
   className = "",
   multiple = false,
+  activeCount,
+  sortDirection,
+  onDirectionChange,
 }: {
   label: string;
   value: string | number;
@@ -4801,22 +4804,53 @@ function CompactOptionMenu({
   onChange: (value: string) => void;
   className?: string;
   multiple?: boolean;
+  activeCount?: number;
+  sortDirection?: "asc" | "desc";
+  onDirectionChange?: (value: "asc" | "desc") => void;
 }) {
   const selectedValues = String(value).split(",").map((entry) => entry.trim()).filter(Boolean);
   const selectedLabels = options.filter((option) => selectedValues.includes(String(option.value))).map((option) => option.label);
-  const currentLabel = multiple ? selectedLabels.join(", ") || label : options.find((option) => String(option.value) === String(value))?.label ?? String(value);
+  const currentLabel = multiple
+    ? selectedLabels.join(", ") || label
+    : options.find((option) => String(option.value) === String(value))?.label ?? String(value);
+  const count = activeCount ?? (multiple ? selectedValues.length : 0);
   return (
     <details
-      className={`compact-option-menu ${multiple ? "is-multi-select" : ""} ${className}`.trim()}
+      className={`compact-option-menu ${multiple ? "is-multi-select" : ""} ${count ? "has-active" : ""} ${className}`.trim()}
       onToggle={(event) => {
         if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget);
       }}
     >
       <summary aria-label={`${label}: ${currentLabel}`}>
-        <span>{label}</span>
-        <CaretDown size={13} />
+        <span className="catalog-filter-summary">
+          <Plus size={13} aria-hidden="true" />
+          <span className="catalog-filter-summary-label">{label}</span>
+          {count ? <b className="catalog-filter-active-count">{count}</b> : null}
+        </span>
+        <CaretDown className="catalog-filter-chevron" size={13} aria-hidden="true" />
       </summary>
-      <div role="listbox" aria-label={`${label} options`} aria-multiselectable={multiple || undefined}>
+      <div role={multiple ? "group" : "radiogroup"} aria-label={`${label} options`}>
+        {sortDirection && onDirectionChange ? (
+          <div className="catalog-sort-direction" role="group" aria-label={`${label} direction`}>
+            <span>Direction</span>
+            <button
+              type="button"
+              className={sortDirection === "asc" ? "is-selected" : ""}
+              aria-pressed={sortDirection === "asc"}
+              onClick={() => onDirectionChange("asc")}
+            >
+              <ArrowUp size={14} aria-hidden="true" /> Asc
+            </button>
+            <button
+              type="button"
+              className={sortDirection === "desc" ? "is-selected" : ""}
+              aria-pressed={sortDirection === "desc"}
+              onClick={() => onDirectionChange("desc")}
+            >
+              <ArrowDown size={14} aria-hidden="true" /> Desc
+            </button>
+          </div>
+        ) : null}
         {!multiple ? <small>Current: {currentLabel}</small> : null}
         {options.map((option) => {
           const optionValue = String(option.value);
@@ -4824,8 +4858,10 @@ function CompactOptionMenu({
           return (
             <button
               type="button"
-              role="option"
+              className={`catalog-option-button ${selected ? "is-selected" : ""}`.trim()}
+              role={multiple ? "checkbox" : "radio"}
               aria-selected={selected}
+              aria-checked={selected}
               key={optionValue}
               onClick={(event) => {
                 if (multiple) {
@@ -4842,7 +4878,9 @@ function CompactOptionMenu({
               }}
             >
               <span>{option.label}</span>
-              {selected ? <Check size={15} /> : null}
+              <span className={`catalog-choice-box ${multiple ? "is-checkbox" : "is-radio"}`} aria-hidden="true">
+                {selected ? <Check size={12} weight="bold" /> : null}
+              </span>
             </button>
           );
         })}
@@ -4875,41 +4913,126 @@ function CatalogFacetMenu({
     .slice(0, 40);
   return (
     <details
-      className="catalog-facet-menu"
+      className={`catalog-facet-menu ${selectedValues.length ? "has-active" : ""}`}
       onToggle={(event) => {
         if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget);
       }}
     >
       <summary aria-label={`${label}: ${selectedLabels.join(", ") || label}`}>
-        <span>{label}</span>
-        <CaretDown size={15} />
+        <span className="catalog-filter-summary">
+          <Plus size={13} aria-hidden="true" />
+          <span className="catalog-filter-summary-label">{label}</span>
+          {selectedValues.length ? <b className="catalog-filter-active-count">{selectedValues.length}</b> : null}
+        </span>
+        <CaretDown className="catalog-filter-chevron" size={13} aria-hidden="true" />
       </summary>
-      <div role="listbox" aria-label={`${label} options`} aria-multiselectable="true">
+      <div role="group" aria-label={`${label} options`}>
         <label className="catalog-facet-search">
           <MagnifyingGlass size={15} />
           <span className="sr-only">Search {label.toLowerCase()}</span>
           <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={placeholder} />
         </label>
-        <button type="button" role="option" aria-selected={!selectedValues.length} onClick={() => onChange("")}>
+        <button className="catalog-option-button catalog-filter-all" type="button" role="checkbox" aria-checked={!selectedValues.length} aria-selected={!selectedValues.length} onClick={() => onChange("")}>
           <span>All {label.toLowerCase()}</span>
-          {!selectedValues.length ? <Check size={15} /> : null}
+          <span className="catalog-choice-box is-checkbox" aria-hidden="true">{!selectedValues.length ? <Check size={12} weight="bold" /> : null}</span>
         </button>
         {visibleOptions.map((option) => {
           const selectedOption = selectedValues.includes(option.value);
           return (
             <button
+              className={`catalog-option-button ${selectedOption ? "is-selected" : ""}`.trim()}
               type="button"
-              role="option"
+              role="checkbox"
               aria-selected={selectedOption}
+              aria-checked={selectedOption}
               key={`${option.kind ?? "option"}-${option.value}`}
               onClick={() => onChange(selectedOption ? selectedValues.filter((entry) => entry !== option.value).join(",") : [...selectedValues, option.value].join(","))}
             >
               <span>{option.kind === "publisher" ? "Publisher · " : ""}{option.label}</span>
-              {selectedOption ? <Check size={15} /> : null}
+              <span className="catalog-choice-box is-checkbox" aria-hidden="true">{selectedOption ? <Check size={12} weight="bold" /> : null}</span>
             </button>
           );
         })}
         {!visibleOptions.length ? <small className="catalog-facet-empty">No matching {label.toLowerCase()}.</small> : null}
+      </div>
+    </details>
+  );
+}
+
+function MinimumChaptersMenu({
+  value,
+  onApply,
+  className = "",
+}: {
+  value: string;
+  onApply: (value: string) => void;
+  className?: string;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  function updateDraft(next: string) {
+    setDraft(next.replace(/[^0-9]/g, "").slice(0, 4));
+  }
+
+  function apply() {
+    onApply(draft && Number(draft) > 0 ? draft : "");
+    if (detailsRef.current) detailsRef.current.open = false;
+  }
+
+  return (
+    <details
+      ref={detailsRef}
+      className={`minimum-chapters-field ${value ? "has-active" : ""} ${className}`.trim()}
+      onToggle={(event) => {
+        if (event.currentTarget.open) {
+          setDraft(value);
+          closeOtherBrowseFilterDetails(event.currentTarget);
+        }
+      }}
+    >
+      <summary aria-label={`Minimum Chapters${value ? `: ${value}` : ""}`}>
+        <span className="catalog-filter-summary">
+          <Plus size={13} aria-hidden="true" />
+          <span className="catalog-filter-summary-label">Minimum Chapters</span>
+          {value ? <b className="catalog-filter-active-count">1</b> : null}
+        </span>
+        <CaretDown className="catalog-filter-chevron" size={13} aria-hidden="true" />
+      </summary>
+      <div className="minimum-chapters-popover">
+        <p>At least how many published chapters?</p>
+        <div className="minimum-chapters-editor">
+          <button
+            type="button"
+            aria-label="Decrease minimum chapters"
+            onClick={() => updateDraft(String(Math.max(0, Number(draft || 0) - 1)))}
+          >
+            <ArrowDown size={15} aria-hidden="true" />
+          </button>
+          <input
+            inputMode="numeric"
+            min="0"
+            max="10000"
+            pattern="[0-9]*"
+            value={draft}
+            onChange={(event) => updateDraft(event.target.value)}
+            placeholder="e.g. 20"
+            aria-label="Minimum chapters"
+          />
+          <button
+            type="button"
+            aria-label="Increase minimum chapters"
+            onClick={() => updateDraft(String(Math.min(10000, Number(draft || 0) + 1)))}
+          >
+            <ArrowUp size={15} aria-hidden="true" />
+          </button>
+        </div>
+        <small>Example: 20 chapters or more.</small>
+        <button className="minimum-chapters-apply" type="button" onClick={apply}>Apply</button>
       </div>
     </details>
   );
@@ -5011,12 +5134,14 @@ function BrowseView({
   const [genre, setGenre] = useState("");
   const [creator, setCreator] = useState("");
   const [minimumChapters, setMinimumChapters] = useState("");
+  const [minimumDraft, setMinimumDraft] = useState("");
   const [hideFollowed, setHideFollowed] = useState(false);
   const [genreSearch, setGenreSearch] = useState("");
   const [creatorSearch, setCreatorSearch] = useState("");
   const [facets, setFacets] = useState<CatalogFacets>({ genres: [], creators: [] });
   const [mode, setMode] = useState<"grid" | "list">("grid");
   const [sort, setSort] = useState("latest");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -5051,6 +5176,10 @@ function BrowseView({
         (params.get("hideFollowed") ?? "").toLowerCase(),
       );
       const nextSort = params.get("sort") ?? "latest";
+      const requestedDirection = params.get("sortDirection");
+      const nextSortDirection: "asc" | "desc" = requestedDirection === "asc" || requestedDirection === "desc"
+        ? requestedDirection
+        : nextSort === "title" ? "asc" : "desc";
       const nextPage = Number(params.get("page") ?? 1);
       const nextPageSize = Number(params.get("pageSize") ?? DEFAULT_CATALOG_PAGE_SIZE);
       setQuery(params.get("q") ?? "");
@@ -5068,6 +5197,7 @@ function BrowseView({
       setGenre(nextGenre);
       setCreator(nextCreator);
       setMinimumChapters(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
+      setMinimumDraft(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
       setHideFollowed(nextHideFollowed);
       setSort(
         ["latest", "added", "viewed", "followed", "rated", "title"].includes(
@@ -5076,6 +5206,7 @@ function BrowseView({
           ? nextSort
           : "latest",
       );
+      setSortDirection(nextSortDirection);
       setPage(Number.isInteger(nextPage) && nextPage > 0 ? nextPage : 1);
       setPageSize(
         nextPageSize === 12
@@ -5108,6 +5239,10 @@ function BrowseView({
   }, []);
 
   useEffect(() => {
+    setMinimumDraft(minimumChapters);
+  }, [minimumChapters]);
+
+  useEffect(() => {
     if (!hydrated) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
@@ -5117,6 +5252,7 @@ function BrowseView({
         page: String(page),
         pageSize: String(pageSize),
         sort,
+        ...(sortDirection !== (sort === "title" ? "asc" : "desc") ? { sortDirection } : {}),
       });
       if (query.trim()) params.set("q", query.trim());
       if (type !== "All") params.set("type", type);
@@ -5185,6 +5321,7 @@ function BrowseView({
     pageSize,
     query,
     sort,
+    sortDirection,
     status,
     type,
   ]);
@@ -5200,6 +5337,7 @@ function BrowseView({
       minimumChapters: string;
       hideFollowed: boolean;
       sort: string;
+      sortDirection: "asc" | "desc";
       page: number;
       pageSize: number;
     }>,
@@ -5215,6 +5353,7 @@ function BrowseView({
       minimumChapters,
       hideFollowed,
       sort,
+      sortDirection,
       page,
       pageSize,
       ...updates,
@@ -5235,6 +5374,8 @@ function BrowseView({
     }
     if (next.hideFollowed && actor) params.set("hideFollowed", "1");
     if (next.sort !== "latest") params.set("sort", next.sort);
+    const defaultDirection = next.sort === "title" ? "asc" : "desc";
+    if (next.sortDirection !== defaultDirection) params.set("sortDirection", next.sortDirection);
     if (next.page > 1) params.set("page", String(next.page));
     if (next.pageSize !== DEFAULT_CATALOG_PAGE_SIZE) params.set("pageSize", String(next.pageSize));
     const nextUrl = `/browse${params.size ? `?${params.toString()}` : ""}`;
@@ -5248,6 +5389,7 @@ function BrowseView({
     setMinimumChapters(next.minimumChapters);
     setHideFollowed(next.hideFollowed);
     setSort(next.sort);
+    setSortDirection(next.sortDirection);
     setPage(next.page);
     setPageSize(next.pageSize);
   }
@@ -5263,6 +5405,8 @@ function BrowseView({
     );
   }, [pagination.page, pagination.pageCount]);
 
+  const sortDefaultDirection = sort === "title" ? "asc" : "desc";
+  const sortActiveCount = sort !== "latest" || sortDirection !== sortDefaultDirection ? 1 : 0;
   const activeFilterCount = [
     type !== "All",
     access !== "All",
@@ -5271,15 +5415,38 @@ function BrowseView({
     Boolean(creator),
     Boolean(minimumChapters && Number(minimumChapters) > 0),
     hideFollowed,
-    sort !== "latest",
+    Boolean(sortActiveCount),
     pageSize !== DEFAULT_CATALOG_PAGE_SIZE,
   ].filter(Boolean).length;
+  const clearFilters = () => {
+    navigate({
+      query: "",
+      type: "All",
+      access: "All",
+      status: "All",
+      genre: "",
+      creator: "",
+      minimumChapters: "",
+      hideFollowed: false,
+      sort: "latest",
+      sortDirection: "desc",
+      page: 1,
+      pageSize: DEFAULT_CATALOG_PAGE_SIZE,
+    }, true);
+    setGenreSearch("");
+    setCreatorSearch("");
+    setMoreOpen(false);
+    showToast("Filters cleared.");
+  };
 
   return (
     <main className={`page-main page-wrap ${browseFixes.browseScope}`}>
       <section className="browse-intro">
         <div className="browse-intro-heading">
-          <h1>Browse Series</h1>
+          <div className="browse-title-group">
+            <h1>Browse Series</h1>
+            <span className="browse-result-count">{pagination.total.toLocaleString("en-US")} results</span>
+          </div>
           <div className="view-mode-toggle" role="group" aria-label="Catalog view">
             <button
               type="button"
@@ -5335,6 +5502,95 @@ function BrowseView({
           ) : null}
         </button>
       </section>
+
+      <div className="browse-desktop-filter-bar catalog-filter-panel" aria-label="Browse filters">
+        <CompactOptionMenu
+          label="Latest Update"
+          value={sort}
+          activeCount={sortActiveCount}
+          sortDirection={sortDirection}
+          onDirectionChange={(value) => navigate({ sortDirection: value, page: 1 })}
+          options={[
+            { value: "latest", label: "Latest update" },
+            { value: "added", label: "Recently added" },
+            { value: "viewed", label: "Most viewed" },
+            { value: "followed", label: "Most followed" },
+            { value: "rated", label: "Highest rated" },
+            { value: "title", label: "Alphabetical" },
+          ]}
+          onChange={(value) => navigate({ sort: value, page: 1 })}
+        />
+        <CompactOptionMenu
+          label="Status"
+          value={status}
+          activeCount={status === "All" ? 0 : 1}
+          options={[
+            { value: "All", label: "All statuses" },
+            { value: "ONGOING", label: "Ongoing" },
+            { value: "COMPLETED", label: "Completed" },
+            { value: "HIATUS", label: "Hiatus" },
+            { value: "PAUSED", label: "Paused" },
+            { value: "CANCELLED", label: "Cancelled" },
+            { value: "UPCOMING", label: "Upcoming" },
+          ]}
+          onChange={(value) => navigate({ status: value, page: 1 })}
+        />
+        <CompactOptionMenu
+          label="Type"
+          value={type}
+          activeCount={type === "All" ? 0 : 1}
+          options={[
+            { value: "All", label: "All types" },
+            { value: "MANHWA", label: "Manhwa" },
+            { value: "MANGA", label: "Manga" },
+            { value: "MANHUA", label: "Manhua" },
+          ]}
+          onChange={(value) => navigate({ type: value, page: 1 })}
+        />
+        <CatalogFacetMenu
+          label="Genres"
+          value={genre}
+          options={facets.genres}
+          search={genreSearch}
+          onSearchChange={setGenreSearch}
+          onChange={(value) => navigate({ genre: value, page: 1 })}
+          placeholder="Search genres..."
+        />
+        <CatalogFacetMenu
+          label="Creator"
+          value={creator}
+          options={facets.creators}
+          search={creatorSearch}
+          onSearchChange={setCreatorSearch}
+          onChange={(value) => navigate({ creator: value, page: 1 })}
+          placeholder="Search artist, author, publisher..."
+        />
+        <MinimumChaptersMenu
+          value={minimumChapters}
+          onApply={(value) => navigate({ minimumChapters: value, page: 1 }, true)}
+        />
+        <label className={`hide-followed-field${hideFollowed ? " has-active" : ""}`.trim()}>
+          <input
+            type="checkbox"
+            checked={hideFollowed}
+            onChange={(event) => {
+              if (event.target.checked && !actor) {
+                window.location.href = authEntryPath("login", "/browse");
+                return;
+              }
+              navigate({ hideFollowed: event.target.checked, page: 1 });
+            }}
+          />
+          <span className="catalog-filter-summary">
+            <Plus size={13} aria-hidden="true" />
+            <span className="catalog-filter-summary-label">Hide Bookmarked</span>
+            {hideFollowed ? <b className="catalog-filter-active-count">1</b> : null}
+          </span>
+        </label>
+        <button className="browse-clear-filters" type="button" disabled={!activeFilterCount} onClick={clearFilters}>
+          <X size={14} aria-hidden="true" /> Clear Filters
+        </button>
+      </div>
 
       {moreOpen ? (
         <aside
@@ -5392,10 +5648,10 @@ function BrowseView({
             />
             <CompactOptionMenu
               label="Status"
-              value={status === "All" ? "" : status}
-              multiple
+              value={status}
+              activeCount={status === "All" ? 0 : 1}
               options={[
-                { value: "", label: "All statuses" },
+                { value: "All", label: "All statuses" },
                 { value: "ONGOING", label: "Ongoing" },
                 { value: "COMPLETED", label: "Completed" },
                 { value: "HIATUS", label: "Hiatus" },
@@ -5403,7 +5659,7 @@ function BrowseView({
                 { value: "CANCELLED", label: "Cancelled" },
                 { value: "UPCOMING", label: "Upcoming" },
               ]}
-              onChange={(value) => navigate({ status: value || "All", page: 1 })}
+              onChange={(value) => navigate({ status: value, page: 1 })}
             />
             <CatalogFacetMenu
               label="Genres"
@@ -5423,52 +5679,10 @@ function BrowseView({
               onChange={(value) => navigate({ creator: value, page: 1 })}
               placeholder="Search artist, author, publisher..."
             />
-              <details
-                className="minimum-chapters-field"
-                onToggle={(event) => {
-                  if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget);
-                }}
-              >
-              <summary>
-                <span>Minimum Chapters</span>
-                <CaretDown size={15} />
-              </summary>
-              <div className="minimum-chapters-editor">
-                <button
-                  type="button"
-                  aria-label="Decrease minimum chapters"
-                  onClick={() => {
-                    const next = Math.max(0, Number(minimumChapters || 0) - 1);
-                    navigate({ minimumChapters: next ? String(next) : "", page: 1 }, true);
-                  }}
-                >
-                  <ArrowDown size={15} />
-                </button>
-                <input
-                  inputMode="numeric"
-                  min="0"
-                  max="10000"
-                  pattern="[0-9]*"
-                  value={minimumChapters}
-                  onChange={(event) => {
-                    const value = event.target.value.replace(/[^0-9]/g, "").slice(0, 4);
-                    navigate({ minimumChapters: value, page: 1 }, true);
-                  }}
-                  placeholder="e.g. 20"
-                  aria-label="Minimum chapters"
-                />
-                <button
-                  type="button"
-                  aria-label="Increase minimum chapters"
-                  onClick={() => {
-                    const next = Math.min(10000, Number(minimumChapters || 0) + 1);
-                    navigate({ minimumChapters: String(next), page: 1 }, true);
-                  }}
-                >
-                  <ArrowUp size={15} />
-                </button>
-              </div>
-            </details>
+            <MinimumChaptersMenu
+              value={minimumChapters}
+              onApply={(value) => navigate({ minimumChapters: value, page: 1 }, true)}
+            />
             <label className="hide-followed-field">
               <input
                 type="checkbox"
@@ -5481,34 +5695,17 @@ function BrowseView({
                   navigate({ hideFollowed: event.target.checked, page: 1 });
                 }}
               />
-              <span>Hide Followed</span>
+              <span>Hide Bookmarked</span>
             </label>
           </div>
           <footer className="catalog-filter-footer">
             <button
               className="mobile-filter-clear"
               type="button"
-              onClick={() => {
-                navigate({
-                  query: "",
-                  type: "All",
-                  access: "All",
-                  status: "All",
-                  genre: "",
-                  creator: "",
-                  minimumChapters: "",
-                  hideFollowed: false,
-                  sort: "latest",
-                  page: 1,
-                  pageSize: DEFAULT_CATALOG_PAGE_SIZE,
-                });
-                setGenreSearch("");
-                setCreatorSearch("");
-                setMoreOpen(false);
-                showToast("Filters cleared.");
-              }}
+              disabled={!activeFilterCount}
+              onClick={clearFilters}
             >
-              Clear filters
+              <X size={14} aria-hidden="true" /> Clear filters
             </button>
           </footer>
         </aside>

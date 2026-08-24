@@ -4,6 +4,7 @@ import { type RefObject, useCallback, useEffect, useState } from "react";
 type HomeRailControlsProps = {
   railRef: RefObject<HTMLElement | null>;
   label: string;
+  anchor?: "cover";
 };
 
 type RailBoundaryState = {
@@ -27,7 +28,7 @@ function railStep(rail: HTMLElement) {
   return Math.max(1, Math.round(firstCard.getBoundingClientRect().width + gap));
 }
 
-export function HomeRailControls({ railRef, label }: HomeRailControlsProps) {
+export function HomeRailControls({ railRef, label, anchor }: HomeRailControlsProps) {
   const [boundaries, setBoundaries] = useState<RailBoundaryState>({
     canPrevious: false,
     canNext: false,
@@ -68,7 +69,11 @@ export function HomeRailControls({ railRef, label }: HomeRailControlsProps) {
   };
 
   return (
-    <div className="home-rail-controls" aria-label={`${label} navigation`}>
+    <div
+      className="home-rail-controls"
+      data-anchor={anchor}
+      aria-label={`${label} navigation`}
+    >
       <button
         className="v481-pinned-arrow is-previous"
         type="button"

@@ -66,6 +66,18 @@ test("floating ads support independently themed stacked banners end to end", () 
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
+test("announcement action groups use content-sized primary and plain secondary links", () => {
+  assert.match(app, /className="home-announcement-actions"/);
+  assert.match(app, /className="home-announcement-primary"/);
+  assert.match(app, /className="home-announcement-secondary-actions"/);
+  assert.match(css, /\.home-announcement-actions \{[\s\S]*?width: fit-content/);
+  assert.match(css, /\.home-announcement-secondary-actions \{[\s\S]*?width: 100%/);
+  assert.match(css, /\.home-announcement-secondary-actions a \{[\s\S]*?padding: 0/);
+  assert.match(css, /\.home-announcement-secondary-actions a \{[\s\S]*?border: 0/);
+  assert.match(css, /\.home-announcement-secondary-actions a:is\(:hover, :focus-visible\)[\s\S]*?color: var\(--campaign-primary\)/);
+  assert.match(css, /\.home-announcement-secondary-actions a:is\(:hover, :focus-visible\)[\s\S]*?text-decoration: underline/);
+});
+
 test("preview restore contains independent gold and red campaign examples", () => {
   assert.match(restore, /preview-leaderboard-banner/);
   assert.match(restore, /#F7C948/);

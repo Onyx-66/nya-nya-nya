@@ -308,8 +308,8 @@ export function NewSeriesSection() {
           <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
         </div>
       ) : records.length ? (
-        <div className="home-scroll-row">
-          <HomeRailControls railRef={railRef} label="New Series" />
+        <div className="home-scroll-row" data-cover-anchor="true">
+          <HomeRailControls railRef={railRef} label="New Series" anchor="cover" />
           <div
             className="new-series-grid"
             ref={railRef}

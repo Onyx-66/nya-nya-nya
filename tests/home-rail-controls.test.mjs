@@ -24,9 +24,9 @@ test("shared rail controls scroll one card and disable at both boundaries", () =
 });
 
 test("target Home sections use the shared controls without replacing their touch rails", () => {
-  assert.match(app, /<HomeRailControls railRef={railRef} label="Trending" \/>/);
-  assert.match(features, /<HomeRailControls railRef={railRef} label="Recent Reviews" \/>/);
-  assert.match(discovery, /<HomeRailControls railRef={railRef} label="New Series" \/>/);
+  assert.match(app, /className="home-scroll-row" data-cover-anchor="true"[\s\S]*<HomeRailControls railRef=\{railRef\} label="Trending" anchor="cover" \/>/);
+  assert.match(features, /className="home-scroll-row" data-cover-anchor="true"[\s\S]*<HomeRailControls railRef=\{railRef\} label="Recent Reviews" anchor="cover" \/>/);
+  assert.match(discovery, /className="home-scroll-row" data-cover-anchor="true"[\s\S]*<HomeRailControls railRef=\{railRef\} label="New Series" anchor="cover" \/>/);
   assert.match(app, /className="series-rail trending-rail"/);
   assert.match(features, /className="recent-reviews-rail"/);
   assert.match(discovery, /className="new-series-grid"/);
@@ -40,6 +40,9 @@ test("arrows are separate from section header actions and hidden on mobile", () 
   assert.match(css, /\.home-scroll-row > \.home-rail-controls \{/);
   assert.match(css, /pointer-events: none/);
   assert.match(css, /\.home-rail-controls \.v481-pinned-arrow \{/);
+  assert.match(css, /\.home-scroll-row\[data-cover-anchor="true"\]/);
+  assert.match(controls, /anchor\?: "cover"/u);
+  assert.match(controls, /data-anchor=\{anchor\}/u);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.home-rail-controls \{/);
   assert.match(css, /display: none;/);
   assert.match(app, /className="trending-actions"/);

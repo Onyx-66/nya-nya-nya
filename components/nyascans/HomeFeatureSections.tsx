@@ -852,8 +852,8 @@ export function RecentReviewsSection() {
         title="Recent Reviews"
         allHref="/latest?view=reviews"
       />
-      <div className="home-scroll-row">
-        <HomeRailControls railRef={railRef} label="Recent Reviews" />
+      <div className="home-scroll-row" data-cover-anchor="true">
+        <HomeRailControls railRef={railRef} label="Recent Reviews" anchor="cover" />
         <div
           ref={railRef}
           className="recent-reviews-rail"

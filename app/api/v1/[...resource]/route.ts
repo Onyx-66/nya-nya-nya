@@ -2353,6 +2353,12 @@ export async function GET(request: Request, context: RouteContext) {
         .enum(["latest", "added", "viewed", "followed", "rated", "title"])
         .catch("latest")
         .parse(url.searchParams.get("sort"));
+      const sortDirection = z
+        .enum(["asc", "desc"])
+        .optional()
+        .catch(undefined)
+        .parse(url.searchParams.get("sortDirection") ?? undefined) ??
+        (sort === "title" ? "asc" : "desc");
       const clauses = [publicSeriesPredicate("s")];
       const bindings: Array<string | number> = [];
       if (query) {
@@ -2451,13 +2457,14 @@ export async function GET(request: Request, context: RouteContext) {
           bindings.push(actor.id);
         }
       }
+      const direction = sortDirection.toUpperCase();
       const orderBy = {
-        latest: "COALESCE(latestPublishedAt, s.updated_at) DESC",
-        added: "s.created_at DESC",
-        viewed: "s.view_count DESC, s.updated_at DESC",
-        followed: "s.follower_count DESC, s.updated_at DESC",
-        rated: "s.rating_tenths DESC, s.updated_at DESC",
-        title: "s.title COLLATE NOCASE ASC",
+        latest: `COALESCE(latestPublishedAt, s.updated_at) ${direction}`,
+        added: `s.created_at ${direction}`,
+        viewed: `s.view_count ${direction}, s.updated_at ${direction}`,
+        followed: `s.follower_count ${direction}, s.updated_at ${direction}`,
+        rated: `s.rating_tenths ${direction}, s.updated_at ${direction}`,
+        title: `s.title COLLATE NOCASE ${direction}`,
       }[sort];
       const where = clauses.join(" AND ");
       const [rows, totalRow] = await Promise.all([
@@ -2623,6 +2630,8 @@ export async function GET(request: Request, context: RouteContext) {
           hasNext: page * pageSize < total,
         },
         facets,
+        sort,
+        sortDirection,
       });
     }
 
