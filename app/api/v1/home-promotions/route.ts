@@ -21,7 +21,8 @@ export async function GET(request: Request) {
           LIMIT 12`,
       ).all(),
       env.DB.prepare(
-        `SELECT id, eyebrow, title, body, action_label AS actionLabel,
+        `SELECT id, eyebrow, title, highlight_text AS highlightText,
+                side_icon AS sideIcon, body, action_label AS actionLabel,
                 info_blocks_json AS infoBlocksJson,
                 destination_url AS destinationUrl,
                 image_key AS imageKey, fallback_image_url AS fallbackImageUrl,
@@ -29,6 +30,9 @@ export async function GET(request: Request) {
                 primary_color AS primaryColor,
                 secondary_color AS secondaryColor,
                 background_color AS backgroundColor,
+                border_color AS borderColor,
+                accent_line_position AS accentLinePosition,
+                secondary_actions_json AS secondaryActionsJson,
                 reset_key AS resetKey, revision
            FROM floating_ads
           WHERE is_active = 1
@@ -41,8 +45,20 @@ export async function GET(request: Request) {
     const floatingAds = ads.results.map((ad) => ({
       ...ad,
       infoBlocks: (() => {
-        try { return JSON.parse(String(ad.infoBlocksJson ?? "[]")); }
-        catch { return []; }
+        try {
+          const parsed = JSON.parse(String(ad.infoBlocksJson ?? "[]"));
+          return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
+      })(),
+      secondaryActions: (() => {
+        try {
+          const parsed = JSON.parse(String(ad.secondaryActionsJson ?? "[]"));
+          return Array.isArray(parsed)
+            ? parsed.filter((action): action is { label: string; url: string } =>
+                Boolean(action && typeof action === "object" && typeof action.label === "string" && typeof action.url === "string"),
+              ).slice(0, 6)
+            : [];
+        } catch { return []; }
       })(),
       imageUrl: ad.imageKey
         ? `/api/v1/floating-ad-media?id=${encodeURIComponent(String(ad.id))}&v=${Number(ad.revision)}`

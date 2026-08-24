@@ -1,6 +1,5 @@
 "use client";
 
-import { Percent } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 type PublicDiscount = {
@@ -49,11 +48,9 @@ async function loadActiveDiscounts() {
 export function ActiveDiscountBadge({
   seriesSlug,
   className,
-  showIcon = true,
 }: {
   seriesSlug: string;
   className?: string;
-  showIcon?: boolean;
 }) {
   const [percentage, setPercentage] = useState(
     () => activeDiscountsCache.get(seriesSlug) ?? 0,
@@ -75,7 +72,6 @@ export function ActiveDiscountBadge({
       className={`active-discount-cover-badge${className ? ` ${className}` : ""}`}
       aria-label={`${percentage}% off`}
     >
-      {showIcon ? <Percent size={12} weight="bold" aria-hidden="true" /> : null}
       {percentage}% off
     </span>
   );

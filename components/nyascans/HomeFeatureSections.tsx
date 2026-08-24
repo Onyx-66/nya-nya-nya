@@ -323,7 +323,7 @@ function PinnedSeriesCard({
       aria-label={`Open ${record.title}`}
     >
       <CoverArtwork src={bannerUrl} mobileSrc={mobileSliderUrl} title={record.title} eager={featured} />
-      <ActiveDiscountBadge seriesSlug={record.slug} className="is-pinned" showIcon={false} />
+      <ActiveDiscountBadge seriesSlug={record.slug} className="is-pinned" />
       <span className="v481-pin-shade" aria-hidden="true" />
       {featured ? <span className="v481-featured-badge">Featured</span> : null}
       <span className="v481-pin-copy">

@@ -173,9 +173,9 @@ const teams = [
 ];
 for (const [teamIndex, [id, teamSlug, name, description, logoKey, bannerKey]] of teams.entries()) {
   exec(
-    `INSERT INTO teams (id, slug, name, created_by_user_id, description, logo_key, banner_key, verification_status, is_archived)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'VERIFIED', 0)`,
-    id, teamSlug, name, owner.id, description, logoKey, bannerKey,
+    `INSERT INTO teams (id, public_ref, slug, name, created_by_user_id, description, logo_key, banner_key, verification_status, is_archived)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'VERIFIED', 0)`,
+    id, `TM-PREVIEW-${teamIndex + 1}`, teamSlug, name, owner.id, description, logoKey, bannerKey,
   );
   exec(`INSERT INTO team_memberships (team_id, user_id, membership_role, status, is_primary, can_request_series) VALUES (?, ?, 'OWNER', 'ACTIVE', ?, 1)`, id, owner.id, teamIndex === 0 ? 1 : 0);
 }
@@ -201,12 +201,12 @@ const series = [
   ["ser-nagatoro", "Don't Toy With Me, Miss Nagatoro", "イジらないで、長瀞さん", "A quiet upperclassman and an energetic underclassman build an awkward but sincere connection.", "MANGA", "COMPLETED", "JP", "ja", 2017, 80, 7640, 15980, 0, ["Comedy", "Romance", "School Life"], "team-ember", "/art/seed/cover-2.png", "/art/mangadex-preview/team-banner-01.jpg", "fc1149d3-1b90-4848-8cbd-b5704d25c91c"],
 ];
 
-for (const [id, title, nativeTitle, synopsis, type, status, country, language, year, rating, followers, views, paid, tags, teamId, coverKey, bannerKey, mangaDexId] of series) {
+for (const [seriesIndex, [id, title, nativeTitle, synopsis, type, status, country, language, year, rating, followers, views, paid, tags, teamId, coverKey, bannerKey, mangaDexId]] of series.entries()) {
   const seriesSlug = slug(title);
   exec(
-    `INSERT INTO series (id, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'RIGHT_TO_LEFT', ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
-    id, seriesSlug, title, nativeTitle, synopsis, type, status, country, language, year, paid ? "PAID" : "FREE", coverKey, bannerKey, coverKey, rating, followers, views, iso(-1440 - id.length * 5), iso(-20),
+    `INSERT INTO series (id, public_ref, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RIGHT_TO_LEFT', ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
+    id, `SR-PREVIEW-${seriesIndex + 1}`, seriesSlug, title, nativeTitle, synopsis, type, status, country, language, year, paid ? "PAID" : "FREE", coverKey, bannerKey, coverKey, rating, followers, views, iso(-1440 - id.length * 5), iso(-20),
   );
   exec(
     `INSERT INTO series_team_assignments (series_id, team_id, can_upload, can_publish, is_primary, assigned_by_user_id, allowed_languages_json, upload_requires_review)
@@ -253,9 +253,9 @@ const mockBrowseSeries = Array.from({ length: 30 }, (_, index) => {
 for (const [index, mock] of mockBrowseSeries.entries()) {
   const seriesSlug = slug(mock.title);
   exec(
-    `INSERT OR IGNORE INTO series (id, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'en', 'LTR', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
-    mock.id, seriesSlug, mock.title, mock.title, `A populated mock title for testing Browse cards, responsive filters, media loading, and long-page performance.`, mock.type, mock.status, ["US", "JP", "KR", "CN"][index % 4], 2026 - (index % 9), mock.access, mock.coverKey, mock.bannerKey, mock.bannerKey, mock.rating, mock.followers, mock.views, iso(-(index + 1) * 18), iso(-(index + 1) * 12),
+    `INSERT OR IGNORE INTO series (id, public_ref, slug, title, native_title, synopsis, type, status, origin_country, original_language, reading_direction, publication_year, access_type, cover_key, banner_key, slider_key, rating_tenths, follower_count, view_count, rights_status, is_published, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en', 'LTR', ?, ?, ?, ?, ?, ?, ?, ?, 'TEST_ORIGINAL', 1, ?, ?)`,
+    mock.id, `SR-MOCK-${index + 1}`, seriesSlug, mock.title, mock.title, `A populated mock title for testing Browse cards, responsive filters, media loading, and long-page performance.`, mock.type, mock.status, ["US", "JP", "KR", "CN"][index % 4], 2026 - (index % 9), mock.access, mock.coverKey, mock.bannerKey, mock.bannerKey, mock.rating, mock.followers, mock.views, iso(-(index + 1) * 18), iso(-(index + 1) * 12),
   );
   exec(
     `INSERT OR IGNORE INTO series_team_assignments (series_id, team_id, can_upload, can_publish, is_primary, assigned_by_user_id, allowed_languages_json, upload_requires_review)
@@ -276,9 +276,9 @@ for (let index = 0; index < series.length; index += 1) {
     const paid = chapter === 4 && index % 3 === 1;
     const publishedAt = iso(-(index * 38 + chapter * 11));
     exec(
-      `INSERT INTO chapters (id, series_id, team_id, uploader_user_id, slug, chapter_number, title, language, format, state, access_type, price_onyx, page_count, published_at, free_at, release_notes, credits_json, thumbnail_key, visibility, comments_enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'en', 'VERTICAL', 'PUBLISHED', ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLIC', 1)`,
-      `chapter-${index + 1}-${chapter}`, seriesId, teamId, owner.id, `chapter-${chapter}`, String(chapter), `${title} · Chapter ${chapter}`, paid ? "PAID" : "FREE", paid ? 180 : 0, 18 + chapter, publishedAt, paid ? date(5) : null, chapter === 4 ? "A fresh release is ready for testing." : "Back-catalog release for preview testing.", JSON.stringify({ team: teams.find((team) => team[0] === teamId)?.[2] ?? "NyaScans" }), `/art/seed/cover-${(index % 8) + 1}${index % 8 === 1 ? ".png" : ".jpg"}`,
+      `INSERT INTO chapters (id, public_ref, series_id, team_id, uploader_user_id, slug, chapter_number, title, language, format, state, access_type, price_onyx, page_count, published_at, free_at, release_notes, credits_json, thumbnail_key, visibility, comments_enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en', 'VERTICAL', 'PUBLISHED', ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLIC', 1)`,
+      `chapter-${index + 1}-${chapter}`, `CH-PREVIEW-${index + 1}-${chapter}`, seriesId, teamId, owner.id, `chapter-${chapter}`, String(chapter), `${title} · Chapter ${chapter}`, paid ? "PAID" : "FREE", paid ? 180 : 0, 18 + chapter, publishedAt, paid ? date(5) : null, chapter === 4 ? "A fresh release is ready for testing." : "Back-catalog release for preview testing.", JSON.stringify({ team: teams.find((team) => team[0] === teamId)?.[2] ?? "NyaScans" }), `/art/seed/cover-${(index % 8) + 1}${index % 8 === 1 ? ".png" : ".jpg"}`,
     );
   }
   if (index < 9) {
@@ -290,9 +290,10 @@ for (const [index, mock] of mockBrowseSeries.entries()) {
   for (let chapter = 1; chapter <= 3; chapter += 1) {
     const paid = chapter === 3 && index % 4 === 3;
     exec(
-      `INSERT OR IGNORE INTO chapters (id, series_id, team_id, uploader_user_id, slug, chapter_number, title, language, format, state, access_type, price_onyx, page_count, published_at, free_at, release_notes, credits_json, thumbnail_key, visibility, comments_enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'en', 'VERTICAL', 'PUBLISHED', ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLIC', 1)`,
+      `INSERT OR IGNORE INTO chapters (id, public_ref, series_id, team_id, uploader_user_id, slug, chapter_number, title, language, format, state, access_type, price_onyx, page_count, published_at, free_at, release_notes, credits_json, thumbnail_key, visibility, comments_enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en', 'VERTICAL', 'PUBLISHED', ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLIC', 1)`,
       `mock-chapter-${String(index + 1).padStart(3, "0")}-${chapter}`,
+      `CH-MOCK-${index + 1}-${chapter}`,
       mock.id,
       teams[index % teams.length][0],
       owner.id,
@@ -408,6 +409,30 @@ for (let index = 0; index < readers.length; index += 1) {
 }
 
 exec(`INSERT INTO site_announcements (id, type, title, body, link_label, link_url, is_active, starts_at, ends_at, sort_order, created_by_user_id) VALUES ('preview-announcement', 'NOTICE', 'Preview dataset restored', 'This temporary environment contains seeded MangaDex-referenced metadata, free and paid chapters, live discounts, reviews, teams, and activity for interface testing.', 'Browse series', '/browse', 1, ?, ?, 1, ?)`, date(-1), date(14), owner.id);
+exec(`INSERT INTO floating_ads
+  (id, eyebrow, title, highlight_text, side_icon, body, action_label,
+   info_blocks_json, secondary_actions_json, destination_url, image_key,
+   fallback_image_url, effect, display_slot, primary_color, secondary_color,
+   background_color, border_color, accent_line_position, is_active,
+   starts_at, ends_at, reset_key, revision, created_by_user_id)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1, ?)`,
+  "preview-leaderboard-banner", "Reader leaderboard", "Climb the leaderboard", "Climb", "♛",
+  "Earn score from thoughtful comments and streaks — see exactly how your community standing grows.", "View leaderboard",
+  JSON.stringify([{ icon: "★", title: "Score", body: "" }, { icon: "✦", title: "Comments", body: "" }, { icon: "↗", title: "Streaks", body: "" }]),
+  JSON.stringify([{ label: "How scoring works", url: "/rankings" }]), "/rankings", "",
+  "WAVE", 1, "#F7C948", "#FFE08A", "#15120A", "#B88918", "top", date(-1), date(14), "preview-leaderboard-v1", owner.id);
+exec(`INSERT INTO floating_ads
+  (id, eyebrow, title, highlight_text, side_icon, body, action_label,
+   info_blocks_json, secondary_actions_json, destination_url, image_key,
+   fallback_image_url, effect, display_slot, primary_color, secondary_color,
+   background_color, border_color, accent_line_position, is_active,
+   starts_at, ends_at, reset_key, revision, created_by_user_id)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1, ?)`,
+  "preview-membership-banner", "Membership plans", "Read more, together", "Read more", "♥",
+  "Support NyaScans with a membership plan, unlock helpful perks, and keep community releases moving.", "View plans",
+  JSON.stringify([{ icon: "✓", title: "Member perks", body: "" }, { icon: "↗", title: "Flexible plans", body: "" }, { icon: "⌁", title: "Cancel anytime", body: "" }]),
+  JSON.stringify([{ label: "Plans", url: "/support" }, { label: "Support", url: "/support" }]), "/support", "",
+  "PULSE", 2, "#F23D5D", "#FF8A9D", "#190B12", "#C52A4D", "left", date(-1), date(14), "preview-membership-v1", owner.id);
 exec(`UPDATE home_pinned_series_state SET mutation_marker = 'preview-restore', updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE collection_key = 'pinned-series'`, owner.id);
 
 const counts = {};

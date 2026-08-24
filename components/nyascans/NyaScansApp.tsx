@@ -1712,12 +1712,6 @@ function SiteHeader({
                       />
                     ) : (
                       <>
-                    <a role="menuitem" href="/browse" onClick={() => setMenuOpen(false)}>
-                      <Compass size={18} /> Browse
-                    </a>
-                    <a role="menuitem" href="/latest" onClick={() => setMenuOpen(false)}>
-                      <Pulse size={18} /> Latest Updates
-                    </a>
                     <a role="menuitem" href="/rankings" onClick={() => setMenuOpen(false)}>
                       <Trophy size={18} /> Ranking
                     </a>
@@ -1733,11 +1727,6 @@ function SiteHeader({
                     <a role="menuitem" href="/discounts" onClick={() => setMenuOpen(false)}>
                       <Tag size={18} /> Discounts
                     </a>
-                    {lockAndPayVisible ? (
-                      <a role="menuitem" href="/store" onClick={() => setMenuOpen(false)}>
-                        <Storefront size={18} /> Store
-                      </a>
-                    ) : null}
                     <button
                       role="menuitem"
                       type="button"
@@ -4475,16 +4464,6 @@ function HomeView({
 
   return (
     <>
-      <FloatingHomeAds
-        campaigns={
-          promotions.floatingAds?.length
-            ? promotions.floatingAds
-            : promotions.floatingAd
-              ? [promotions.floatingAd]
-              : []
-        }
-      />
-
       <FeaturedSeriesSlider />
 
       <main className="home-main">
@@ -4496,6 +4475,16 @@ function HomeView({
 
         <RecentReviewsSection />
         <DiscountsSection enabled={premiumEconomyPublic} />
+
+        <FloatingHomeAds
+          campaigns={
+            promotions.floatingAds?.length
+              ? promotions.floatingAds
+              : promotions.floatingAd
+                ? [promotions.floatingAd]
+                : []
+          }
+        />
 
         <section className="updates-section">
           <div className="page-wrap">
@@ -4518,12 +4507,20 @@ function HomeView({
   );
 }
 
+type AnnouncementAction = {
+  label: string;
+  url: string;
+};
+
 type FloatingCampaign = {
   id: string;
   eyebrow: string;
   title: string;
+  highlightText: string;
   body: string;
   actionLabel: string;
+  secondaryActions: AnnouncementAction[];
+  sideIcon: string;
   infoBlocks: Array<{ icon: string; title: string; body: string }>;
   destinationUrl: string;
   imageUrl: string | null;
@@ -4533,189 +4530,85 @@ type FloatingCampaign = {
   primaryColor: string;
   secondaryColor: string;
   backgroundColor: string;
+  borderColor: string;
+  accentLinePosition: "top" | "left" | "bottom";
 };
 
-function FloatingHomeAds({ campaigns }: { campaigns: FloatingCampaign[] }) {
-  const [activeIndex, setActiveIndex] = useState(0);
+function renderAnnouncementTitle(title: string, highlightText: string) {
+  if (!highlightText || !title.includes(highlightText)) return title;
+  const [before, after] = title.split(highlightText, 2);
+  return <>{before}<em>{highlightText}</em>{after}</>;
+}
 
-  const finishCampaign = useCallback(() => {
-    setActiveIndex((current) => current + 1);
-  }, []);
-  const campaign = campaigns[activeIndex] ?? null;
-  if (!campaign) return null;
+function FloatingHomeAds({ campaigns }: { campaigns: FloatingCampaign[] }) {
+  if (!campaigns.length) return null;
   return (
-    <FloatingHomeAd
-      key={campaign.id}
-      campaign={campaign}
-      revealDelay={activeIndex === 0 ? 450 : 2_000}
-      onFinished={finishCampaign}
-    />
+    <section id="home-announcement-stack" className="home-announcement-stack" aria-label="Announcements">
+      <div className="page-wrap home-announcement-stack-inner">
+        {campaigns.slice(0, 4).map((campaign) => (
+          <FloatingHomeAd key={campaign.id} campaign={campaign} />
+        ))}
+      </div>
+    </section>
   );
 }
 
-function FloatingHomeAd({
-  campaign,
-  revealDelay,
-  onFinished,
-}: {
-  campaign: FloatingCampaign;
-  revealDelay: number;
-  onFinished: () => void;
-}) {
-  const [open, setOpen] = useState(false);
+function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const [doNotShowToday, setDoNotShowToday] = useState(false);
-  const doNotShowTodayRef = useRef(false);
-  const dialogRef = useRef<HTMLElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const finishedRef = useRef(false);
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const storageKey = `nyascans:floating-ad:${campaign.id}:${campaign.resetKey}:${today}`;
-  const persistDismissal = useCallback(() => {
-    if (storageKey && doNotShowTodayRef.current) {
-      try {
-        window.localStorage.setItem(storageKey, "dismissed");
-      } catch {
-        // Privacy modes may disable storage; the campaign action still works.
-      }
-    }
-  }, [storageKey]);
-  const dismiss = useCallback(() => {
-    if (finishedRef.current) return;
-    finishedRef.current = true;
-    persistDismissal();
-    setOpen(false);
-    onFinished();
-  }, [onFinished, persistDismissal]);
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(storageKey)) {
-        const skipTimer = window.setTimeout(onFinished, 0);
-        return () => window.clearTimeout(skipTimer);
-      }
-    } catch {
-      // A blocked storage API must not block the campaign itself.
-    }
-    const timer = window.setTimeout(() => {
-      setImageFailed(false);
-      doNotShowTodayRef.current = false;
-      setDoNotShowToday(false);
-      setOpen(true);
-    }, revealDelay);
-    return () => window.clearTimeout(timer);
-  }, [campaign, onFinished, revealDelay, storageKey]);
-  useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    previousFocusRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    document.body.style.overflow = "hidden";
-    window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("button, a[href], input")?.focus());
-    const close = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") dismiss();
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(
-        dialogRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not(:disabled), input:not(:disabled)',
-        ) ?? [],
-      );
-      if (!focusable.length) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      const focusInside = dialogRef.current?.contains(document.activeElement);
-      if (event.shiftKey && (!focusInside || document.activeElement === first)) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (!focusInside || document.activeElement === last)) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", close);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", close);
-      const previousFocus = previousFocusRef.current;
-      previousFocusRef.current = null;
-      if (previousFocus?.isConnected) {
-        window.requestAnimationFrame(() => previousFocus.focus());
-      }
-    };
-  }, [dismiss, open]);
-  if (!open) return null;
+
   return (
-    <div className="event-campaign-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) dismiss();
-    }}>
-      <aside
-        ref={dialogRef}
-        tabIndex={-1}
-        className="floating-home-ad event-campaign-modal"
-        data-effect={campaign.effect.toLowerCase()}
-        data-slot={campaign.displaySlot}
-        style={{
-          "--campaign-primary": campaign.primaryColor || "#65B5FF",
-          "--campaign-secondary": campaign.secondaryColor || "#8B5CF6",
-          "--campaign-background": campaign.backgroundColor || "#07111C",
-        } as CSSProperties}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="event-campaign-title"
-      >
-        <div className="event-campaign-visual">
-          {campaign.imageUrl && !imageFailed ? (
-            <img className="event-campaign-art" src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} />
-          ) : (
-            <span className="event-campaign-art event-campaign-placeholder"><ImageIcon size={44} weight="duotone" /></span>
-          )}
-          <div className="event-campaign-shade" />
-          <small className="event-campaign-eyebrow">{campaign.eyebrow}</small>
-          <button className="event-campaign-close" type="button" onClick={dismiss} aria-label="Close event">
-            <X size={20} />
-          </button>
+    <article
+      className="home-announcement-banner"
+      data-effect={campaign.effect.toLowerCase()}
+      data-accent-line={campaign.accentLinePosition}
+      style={{
+        "--campaign-primary": campaign.primaryColor || "#65B5FF",
+        "--campaign-secondary": campaign.secondaryColor || "#8B5CF6",
+        "--campaign-background": campaign.backgroundColor || "#07111C",
+        "--campaign-border": campaign.borderColor || campaign.primaryColor || "#65B5FF",
+      } as CSSProperties}
+    >
+      <div className="home-announcement-media" aria-hidden="true">
+        {campaign.imageUrl && !imageFailed ? (
+          <img src={campaign.imageUrl} alt="" onError={() => setImageFailed(true)} />
+        ) : (
+          <span className="home-announcement-icon">{campaign.sideIcon || "✦"}</span>
+        )}
+      </div>
+      <div className="home-announcement-copy">
+        <div className="home-announcement-eyebrow">
+          <span className="home-announcement-dot" />
+          <span>{campaign.eyebrow || "Announcement"}</span>
         </div>
-        <div className="event-campaign-content">
-          <div className="event-campaign-copy">
-            <h2 id="event-campaign-title">{campaign.title}</h2>
-            {campaign.body ? <p>{campaign.body}</p> : null}
+        <h2>{renderAnnouncementTitle(campaign.title, campaign.highlightText)}</h2>
+        {campaign.body ? <p>{campaign.body}</p> : null}
+        {campaign.infoBlocks?.length ? (
+          <div className="home-announcement-chips" aria-label="Announcement details">
+            {campaign.infoBlocks.slice(0, 4).map((block, index) => (
+              <span key={campaign.id + ":chip:" + index + ":" + block.title}>
+                <b aria-hidden="true">{block.icon || "•"}</b>{block.title}
+              </span>
+            ))}
           </div>
-          {campaign.infoBlocks?.length ? (
-            <div className="event-campaign-info">
-              {campaign.infoBlocks.slice(0, 4).map((block, index) => (
-                <article key={`${index}:${block.title}`}>
-                  <span aria-hidden="true">{block.icon}</span>
-                  <div><strong>{block.title}</strong>{block.body ? <small>{block.body}</small> : null}</div>
-                </article>
-              ))}
-            </div>
-          ) : null}
-          <footer className="event-campaign-footer">
-            <a
-              className="event-campaign-action"
-              href={campaign.destinationUrl || "/browse?sort=latest"}
-              onClick={persistDismissal}
-            >
-              <Sparkle size={18} weight="fill" aria-hidden="true" />
-              {campaign.actionLabel || "Explore event"}
-              <ArrowRight size={18} aria-hidden="true" />
-            </a>
-            <label className="event-campaign-dismiss">
-              <input
-                type="checkbox"
-                checked={doNotShowToday}
-                onChange={(event) => {
-                  doNotShowTodayRef.current = event.target.checked;
-                  setDoNotShowToday(event.target.checked);
-                }}
-              />
-              <span>Do not show again today</span>
-            </label>
-          </footer>
-        </div>
-      </aside>
-    </div>
+        ) : null}
+      </div>
+      <div className="home-announcement-actions">
+        {campaign.actionLabel ? (
+          <a className="home-announcement-primary" href={campaign.destinationUrl || "/browse?sort=latest"}>
+            {campaign.actionLabel}<ArrowRight size={17} aria-hidden="true" />
+          </a>
+        ) : null}
+        {campaign.secondaryActions?.length ? (
+          <div className="home-announcement-secondary-actions">
+            {campaign.secondaryActions.slice(0, 4).map((action, index) => (
+              <a key={campaign.id + ":secondary:" + index + ":" + action.label} href={action.url || "/browse?sort=latest"}>
+                {action.label}<ArrowRight size={14} aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </article>
   );
 }
 

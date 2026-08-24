@@ -11,11 +11,12 @@ type Announcement = {
   linkLabel: string; linkUrl: string; isActive: boolean; startsAt: string | null; endsAt: string | null; revision: number;
 };
 type FloatingAd = {
-  id: string; eyebrow: string; title: string; body: string; destinationUrl: string; fallbackImageUrl: string;
+  id: string; eyebrow: string; title: string; highlightText: string; sideIcon: string; body: string; destinationUrl: string; fallbackImageUrl: string;
   actionLabel: string; infoBlocks: Array<{ icon: string; title: string; body: string }>;
+  secondaryActions: Array<{ label: string; url: string }>;
   startsAt: string | null; endsAt: string | null; imageUrl: string | null;
   effect: "WAVE" | "PULSE" | "GLOW"; isActive: boolean; revision: number;
-  displaySlot: number; primaryColor: string; secondaryColor: string; backgroundColor: string;
+  displaySlot: number; primaryColor: string; secondaryColor: string; backgroundColor: string; borderColor: string; accentLinePosition: "top" | "left" | "bottom";
 };
 type Payload = { announcements: Announcement[]; ads: FloatingAd[]; savedAdId?: string | null };
 type AnnouncementDraft = Omit<Announcement, "id" | "revision">;
@@ -29,11 +30,12 @@ async function readJson(response: Response): Promise<Payload> {
 
 const emptyAnnouncement: AnnouncementDraft = { type: "UPDATE", title: "", body: "", linkLabel: "", linkUrl: "", isActive: true, startsAt: null, endsAt: null };
 const emptyAd: FloatingAdDraft = {
-  eyebrow: "New event", title: "", body: "", actionLabel: "Explore event",
+  eyebrow: "New event", title: "", highlightText: "", sideIcon: "✦", body: "", actionLabel: "Explore event",
   infoBlocks: [] as Array<{ icon: string; title: string; body: string }>,
+  secondaryActions: [] as Array<{ label: string; url: string }>,
   startsAt: null as string | null, endsAt: null as string | null,
   destinationUrl: "", fallbackImageUrl: "", effect: "WAVE",
-  displaySlot: 1, primaryColor: "#65B5FF", secondaryColor: "#8B5CF6", backgroundColor: "#07111C",
+  displaySlot: 1, primaryColor: "#65B5FF", secondaryColor: "#8B5CF6", backgroundColor: "#07111C", borderColor: "", accentLinePosition: "top",
   isActive: false, resetAudience: false,
 };
 
@@ -41,9 +43,12 @@ function adDraftFromRecord(record: FloatingAd): FloatingAdDraft {
   return {
     eyebrow: record.eyebrow,
     title: record.title,
+    highlightText: record.highlightText ?? "",
+    sideIcon: record.sideIcon ?? "✦",
     body: record.body,
     actionLabel: record.actionLabel,
     infoBlocks: record.infoBlocks ?? [],
+    secondaryActions: record.secondaryActions ?? [],
     startsAt: record.startsAt,
     endsAt: record.endsAt,
     destinationUrl: record.destinationUrl,
@@ -53,6 +58,8 @@ function adDraftFromRecord(record: FloatingAd): FloatingAdDraft {
     primaryColor: record.primaryColor,
     secondaryColor: record.secondaryColor,
     backgroundColor: record.backgroundColor,
+    borderColor: record.borderColor ?? "",
+    accentLinePosition: record.accentLinePosition ?? "top",
     isActive: record.isActive,
     resetAudience: false,
   };
@@ -254,12 +261,16 @@ export function HomePromotionsPanel() {
               "--campaign-primary": ad.primaryColor,
               "--campaign-secondary": ad.secondaryColor,
               "--campaign-background": ad.backgroundColor,
+              "--campaign-border": ad.borderColor || ad.primaryColor,
             } as CSSProperties}
-          >{selectedAdImage ? <img src={selectedAdImage} alt="Floating campaign preview" /> : <ImageSquare />}<div><small>{ad.eyebrow}</small><strong>{ad.title || "Campaign title"}</strong><p>{ad.body || "Your campaign message appears here."}</p>{ad.infoBlocks.length ? <div className="ad-admin-block-preview">{ad.infoBlocks.map((block, index) => <span key={`${index}:${block.title}`}><b>{block.icon}</b><em>{block.title || "Information"}</em></span>)}</div> : null}<button type="button">{ad.actionLabel || "Explore event"}</button></div></div>
+            data-accent-line={ad.accentLinePosition}
+          >{selectedAdImage ? <img src={selectedAdImage} alt="Floating campaign preview" /> : <span className="home-announcement-icon">{ad.sideIcon || "✦"}</span>}<div><small><i />{ad.eyebrow || "Announcement"}</small><strong>{ad.title || "Campaign title"}</strong><p>{ad.body || "Your campaign message appears here."}</p>{ad.infoBlocks.length ? <div className="ad-admin-block-preview">{ad.infoBlocks.map((block, index) => <span key={`${index}:${block.title}`}><b>{block.icon}</b><em>{block.title || "Chip label"}</em></span>)}</div> : null}<button type="button">{ad.actionLabel || "Explore event"}</button>{ad.secondaryActions.length ? <div className="ad-admin-secondary-preview">{ad.secondaryActions.map((action, index) => <span key={`${index}:${action.label}`}>{action.label || "Secondary"}</span>)}</div> : null}</div></div>
           <div className="v46-promo-form">
             <label><span>Display slot</span><select value={ad.displaySlot} onChange={(event) => setAd((current) => ({ ...current, displaySlot: Number(event.target.value) }))}><option value={1}>Ad 1 · shown first</option><option value={2}>Ad 2 · shown after Ad 1</option></select></label>
             <label><span>Eyebrow</span><input value={ad.eyebrow} onChange={(event) => setAd((current) => ({ ...current, eyebrow: event.target.value }))} /></label>
+            <label><span>Side icon</span><input maxLength={8} value={ad.sideIcon} placeholder="✦" onChange={(event) => setAd((current) => ({ ...current, sideIcon: event.target.value }))} /></label>
             <label><span>Title</span><input value={ad.title} onChange={(event) => setAd((current) => ({ ...current, title: event.target.value }))} /></label>
+            <label><span>Highlighted title text</span><input value={ad.highlightText} placeholder="Optional title segment" onChange={(event) => setAd((current) => ({ ...current, highlightText: event.target.value }))} /></label>
             <label className="v46-span-two"><span>Message</span><textarea rows={3} value={ad.body} onChange={(event) => setAd((current) => ({ ...current, body: event.target.value }))} /></label>
             <label><span>Primary action label</span><input value={ad.actionLabel} onChange={(event) => setAd((current) => ({ ...current, actionLabel: event.target.value }))} /></label>
             <label><span>Destination</span><input value={ad.destinationUrl} placeholder="https://patreon.com/…" onChange={(event) => setAd((current) => ({ ...current, destinationUrl: event.target.value }))} /></label>
@@ -269,10 +280,13 @@ export function HomePromotionsPanel() {
             <label><span>Visual effect</span><select value={ad.effect} onChange={(event) => setAd((current) => ({ ...current, effect: event.target.value as FloatingAd["effect"] }))}><option value="WAVE">Wave</option><option value="PULSE">Pulse</option><option value="GLOW">Glow</option></select></label>
             <label className="campaign-color-field"><span>Primary light</span><span><input type="color" value={ad.primaryColor} onChange={(event) => setAd((current) => ({ ...current, primaryColor: event.target.value.toUpperCase() }))} /><code>{ad.primaryColor}</code></span></label>
             <label className="campaign-color-field"><span>Secondary light</span><span><input type="color" value={ad.secondaryColor} onChange={(event) => setAd((current) => ({ ...current, secondaryColor: event.target.value.toUpperCase() }))} /><code>{ad.secondaryColor}</code></span></label>
-            <label className="campaign-color-field"><span>Background</span><span><input type="color" value={ad.backgroundColor} onChange={(event) => setAd((current) => ({ ...current, backgroundColor: event.target.value.toUpperCase() }))} /><code>{ad.backgroundColor}</code></span></label>
-            <label><span>Upload image</span><input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => setAdImage(event.target.files?.[0] ?? null)} /><small>{adImage?.name ?? "Static PNG, JPEG or WebP · 500×400px minimum · 8 MB maximum"}</small></label>
+                        <label className="campaign-color-field"><span>Background</span><span><input type="color" value={ad.backgroundColor} onChange={(event) => setAd((current) => ({ ...current, backgroundColor: event.target.value.toUpperCase() }))} /><code>{ad.backgroundColor}</code></span></label>
+            <label className="campaign-color-field"><span>Border / accent</span><span><input type="color" value={ad.borderColor || ad.primaryColor} onChange={(event) => setAd((current) => ({ ...current, borderColor: event.target.value.toUpperCase() }))} /><code>{ad.borderColor || ad.primaryColor}</code></span></label>
+            <label><span>Accent line edge</span><select value={ad.accentLinePosition} onChange={(event) => setAd((current) => ({ ...current, accentLinePosition: event.target.value as FloatingAdDraft["accentLinePosition"] }))}><option value="top">Top</option><option value="left">Left</option><option value="bottom">Bottom</option></select></label>
+            <label><span>Upload image</span>
+<input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => setAdImage(event.target.files?.[0] ?? null)} /><small>{adImage?.name ?? "Static PNG, JPEG or WebP · 500×400px minimum · 8 MB maximum"}</small></label>
             <div className="v46-span-two ad-admin-info-editor">
-              <div><span>Information blocks</span><small>Up to four concise event details.</small></div>
+              <div><span>Chip tags</span><small>Up to four concise details shown under the description.</small></div>
               {ad.infoBlocks.map((block, index) => (
                 <div className="ad-admin-info-row" key={`info:${index}`}>
                   <input aria-label={`Block ${index + 1} icon`} maxLength={16} value={block.icon} placeholder="✦" onChange={(event) => setAd((current) => ({ ...current, infoBlocks: current.infoBlocks.map((entry, entryIndex) => entryIndex === index ? { ...entry, icon: event.target.value } : entry) }))} />
@@ -281,9 +295,21 @@ export function HomePromotionsPanel() {
                   <button type="button" aria-label={`Remove block ${index + 1}`} onClick={() => setAd((current) => ({ ...current, infoBlocks: current.infoBlocks.filter((_, entryIndex) => entryIndex !== index) }))}><Trash /></button>
                 </div>
               ))}
-              {ad.infoBlocks.length < 4 ? <button className="button button-secondary" type="button" onClick={() => setAd((current) => ({ ...current, infoBlocks: [...current.infoBlocks, { icon: "✦", title: "", body: "" }] }))}><Plus /> Add information block</button> : null}
+                            {ad.infoBlocks.length < 4 ? <button className="button button-secondary" type="button" onClick={() => setAd((current) => ({ ...current, infoBlocks: [...current.infoBlocks, { icon: "✦", title: "", body: "" }] }))}><Plus /> Add chip</button> : null}
             </div>
-            <label className="v46-admin-switch"><input type="checkbox" checked={ad.isActive} onChange={(event) => setAd((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active campaign (maximum two, one per slot)</span></label>
+            <div className="v46-span-two ad-admin-info-editor">
+              <div><span>Secondary actions</span><small>Add up to six extra links; each is rendered beside the primary CTA.</small></div>
+              {ad.secondaryActions.map((action, index) => (
+                <div className="ad-admin-info-row" key={`secondary:${index}`}>
+                  <input aria-label={`Secondary action ${index + 1} label`} maxLength={60} value={action.label} placeholder="Plans" onChange={(event) => setAd((current) => ({ ...current, secondaryActions: current.secondaryActions.map((entry, entryIndex) => entryIndex === index ? { ...entry, label: event.target.value } : entry) }))} />
+                  <input aria-label={`Secondary action ${index + 1} link`} maxLength={600} value={action.url} placeholder="/support" onChange={(event) => setAd((current) => ({ ...current, secondaryActions: current.secondaryActions.map((entry, entryIndex) => entryIndex === index ? { ...entry, url: event.target.value } : entry) }))} />
+                  <button type="button" aria-label={`Remove secondary action ${index + 1}`} onClick={() => setAd((current) => ({ ...current, secondaryActions: current.secondaryActions.filter((_, entryIndex) => entryIndex !== index) }))}><Trash /></button>
+                </div>
+              ))}
+              {ad.secondaryActions.length < 6 ? <button className="button button-secondary" type="button" onClick={() => setAd((current) => ({ ...current, secondaryActions: [...current.secondaryActions, { label: "", url: "" }] }))}><Plus /> Add secondary action</button> : null}
+            </div>
+            <label className="v46-admin-switch">
+<input type="checkbox" checked={ad.isActive} onChange={(event) => setAd((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active campaign (maximum two, one per slot)</span></label>
             <label className="v46-admin-switch"><input type="checkbox" checked={ad.resetAudience} onChange={(event) => setAd((current) => ({ ...current, resetAudience: event.target.checked }))} /><span>Show again to dismissed viewers</span></label>
             <div className="floating-ad-form-actions v46-span-two">
               <button className="button button-primary" type="button" disabled={busy || !ad.title.trim()} onClick={() => void saveAd()}>{busy ? <SpinnerGap className="spin" /> : null} Save floating ad</button>

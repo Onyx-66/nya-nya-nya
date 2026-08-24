@@ -1601,6 +1601,8 @@ export const floatingAds = sqliteTable(
     id: text("id").primaryKey(),
     eyebrow: text("eyebrow").notNull().default("Support NyaScans"),
     title: text("title").notNull(),
+    highlightText: text("highlight_text").notNull().default(""),
+    sideIcon: text("side_icon").notNull().default("✦"),
     body: text("body").notNull().default(""),
     actionLabel: text("action_label").notNull().default("Explore event"),
     infoBlocksJson: text("info_blocks_json").notNull().default("[]"),
@@ -1612,6 +1614,9 @@ export const floatingAds = sqliteTable(
     primaryColor: text("primary_color").notNull().default("#65B5FF"),
     secondaryColor: text("secondary_color").notNull().default("#8B5CF6"),
     backgroundColor: text("background_color").notNull().default("#07111C"),
+    borderColor: text("border_color").notNull().default(""),
+    accentLinePosition: text("accent_line_position").notNull().default("top"),
+    secondaryActionsJson: text("secondary_actions_json").notNull().default("[]"),
     isActive: integer("is_active", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -1641,6 +1646,10 @@ export const floatingAds = sqliteTable(
     check(
       "floating_ads_display_slot_check",
       sql`${table.displaySlot} IN (1, 2)`,
+    ),
+    check(
+      "floating_ads_accent_line_position_check",
+      sql`${table.accentLinePosition} IN ('top', 'left', 'bottom')`,
     ),
   ],
 );

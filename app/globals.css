@@ -59820,3 +59820,168 @@ body:has(.catalog-toolbar) .catalog-cover-bottom-badges .series-status-badge.sta
 .home-main :is(.recent-review-meta > span, .recent-reviews-empty svg) {
   color: var(--theme-primary);
 }
+
+@property --home-announcement-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes home-announcement-border-orbit {
+  to { --home-announcement-angle: 360deg; }
+}
+
+@keyframes home-announcement-soft-pulse {
+  0%, 100% { box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 1rem 2.1rem rgb(0 0 0 / 18%), 0 0 1rem color-mix(in srgb, var(--campaign-primary) 8%, transparent); }
+  50% { box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), 0 1.1rem 2.25rem rgb(0 0 0 / 24%), 0 0 1.45rem color-mix(in srgb, var(--campaign-primary) 22%, transparent); }
+}
+
+.home-announcement-stack {
+  width: 100%;
+  margin: clamp(1.35rem, 3vw, 2.5rem) 0;
+}
+.home-announcement-stack-inner { display: grid; gap: .9rem; }
+.home-announcement-banner {
+  position: relative;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: 5.25rem minmax(0, 1fr) minmax(12rem, 18rem);
+  align-items: center;
+  gap: clamp(.85rem, 2vw, 1.35rem);
+  min-height: 9.25rem;
+  padding: 1.15rem 1.25rem;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--campaign-border) 58%, var(--line));
+  border-radius: 1.05rem;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--campaign-background) 94%, #000), color-mix(in srgb, var(--campaign-primary) 7%, var(--campaign-background)) 55%, color-mix(in srgb, var(--campaign-secondary) 8%, var(--campaign-background)));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 1rem 2.1rem rgb(0 0 0 / 18%), 0 0 1rem color-mix(in srgb, var(--campaign-primary) 8%, transparent);
+}
+.home-announcement-banner::before {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-top: 2px solid color-mix(in srgb, var(--campaign-primary) 84%, #fff);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+.home-announcement-banner::after {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--home-announcement-angle), transparent 0 56%, color-mix(in srgb, var(--campaign-secondary) 92%, #fff) 65%, var(--campaign-primary) 74%, transparent 84% 100%);
+  content: "";
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: home-announcement-border-orbit 4.8s linear infinite;
+}
+.home-announcement-banner[data-accent-line="left"]::before { border-top: 0; border-left: 3px solid color-mix(in srgb, var(--campaign-primary) 84%, #fff); }
+.home-announcement-banner[data-accent-line="bottom"]::before { border-top: 0; border-bottom: 2px solid color-mix(in srgb, var(--campaign-primary) 84%, #fff); }
+.home-announcement-banner[data-effect="pulse"] { animation: home-announcement-soft-pulse 3.8s ease-in-out infinite; }
+
+/* Canonical discount ribbon: one top-left diagonal treatment across all cover contexts. */
+.home-main :is(.active-discount-cover-badge, .v481-ticket-ribbon),
+.active-discount-cover-badge,
+.discount-card .discount-badge {
+  position: absolute !important;
+  top: .7rem !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: .05rem !important;
+  z-index: 8;
+  display: inline-flex !important;
+  width: 6.25rem;
+  min-height: 1.55rem;
+  align-items: center;
+  justify-content: center;
+  padding: .28rem .55rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 206 222 / 78%) !important;
+  border-radius: .22rem;
+  background: linear-gradient(135deg, #e45692 0%, #ff659a 56%, #ff9fbe 100%) !important;
+  color: #fff !important;
+  font-size: .68rem;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: .01em;
+  text-transform: none !important;
+  white-space: nowrap;
+  box-shadow: 0 .35rem .85rem rgb(128 24 72 / 42%) !important;
+  transform: rotate(-32deg);
+  transform-origin: center;
+}
+
+.home-main :is(.active-discount-cover-badge, .v481-ticket-ribbon)::after,
+.active-discount-cover-badge::after,
+.discount-card .discount-badge::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 28%, rgb(255 255 255 / 42%) 49%, transparent 70%);
+  content: "";
+  transform: translateX(-130%);
+  animation: discount-ribbon-glint 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes discount-ribbon-glint {
+  0%, 48% { transform: translateX(-130%); }
+  74%, 100% { transform: translateX(130%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-main :is(.active-discount-cover-badge, .v481-ticket-ribbon)::after,
+  .active-discount-cover-badge::after,
+  .discount-card .discount-badge::after { animation: none; }
+}
+
+.home-announcement-media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 5.25rem;
+  height: 5.25rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--campaign-primary) 62%, var(--line));
+  border-radius: 1rem;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--campaign-primary) 54%, transparent), transparent 62%), color-mix(in srgb, var(--campaign-background) 76%, #000);
+  box-shadow: 0 0 1.2rem color-mix(in srgb, var(--campaign-primary) 17%, transparent);
+}
+.home-announcement-media img { width: 100%; height: 100%; object-fit: cover; }
+.home-announcement-icon { color: color-mix(in srgb, var(--campaign-primary) 88%, #fff); font-size: 2.25rem; line-height: 1; text-shadow: 0 0 .9rem color-mix(in srgb, var(--campaign-primary) 40%, transparent); }
+.home-announcement-copy { min-width: 0; }
+.home-announcement-eyebrow { display: flex; align-items: center; gap: .45rem; margin-bottom: .35rem; color: color-mix(in srgb, var(--campaign-primary) 88%, #fff); font-size: .66rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.home-announcement-dot { width: .45rem; height: .45rem; flex: 0 0 auto; border-radius: 999px; background: var(--campaign-primary); box-shadow: 0 0 .65rem color-mix(in srgb, var(--campaign-primary) 72%, transparent); }
+.home-announcement-copy h2 { margin: 0; color: var(--text-strong, #fff); font-size: clamp(1.05rem, 2.1vw, 1.55rem); line-height: 1.12; letter-spacing: -.015em; }
+.home-announcement-copy h2 em { color: color-mix(in srgb, var(--campaign-primary) 88%, #fff); font-style: normal; }
+.home-announcement-copy p { max-width: 58rem; margin: .45rem 0 0; color: var(--text-muted, rgb(204 214 229 / 78%)); font-size: .82rem; line-height: 1.45; }
+.home-announcement-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+.home-announcement-chips span { display: inline-flex; align-items: center; gap: .3rem; min-height: 1.55rem; padding: .22rem .52rem; border: 1px solid color-mix(in srgb, var(--campaign-primary) 25%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--campaign-primary) 8%, transparent); color: color-mix(in srgb, var(--campaign-primary) 72%, #fff); font-size: .66rem; font-weight: 700; white-space: nowrap; }
+.home-announcement-chips b { color: var(--campaign-primary); font-size: .72rem; }
+.home-announcement-actions { position: relative; z-index: 4; display: flex; flex-direction: column; align-items: stretch; gap: .55rem; }
+.home-announcement-primary, .home-announcement-secondary-actions a { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 2.3rem; padding: .55rem .82rem; border-radius: .65rem; font-size: .75rem; font-weight: 800; text-decoration: none; transition: transform .18s ease, filter .18s ease, background .18s ease; }
+.home-announcement-primary { border: 1px solid color-mix(in srgb, var(--campaign-primary) 86%, #fff); background: var(--campaign-primary); color: #06101a; box-shadow: 0 .45rem 1.1rem color-mix(in srgb, var(--campaign-primary) 25%, transparent); }
+.home-announcement-primary:is(:hover, :focus-visible), .home-announcement-secondary-actions a:is(:hover, :focus-visible) { filter: brightness(1.1); transform: translateY(-1px); }
+.home-announcement-secondary-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .45rem; }
+.home-announcement-secondary-actions a { min-height: 1.85rem; padding: .35rem .62rem; border: 1px solid color-mix(in srgb, var(--campaign-primary) 32%, var(--line)); background: color-mix(in srgb, var(--campaign-background) 65%, transparent); color: color-mix(in srgb, var(--campaign-primary) 80%, #fff); }
+@media (max-width: 760px) {
+  .home-announcement-stack { margin-block: 1.2rem; }
+  .home-announcement-banner { grid-template-columns: 3.6rem minmax(0, 1fr); gap: .8rem; min-height: 0; padding: 1rem; }
+  .home-announcement-media { width: 3.6rem; height: 3.6rem; border-radius: .8rem; }
+  .home-announcement-icon { font-size: 1.65rem; }
+  .home-announcement-actions { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); margin-top: .1rem; }
+  .home-announcement-secondary-actions { justify-content: flex-start; }
+  .home-announcement-primary, .home-announcement-secondary-actions a { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-announcement-banner::after, .home-announcement-banner[data-effect="pulse"] { animation: none; }
+}
+.v46-floating-ad-preview[data-accent-line="left"]::before { border-left: 3px solid var(--campaign-primary); }
+.v46-floating-ad-preview[data-accent-line="bottom"]::before { border-top: 0; border-bottom: 2px solid var(--campaign-primary); }
+.ad-admin-secondary-preview { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+.ad-admin-secondary-preview span { padding: .25rem .45rem; border: 1px solid color-mix(in srgb, var(--campaign-primary) 40%, var(--line)); border-radius: .45rem; color: var(--campaign-primary); font-size: .7rem; }

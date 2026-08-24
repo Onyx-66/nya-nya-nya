@@ -41,6 +41,8 @@ const adSchema = z.object({
   revision: z.coerce.number().int().min(1).optional(),
   eyebrow: z.string().trim().max(80).default("Support NyaScans"),
   title: z.string().trim().min(2).max(140),
+  highlightText: z.string().trim().max(80).default(""),
+  sideIcon: z.string().trim().max(8).default("✦"),
   body: z.string().trim().max(500).default(""),
   actionLabel: z.string().trim().min(1).max(60).default("Explore event"),
   infoBlocks: z.array(z.object({
@@ -48,6 +50,10 @@ const adSchema = z.object({
     title: z.string().trim().min(1).max(60),
     body: z.string().trim().max(140).default(""),
   })).max(4).default([]),
+  secondaryActions: z.array(z.object({
+    label: z.string().trim().min(1).max(60),
+    url: linkSchema,
+  })).max(6).default([]),
   destinationUrl: linkSchema.default(""),
   fallbackImageUrl: linkSchema.default(""),
   effect: z.enum(["WAVE", "PULSE", "GLOW"]).default("WAVE"),
@@ -55,6 +61,8 @@ const adSchema = z.object({
   primaryColor: campaignColorSchema.default("#65B5FF"),
   secondaryColor: campaignColorSchema.default("#8B5CF6"),
   backgroundColor: campaignColorSchema.default("#07111C"),
+  borderColor: z.union([campaignColorSchema, z.literal("")]).default(""),
+  accentLinePosition: z.enum(["top", "left", "bottom"]).default("top"),
   isActive: z.boolean().default(false),
   startsAt: timestampSchema,
   endsAt: timestampSchema,
@@ -89,13 +97,18 @@ async function readAll() {
         ORDER BY datetime(created_at) DESC`,
     ).all<Record<string, unknown>>(),
     db.prepare(
-      `SELECT id, eyebrow, title, body, action_label AS actionLabel,
-              info_blocks_json AS infoBlocksJson, destination_url AS destinationUrl,
+      `SELECT id, eyebrow, title, highlight_text AS highlightText,
+              side_icon AS sideIcon, body, action_label AS actionLabel,
+              info_blocks_json AS infoBlocksJson,
+              secondary_actions_json AS secondaryActionsJson,
+              destination_url AS destinationUrl,
               image_key AS imageKey, fallback_image_url AS fallbackImageUrl,
               effect, display_slot AS displaySlot,
               primary_color AS primaryColor,
               secondary_color AS secondaryColor,
               background_color AS backgroundColor,
+              border_color AS borderColor,
+              accent_line_position AS accentLinePosition,
               is_active AS isActive, reset_key AS resetKey,
               starts_at AS startsAt, ends_at AS endsAt,
               revision, created_at AS createdAt, updated_at AS updatedAt
@@ -108,11 +121,24 @@ async function readAll() {
     ads: ads.results.map((row) => ({
       ...row,
       isActive: Boolean(row.isActive),
-      infoBlocks: (() => {
-        try { return JSON.parse(String(row.infoBlocksJson ?? "[]")); }
-        catch { return []; }
+            infoBlocks: (() => {
+        try {
+          const parsed = JSON.parse(String(row.infoBlocksJson ?? "[]"));
+          return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
       })(),
-      imageUrl: row.imageKey ? `/api/v1/floating-ad-media?id=${encodeURIComponent(String(row.id))}&v=${Number(row.revision)}` : row.fallbackImageUrl || null,
+      secondaryActions: (() => {
+        try {
+          const parsed = JSON.parse(String(row.secondaryActionsJson ?? "[]"));
+          return Array.isArray(parsed)
+            ? parsed.filter((action): action is { label: string; url: string } =>
+                Boolean(action && typeof action === "object" && typeof action.label === "string" && typeof action.url === "string"),
+              ).slice(0, 6)
+            : [];
+        } catch { return []; }
+      })(),
+      imageUrl: row.imageKey ?
+ `/api/v1/floating-ad-media?id=${encodeURIComponent(String(row.id))}&v=${Number(row.revision)}` : row.fallbackImageUrl || null,
     })),
   };
 }
@@ -175,19 +201,20 @@ export async function POST(request: Request) {
       const operationTimestamp = new Date().toISOString();
       if (data.id) {
         const update = db.prepare(
-          `UPDATE floating_ads SET eyebrow = ?, title = ?, body = ?,
-                  action_label = ?, info_blocks_json = ?,
+          `UPDATE floating_ads SET eyebrow = ?, title = ?, highlight_text = ?, side_icon = ?, body = ?,
+                  action_label = ?, info_blocks_json = ?, secondary_actions_json = ?,
                   destination_url = ?, fallback_image_url = ?, effect = ?,
                   display_slot = ?, primary_color = ?, secondary_color = ?,
-                  background_color = ?, is_active = 0,
+                  background_color = ?, border_color = ?, accent_line_position = ?, is_active = 0,
                   reset_key = CASE WHEN ? THEN ? ELSE reset_key END,
                   starts_at = ?, ends_at = ?,
                   revision = revision + 1, updated_at = ?
             WHERE id = ? AND revision = ?`,
-        ).bind(data.eyebrow, data.title, data.body, data.actionLabel,
-          JSON.stringify(data.infoBlocks), data.destinationUrl,
+        ).bind(data.eyebrow, data.title, data.highlightText, data.sideIcon, data.body, data.actionLabel,
+          JSON.stringify(data.infoBlocks), JSON.stringify(data.secondaryActions), data.destinationUrl,
           data.fallbackImageUrl, data.effect, data.displaySlot,
           data.primaryColor, data.secondaryColor, data.backgroundColor,
+          data.borderColor, data.accentLinePosition,
           data.resetAudience ? 1 : 0, randomId(), data.startsAt || null,
           data.endsAt || null, operationTimestamp, id, data.revision);
         const results = await db.batch([
@@ -223,16 +250,19 @@ export async function POST(request: Request) {
       } else {
         await db.batch([db.prepare(
           `INSERT INTO floating_ads
-           (id, eyebrow, title, body, action_label, info_blocks_json,
-            destination_url, fallback_image_url, effect, display_slot,
-            primary_color, secondary_color, background_color,
-            is_active, reset_key,
+           (id, eyebrow, title, highlight_text, side_icon, body, action_label,
+            info_blocks_json, secondary_actions_json, destination_url,
+            fallback_image_url, effect, display_slot,
+            primary_color, secondary_color, background_color, border_color,
+            accent_line_position, is_active, reset_key,
             starts_at, ends_at, created_by_user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-        ).bind(id, data.eyebrow, data.title, data.body, data.actionLabel,
-          JSON.stringify(data.infoBlocks), data.destinationUrl,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+        ).bind(id, data.eyebrow, data.title, data.highlightText, data.sideIcon,
+          data.body, data.actionLabel, JSON.stringify(data.infoBlocks),
+          JSON.stringify(data.secondaryActions), data.destinationUrl,
           data.fallbackImageUrl, data.effect, data.displaySlot,
           data.primaryColor, data.secondaryColor, data.backgroundColor,
+          data.borderColor, data.accentLinePosition,
           randomId(), data.startsAt || null, data.endsAt || null, actor.id),
           ...(data.isActive ? [
             db.prepare(
