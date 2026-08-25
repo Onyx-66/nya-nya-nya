@@ -66,6 +66,31 @@ test("Pinned Series exposes an admin-selectable Classic/CardCoverFlow mode", asy
   assert.match(home, /v481-pinned-classic/u);
 });
 
+test("pasted-content UI contracts remove Home elevation, unify section accents, and normalize badges/pagination", async () => {
+  const [surfaces, globals, builder] = await Promise.all([
+    readProjectFile("app/theme-surfaces.css"),
+    readProjectFile("app/globals.css"),
+    readProjectFile("components/nyascans/ThemeBuilderPage.tsx"),
+  ]);
+  assert.match(surfaces, /canonical Home surface\/effect contracts/u);
+  assert.match(surfaces, /\.home-main > :is\(\.featured-slider, \.page-wrap, \.content-section, \.updates-section, \.home-announcement-stack\)/u);
+  assert.match(surfaces, /background: transparent !important;[\s\S]*box-shadow: none !important;[\s\S]*color: var\(--section-accent\)/u);
+  assert.match(surfaces, /var\(--section-accent-soft, var\(--section-accent\)\)/u);
+  assert.match(surfaces, /\.latest-pagination[\s\S]*width: 2\.5rem !important[\s\S]*height: 2\.5rem !important[\s\S]*place-items: center !important/u);
+  assert.match(surfaces, /\.series-type-badge\.is-flag-only[\s\S]*width: max-content !important[\s\S]*padding: \.14rem !important/u);
+  assert.match(surfaces, /\.v481-ticket-ribbon[\s\S]*border-radius: 999px !important/u);
+  assert.match(surfaces, /\.v481-ticket-ribbon[\s\S]*transform: none !important/u);
+  assert.match(surfaces, /\.theme-builder-export[\s\S]*\.theme-token-group-chevron/u);
+  assert.match(builder, /Current JSON/u);
+  assert.match(builder, /Current MD/u);
+  assert.match(builder, /Blank JSON/u);
+  assert.match(builder, /Blank MD/u);
+  assert.match(builder, /CaretUp/u);
+  assert.match(builder, /CaretDown/u);
+  assert.doesNotMatch(builder, /<small>Design tokens<\/small>/u);
+  assert.match(globals, /section-action-orbit/u);
+});
+
 test("site configuration preserves Classic for legacy data and accepts CardCoverFlow safely", () => {
   const validation = spawnSync(
     fileURLToPath(new URL("../node_modules/.bin/tsx", import.meta.url)),

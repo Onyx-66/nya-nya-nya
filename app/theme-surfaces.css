@@ -489,3 +489,409 @@
   .theme-preview-effect-header button::after,
   .theme-preview-effect-specimens > span::after { animation: none; }
 }
+
+
+/* v49.15.5 — canonical Home surface/effect contracts and Theme Builder cleanup. */
+.home-main > :is(.featured-slider, .page-wrap, .content-section, .updates-section, .home-announcement-stack),
+.home-main > :is(.featured-slider, .page-wrap, .content-section, .updates-section, .home-announcement-stack)::before,
+.home-main > :is(.featured-slider, .page-wrap, .content-section, .updates-section, .home-announcement-stack)::after {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+.home-main :is(
+  .section-heading-icon,
+  .hot-week-heading-icon,
+  .editors-pick-fleur
+) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--section-accent) !important;
+}
+
+.home-main :is(
+  .featured-slider-arrows button,
+  .v481-pinned-section .v481-pinned-arrow,
+  .v481-pinned-section .card-coverflow__arrow,
+  .home-scroll-row .v481-pinned-arrow,
+  .teams-carousel-controls button,
+  .editors-pick-controls button,
+  .announcement-slider-arrows button
+) {
+  border-color: color-mix(in srgb, var(--section-accent) 64%, var(--line)) !important;
+  background: color-mix(in srgb, var(--section-accent) 10%, var(--surface)) !important;
+  color: var(--section-accent) !important;
+  box-shadow: 0 0 .85rem color-mix(in srgb, var(--section-accent) 22%, transparent) !important;
+}
+
+.home-main :is(
+  .featured-slider-arrows button,
+  .v481-pinned-section .v481-pinned-arrow,
+  .v481-pinned-section .card-coverflow__arrow,
+  .home-scroll-row .v481-pinned-arrow,
+  .teams-carousel-controls button,
+  .editors-pick-controls button,
+  .announcement-slider-arrows button
+):is(:hover, :focus-visible):not(:disabled) {
+  border-color: var(--section-accent) !important;
+  background: color-mix(in srgb, var(--section-accent) 18%, var(--surface)) !important;
+  color: var(--section-accent-soft, var(--section-accent)) !important;
+}
+
+.featured-slider :is(.featured-slider-arrows button, .featured-slider-dots button),
+.home-main :is(
+  .trending-actions > a.latest-all-action,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .v481-feature-heading .latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action,
+  .latest-style-toggle,
+  .latest-language-filter > summary,
+  .hot-week-tabs button,
+  .editors-pick-actions .button
+) {
+  border-color: color-mix(in srgb, var(--section-accent) 64%, var(--line)) !important;
+  background: color-mix(in srgb, var(--section-accent) 10%, var(--surface)) !important;
+  color: var(--section-accent) !important;
+  box-shadow: 0 0 .85rem color-mix(in srgb, var(--section-accent) 22%, transparent) !important;
+}
+
+.home-main :is(
+  .trending-actions > a.latest-all-action,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .v481-feature-heading .latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.home-main :is(
+  .trending-actions > a.latest-all-action,
+  .continue-reading-actions > a.latest-all-action,
+  .latest-updates-actions > a.latest-all-action,
+  .v481-feature-heading .latest-all-action,
+  .public-new-series .new-series-heading-actions > a.latest-all-action,
+  .public-teams .teams-heading-actions > a.latest-all-action,
+  .hot-week-heading > a.latest-all-action
+)::after {
+  background: conic-gradient(
+    from var(--section-action-angle, 0deg),
+    transparent 0 56%,
+    var(--section-accent-soft, var(--section-accent)) 64%,
+    var(--section-accent) 74%,
+    var(--section-accent-strong, var(--section-accent)) 82%,
+    transparent 90% 100%
+  ) !important;
+  box-shadow: 0 0 .9rem color-mix(in srgb, var(--section-accent) 52%, transparent) !important;
+}
+
+.featured-slider .featured-slider-arrows button::after,
+.public-teams .teams-carousel-controls button::after,
+.home-main .v481-pinned-section .v481-pinned-arrow::before,
+.home-main .v481-pinned-section .card-coverflow__arrow::after,
+.home-main .home-scroll-row .v481-pinned-arrow::before {
+  background: conic-gradient(
+    from var(--section-action-angle, 0deg),
+    transparent 0 56%,
+    var(--section-accent-soft, var(--section-accent)) 64%,
+    var(--section-accent) 74%,
+    var(--section-accent-strong, var(--section-accent)) 82%,
+    transparent 90% 100%
+  ) !important;
+}
+
+.featured-slider .featured-main-card::after,
+.home-main .trending-rail .ranked-card:is(.is-top-1, .is-top-2, .is-top-3)::after,
+.home-main .trending-rail .ranked-card:is(.is-top-1, .is-top-2, .is-top-3) .cover-link::after,
+.home-main .v481-pinned-slide > .v481-pin-card::after,
+.home-main .card-coverflow__slide > .v481-pin-card,
+.home-main .public-teams .team-carousel-card::before,
+.home-main .public-teams .team-carousel-card::after,
+.home-main .editors-pick-card::before,
+.home-main .v481-discounts-section .v481-ticket::after {
+  border-color: color-mix(in srgb, var(--section-accent) 72%, var(--line)) !important;
+  background: conic-gradient(
+    from var(--section-action-angle, 0deg),
+    transparent 0 56%,
+    var(--section-accent-soft, var(--section-accent)) 64%,
+    var(--section-accent) 74%,
+    var(--section-accent-strong, var(--section-accent)) 82%,
+    transparent 90% 100%
+  ) !important;
+}
+
+.home-main .card-coverflow__slide > .v481-pin-card {
+  box-shadow: 0 1rem 2.8rem color-mix(in srgb, var(--section-accent) 22%, transparent), 0 1rem 2rem color-mix(in srgb, var(--theme-main-background) 42%, transparent) !important;
+}
+
+.home-main .card-coverflow__slide[data-coverflow-active="true"] > .v481-pin-card {
+  border-color: var(--section-accent) !important;
+  box-shadow: 0 1.3rem 3.2rem color-mix(in srgb, var(--section-accent) 30%, transparent), 0 1rem 2rem color-mix(in srgb, var(--theme-main-background) 42%, transparent) !important;
+}
+
+.home-main .recent-review-card[data-active="true"] {
+  border-color: var(--section-accent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--section-accent) 64%, transparent), 0 0 1.5rem color-mix(in srgb, var(--section-accent) 34%, transparent) !important;
+}
+
+.home-main .v481-discounts-section .v481-ticket {
+  border-color: color-mix(in srgb, var(--section-accent) 68%, var(--line)) !important;
+  box-shadow: 0 0 1rem color-mix(in srgb, var(--section-accent) 22%, transparent), 0 .8rem 1.8rem color-mix(in srgb, var(--theme-main-background) 24%, transparent) !important;
+}
+
+.home-main .public-new-series .new-series-card:is(:hover, :focus-visible),
+.home-main .community-highlights .community-highlight-card:is(:hover, :focus-visible) {
+  border-color: var(--section-accent) !important;
+  box-shadow: 0 0 .9rem color-mix(in srgb, var(--section-accent) 22%, transparent) !important;
+}
+
+.home-main :is(.latest-pagination, .latest-pagination.is-home) > button,
+.home-main :is(.latest-pagination, .latest-pagination.is-home) .latest-page-dots > button,
+.home-main :is(.latest-pagination, .latest-pagination.is-home) .latest-page-ellipsis {
+  display: grid !important;
+  width: 2.5rem !important;
+  min-width: 2.5rem !important;
+  height: 2.5rem !important;
+  min-height: 2.5rem !important;
+  place-items: center !important;
+  box-sizing: border-box !important;
+  border: 1px solid color-mix(in srgb, var(--section-accent) 54%, var(--line)) !important;
+  border-radius: .7rem !important;
+  background: color-mix(in srgb, var(--section-accent) 10%, var(--surface)) !important;
+  color: var(--section-accent) !important;
+  box-shadow: none !important;
+  line-height: 1 !important;
+}
+
+.home-main :is(.latest-pagination, .latest-pagination.is-home) .latest-page-dots {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: .45rem !important;
+}
+
+.home-main :is(.latest-pagination, .latest-pagination.is-home) > button:disabled {
+  color: color-mix(in srgb, var(--section-accent) 38%, var(--muted)) !important;
+  opacity: .52;
+}
+
+.home-main .new-series-badges .series-type-badge.is-flag-only,
+.home-main .latest-cover-type .series-type-badge.is-flag-only,
+.home-main .catalog-cover-top-badges .series-type-badge.is-flag-only {
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: 2.4rem !important;
+  min-height: 1.35rem !important;
+  padding: .14rem !important;
+  place-items: center !important;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent) !important;
+  border-radius: .42rem !important;
+  background: color-mix(in srgb, var(--section-accent) 10%, var(--surface)) !important;
+}
+
+.home-main :is(.new-series-badges, .latest-cover-type, .catalog-cover-top-badges) .series-type-badge.is-flag-only .language-flag,
+.home-main :is(.new-series-badges, .latest-cover-type, .catalog-cover-top-badges) .series-type-badge.is-flag-only .language-flag img {
+  width: auto !important;
+  min-width: 0 !important;
+  gap: 0 !important;
+}
+
+.home-main :is(.new-series-badges, .latest-cover-type, .catalog-cover-top-badges) .series-type-badge.is-flag-only .language-flag img {
+  width: 1.35rem !important;
+  height: 1rem !important;
+  object-fit: cover !important;
+}
+
+:is(.active-discount-cover-badge, .v481-ticket-ribbon, .discount-card .discount-badge, .reader-lock-discount-badge) {
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: calc(100% - .8rem) !important;
+  min-height: 1.55rem !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: .28rem .62rem !important;
+  border-radius: 999px !important;
+  transform: none !important;
+  transform-origin: center !important;
+  white-space: nowrap !important;
+}
+
+:is(.active-discount-cover-badge, .v481-ticket-ribbon, .discount-card .discount-badge, .reader-lock-discount-badge)::after {
+  transform: translateX(-130%) !important;
+}
+
+.theme-builder-action-groups {
+  display: grid;
+  gap: 1rem;
+  padding: 0 1.15rem 1.15rem;
+}
+
+.theme-builder-action-groups .theme-builder-actions {
+  padding: 0;
+}
+
+.theme-builder-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.theme-builder-export {
+  overflow: hidden;
+  border: 1px solid var(--theme-accent-l3);
+  border-radius: var(--site-button-radius, .75rem);
+  background: color-mix(in srgb, var(--theme-accent-l1) 62%, transparent);
+}
+
+.theme-builder-export-header {
+  display: flex;
+  min-height: 3.4rem;
+  align-items: center;
+  padding: .75rem .9rem;
+  border-bottom: 1px solid var(--theme-accent-l3);
+  background: color-mix(in srgb, var(--theme-accent-l2) 54%, transparent);
+}
+
+.theme-builder-export-header small {
+  color: var(--theme-primary);
+  font-size: .61rem;
+  font-weight: 760;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.theme-builder-export-header h3 {
+  margin: .15rem 0 0;
+  color: var(--theme-text-color);
+  font-size: .88rem;
+}
+
+.theme-builder-export-actions {
+  padding: .8rem .9rem .9rem !important;
+}
+
+.theme-token-group-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .55rem .7rem;
+}
+
+.theme-token-group-title-row h2 {
+  margin: 0;
+}
+
+.theme-token-group-count {
+  display: inline-flex !important;
+  width: max-content !important;
+  min-width: max-content !important;
+  max-width: 100%;
+  min-height: 1.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: .2rem .62rem;
+  border: 1px solid var(--theme-accent-l3);
+  border-radius: 999px;
+  color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+  font-size: .62rem;
+  font-weight: 780;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.theme-token-group-chevron {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--theme-accent-l3);
+  border-radius: 50%;
+  color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+}
+
+.theme-token-group-toggle:is(:hover, :focus-visible) .theme-token-group-chevron {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 .75rem color-mix(in srgb, var(--theme-primary) 24%, transparent);
+}
+
+@media (max-width: 620px) {
+  .theme-builder-action-groups {
+    padding-inline: .85rem;
+  }
+
+  .theme-builder-primary-actions,
+  .theme-builder-export-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .theme-builder-primary-actions .button,
+  .theme-builder-export-actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .theme-token-group-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .32rem;
+  }
+
+  .theme-token-group-count {
+    font-size: .58rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-main :is(
+    .featured-slider-arrows button::after,
+    .v481-pinned-arrow::before,
+    .card-coverflow__arrow::after,
+    .v481-pinned-slide > .v481-pin-card::after,
+    .v481-discounts-section .v481-ticket::after,
+    .trending-rail .ranked-card::after,
+    .trending-rail .ranked-card .cover-link::after,
+    .public-teams .team-carousel-card::before,
+    .public-teams .team-carousel-card::after,
+    .editors-pick-card::before,
+    .latest-all-action::after
+  ) {
+    animation: none !important;
+  }
+}
+
+
+/* v49.15.5 follow-up — beat legacy Home icon selectors while keeping the icon/divider/title rhythm. */
+.home-main.home-main :is(
+  .section-heading .section-heading-icon,
+  .trending-title .section-heading-icon,
+  .continue-reading-heading .section-heading-icon,
+  .editors-pick-title-group .section-heading-icon,
+  .v481-feature-heading > :first-child > .section-heading-icon,
+  .hot-week-title-group .hot-week-heading-icon,
+  .public-new-series .section-heading .section-heading-icon,
+  .public-teams .section-heading .section-heading-icon,
+  .community-highlights .section-heading .section-heading-icon,
+  .editors-pick-fleur
+) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--section-accent) !important;
+}

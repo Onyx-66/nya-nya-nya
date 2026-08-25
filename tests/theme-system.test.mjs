@@ -393,10 +393,10 @@ test("Theme Identity exposes all five safe actions and a manual-delete saved lib
     "Create new",
     "Copy JSON URL",
     "Copy Markdown URL",
-    "Export JSON",
-    "Export Markdown",
-    "Blank JSON template",
-    "Blank Markdown template",
+    "Current JSON",
+    "Current MD",
+    "Blank JSON",
+    "Blank MD",
     "Import theme",
     "Import system theme",
     "Preview",
@@ -411,6 +411,15 @@ test("Theme Identity exposes all five safe actions and a manual-delete saved lib
   assert.match(builder, /nyascans-blank-theme-template\.json/u);
   assert.match(builder, /nyascans-blank-theme-template\.md/u);
   assert.match(builder, /themeTokenGroups\.map/u);
+  assert.match(builder, /theme-builder-export/u);
+  assert.match(builder, /Export/u);
+  assert.match(builder, /Current JSON/u);
+  assert.match(builder, /Current MD/u);
+  assert.match(builder, /Blank JSON/u);
+  assert.match(builder, /Blank MD/u);
+  assert.match(builder, /CaretUp/u);
+  assert.match(builder, /CaretDown/u);
+  assert.doesNotMatch(builder, /<small>Design tokens<\/small>/u);
   assert.match(builder, /aria-expanded=\{isOpen\}/u);
   assert.match(builder, /Expand all/u);
   assert.match(builder, /Collapse all/u);

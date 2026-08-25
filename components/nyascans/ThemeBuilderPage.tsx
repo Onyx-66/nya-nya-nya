@@ -1,6 +1,8 @@
 "use client";
 import {
   ArrowClockwise,
+  CaretDown,
+  CaretUp,
   Check,
   ClipboardText,
   DownloadSimple,
@@ -798,39 +800,51 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
               </div>
             </fieldset>
 
-            <div className="theme-builder-actions">
-              <button
-                className="button button-primary"
-                type="button"
-                onClick={() => void saveTheme()}
-                disabled={saving || !controller.hydrated || controller.syncing}
-              >
-                <FloppyDisk size={17} /> {saving ? "Saving…" : "Save theme"}
-              </button>
-              <button className="button button-secondary" type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>
-                <ArrowClockwise size={17} /> Load theme
-              </button>
-              <button className="button button-secondary" type="button" onClick={createNew}>
-                <Plus size={17} /> Create new
-              </button>
-              <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("json")}>
-                <LinkSimple size={17} /> Copy JSON URL
-              </button>
-              <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("markdown")}>
-                <LinkSimple size={17} /> Copy Markdown URL
-              </button>
-              <button className="button button-secondary" type="button" onClick={exportTheme}>
-                <DownloadSimple size={17} /> Export JSON
-              </button>
-              <button className="button button-secondary" type="button" onClick={exportMarkdownTheme}>
-                <DownloadSimple size={17} /> Export Markdown
-              </button>
-              <button className="button button-secondary" type="button" onClick={downloadBlankTemplate}>
-                <DownloadSimple size={17} /> Blank JSON template
-              </button>
-              <button className="button button-secondary" type="button" onClick={downloadBlankMarkdownTemplate}>
-                <DownloadSimple size={17} /> Blank Markdown template
-              </button>
+            <div className="theme-builder-action-groups">
+              <div className="theme-builder-actions theme-builder-primary-actions" aria-label="Theme actions">
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={() => void saveTheme()}
+                  disabled={saving || !controller.hydrated || controller.syncing}
+                >
+                  <FloppyDisk size={17} /> {saving ? "Saving…" : "Save theme"}
+                </button>
+                <button className="button button-secondary" type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>
+                  <ArrowClockwise size={17} /> Load theme
+                </button>
+                <button className="button button-secondary" type="button" onClick={createNew}>
+                  <Plus size={17} /> Create new
+                </button>
+              </div>
+              <section className="theme-builder-export" aria-labelledby="theme-export-title">
+                <header className="theme-builder-export-header">
+                  <div>
+                    <small>Export</small>
+                    <h3 id="theme-export-title">Share or download</h3>
+                  </div>
+                </header>
+                <div className="theme-builder-actions theme-builder-export-actions">
+                  <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("json")}>
+                    <LinkSimple size={17} /> Copy JSON URL
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("markdown")}>
+                    <LinkSimple size={17} /> Copy Markdown URL
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={exportTheme}>
+                    <DownloadSimple size={17} /> Current JSON
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={exportMarkdownTheme}>
+                    <DownloadSimple size={17} /> Current MD
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={downloadBlankTemplate}>
+                    <DownloadSimple size={17} /> Blank JSON
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={downloadBlankMarkdownTemplate}>
+                    <DownloadSimple size={17} /> Blank MD
+                  </button>
+                </div>
+              </section>
             </div>
             <p className="theme-builder-save-note">
               Edits stay in this builder until you choose Save. Create new never overwrites the loaded theme.
@@ -956,13 +970,16 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
                     onClick={() => toggleGroup(group.id)}
                   >
                     <span>
-                      <small>Design tokens</small>
-                      <h2>{group.name}</h2>
+                      <span className="theme-token-group-title-row">
+                        <h2>{group.name}</h2>
+                        <span className="theme-token-group-count">{group.tokens.length} {group.tokens.length === 1 ? "token" : "tokens"}</span>
+                      </span>
                       <p>{group.description}</p>
                     </span>
-                    <strong aria-hidden="true">{isOpen ? "−" : "+"}</strong>
+                    <span className="theme-token-group-chevron" aria-hidden="true">
+                      {isOpen ? <CaretUp size={18} weight="bold" /> : <CaretDown size={18} weight="bold" />}
+                    </span>
                   </button>
-                  <span className="theme-token-group-count">{group.tokens.length} {group.tokens.length === 1 ? "token" : "tokens"}</span>
                 </header>
                 {isOpen ? (
                   <div className="theme-token-list" id={groupPanelId}>
