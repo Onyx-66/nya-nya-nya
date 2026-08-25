@@ -7,6 +7,7 @@ import { ThemePalettePresetsPanel } from "@/components/nyascans/admin/ThemePalet
 
 type AppearanceTab =
   | "branding"
+  | "homepage"
   | "reader"
   | "footer"
   | "legal"
@@ -22,6 +23,7 @@ export type AppearanceWorkspaceKind =
 
 const appearanceTabs: Array<{ key: AppearanceTab; label: string }> = [
   { key: "branding", label: "Branding" },
+  { key: "homepage", label: "Homepage layout" },
   { key: "reader", label: "Header assets" },
   { key: "theme", label: "Colors, typography & layout" },
   { key: "palettes", label: "Ready-to-use palettes" },
@@ -99,9 +101,9 @@ export function AppearanceWorkspace({
       onTabChange={changeTab}
     >
       <div className="appearance-workspace-panels">
-        {["branding", "reader", "footer", "legal", "shortcuts"].includes(tab) ? (
+        { ["branding", "homepage", "reader", "footer", "legal", "shortcuts"].includes(tab) ? (
           <SiteConfigurationPanel
-            section={tab as "branding" | "reader" | "footer" | "legal" | "shortcuts"}
+            section={tab as "branding" | "homepage" | "reader" | "footer" | "legal" | "shortcuts"}
           />
         ) : null}
         <div hidden={tab !== "theme"} aria-hidden={tab !== "theme"}>

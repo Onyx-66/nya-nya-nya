@@ -20,6 +20,9 @@ const mediaKeySchema = z
   .regex(/^public\/site\/[a-z0-9/_\-.]+$/)
   .nullable();
 
+export const pinnedSeriesCarouselStyleSchema = z.enum(["CLASSIC", "CARD_COVER_FLOW"]);
+export type PinnedSeriesCarouselStyle = z.infer<typeof pinnedSeriesCarouselStyleSchema>;
+
 const mediaSlotSchema = z.object({
   enabled: z.boolean(),
   key: mediaKeySchema,
@@ -113,6 +116,9 @@ export const siteConfigurationSchema = z
       logo: mediaSlotSchema,
       compactLogo: optionalBrandMediaSchema,
       appIcon: optionalBrandMediaSchema,
+    }),
+    homepage: z.object({
+      pinnedSeriesStyle: pinnedSeriesCarouselStyleSchema.default("CLASSIC"),
     }),
     footer: z.object({
       description: z.string().trim().max(400).default(""),
@@ -254,6 +260,9 @@ export const defaultSiteConfiguration: SiteConfiguration = {
       height: 512,
     },
   },
+  homepage: {
+    pinnedSeriesStyle: "CLASSIC",
+  },
   footer: {
     description: "A focused home for manga, manhwa, manhua, webtoons, readers, and the teams that make every release possible.",
     copyright: "© 2026 NyaScans. Original platform artwork.",
@@ -348,6 +357,7 @@ export function parseSiteConfiguration(
     ...defaultSiteConfiguration,
     ...input,
     brand: { ...defaultSiteConfiguration.brand, ...input.brand },
+    homepage: { ...defaultSiteConfiguration.homepage, ...input.homepage },
     footer: { ...defaultSiteConfiguration.footer, ...input.footer },
     reader: { ...defaultSiteConfiguration.reader, ...input.reader },
     keyboardShortcuts:

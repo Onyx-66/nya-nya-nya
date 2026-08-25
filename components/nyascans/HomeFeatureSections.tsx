@@ -29,6 +29,7 @@ import {
   coinLabel,
   type CommercialSettings,
 } from "@/lib/commercial-settings";
+import type { PinnedSeriesCarouselStyle } from "@/lib/site-configuration";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 import { HomeRailControls } from "@/components/nyascans/HomeRailControls";
 
@@ -88,6 +89,7 @@ type PublicDataResponse<T> = {
 export type PinnedSeriesSectionProps = {
   initialRecords?: PinnedSeriesRecord[];
   allHref?: string;
+  carouselStyle?: PinnedSeriesCarouselStyle;
 };
 
 export type PinnedSeriesDirectoryProps = {
@@ -359,8 +361,10 @@ function PinnedLoading() {
 export function PinnedSeriesSection({
   initialRecords,
   allHref = "/pinned-series",
+  carouselStyle = "CLASSIC",
 }: PinnedSeriesSectionProps = {}) {
   const { records, loading, error, retry } = usePinnedSeries(initialRecords);
+  const showCardCoverFlow = carouselStyle === "CARD_COVER_FLOW";
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const featuredRecords = useMemo(
@@ -437,18 +441,21 @@ export function PinnedSeriesSection({
         <PinnedLoading />
       ) : featuredRecords.length ? (
         <>
-          <div className="card-coverflow-desktop">
-            <CardCoverFlow
-              items={featuredRecords}
-              label="Pinned Series"
-              activeIndex={activeIndex}
-              onActiveIndexChange={setActiveIndex}
-              autoAdvanceMs={7000}
-              renderCard={(record) => <PinnedSeriesCard record={record} featured />}
-            />
-          </div>
+          {showCardCoverFlow ? (
+            <div className="card-coverflow-desktop" data-carousel-style="CARD_COVER_FLOW">
+              <CardCoverFlow
+                items={featuredRecords}
+                label="Pinned Series"
+                activeIndex={activeIndex}
+                onActiveIndexChange={setActiveIndex}
+                autoAdvanceMs={7000}
+                renderCard={(record) => <PinnedSeriesCard record={record} featured />}
+              />
+            </div>
+          ) : null}
           <div
-            className="v481-pinned-stage v481-pinned-touch-only"
+            className={`v481-pinned-stage ${showCardCoverFlow ? "v481-pinned-touch-only" : "v481-pinned-classic"}`}
+            data-carousel-style={showCardCoverFlow ? "CARD_COVER_FLOW_TOUCH" : "CLASSIC"}
           role="region"
           aria-roledescription="carousel"
           aria-label="Pinned Series carousel"

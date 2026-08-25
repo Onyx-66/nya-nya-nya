@@ -4573,6 +4573,7 @@ function HomeView({
     settings: commercialSettings,
     runtimeFeatures,
   } = useCommercialSettings();
+  const { settings: siteConfiguration } = useSiteConfiguration();
   const premiumEconomyPublic =
     commercialSettings.economy.premiumEconomyPublic;
   const [promotions, setPromotions] = useState<{
@@ -4599,7 +4600,7 @@ function HomeView({
 
         <ContinueReadingSection signedIn={Boolean(actor)} />
 
-        <PinnedSeriesSection />
+        <PinnedSeriesSection carouselStyle={siteConfiguration.homepage.pinnedSeriesStyle} />
 
         <RecentReviewsSection />
         <DiscountsSection enabled={premiumEconomyPublic} />

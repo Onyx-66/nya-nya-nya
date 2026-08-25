@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = new URL("..", import.meta.url);
@@ -40,10 +42,46 @@ test("CardCoverFlow is reusable, desktop-gated, accessible, and wired to the Pin
   assert.match(flow, /className="card-coverflow__progress"/u);
   assert.match(home, /<CardCoverFlow/u);
   assert.match(home, /autoAdvanceMs=\{7000\}/u);
-  assert.match(home, /className="v481-pinned-stage v481-pinned-touch-only"/u);
+  assert.match(home, /v481-pinned-stage.*v481-pinned-touch-only/su);
   assert.match(css, /@media \(min-width: 1024px\) \{[\s\S]*?\.card-coverflow-desktop \{ display: block; \}[\s\S]*?\.v481-pinned-touch-only \{ display: none/u);
   assert.match(css, /--theme-effect-cover-glow/u);
   assert.match(css, /--theme-effect-button-glow/u);
+});
+
+test("Pinned Series exposes an admin-selectable Classic/CardCoverFlow mode", async () => {
+  const [config, panel, workspace, home, app] = await Promise.all([
+    readProjectFile("lib/site-configuration.ts"),
+    readProjectFile("components/nyascans/SiteConfigurationPanel.tsx"),
+    readProjectFile("components/nyascans/admin/AppearanceWorkspace.tsx"),
+    readProjectFile("components/nyascans/HomeFeatureSections.tsx"),
+    readProjectFile("components/nyascans/NyaScansApp.tsx"),
+  ]);
+  assert.match(config, /pinnedSeriesStyle: pinnedSeriesCarouselStyleSchema\.default\("CLASSIC"\)/u);
+  assert.match(config, /homepage: \{ \.\.\.defaultSiteConfiguration\.homepage, \.\.\.input\.homepage \}/u);
+  assert.match(panel, /Homepage layout|Pinned Series carousel style/u);
+  assert.match(panel, /value="CARD_COVER_FLOW"/u);
+  assert.match(workspace, /homepage.*Homepage layout/su);
+  assert.match(app, /<PinnedSeriesSection carouselStyle=\{siteConfiguration\.homepage\.pinnedSeriesStyle\}/u);
+  assert.match(home, /data-carousel-style="CARD_COVER_FLOW"/u);
+  assert.match(home, /v481-pinned-classic/u);
+});
+
+test("site configuration preserves Classic for legacy data and accepts CardCoverFlow safely", () => {
+  const validation = spawnSync(
+    fileURLToPath(new URL("../node_modules/.bin/tsx", import.meta.url)),
+    [
+      "--eval",
+      `import { parseSiteConfiguration } from './lib/site-configuration.ts';
+       const legacy = parseSiteConfiguration({});
+       const selected = parseSiteConfiguration({ homepage: { pinnedSeriesStyle: 'CARD_COVER_FLOW' } });
+       const malformed = parseSiteConfiguration({ homepage: { pinnedSeriesStyle: 'NOT_A_STYLE' } });
+       if (legacy.homepage.pinnedSeriesStyle !== 'CLASSIC') throw new Error('legacy default was not Classic');
+       if (selected.homepage.pinnedSeriesStyle !== 'CARD_COVER_FLOW') throw new Error('CardCoverFlow was not accepted');
+       if (malformed.homepage.pinnedSeriesStyle !== 'CLASSIC') throw new Error('malformed style did not fall back to Classic');`,
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+  assert.equal(validation.status, 0, validation.stderr);
 });
 
 test("Theme Builder exposes independently addressable groups, workspace tokens, and both interchange formats", async () => {

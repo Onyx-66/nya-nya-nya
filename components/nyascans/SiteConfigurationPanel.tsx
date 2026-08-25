@@ -84,7 +84,7 @@ function linkId(label: string, taken: Set<string>) {
   return candidate;
 }
 
-type ConfigurationSection = "branding" | "reader" | "footer" | "legal" | "shortcuts";
+type ConfigurationSection = "branding" | "homepage" | "reader" | "footer" | "legal" | "shortcuts";
 type MediaSlot = "logo" | "compact" | "app" | "first" | "last";
 type PendingMedia = { file: File; url: string } | null;
 
@@ -379,7 +379,7 @@ export function SiteConfigurationPanel({
       setRevision(currentRevision);
       setRecoveredFromInvalid(false);
       broadcastSiteConfiguration(serverSettings, currentRevision);
-      setMessage("Branding, footer links, and reader pages are live.");
+      setMessage("Site configuration is live.");
       setStatus("saved");
     } catch (error) {
       setSettings(desiredSettings);
@@ -647,24 +647,28 @@ export function SiteConfigurationPanel({
           <h2>
             {section === "branding"
               ? "Branding"
-              : section === "reader"
-                ? "Reader assets"
-                : section === "legal"
-                  ? "Legal documents"
-                : section === "shortcuts"
-                  ? "Keyboard shortcuts"
-                  : "Footer and social links"}
+              : section === "homepage"
+                ? "Homepage"
+                : section === "reader"
+                  ? "Reader assets"
+                  : section === "legal"
+                    ? "Legal documents"
+                    : section === "shortcuts"
+                      ? "Keyboard shortcuts"
+                      : "Footer and social links"}
           </h2>
           <p>
             {section === "branding"
               ? "Manage the public name, description, and responsive brand marks."
-              : section === "reader"
-                ? "Manage reusable fixed chapter pages without changing release files."
-                : section === "legal"
-                  ? "Edit the titles, dates, summaries, paragraphs, and bullet points published on every legal and DMCA page."
-                : section === "shortcuts"
-                  ? "Edit navigation chords and their real destinations without changing application code."
-                  : "Edit every public footer text, group, legal destination, and social link."}
+              : section === "homepage"
+                ? "Choose which Pinned Series presentation is active on desktop; touch layouts remain responsive."
+                : section === "reader"
+                  ? "Manage reusable fixed chapter pages without changing release files."
+                  : section === "legal"
+                    ? "Edit the titles, dates, summaries, paragraphs, and bullet points published on every legal and DMCA page."
+                    : section === "shortcuts"
+                      ? "Edit navigation chords and their real destinations without changing application code."
+                      : "Edit every public footer text, group, legal destination, and social link."}
           </p>
         </div>
         {section !== "legal" ? (
@@ -704,6 +708,32 @@ export function SiteConfigurationPanel({
         <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading site configuration…</span></div>
       ) : (
         <>
+          {section === "homepage" ? (
+          <section className="site-identity-fields homepage-carousel-settings">
+            <label>
+              <span>Pinned Series carousel style</span>
+              <UnifiedSingleSelect
+                value={settings.homepage.pinnedSeriesStyle}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    homepage: {
+                      ...current.homepage,
+                      pinnedSeriesStyle: event.target.value as SiteConfiguration["homepage"]["pinnedSeriesStyle"],
+                    },
+                  }))
+                }
+              >
+                <option value="CLASSIC">Classic carousel</option>
+                <option value="CARD_COVER_FLOW">CardCoverFlow</option>
+              </UnifiedSingleSelect>
+              <small>
+                Classic keeps the existing full-width touch-style rail. CardCoverFlow uses the new angled cover-flow on desktop; mobile and tablet keep the touch rail.
+              </small>
+            </label>
+          </section>
+          ) : null}
+
           {section === "branding" ? (
           <section className="site-identity-fields">
             <label>
