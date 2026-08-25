@@ -8,10 +8,12 @@ import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold
 import { DiscountCardStylePanel } from "@/components/nyascans/admin/DiscountCardStylePanel";
 import { RecentReviewsSettingsPanel } from "@/components/nyascans/admin/RecentReviewsSettingsPanel";
 import { ThemePalettePresetsPanel } from "@/components/nyascans/admin/ThemePalettePresetsPanel";
+import { ThemeCatalogPanel } from "@/components/nyascans/admin/ThemeCatalogPanel";
 
 type AppearanceTab =
   | "branding"
   | "homepage"
+  | "pinned"
   | "reader"
   | "footer"
   | "legal"
@@ -19,6 +21,7 @@ type AppearanceTab =
   | "theme"
   | "palettes"
   | "theme-management"
+  | "theme-catalog"
   | "discounts"
   | "reviews"
   | "preview";
@@ -31,10 +34,12 @@ export type AppearanceWorkspaceKind =
 const appearanceTabs: Array<{ key: AppearanceTab; label: string }> = [
   { key: "branding", label: "Branding" },
   { key: "homepage", label: "Homepage layout" },
+  { key: "pinned", label: "Pinned Series style" },
   { key: "reader", label: "Header assets" },
   { key: "theme", label: "Colors, typography & layout" },
   { key: "palettes", label: "Ready-to-use palettes" },
   { key: "theme-management", label: "Theme Management" },
+  { key: "theme-catalog", label: "Theme Catalog" },
   { key: "discounts", label: "Discount presentation" },
   { key: "reviews", label: "Recent Reviews" },
   { key: "preview", label: "Advanced preview" },
@@ -115,9 +120,9 @@ export function AppearanceWorkspace({
       onTabChange={changeTab}
     >
       <div className="appearance-workspace-panels">
-        { ["branding", "homepage", "reader", "footer", "legal", "shortcuts"].includes(tab) ? (
+        { ["branding", "homepage", "pinned", "reader", "footer", "legal", "shortcuts"].includes(tab) ? (
           <SiteConfigurationPanel
-            section={tab as "branding" | "homepage" | "reader" | "footer" | "legal" | "shortcuts"}
+            section={tab as "branding" | "homepage" | "pinned" | "reader" | "footer" | "legal" | "shortcuts"}
           />
         ) : null}
         <div hidden={tab !== "theme"} aria-hidden={tab !== "theme"}>
@@ -129,6 +134,7 @@ export function AppearanceWorkspace({
         {tab === "theme-management" && themeController ? (
           <ThemeBuilderPage controller={themeController} notify={notify} embedded />
         ) : null}
+        {tab === "theme-catalog" ? <ThemeCatalogPanel /> : null}
         {tab === "discounts" ? <DiscountCardStylePanel /> : null}
         {tab === "reviews" ? <RecentReviewsSettingsPanel /> : null}
         {tab === "preview" ? (

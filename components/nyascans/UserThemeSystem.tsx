@@ -25,6 +25,11 @@ import {
   type ThemePreference,
   type ThemePreferenceMutation,
 } from "@/lib/theme-system";
+import {
+  defaultPublicThemeCatalog,
+  parsePublicThemeCatalog,
+  type PublicThemeCatalog,
+} from "@/lib/theme-catalog";
 
 const THEME_CACHE_KEY = "nyascans:user-theme-cache:v2";
 
@@ -35,6 +40,7 @@ type ThemePreferenceResponse = {
     hasExplicitThemePreference?: boolean;
     recoveredFromInvalid?: boolean;
     updatedAt?: string | null;
+    globalThemeCatalog?: PublicThemeCatalog;
   };
   error?: { code?: string; message?: string };
 };
@@ -42,6 +48,7 @@ type ThemePreferenceResponse = {
 type AccountPreference = {
   preference: ThemePreference;
   preferenceRevision: number;
+  globalThemeCatalog: PublicThemeCatalog;
 };
 
 type ThemePreferenceMutationDraft = ThemePreferenceMutation extends infer Mutation
@@ -58,6 +65,9 @@ export type ThemeController = {
   activeThemeId: ActiveThemeId;
   customThemes: SavedCustomTheme[];
   shortlist: ActiveThemeId[];
+  suggestedThemes: PublicThemeCatalog["suggestedThemes"];
+  defaultSuggestedThemeId: ActiveThemeId;
+
   hydrated: boolean;
   syncing: boolean;
   syncError: string;
@@ -181,6 +191,7 @@ function writeLocalPreference(
 function parsePreferencePayload(value: unknown) {
   const candidate = value as (Partial<ThemePreference> & {
     preferenceRevision?: unknown;
+    globalThemeCatalog?: unknown;
   }) | null;
   const preferenceRevision = candidate?.preferenceRevision;
   if (
@@ -198,6 +209,7 @@ function parsePreferencePayload(value: unknown) {
       customThemes: candidate?.customThemes,
     }),
     preferenceRevision,
+    globalThemeCatalog: parsePublicThemeCatalog(candidate?.globalThemeCatalog),
   } satisfies AccountPreference;
 }
 
@@ -223,11 +235,54 @@ async function mutateAccountPreference(
 async function migrateBrowserPreference(
   preference: ThemePreference,
   signal: AbortSignal,
+  globalThemeCatalog: PublicThemeCatalog,
 ) {
-  return mutateAccountPreference(
+  const saved = await mutateAccountPreference(
     { action: "reconcile", preference },
     signal,
   );
+  return { ...saved, globalThemeCatalog } satisfies AccountPreference;
+}
+
+function isPristineBrowserPreference(preference: ThemePreference) {
+  return (
+    preference.customThemes.length === 0 &&
+    preference.activeThemeId === "nya-midnight" &&
+    JSON.stringify(preference.shortlist) === JSON.stringify(defaultThemePreference.shortlist)
+  );
+}
+
+function preferenceForCatalog(
+  catalog: PublicThemeCatalog,
+  base: ThemePreference,
+) {
+  const timestamp = new Date().toISOString();
+  const customThemes = [...base.customThemes];
+  const localReferenceByGlobal = new Map<string, ActiveThemeId>();
+  for (const entry of catalog.suggestedThemes) {
+    if (entry.source !== "USER" || customThemes.length >= MAX_SAVED_CUSTOM_THEMES) continue;
+    const id = createCustomThemeId();
+    customThemes.push({
+      id,
+      theme: cloneTheme(entry.theme),
+      revision: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    localReferenceByGlobal.set(entry.id, customThemeReference(id));
+  }
+  const remap = (reference: ActiveThemeId) =>
+    localReferenceByGlobal.get(reference) ?? reference;
+  const shortlist = catalog.policy.suggestedThemeIds.map(remap).slice(0, MAX_SHORTLISTED_THEMES);
+  const activeThemeId = remap(catalog.policy.defaultThemeId);
+  return themePreferenceSchema.parse({
+    ...base,
+    activeThemeId,
+    shortlist: shortlist.includes(activeThemeId)
+      ? shortlist
+      : [activeThemeId, ...shortlist].slice(0, MAX_SHORTLISTED_THEMES),
+    customThemes,
+  });
 }
 
 export function useUserThemeController(accountId: string | null): ThemeController {
@@ -238,10 +293,12 @@ export function useUserThemeController(accountId: string | null): ThemeControlle
   const [hydrated, setHydrated] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
+  const [globalThemeCatalog, setGlobalThemeCatalog] = useState<PublicThemeCatalog>(defaultPublicThemeCatalog);
   const preferenceRef = useRef(preference);
   const confirmedPreferenceRef = useRef(preference);
   const preferenceRevisionRef = useRef(0);
   const confirmedPreferenceRevisionRef = useRef(0);
+  const globalThemeCatalogRef = useRef<PublicThemeCatalog>(defaultPublicThemeCatalog);
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mutationGenerationRef = useRef(0);
   const accountGenerationRef = useRef(0);
@@ -267,15 +324,29 @@ export function useUserThemeController(accountId: string | null): ThemeControlle
       preferenceRevisionRef.current = 0;
       confirmedPreferenceRevisionRef.current = 0;
       setAndApply(browserPreference);
-
-      if (!signedIn) {
-        confirmedPreferenceRef.current = browserPreference;
-        setHydrated(true);
-        return;
-      }
-      setSyncing(true);
+      setSyncing(signedIn);
       void (async () => {
         try {
+          const catalogResponse = await fetch("/api/v1/theme-catalog", {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          const catalogPayload = catalogResponse.ok
+            ? await catalogResponse.json()
+            : null;
+          const catalog = parsePublicThemeCatalog(catalogPayload);
+          globalThemeCatalogRef.current = catalog;
+          setGlobalThemeCatalog(catalog);
+
+          if (!signedIn) {
+            const initial = isPristineBrowserPreference(browserPreference)
+              ? preferenceForCatalog(catalog, browserPreference)
+              : browserPreference;
+            confirmedPreferenceRef.current = initial;
+            setAndApply(initial);
+            return;
+          }
+
           const response = await fetch("/api/v1/theme-preferences", {
             cache: "no-store",
             signal: controller.signal,
@@ -286,9 +357,19 @@ export function useUserThemeController(accountId: string | null): ThemeControlle
               payload.error?.message ?? "Your account theme could not be loaded.",
             );
           }
+          const serverCatalog = parsePublicThemeCatalog(payload.data.globalThemeCatalog ?? catalog);
+          globalThemeCatalogRef.current = serverCatalog;
+          setGlobalThemeCatalog(serverCatalog);
+          const serverPreference = parsePreferencePayload(payload.data);
           const confirmedAccount = payload.data.hasExplicitThemePreference
-            ? parsePreferencePayload(payload.data)
-            : await migrateBrowserPreference(browserPreference, controller.signal);
+            ? serverPreference
+            : await migrateBrowserPreference(
+                isPristineBrowserPreference(browserPreference)
+                  ? preferenceForCatalog(serverCatalog, browserPreference)
+                  : browserPreference,
+                controller.signal,
+                serverCatalog,
+              );
           if (!controller.signal.aborted) {
             confirmedPreferenceRef.current = confirmedAccount.preference;
             preferenceRevisionRef.current = confirmedAccount.preferenceRevision;
@@ -391,13 +472,55 @@ export function useUserThemeController(accountId: string | null): ThemeControlle
   const selectTheme = useCallback(
     async (id: ActiveThemeId) => {
       const current = preferenceRef.current;
-      if (!themeForReference(current, id)) return false;
-      const shortlist = current.shortlist.includes(id)
+      let resolvedId = id;
+      let resolvedTheme = themeForReference(current, id);
+      if (!resolvedTheme) {
+        const suggested = globalThemeCatalogRef.current.suggestedThemes.find(
+          (entry) => entry.id === id,
+        );
+        if (!suggested) return false;
+        const existing = current.customThemes.find(
+          (saved) => JSON.stringify(saved.theme) === JSON.stringify(suggested.theme),
+        );
+        if (existing) {
+          resolvedId = customThemeReference(existing.id);
+          resolvedTheme = existing.theme;
+        } else {
+          if (current.customThemes.length >= MAX_SAVED_CUSTOM_THEMES) {
+            throw new Error("Delete a saved theme before adding a suggested user theme.");
+          }
+          const savedId = createCustomThemeId();
+          const timestamp = new Date().toISOString();
+          const saved = {
+            id: savedId,
+            theme: cloneTheme(suggested.theme),
+            revision: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          } satisfies SavedCustomTheme;
+          resolvedId = customThemeReference(savedId);
+          resolvedTheme = saved.theme;
+          const shortlist = [resolvedId, ...current.shortlist].slice(0, MAX_SHORTLISTED_THEMES);
+          await commit(
+            { ...current, activeThemeId: resolvedId, shortlist, customThemes: [...current.customThemes, saved] },
+            {
+              action: "create-custom",
+              themeId: savedId,
+              customTheme: saved.theme,
+              activate: true,
+              shortlist,
+            },
+          );
+          return true;
+        }
+      }
+      if (!resolvedTheme) return false;
+      const shortlist = current.shortlist.includes(resolvedId)
         ? current.shortlist
-        : [id, ...current.shortlist].slice(0, MAX_SHORTLISTED_THEMES);
+        : [resolvedId, ...current.shortlist].slice(0, MAX_SHORTLISTED_THEMES);
       await commit(
-        { ...current, activeThemeId: id, shortlist },
-        { action: "select", activeThemeId: id, shortlist },
+        { ...current, activeThemeId: resolvedId, shortlist },
+        { action: "select", activeThemeId: resolvedId, shortlist },
       );
       return true;
     },
@@ -526,6 +649,8 @@ export function useUserThemeController(accountId: string | null): ThemeControlle
     activeThemeId: preference.activeThemeId,
     customThemes: preference.customThemes,
     shortlist: preference.shortlist,
+    suggestedThemes: globalThemeCatalog.suggestedThemes,
+    defaultSuggestedThemeId: globalThemeCatalog.policy.defaultThemeId,
     hydrated,
     syncing,
     syncError,

@@ -78,7 +78,7 @@ export function capabilityForAdminPath(path: string) {
   if (/^(payouts)$/u.test(suffix)) return "finance.transactions.read";
   if (/^(store|store-items|store-collections|store-media)$/u.test(suffix)) return "store.manage";
   if (/^editor-picks$/u.test(suffix)) return "content.editorial.manage";
-  if (/^(appearance|site-configuration|site-media)$/u.test(suffix)) return "appearance.manage";
+  if (/^(appearance|site-configuration|theme-catalog|site-media)$/u.test(suffix)) return "appearance.manage";
   if (/^commercial-settings$/u.test(suffix)) return "commerce.manage";
   if (/^discussion-settings$/u.test(suffix)) return "comments.moderate.global";
   if (/^reports$/u.test(suffix)) return "reports.manage";

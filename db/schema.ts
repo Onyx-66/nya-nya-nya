@@ -352,6 +352,18 @@ export const siteConfigurationSettings = sqliteTable(
   },
 );
 
+export const themeCatalogSettings = sqliteTable("theme_catalog_settings", {
+  id: text("id").primaryKey(),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  settingsJson: text("settings_json").notNull(),
+  revision: integer("revision").notNull().default(1),
+  updatedByUserId: text("updated_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt,
+  updatedAt,
+});
+
 export const commercialSettings = sqliteTable("commercial_settings", {
   id: text("id").primaryKey(),
   schemaVersion: integer("schema_version").notNull().default(1),
@@ -3531,6 +3543,33 @@ export const ledgerTransactions = sqliteTable(
     uniqueIndex("ledger_tx_idempotency_uidx").on(table.idempotencyKey),
     index("ledger_tx_reference_idx").on(table.referenceType, table.referenceId),
     index("ledger_tx_kind_time_idx").on(table.kind, table.createdAt),
+  ],
+);
+
+export const themeCatalogRewardClaims = sqliteTable(
+  "theme_catalog_reward_claims",
+  {
+    creatorUserId: text("creator_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    themeReference: text("theme_reference").notNull(),
+    transactionId: text("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id, { onDelete: "restrict" }),
+    selectedByUserId: text("selected_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.creatorUserId, table.themeReference] }),
+    uniqueIndex("theme_catalog_reward_claims_transaction_uidx").on(
+      table.transactionId,
+    ),
+    index("theme_catalog_reward_claims_creator_idx").on(
+      table.creatorUserId,
+      table.createdAt,
+    ),
   ],
 );
 

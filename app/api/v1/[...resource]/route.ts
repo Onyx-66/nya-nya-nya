@@ -78,6 +78,12 @@ import {
   saveSiteConfiguration,
 } from "@/lib/server/site-configuration";
 import {
+  getPublicThemeCatalog,
+  getThemeCatalogDocument,
+  saveThemeCatalog,
+} from "@/lib/server/theme-catalog";
+import { themeCatalogPolicySchema } from "@/lib/theme-catalog";
+import {
   siteConfigurationSchema,
   type SiteConfiguration,
 } from "@/lib/site-configuration";
@@ -1379,6 +1385,14 @@ export async function GET(request: Request, context: RouteContext) {
       return json(id, publicDocument, {
         headers: {
           "cache-control": "no-store",
+        },
+      });
+    }
+
+    if (path === "theme-catalog") {
+      return json(id, await getPublicThemeCatalog(), {
+        headers: {
+          "cache-control": "public, max-age=30, stale-while-revalidate=120",
         },
       });
     }
@@ -7489,6 +7503,14 @@ export async function GET(request: Request, context: RouteContext) {
       });
     }
 
+    if (path === "admin/theme-catalog") {
+      const actor = await requireActor();
+      requireAdminCapability(actor, "appearance.manage");
+      return json(id, await getThemeCatalogDocument(), {
+        headers: { "cache-control": "private, no-store" },
+      });
+    }
+
     if (path === "admin/commercial-settings") {
       const actor = await requireActor();
       requireAdminCapability(actor, capabilityForAdminPath(path));
@@ -8582,6 +8604,7 @@ export async function PUT(request: Request, context: RouteContext) {
     if (
       path !== "admin/appearance" &&
       path !== "admin/site-configuration" &&
+      path !== "admin/theme-catalog" &&
       path !== "admin/commercial-settings" &&
       path !== "admin/discussion-settings" &&
       path !== "admin/chapters" &&
@@ -8960,7 +8983,7 @@ export async function PUT(request: Request, context: RouteContext) {
         ),
       );
     }
-    if (path === "admin/site-configuration") {
+        if (path === "admin/site-configuration") {
       const body = await request.json();
       const wrapped = z
         .object({
@@ -8980,6 +9003,27 @@ export async function PUT(request: Request, context: RouteContext) {
         { headers: { "cache-control": "private, no-store" } },
       );
     }
+
+    if (path === "admin/theme-catalog") {
+      const body = await request.json();
+      const wrapped = z
+        .object({
+          policy: themeCatalogPolicySchema,
+          expectedRevision: z.coerce.number().int().min(0),
+        })
+        .parse(body);
+      return json(
+        id,
+        await saveThemeCatalog(
+          wrapped.policy,
+          actor.id,
+          id,
+          wrapped.expectedRevision,
+        ),
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+
     if (path === "admin/commercial-settings") {
       const body = await request.json();
       const wrapped = z

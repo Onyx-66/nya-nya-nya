@@ -926,12 +926,22 @@ function ThemeSelectionMenu({
   const shortlistEntries = controller.shortlist
     .map(entryFor)
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-  const allEntries = [
+  const globalEntries = controller.suggestedThemes.map((entry) => ({
+    id: entry.id,
+    theme: entry.theme,
+    source: entry.source === "USER" ? "Community" : "Preset",
+  }));
+  const personalEntries = [
     ...userThemePresets.map((preset) => entryFor(preset.id)),
     ...controller.customThemes.map((saved) =>
       entryFor(`custom:${saved.id}` as ActiveThemeId),
     ),
   ].filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const allEntries = Array.from(
+    new Map(
+      [...globalEntries, ...personalEntries].map((entry) => [entry.id, entry]),
+    ).values(),
+  );
 
   const choose = async (id: ActiveThemeId) => {
     if (!controller.hydrated || controller.syncing) return;
@@ -13993,20 +14003,26 @@ function OperationsView({
             initialTab={
               [
                 "branding",
+                "homepage",
+                "pinned",
                 "reader",
                 "theme",
                 "palettes",
                 "theme-management",
+                "theme-catalog",
                 "discounts",
                 "reviews",
                 "preview",
               ].includes(activeSubsection)
                 ? (activeSubsection as
                     | "branding"
+                    | "homepage"
+                    | "pinned"
                     | "reader"
                     | "theme"
                     | "palettes"
                     | "theme-management"
+                    | "theme-catalog"
                     | "discounts"
                     | "reviews"
                     | "preview")

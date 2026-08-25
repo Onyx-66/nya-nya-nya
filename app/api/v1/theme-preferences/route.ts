@@ -2,8 +2,11 @@ import { env } from "cloudflare:workers";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, requestIdFor } from "@/lib/server/admin-utils";
 import { requireActor } from "@/lib/server/policy";
+import { getPublicThemeCatalog } from "@/lib/server/theme-catalog";
 import {
   activeThemeIdSchema,
+  cloneTheme,
+  createCustomThemeId,
   customThemeReference,
   defaultThemePreference,
   isCustomThemeReference,
@@ -380,6 +383,45 @@ function responseData(normalized: NormalizedPreference) {
   };
 }
 
+function preferenceForGlobalCatalog(
+  catalog: Awaited<ReturnType<typeof getPublicThemeCatalog>>,
+  current: NormalizedPreference,
+) {
+  const timestamp = new Date().toISOString();
+  const customThemes = [...current.preference.customThemes];
+  const referenceByGlobalId = new Map<string, ActiveThemeId>();
+  for (const entry of catalog.suggestedThemes) {
+    if (entry.source !== "USER") continue;
+    const existing = customThemes.find(
+      (saved) => JSON.stringify(saved.theme) === JSON.stringify(entry.theme),
+    );
+    const saved = existing ?? {
+      id: createCustomThemeId(),
+      theme: cloneTheme(entry.theme),
+      revision: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    } satisfies SavedCustomTheme;
+    if (!existing) customThemes.push(saved);
+    referenceByGlobalId.set(entry.id, customThemeReference(saved.id));
+  }
+  const remap = (reference: ActiveThemeId) =>
+    referenceByGlobalId.get(reference) ?? reference;
+  const activeThemeId = remap(catalog.policy.defaultThemeId);
+  const shortlist = catalog.policy.suggestedThemeIds.map(remap).slice(
+    0,
+    MAX_SHORTLISTED_THEMES,
+  );
+  return themePreferenceSchema.parse({
+    schemaVersion: THEME_PREFERENCE_SCHEMA_VERSION,
+    activeThemeId,
+    shortlist: shortlist.includes(activeThemeId)
+      ? shortlist
+      : [activeThemeId, ...shortlist].slice(0, MAX_SHORTLISTED_THEMES),
+    customThemes,
+  });
+}
+
 function isThemeLimitError(error: unknown) {
   return String(error).includes("CUSTOM_THEME_LIMIT_REACHED");
 }
@@ -401,9 +443,19 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
+    const [state, globalThemeCatalog] = await Promise.all([
+      stateForUser(database(), actor.id),
+      getPublicThemeCatalog(),
+    ]);
+    const presentedState = state.hasExplicitThemePreference
+      ? state
+      : {
+          ...state,
+          preference: preferenceForGlobalCatalog(globalThemeCatalog, state),
+        };
     return json(
       requestId,
-      { data: responseData(await stateForUser(database(), actor.id)) },
+      { data: { ...responseData(presentedState), globalThemeCatalog } },
       { headers: privateHeaders },
     );
   } catch (error) {
@@ -704,6 +756,8 @@ export async function PATCH(request: Request) {
       if (!savedPreference.meta.changes) throw preferenceConflict();
     } else if (!current.hasExplicitThemePreference) {
       const marker = `reconcile:${requestId}`;
+      const catalog = await getPublicThemeCatalog();
+      const initialPreference = preferenceForGlobalCatalog(catalog, current);
       const statements = [
         db
           .prepare(
@@ -711,9 +765,10 @@ export async function PATCH(request: Request) {
              (user_id, theme, content_language, reader_mode, mature_content,
               settings_json, custom_theme_json, theme_shortlist_json,
               theme_preference_revision, theme_mutation_marker, updated_at)
-             VALUES (?, ?, 'en', 'VERTICAL', 0, '{}', NULL, NULL, 0, ?, CURRENT_TIMESTAMP)
+             VALUES (?, ?, 'en', 'VERTICAL', 0, '{}', NULL, ?, 0, ?, CURRENT_TIMESTAMP)
              ON CONFLICT(user_id) DO UPDATE SET
                theme = excluded.theme,
+               theme_shortlist_json = excluded.theme_shortlist_json,
                theme_mutation_marker = excluded.theme_mutation_marker,
                updated_at = CURRENT_TIMESTAMP
              WHERE lower(trim(user_preferences.theme)) IN ('system', '')
@@ -724,9 +779,9 @@ export async function PATCH(request: Request) {
                  WHERE user_id = excluded.user_id
                )`,
           )
-          .bind(actor.id, marker, marker),
+          .bind(actor.id, initialPreference.activeThemeId, JSON.stringify(initialPreference.shortlist), marker),
       ];
-      for (const saved of mutation.preference.customThemes) {
+      for (const saved of initialPreference.customThemes) {
         statements.push(
           db
             .prepare(
@@ -735,7 +790,7 @@ export async function PATCH(request: Request) {
                SELECT ?, ?, ?, ?, ?, ?
                WHERE EXISTS (
                  SELECT 1 FROM user_preferences
-                 WHERE user_id = ? AND theme = ?
+                 WHERE user_id = ? AND theme_mutation_marker = ?
                )`,
             )
             .bind(
@@ -759,14 +814,13 @@ export async function PATCH(request: Request) {
                     theme_preference_revision = theme_preference_revision + 1,
                     theme_mutation_marker = ?,
                     updated_at = CURRENT_TIMESTAMP
-              WHERE user_id = ? AND theme = ? AND theme_mutation_marker = ?`,
+              WHERE user_id = ? AND theme_mutation_marker = ?`,
           )
           .bind(
-            mutation.preference.activeThemeId,
-            JSON.stringify(mutation.preference.shortlist),
+            initialPreference.activeThemeId,
+            JSON.stringify(initialPreference.shortlist),
             marker,
             actor.id,
-            marker,
             marker,
           ),
       );
@@ -784,12 +838,16 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const normalized = await stateForUser(db, actor.id);
+    const [normalized, globalThemeCatalog] = await Promise.all([
+      stateForUser(db, actor.id),
+      getPublicThemeCatalog(),
+    ]);
     return json(
       requestId,
       {
         data: {
           ...responseData(normalized),
+          globalThemeCatalog,
           saved: true,
           recoveredFromInvalid: false,
           hasExplicitThemePreference: true,

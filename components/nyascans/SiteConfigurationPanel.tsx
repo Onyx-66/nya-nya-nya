@@ -84,7 +84,7 @@ function linkId(label: string, taken: Set<string>) {
   return candidate;
 }
 
-type ConfigurationSection = "branding" | "homepage" | "reader" | "footer" | "legal" | "shortcuts";
+type ConfigurationSection = "branding" | "homepage" | "pinned" | "reader" | "footer" | "legal" | "shortcuts";
 type MediaSlot = "logo" | "compact" | "app" | "first" | "last";
 type PendingMedia = { file: File; url: string } | null;
 
@@ -649,7 +649,9 @@ export function SiteConfigurationPanel({
               ? "Branding"
               : section === "homepage"
                 ? "Homepage"
-                : section === "reader"
+                : section === "pinned"
+                  ? "Pinned Series style"
+                  : section === "reader"
                   ? "Reader assets"
                   : section === "legal"
                     ? "Legal documents"
@@ -662,7 +664,9 @@ export function SiteConfigurationPanel({
               ? "Manage the public name, description, and responsive brand marks."
               : section === "homepage"
                 ? "Choose which Pinned Series presentation is active on desktop; touch layouts remain responsive."
-                : section === "reader"
+                : section === "pinned"
+                  ? "Choose the active Pinned Series presentation style. The setting is shared by the homepage and all supported breakpoints."
+                  : section === "reader"
                   ? "Manage reusable fixed chapter pages without changing release files."
                   : section === "legal"
                     ? "Edit the titles, dates, summaries, paragraphs, and bullet points published on every legal and DMCA page."
@@ -708,8 +712,14 @@ export function SiteConfigurationPanel({
         <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading site configuration…</span></div>
       ) : (
         <>
-          {section === "homepage" ? (
-          <section className="site-identity-fields homepage-carousel-settings">
+          {section === "homepage" || section === "pinned" ? (
+          <section className={`site-identity-fields homepage-carousel-settings${section === "pinned" ? " pinned-style-focus" : ""}`}>
+            {section === "pinned" ? (
+              <div className="pinned-style-management-intro">
+                <strong>Pinned Series presentation</strong>
+                <p>This is the same persisted setting used by the public homepage. Pick one style, then save the configuration to publish it.</p>
+              </div>
+            ) : null}
             <label>
               <span>Pinned Series carousel style</span>
               <UnifiedSingleSelect
