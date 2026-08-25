@@ -163,6 +163,7 @@ test("slider fallback and reading progress share the intended visual system", as
   assert.match(route, /preferredSeriesArtworkUrl/u);
   assert.match(route, /\["slider", row\.seriesSliderKey\][\s\S]*\["cover", row\.coverKey\][\s\S]*\["banner", row\.bannerKey\]/u);
   const authority = css.slice(css.lastIndexOf("/* Version 47"));
-  assert.match(authority, /\.continue-reading-progress > b,[\s\S]*background: var\(--brand-gradient\) !important/u);
+  assert.match(css, /\.continue-reading-progress > b[\s\S]*background: var\(--theme-progress-fill\)/u);
+  assert.match(css, /\.featured-slider-dots button[\s\S]*background: var\(--theme-progress-track\)/u);
   assert.match(upload, /aria-label="Remove selected page"[\s\S]*<Trash size=\{16\}/u);
 });

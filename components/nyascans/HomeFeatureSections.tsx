@@ -1030,9 +1030,9 @@ const HOME_FEATURE_CSS = `
   .v481-pinned-arrow:is(:hover,:focus-visible) { background:color-mix(in srgb,#d79c18 18%,var(--bg)); color:#fff4be; }
   .v481-pinned-arrow:disabled { cursor:default; opacity:.45; }
   .v481-pinned-dots { display:flex; align-items:center; justify-content:center; gap:.4rem; min-height:1.5rem; padding-top:.25rem; }
-  .v481-pinned-dots button { width:.5rem; height:.5rem; padding:0; border:1px solid rgb(255 216 119 / 62%); border-radius:999px; background:rgb(255 255 255 / 34%); cursor:pointer; transition:width .18s ease,background-color .18s ease,transform .18s ease; }
-  .v481-pinned-dots button[aria-current='true'] { width:1.35rem; background:#ffd877; box-shadow:0 0 .65rem rgb(255 216 119 / 55%); }
-  .v481-pinned-dots button:is(:hover,:focus-visible) { transform:scale(1.18); background:#fff0a8; }
+  .v481-pinned-dots button { width:.5rem; height:.5rem; padding:0; border:1px solid color-mix(in srgb,var(--theme-progress-fill) 62%,var(--theme-progress-track)); border-radius:999px; background:var(--theme-progress-track); cursor:pointer; transition:width .18s ease,background-color .18s ease,transform .18s ease; }
+  .v481-pinned-dots button[aria-current='true'] { width:1.35rem; background:var(--theme-progress-fill); box-shadow:0 0 .65rem color-mix(in srgb,var(--theme-progress-fill) 55%,transparent); }
+  .v481-pinned-dots button:is(:hover,:focus-visible) { transform:scale(1.18); background:color-mix(in srgb,var(--theme-progress-fill) 80%,var(--theme-text-color)); }
   .v481-feature-slot { position:relative; display:block; min-width:0; grid-column:span 2; grid-row:span 2; animation:v481-pin-fade .48s ease both; }
   .v481-pin-card { position:relative; display:block; min-width:0; height:100%; overflow:hidden; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:var(--surface-strong); color:#fff; isolation:isolate; transition:border-color .24s ease,box-shadow .24s ease,transform .24s ease; }
   .v481-pinned-slide > .v481-pin-card { border-color:transparent; box-shadow:0 0 0 1px rgb(247 198 77 / 35%),0 0 2.2rem rgb(226 166 30 / 28%),0 1.4rem 3rem rgb(0 0 0 / 34%); }

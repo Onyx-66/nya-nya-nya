@@ -80,6 +80,17 @@ const exactEffectTokenKeys = [
   "effectAnnouncementGlow",
 ];
 
+const exactProgressTokenKeys = [
+  "progressTrack",
+  "progressFill",
+  "progressStarting",
+  "progressBuilding",
+  "progressHalfway",
+  "progressStrong",
+  "progressNearly",
+  "progressComplete",
+];
+
 const exactNotificationTokenKeys = [
   "notificationToastSurface",
   "notificationToastText",
@@ -107,6 +118,7 @@ const exactTokenKeys = [
   ...exactCoreTokenKeys,
   ...exactHomeSectionTokenKeys,
   ...exactEffectTokenKeys,
+  ...exactProgressTokenKeys,
   ...exactNotificationTokenKeys,
   ...exactWorkspaceTokenKeys,
 ];
@@ -128,6 +140,7 @@ test("theme schema preserves the original 39-token core and exposes complete sec
       coreThemeTokenKeys,
       effectThemeTokenKeys,
       homeSectionThemeTokenKeys,
+      progressThemeTokenKeys,
       notificationThemeTokenKeys,
       workspaceThemeTokenKeys,
       themeTokenGroups,
@@ -137,6 +150,7 @@ test("theme schema preserves the original 39-token core and exposes complete sec
       core: coreThemeTokenKeys,
       sections: homeSectionThemeTokenKeys,
       effects: effectThemeTokenKeys,
+      progress: progressThemeTokenKeys,
       notifications: notificationThemeTokenKeys,
       workspace: workspaceThemeTokenKeys,
       all: themeTokenKeys,
@@ -146,6 +160,7 @@ test("theme schema preserves the original 39-token core and exposes complete sec
   assert.deepEqual(result.core, exactCoreTokenKeys);
   assert.deepEqual(result.sections, exactHomeSectionTokenKeys);
   assert.deepEqual(result.effects, exactEffectTokenKeys);
+  assert.deepEqual(result.progress, exactProgressTokenKeys);
   assert.deepEqual(result.notifications, exactNotificationTokenKeys);
   assert.deepEqual(result.workspace, exactWorkspaceTokenKeys);
   assert.deepEqual(result.all, exactTokenKeys);
@@ -153,6 +168,7 @@ test("theme schema preserves the original 39-token core and exposes complete sec
   assert.ok(result.groupNames.includes("Home · Pinned Series"));
   assert.ok(result.groupNames.includes("Browse Filters & Catalog"));
   assert.ok(result.groupNames.includes("Effects & Glows"));
+  assert.ok(result.groupNames.includes("Progress Indicators"));
   assert.ok(result.groupNames.includes("Notifications"));
   assert.ok(result.groupNames.includes("Status Signals"));
   assert.match(source, /themeTokensSchema[\s\S]*?\.strict\(\)/u);
@@ -231,20 +247,20 @@ test("portable themes round-trip, upgrade legacy core themes, and reject malform
     }));
   `);
   assert.deepEqual(result, {
-    tokenCount: 82,
-    runtimeVariableCount: 85,
+    tokenCount: 90,
+    runtimeVariableCount: 93,
     presetCount: 5,
     codeRoundTrip: true,
     urlRoundTrip: true,
     markdownUrlRoundTrip: true,
     markdownRoundTrip: true,
     markdownImportRoundTrip: true,
-    markdownGroupCount: 23,
-    blankMarkdownTokenCount: 82,
+    markdownGroupCount: 24,
+    blankMarkdownTokenCount: 90,
     blankMarkdownError: "The theme Markdown is missing token textColor.",
     legacyLogoDefault: null,
-    legacyCoreExpanded: 82,
-    blankTokenCount: 82,
+    legacyCoreExpanded: 90,
+    blankTokenCount: 90,
     blankError: "The theme is incomplete or invalid. tokens.textColor: Use a six-digit hexadecimal color.",
     filledBlankAccepted: true,
     rejected: true,
@@ -351,7 +367,7 @@ test("preference v2 enforces a combined five-theme shortlist and fifteen saved c
     migratedCount: 1,
     migratedActiveOwned: true,
     migratedActiveShortlisted: true,
-    normalizedStoredTokenCount: 82,
+    normalizedStoredTokenCount: 90,
   });
 });
 
@@ -684,9 +700,9 @@ test("all canonical CSS variables bridge into app semantics and legacy profile t
     readProjectFile("app/theme-surfaces.css"),
     readProjectFile("components/nyascans/ProfileSettingsWorkspace.tsx"),
   ]);
-  const css = `${globalsCss}\n${themeSurfacesCss}`;
+  const css = `${model}\n${globalsCss}\n${themeSurfacesCss}`;
   const cssNames = [...model.matchAll(/: "(--theme-[a-z0-9-]+)"/gu)].map((match) => match[1]);
-  assert.equal(new Set(cssNames).size, 82);
+  assert.equal(new Set(cssNames).size, 90);
   for (const name of new Set(cssNames)) {
     assert.ok(
       css.split(name).length - 1 >= 2,

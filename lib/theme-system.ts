@@ -83,6 +83,17 @@ export const effectThemeTokenKeys = [
   "effectAnnouncementGlow",
 ] as const;
 
+export const progressThemeTokenKeys = [
+  "progressTrack",
+  "progressFill",
+  "progressStarting",
+  "progressBuilding",
+  "progressHalfway",
+  "progressStrong",
+  "progressNearly",
+  "progressComplete",
+] as const;
+
 export const notificationThemeTokenKeys = [
   "notificationToastSurface",
   "notificationToastText",
@@ -110,6 +121,7 @@ export const themeTokenKeys = [
   ...coreThemeTokenKeys,
   ...homeSectionThemeTokenKeys,
   ...effectThemeTokenKeys,
+  ...progressThemeTokenKeys,
   ...notificationThemeTokenKeys,
   ...workspaceThemeTokenKeys,
 ] as const;
@@ -188,6 +200,14 @@ export const themeTokensSchema = z
     effectPaidGlow: hexColor,
     effectDiscountGlow: hexColor,
     effectAnnouncementGlow: hexColor,
+    progressTrack: hexColor,
+    progressFill: hexColor,
+    progressStarting: hexColor,
+    progressBuilding: hexColor,
+    progressHalfway: hexColor,
+    progressStrong: hexColor,
+    progressNearly: hexColor,
+    progressComplete: hexColor,
     notificationToastSurface: hexColor,
     notificationToastText: hexColor,
     notificationBellBadge: hexColor,
@@ -238,6 +258,14 @@ function extensionDefaults(tokens: LegacyCoreTokens) {
     effectPaidGlow: tokens.statusYellow,
     effectDiscountGlow: tokens.statusRed,
     effectAnnouncementGlow: tokens.indicationBlue,
+    progressTrack: tokens.accentL3,
+    progressFill: tokens.primary,
+    progressStarting: tokens.statusRed,
+    progressBuilding: tokens.statusYellow,
+    progressHalfway: tokens.statusYellow,
+    progressStrong: tokens.statusGreen,
+    progressNearly: tokens.statusBlue,
+    progressComplete: tokens.primary,
     notificationToastSurface: tokens.accentL1,
     notificationToastText: tokens.textColor,
     notificationBellBadge: tokens.danger,
@@ -258,6 +286,7 @@ function extensionDefaults(tokens: LegacyCoreTokens) {
   } satisfies Record<
     | (typeof homeSectionThemeTokenKeys)[number]
     | (typeof effectThemeTokenKeys)[number]
+    | (typeof progressThemeTokenKeys)[number]
     | (typeof notificationThemeTokenKeys)[number]
     | (typeof workspaceThemeTokenKeys)[number],
     string
@@ -333,6 +362,12 @@ export const themeTokenGroups = [
     name: "Effects & Glows",
     description: "Moving-light, focus, cover, button, rank, paid, discount, and announcement effects.",
     tokens: effectThemeTokenKeys,
+  },
+  {
+    id: "progress-indicators",
+    name: "Progress Indicators",
+    description: "Track, active fill, and reading-progress colors used across homepage and library progress bars.",
+    tokens: progressThemeTokenKeys,
   },
   {
     id: "notifications",
@@ -522,6 +557,14 @@ export const themeTokenLabels: Record<ThemeTokenKey, string> = {
   effectPaidGlow: "Paid Release Glow",
   effectDiscountGlow: "Discount Glow",
   effectAnnouncementGlow: "Announcement Glow",
+  progressTrack: "Progress Track",
+  progressFill: "Progress Fill",
+  progressStarting: "Progress · Starting",
+  progressBuilding: "Progress · Building",
+  progressHalfway: "Progress · Halfway",
+  progressStrong: "Progress · Strong",
+  progressNearly: "Progress · Nearly complete",
+  progressComplete: "Progress · Complete",
   notificationToastSurface: "Toast Surface",
   notificationToastText: "Toast Text",
   notificationBellBadge: "Notification Bell Badge",
@@ -1176,6 +1219,14 @@ const cssTokenNames: Record<ThemeTokenKey, string> = {
   effectPaidGlow: "--theme-effect-paid-glow",
   effectDiscountGlow: "--theme-effect-discount-glow",
   effectAnnouncementGlow: "--theme-effect-announcement-glow",
+  progressTrack: "--theme-progress-track",
+  progressFill: "--theme-progress-fill",
+  progressStarting: "--theme-progress-starting",
+  progressBuilding: "--theme-progress-building",
+  progressHalfway: "--theme-progress-halfway",
+  progressStrong: "--theme-progress-strong",
+  progressNearly: "--theme-progress-nearly",
+  progressComplete: "--theme-progress-complete",
   notificationToastSurface: "--theme-notification-toast-surface",
   notificationToastText: "--theme-notification-toast-text",
   notificationBellBadge: "--theme-notification-bell-badge",

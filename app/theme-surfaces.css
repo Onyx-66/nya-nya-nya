@@ -147,7 +147,10 @@
   text-shadow: 0 0 1rem color-mix(in srgb, var(--theme-effect-section-header-glow) 22%, transparent);
 }
 
-.featured-slider :is(.featured-slider-dots button[aria-pressed="true"], .featured-slider-arrows button) {
+.featured-slider .featured-slider-dots button[aria-pressed="true"] {
+  background: var(--theme-progress-fill) !important;
+}
+.featured-slider .featured-slider-arrows button {
   border-color: color-mix(in srgb, var(--theme-home-featured-accent) 64%, var(--theme-accent-l3)) !important;
   color: var(--theme-home-featured-accent) !important;
 }
@@ -553,7 +556,6 @@
   .hot-week-heading > a.latest-all-action,
   .latest-style-toggle,
   .latest-language-filter > summary,
-  .hot-week-tabs button,
   .editors-pick-actions .button
 ) {
   border-color: color-mix(in srgb, var(--section-accent) 64%, var(--line)) !important;

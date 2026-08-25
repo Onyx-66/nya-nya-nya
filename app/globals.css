@@ -177,13 +177,13 @@
     padding: 0;
     border: 0;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--theme-accent-l3) 74%, transparent);
+    background: var(--theme-progress-track);
     transition: width .18s ease, background .18s ease, box-shadow .18s ease;
   }
   .card-coverflow__progress button.is-active {
     width: 2.1rem;
-    background: var(--theme-effect-moving-light);
-    box-shadow: 0 0 .7rem color-mix(in srgb, var(--theme-effect-moving-light) 45%, transparent);
+    background: var(--theme-progress-fill);
+    box-shadow: 0 0 .7rem color-mix(in srgb, var(--theme-progress-fill) 45%, transparent);
   }
 }
 
@@ -2967,14 +2967,14 @@ img {
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--surface-3);
+  background: var(--theme-progress-track);
 }
 
 .mini-progress i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--theme-progress-fill);
 }
 
 .continue-play {
@@ -14324,14 +14324,14 @@ button:disabled,
   height: 0.3rem;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--surface-strong);
+  background: var(--theme-progress-track);
 }
 
 .library-record-progress i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--theme-progress-fill);
 }
 
 .library-record-status {
@@ -29408,7 +29408,7 @@ button:disabled,
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: var(--line-strong);
+  background: var(--theme-progress-track);
   cursor: pointer;
   transition:
     width 180ms ease,
@@ -29417,7 +29417,7 @@ button:disabled,
 
 .featured-slider-dots button[aria-pressed="true"] {
   width: 30px;
-  background: var(--accent);
+  background: var(--theme-progress-fill);
 }
 
 .featured-slider-fallback-copy {
@@ -31108,14 +31108,14 @@ button:disabled,
   overflow: hidden;
   margin-top: 3px;
   border-radius: 999px;
-  background: var(--surface-3);
+  background: var(--theme-progress-track);
 }
 
 .continue-reading-progress > b {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--site-brand-gradient, var(--accent));
+  background: var(--theme-progress-fill);
 }
 
 .continue-reading-resume {
@@ -35581,31 +35581,25 @@ body:has(.browse-desktop-filter-bar) .browse-desktop-filter-bar > .compact-singl
 }
 
 :is(.continue-reading-progress, .library-record-progress) {
-  --reading-progress-fill: var(--muted);
+  --reading-progress-fill: var(--theme-progress-fill);
 }
-
 :is(.continue-reading-progress, .library-record-progress)[data-progress-tone="starting"] {
-  --reading-progress-fill: #ef7772;
+  --reading-progress-fill: var(--theme-progress-starting);
 }
-
 :is(.continue-reading-progress, .library-record-progress)[data-progress-tone="building"] {
-  --reading-progress-fill: #f2a35f;
+  --reading-progress-fill: var(--theme-progress-building);
 }
-
 :is(.continue-reading-progress, .library-record-progress)[data-progress-tone="halfway"] {
-  --reading-progress-fill: #e1c758;
+  --reading-progress-fill: var(--theme-progress-halfway);
 }
-
 :is(.continue-reading-progress, .library-record-progress)[data-progress-tone="strong"] {
-  --reading-progress-fill: #54c78c;
+  --reading-progress-fill: var(--theme-progress-strong);
 }
-
 :is(.continue-reading-progress, .library-record-progress)[data-progress-tone="nearly"] {
-  --reading-progress-fill: #45c5bd;
+  --reading-progress-fill: var(--theme-progress-nearly);
 }
-
 :is(.continue-reading-progress, .library-record-progress)[data-progress-tone="complete"] {
-  --reading-progress-fill: var(--accent);
+  --reading-progress-fill: var(--theme-progress-complete);
 }
 
 .continue-reading-progress > b,
@@ -44493,12 +44487,12 @@ a.public-team-member-card:focus-visible {
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: var(--line-strong);
+  background: var(--theme-progress-track);
   transition: inline-size 180ms ease, background-color 180ms ease;
 }
 .featured-slider-dots button[aria-pressed="true"] {
   inline-size: 30px;
-  background: var(--accent);
+  background: var(--theme-progress-fill);
 }
 
 .catalog-badge-row {
@@ -45112,13 +45106,13 @@ a.public-team-member-card:focus-visible {
 .continue-reading-progress,
 .library-record-progress {
   overflow: hidden;
-  background: color-mix(in srgb, var(--line) 62%, var(--surface)) !important;
+  background: var(--theme-progress-track) !important;
 }
 
 .continue-reading-progress > b,
-.library-record-progress > b {
-  background: var(--brand-gradient) !important;
-  box-shadow: 0 0 .8rem color-mix(in srgb, var(--accent) 42%, transparent);
+.library-record-progress > i {
+  background: var(--theme-progress-fill) !important;
+  box-shadow: 0 0 .8rem color-mix(in srgb, var(--theme-progress-fill) 42%, transparent);
 }
 
 .formatted-announcement-text {
@@ -52919,19 +52913,24 @@ body::-webkit-scrollbar {
   transform: none;
 }
 
-/* v48.18.1 cascade correction: preserve the filled active Weekly tab. */
+/* v48.18.1 cascade correction: preserve a clearly distinct inactive/active period state. */
 .hot-this-week .hot-week-tabs button {
-  border: 0 !important;
-  background: transparent !important;
-  color: color-mix(in srgb, var(--theme-text-color) 78%, var(--theme-main-background)) !important;
+  border: 1px solid color-mix(in srgb, var(--theme-home-hot-this-week-accent) 28%, var(--theme-accent-l3)) !important;
+  background: color-mix(in srgb, var(--theme-home-hot-this-week-accent) 9%, var(--theme-accent-l1)) !important;
+  color: color-mix(in srgb, var(--theme-home-hot-this-week-accent) 72%, var(--theme-text-color)) !important;
   box-shadow: none !important;
 }
 
+.hot-this-week .hot-week-tabs button:is(:hover, :focus-visible) {
+  border-color: color-mix(in srgb, var(--theme-home-hot-this-week-accent) 58%, var(--theme-accent-l3)) !important;
+  background: color-mix(in srgb, var(--theme-home-hot-this-week-accent) 18%, var(--theme-accent-l1)) !important;
+}
+
 .hot-this-week .hot-week-tabs button.is-active {
-  border: 0 !important;
-  background: var(--theme-primary-l1) !important;
+  border-color: var(--theme-home-hot-this-week-accent) !important;
+  background: var(--theme-home-hot-this-week-accent) !important;
   color: var(--theme-button-accent-alternate) !important;
-  box-shadow: 0 .3rem .75rem color-mix(in srgb, var(--theme-primary) 25%, transparent) !important;
+  box-shadow: 0 .3rem .75rem color-mix(in srgb, var(--theme-home-hot-this-week-accent) 25%, transparent) !important;
 }
 
 /* v48.18.2: align Most Popular with shared page gutters and center row dividers. */
@@ -61209,5 +61208,21 @@ dialog::backdrop,
 @media (prefers-reduced-motion: reduce) {
   .home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-card {
     transition: none;
+  }
+}
+
+/* v49.15.9: prioritize trusted external metadata before manual series details. */
+.series-request-import-first {
+  border-color: color-mix(in srgb, var(--theme-home-featured-accent) 38%, var(--line));
+}
+.series-request-import-first > legend {
+  color: var(--theme-home-featured-accent);
+}
+.upload-import-source-picker {
+  width: min(100%, 18rem);
+}
+@media (max-width: 680px) {
+  .upload-import-source-picker {
+    width: 100%;
   }
 }

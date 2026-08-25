@@ -51,7 +51,6 @@ export const seriesRequestMetadataSchema = z
     externalSources: z.array(externalSourceSchema).max(2).default([]),
     submitterNotes: z.string().trim().max(4_000).default(""),
     duplicateConfirmation: z.boolean().default(false),
-    duplicateExplanation: z.string().trim().max(2_000).default(""),
   })
   .superRefine((value, context) => {
     const duplicateSets: Array<
@@ -84,17 +83,6 @@ export const seriesRequestMetadataSchema = z
         code: "custom",
         path: ["requestingTeamIds"],
         message: "A requesting team can only be selected once.",
-      });
-    }
-    if (
-      value.duplicateConfirmation &&
-      value.duplicateExplanation.trim().length < 12
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["duplicateExplanation"],
-        message:
-          "Explain why the similar title is a distinct series in at least 12 characters.",
       });
     }
   });

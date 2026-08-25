@@ -101,7 +101,6 @@ function metadataFromRow(row: AdminRequestRow): SeriesRequestMetadata {
     ].filter(Boolean) as SeriesRequestMetadata["externalSources"],
     submitterNotes: row.submitterNotes,
     duplicateConfirmation: Boolean(row.duplicateConfirmation),
-    duplicateExplanation: row.duplicateExplanation,
   };
 }
 

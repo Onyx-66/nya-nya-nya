@@ -142,7 +142,7 @@ function requestWriteValues(metadata: SeriesRequestMetadata) {
     sources.canonicalSourceUrl,
     metadata.submitterNotes,
     metadata.duplicateConfirmation ? 1 : 0,
-    metadata.duplicateExplanation,
+    "",
   ] as const;
 }
 
@@ -375,13 +375,12 @@ export async function updateSeriesRequest(
   if (
     submitting &&
     duplicates.riskScore > 0 &&
-    (!input.metadata.duplicateConfirmation ||
-      input.metadata.duplicateExplanation.length < 12)
+    !input.metadata.duplicateConfirmation
   ) {
     throw new ApiError(
       409,
       "POSSIBLE_DUPLICATE_CONFIRMATION_REQUIRED",
-      "Review the possible matches and explain why this is a distinct series.",
+      "Review the possible matches and confirm that this is a distinct series.",
     );
   }
   if (submitting) {
@@ -896,7 +895,6 @@ export async function cloneSeriesRequestToDraft(
     ].filter(Boolean) as SeriesRequestMetadata["externalSources"],
     submitterNotes: current.submitterNotes,
     duplicateConfirmation: Boolean(current.duplicateConfirmation),
-    duplicateExplanation: current.duplicateExplanation,
   };
   return createSeriesRequestDraft(
     db,

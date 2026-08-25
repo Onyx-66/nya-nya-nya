@@ -19,6 +19,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import {
   AdminCombobox,
@@ -105,7 +107,6 @@ type RequestForm = {
   mangaUpdatesUrl: string;
   submitterNotes: string;
   duplicateConfirmation: boolean;
-  duplicateExplanation: string;
 };
 
 const emptyForm: RequestForm = {
@@ -128,7 +129,6 @@ const emptyForm: RequestForm = {
   mangaUpdatesUrl: "",
   submitterNotes: "",
   duplicateConfirmation: false,
-  duplicateExplanation: "",
 };
 
 type ApiErrorBody = {
@@ -136,7 +136,7 @@ type ApiErrorBody = {
 };
 
 type MetadataPreview = {
-  source: "MANGADEX";
+  source: "MANGADEX" | "MANGAUPDATES";
   externalId: string;
   sourceUrl: string;
   responseHash: string;
@@ -246,7 +246,6 @@ function requestData(form: RequestForm, teamId: string) {
     externalSources,
     submitterNotes: form.submitterNotes,
     duplicateConfirmation: form.duplicateConfirmation,
-    duplicateExplanation: form.duplicateExplanation,
   };
 }
 
@@ -277,7 +276,6 @@ function formFromRequest(record: RequestRecord): RequestForm {
     mangaUpdatesUrl: mangaUpdates?.sourceUrl ?? "",
     submitterNotes: record.submitterNotes ?? "",
     duplicateConfirmation: Boolean(record.duplicateConfirmation),
-    duplicateExplanation: record.duplicateExplanation ?? "",
   };
 }
 
@@ -357,6 +355,184 @@ function availableImportFields(preview: MetadataPreview) {
   return available;
 }
 
+type SourceImportWorkspaceProps = {
+  form: RequestForm;
+  setForm: Dispatch<SetStateAction<RequestForm>>;
+  editable: boolean;
+  busy: boolean;
+  importBusy: boolean;
+  importSource: "MANGADEX" | "MANGAUPDATES";
+  setImportSource: (source: "MANGADEX" | "MANGAUPDATES") => void;
+  metadataPreview: MetadataPreviewResult | null;
+  acceptedImportFields: Set<ImportField>;
+  previewExternalMetadata: () => Promise<void>;
+  toggleImportField: (field: ImportField) => void;
+  applyMetadataPreview: () => void;
+};
+
+function SourceImportWorkspace({
+  form,
+  setForm,
+  editable,
+  busy,
+  importBusy,
+  importSource,
+  setImportSource,
+  metadataPreview,
+  acceptedImportFields,
+  previewExternalMetadata,
+  toggleImportField,
+  applyMetadataPreview,
+}: SourceImportWorkspaceProps) {
+  return (
+    <fieldset disabled={!editable || busy} className="series-request-import-first">
+      <legend>Import from MangaDex or MangaUpdates</legend>
+      <p className="upload-helper">
+        Start here to prefill the request from a trusted source, then review the imported fields before saving or submitting.
+      </p>
+      <label className="upload-import-source-picker">
+        <span>Import source</span>
+        <UnifiedSingleSelect
+          value={importSource}
+          onChange={(event) => setImportSource(event.target.value as "MANGADEX" | "MANGAUPDATES")}
+        >
+          <option value="MANGADEX">MangaDex</option>
+          <option value="MANGAUPDATES">MangaUpdates</option>
+        </UnifiedSingleSelect>
+      </label>
+      <div className="upload-form-grid">
+        <label>
+          <span>{importSource === "MANGADEX" ? "MangaDex ID" : "MangaUpdates ID"}</span>
+          <input
+            value={importSource === "MANGADEX" ? form.mangaDexId : form.mangaUpdatesId}
+            onChange={(event) =>
+              setForm((current) => importSource === "MANGADEX"
+                ? { ...current, mangaDexId: event.target.value }
+                : { ...current, mangaUpdatesId: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          <span>{importSource === "MANGADEX" ? "MangaDex URL" : "MangaUpdates URL"}</span>
+          <input
+            type="url"
+            value={importSource === "MANGADEX" ? form.mangaDexUrl : form.mangaUpdatesUrl}
+            onChange={(event) =>
+              setForm((current) => importSource === "MANGADEX"
+                ? { ...current, mangaDexUrl: event.target.value }
+                : { ...current, mangaUpdatesUrl: event.target.value })
+            }
+          />
+        </label>
+      </div>
+      <div className="request-import-workspace">
+        <div>
+          <strong>Metadata preview</strong>
+          <p className="upload-helper">
+            Load a read-only {importSource === "MANGADEX" ? "MangaDex" : "MangaUpdates"} preview, then choose each field you want to apply. Nothing is published or changed automatically.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="button button-secondary"
+          disabled={
+            !editable ||
+            busy ||
+            importBusy ||
+            (importSource === "MANGADEX"
+              ? !form.mangaDexId.trim() && !form.mangaDexUrl.trim()
+              : !form.mangaUpdatesId.trim() && !form.mangaUpdatesUrl.trim())
+          }
+          onClick={() => void previewExternalMetadata()}
+        >
+          {importBusy ? <DotsRing size={18} /> : <FileText size={18} />}
+          {importBusy ? "Loading preview…" : `Preview ${importSource === "MANGADEX" ? "MangaDex" : "MangaUpdates"} metadata`}
+        </button>
+      </div>
+      {metadataPreview ? (
+        <section
+          className="request-import-preview"
+          aria-labelledby="mangadex-preview-heading"
+        >
+          <header>
+            <div>
+              <span>
+                {metadataPreview.data.cached
+                  ? `Cached ${metadataPreview.data.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} response`
+                  : `Fresh ${metadataPreview.data.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} response`}
+              </span>
+              <h3 id="mangadex-preview-heading">
+                {metadataPreview.data.fields.title ?? metadataPreview.data.externalId}
+              </h3>
+            </div>
+            <small>
+              Previewed {new Date(metadataPreview.data.fetchedAt).toLocaleString()}
+            </small>
+          </header>
+          {metadataPreview.duplicate ? (
+            <div className="upload-alert is-error" role="alert">
+              <WarningCircle size={19} />
+              <span>
+                Exact {metadataPreview.data.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} match: <Link href={`/title/${metadataPreview.duplicate.slug}`}>
+                  {metadataPreview.duplicate.title}
+                </Link>. This identifier cannot be used for a new series.
+              </span>
+            </div>
+          ) : null}
+          {metadataPreview.duplicateRequest ? (
+            <div className="upload-alert is-error" role="alert">
+              <WarningCircle size={19} />
+              An active request already uses this {metadataPreview.data.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} identifier: {metadataPreview.duplicateRequest.title} (
+              {metadataPreview.duplicateRequest.status.replaceAll("_", " ").toLowerCase()}).
+            </div>
+          ) : null}
+          {metadataPreview.data.fields.status === "CANCELLED" ? (
+            <div className="upload-alert" role="status">
+              <WarningCircle size={19} />
+              {metadataPreview.data.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} reports this title as cancelled. Community requests keep their current publication status; an administrator can apply Cancelled when creating or reviewing the canonical series.
+            </div>
+          ) : null}
+          <div className="request-import-fields">
+            {availableImportFields(metadataPreview.data).map((field) => (
+              <label key={field}>
+                <input
+                  type="checkbox"
+                  checked={acceptedImportFields.has(field)}
+                  onChange={() => toggleImportField(field)}
+                />
+                <span>
+                  <strong>{importFieldLabels[field]}</strong>
+                  <small>{importFieldValue(metadataPreview.data, field)}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="request-import-actions">
+            <button
+              type="button"
+              className="button button-primary"
+              disabled={
+                Boolean(metadataPreview.duplicate || metadataPreview.duplicateRequest) ||
+                acceptedImportFields.size === 0
+              }
+              onClick={applyMetadataPreview}
+            >
+              <CheckCircle size={18} /> Apply selected fields
+            </button>
+            <small>
+              MangaUpdates identifiers are accepted for later validation; provider previews remain limited to permitted stable sources.
+            </small>
+          </div>
+        </section>
+      ) : (
+        <p className="upload-helper">
+          Add a MangaDex or MangaUpdates ID/URL above when you want a metadata preview. Provider data remains read-only until you apply selected fields.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 export function AddSeriesRequestPanel() {
   const [teams, setTeams] = useState<TeamOption[]>([]);
   const [teamsLoaded, setTeamsLoaded] = useState(false);
@@ -367,6 +543,7 @@ export function AddSeriesRequestPanel() {
   const [banner, setBanner] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
+  const [importSource, setImportSource] = useState<"MANGADEX" | "MANGAUPDATES">("MANGADEX");
   const [metadataPreview, setMetadataPreview] =
     useState<MetadataPreviewResult | null>(null);
   const [acceptedImportFields, setAcceptedImportFields] = useState<
@@ -479,23 +656,25 @@ export function AddSeriesRequestPanel() {
     return { ...request, revision: payload.data.revision };
   }
 
-  async function previewMangaDex() {
+  async function previewExternalMetadata() {
     setImportBusy(true);
     setError("");
     setMessage("");
     setMetadataPreview(null);
     try {
       if (!teamId) throw new Error("Choose the submitting team first.");
-      const input = form.mangaDexUrl.trim() || form.mangaDexId.trim();
+      const input = importSource === "MANGADEX"
+        ? form.mangaDexUrl.trim() || form.mangaDexId.trim()
+        : form.mangaUpdatesUrl.trim() || form.mangaUpdatesId.trim();
       if (!input) {
-        throw new Error("Enter a MangaDex title URL or UUID to preview.");
+        throw new Error(`Enter a ${importSource === "MANGADEX" ? "MangaDex title URL or UUID" : "MangaUpdates series URL or numeric ID"} to preview.`);
       }
       const preview = await readJson<MetadataPreviewResult>(
         await fetch("/api/v1/series-request-metadata-import", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            source: "MANGADEX",
+            source: importSource,
             input,
             teamId,
             seriesRequestId: requestRecord?.id,
@@ -587,15 +766,21 @@ export function AddSeriesRequestPanel() {
         acceptedImportFields.has("genres") && fields.genres
           ? fields.genres.map((genre) => genre.name).join(", ")
           : current.genres,
-      mangaDexId: acceptedImportFields.has("source")
+      mangaDexId: acceptedImportFields.has("source") && imported.source === "MANGADEX"
         ? imported.externalId
         : current.mangaDexId,
-      mangaDexUrl: acceptedImportFields.has("source")
+      mangaDexUrl: acceptedImportFields.has("source") && imported.source === "MANGADEX"
         ? imported.sourceUrl
         : current.mangaDexUrl,
+      mangaUpdatesId: acceptedImportFields.has("source") && imported.source === "MANGAUPDATES"
+        ? imported.externalId
+        : current.mangaUpdatesId,
+      mangaUpdatesUrl: acceptedImportFields.has("source") && imported.source === "MANGAUPDATES"
+        ? imported.sourceUrl
+        : current.mangaUpdatesUrl,
     }));
     setMessage(
-      "Selected MangaDex fields were applied to the form. Review them before saving or submitting.",
+      `Selected ${imported.source === "MANGADEX" ? "MangaDex" : "MangaUpdates"} fields were applied to the form. Review them before saving or submitting.`,
     );
   }
 
@@ -630,7 +815,7 @@ export function AddSeriesRequestPanel() {
           !form.duplicateConfirmation
         ) {
           throw new Error(
-            "Possible duplicates were found. Review the matches in My Series Requests, then confirm and explain why this is distinct.",
+            "Possible duplicates were found. Review the matches in My Series Requests, then confirm the distinct-series checkbox.",
           );
         }
       }
@@ -780,6 +965,20 @@ export function AddSeriesRequestPanel() {
           void save("SUBMIT");
         }}
       >
+        <SourceImportWorkspace
+          form={form}
+          setForm={setForm}
+          editable={editable}
+          busy={busy}
+          importBusy={importBusy}
+          importSource={importSource}
+          setImportSource={setImportSource}
+          metadataPreview={metadataPreview}
+          acceptedImportFields={acceptedImportFields}
+          previewExternalMetadata={previewExternalMetadata}
+          toggleImportField={toggleImportField}
+          applyMetadataPreview={applyMetadataPreview}
+        />
         <fieldset disabled={!editable || busy}>
           <legend>Title and team</legend>
           <div className="upload-form-grid">
@@ -1022,186 +1221,6 @@ export function AddSeriesRequestPanel() {
               />
             </label>
           </div>
-          <div className="upload-form-grid">
-            <label>
-              <span>MangaDex ID</span>
-              <input
-                value={form.mangaDexId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    mangaDexId: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              <span>MangaDex URL</span>
-              <input
-                type="url"
-                value={form.mangaDexUrl}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    mangaDexUrl: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              <span>MangaUpdates ID</span>
-              <input
-                value={form.mangaUpdatesId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    mangaUpdatesId: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              <span>MangaUpdates URL</span>
-              <input
-                type="url"
-                value={form.mangaUpdatesUrl}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    mangaUpdatesUrl: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          </div>
-          <div className="request-import-workspace">
-            <div>
-              <strong>MangaDex metadata preview</strong>
-              <p className="upload-helper">
-                Load a read-only preview, then choose each field you want to
-                apply. Nothing is published or changed automatically.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="button button-secondary"
-              disabled={
-                !editable ||
-                busy ||
-                importBusy ||
-                (!form.mangaDexId.trim() && !form.mangaDexUrl.trim())
-              }
-              onClick={() => void previewMangaDex()}
-            >
-              {importBusy ? (
-                <DotsRing size={18} />
-              ) : (
-                <FileText size={18} />
-              )}
-              {importBusy ? "Loading preview…" : "Preview MangaDex metadata"}
-            </button>
-          </div>
-          {metadataPreview ? (
-            <section
-              className="request-import-preview"
-              aria-labelledby="mangadex-preview-heading"
-            >
-              <header>
-                <div>
-                  <span>
-                    {metadataPreview.data.cached
-                      ? "Cached provider response"
-                      : "Fresh provider response"}
-                  </span>
-                  <h3 id="mangadex-preview-heading">
-                    {metadataPreview.data.fields.title ??
-                      metadataPreview.data.externalId}
-                  </h3>
-                </div>
-                <small>
-                  Previewed{" "}
-                  {new Date(
-                    metadataPreview.data.fetchedAt,
-                  ).toLocaleString()}
-                </small>
-              </header>
-              {metadataPreview.duplicate ? (
-                <div className="upload-alert is-error" role="alert">
-                  <WarningCircle size={19} />
-                  <span>
-                    Exact MangaDex match:{" "}
-                    <Link
-                      href={`/title/${metadataPreview.duplicate.slug}`}
-                    >
-                      {metadataPreview.duplicate.title}
-                    </Link>
-                    . This identifier cannot be used for a new series.
-                  </span>
-                </div>
-              ) : null}
-              {metadataPreview.duplicateRequest ? (
-                <div className="upload-alert is-error" role="alert">
-                  <WarningCircle size={19} />
-                  An active request already uses this MangaDex ID:{" "}
-                  {metadataPreview.duplicateRequest.title} (
-                  {metadataPreview.duplicateRequest.status
-                    .replaceAll("_", " ")
-                    .toLowerCase()}
-                  ).
-                </div>
-              ) : null}
-              {metadataPreview.data.fields.status === "CANCELLED" ? (
-                <div className="upload-alert" role="status">
-                  <WarningCircle size={19} />
-                  MangaDex reports this title as cancelled. Community requests
-                  keep their current publication status; an administrator can
-                  apply Cancelled when creating or reviewing the canonical
-                  series.
-                </div>
-              ) : null}
-              <div className="request-import-fields">
-                {availableImportFields(metadataPreview.data).map((field) => (
-                  <label key={field}>
-                    <input
-                      type="checkbox"
-                      checked={acceptedImportFields.has(field)}
-                      onChange={() => toggleImportField(field)}
-                    />
-                    <span>
-                      <strong>{importFieldLabels[field]}</strong>
-                      <small>{importFieldValue(metadataPreview.data, field)}</small>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <div className="request-import-actions">
-                <button
-                  type="button"
-                  className="button button-primary"
-                  disabled={
-                    Boolean(
-                      metadataPreview.duplicate ||
-                        metadataPreview.duplicateRequest,
-                    ) || acceptedImportFields.size === 0
-                  }
-                  onClick={applyMetadataPreview}
-                >
-                  <CheckCircle size={18} /> Apply selected fields
-                </button>
-                <small>
-                  MangaUpdates import remains unavailable because no permitted
-                  stable provider API is configured; manual identifiers are
-                  still validated.
-                </small>
-              </div>
-            </section>
-          ) : (
-            <p className="upload-helper">
-              MangaUpdates import is unavailable because no permitted stable
-              provider API is configured. Manual source IDs remain supported
-              and are checked for exact duplicates.
-            </p>
-          )}
         </fieldset>
         <fieldset disabled={!editable || busy}>
           <legend>Reviewer context</legend>
@@ -1231,23 +1250,9 @@ export function AddSeriesRequestPanel() {
             />
             I reviewed possible matches and believe this is a distinct series.
           </label>
-          {form.duplicateConfirmation ? (
-            <label className="upload-field-wide">
-              <span>Why this is not a duplicate</span>
-              <textarea
-                minLength={12}
-                required
-                rows={3}
-                value={form.duplicateExplanation}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    duplicateExplanation: event.target.value,
-                  }))
-                }
-              />
-            </label>
-          ) : null}
+          <small className="upload-helper">
+            This confirmation records that you reviewed the possible matches; no additional explanation is required.
+          </small>
         </fieldset>
         <div className="upload-action-bar">
           <button
