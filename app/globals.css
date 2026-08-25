@@ -60490,15 +60490,15 @@ body:has(.catalog-toolbar) .catalog-cover-bottom-badges .series-status-badge.sta
 .home-announcement-banner[data-accent-line="bottom"]::before { border-top: 0; border-bottom: 2px solid color-mix(in srgb, var(--campaign-primary) 84%, #fff); }
 .home-announcement-banner[data-effect="pulse"] { animation: home-announcement-soft-pulse 3.8s ease-in-out infinite; }
 
-/* Canonical discount ribbon: one top-left diagonal treatment across all cover contexts. */
+/* Canonical discount badge: one horizontal top-right treatment across all cover contexts. */
 .home-main :is(.active-discount-cover-badge, .v481-ticket-ribbon),
 .active-discount-cover-badge,
 .discount-card .discount-badge {
   position: absolute !important;
   top: .7rem !important;
-  right: auto !important;
+  right: .7rem !important;
   bottom: auto !important;
-  left: .05rem !important;
+  left: auto !important;
   z-index: 8;
   display: inline-flex !important;
   width: 6.25rem;
@@ -60518,7 +60518,7 @@ body:has(.catalog-toolbar) .catalog-cover-bottom-badges .series-status-badge.sta
   text-transform: none !important;
   white-space: nowrap;
   box-shadow: 0 .35rem .85rem rgb(128 24 72 / 42%) !important;
-  transform: rotate(-32deg);
+  transform: none !important;
   transform-origin: center;
 }
 

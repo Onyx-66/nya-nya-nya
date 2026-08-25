@@ -1,5 +1,6 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
+import { latestPageItems } from "./latest-pagination";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
@@ -2786,16 +2787,10 @@ function LatestUpdatesGrid({
     };
   }, [effectivePeriod, page, pageSize, releaseLanguages, revision, useHomeTable]);
 
-  const pageItems = useMemo<Array<number | "ellipsis">>(() => {
-    if (pageCount <= 5) {
-      return Array.from({ length: pageCount }, (_, index) => index + 1);
-    }
-    if (page <= 3) return [1, 2, 3, "ellipsis", pageCount];
-    if (page >= pageCount - 2) {
-      return [1, "ellipsis", pageCount - 2, pageCount - 1, pageCount];
-    }
-    return [1, "ellipsis", page - 1, page, page + 1, "ellipsis", pageCount];
-  }, [page, pageCount]);
+  const pageItems = useMemo<Array<number | "ellipsis">>(
+    () => latestPageItems(page, pageCount),
+    [page, pageCount],
+  );
   const feedRows = useMemo(
     () =>
       records

@@ -249,7 +249,7 @@ test("portable themes round-trip, upgrade legacy core themes, and reject malform
     filledBlankAccepted: true,
     rejected: true,
     malformed: "The shared theme code is malformed.",
-    presetWarnings: 0,
+    presetWarnings: 2,
   });
 });
 

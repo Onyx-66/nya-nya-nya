@@ -109,6 +109,52 @@ test("site configuration preserves Classic for legacy data and accepts CardCover
   assert.equal(validation.status, 0, validation.stderr);
 });
 
+test("Claude presets replace the circled Slate Rain and Jade Night themes", async () => {
+  const model = await readProjectFile("lib/theme-system.ts");
+  assert.match(model, /name: "Ember Cloth"/u);
+  assert.match(model, /name: "Light Brick"/u);
+  assert.doesNotMatch(model, /name: "Slate Rain"/u);
+  assert.doesNotMatch(model, /name: "Jade Night"/u);
+  assert.match(model, /background: "#1A1815"/u);
+  assert.match(model, /background: "#F5F3EE"/u);
+  assert.match(model, /effectMovingLight: "#D97757"/u);
+  assert.match(model, /homePinnedSeriesAccent: "#D9AE6C"/u);
+});
+
+test("discount badges use the opposite top-right placement and Latest Updates starts with the compact page sequence", async () => {
+  const [css, pagination] = await Promise.all([
+    readProjectFile("app/globals.css"),
+    readProjectFile("components/nyascans/latest-pagination.ts"),
+  ]);
+  assert.match(css, /Canonical discount badge: one horizontal top-right treatment/u);
+  assert.match(css, /right: \.7rem !important;[\s\S]*?left: auto !important;[\s\S]*?transform: none !important;/u);
+  assert.doesNotMatch(css, /left: \.05rem !important;[\s\S]*?transform: rotate\(-32deg\)/u);
+  assert.match(pagination, /if \(page <= 2\) return \[1, 2, "ellipsis", pageCount\]/u);
+});
+
+test("Latest Updates pagination helper renders compact, direct navigation sequences", () => {
+  const validation = spawnSync(
+    fileURLToPath(new URL("../node_modules/.bin/tsx", import.meta.url)),
+    [
+      "--eval",
+      `import { latestPageItems } from './components/nyascans/latest-pagination.ts';
+       const cases = [
+         [latestPageItems(1, 9), [1, 2, 'ellipsis', 9]],
+         [latestPageItems(2, 9), [1, 2, 'ellipsis', 9]],
+         [latestPageItems(5, 9), [1, 'ellipsis', 4, 5, 6, 'ellipsis', 9]],
+         [latestPageItems(9, 9), [1, 'ellipsis', 7, 8, 9]],
+       ];
+       for (const [actual, expected] of cases) {
+         if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+           throw new Error('pagination mismatch: ' + JSON.stringify(actual));
+         }
+       }`,
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+  assert.equal(validation.status, 0, validation.stderr);
+});
+
 test("Theme Builder exposes independently addressable groups, workspace tokens, and both interchange formats", async () => {
   const [model, builder, surfaces] = await Promise.all([
     readProjectFile("lib/theme-system.ts"),
