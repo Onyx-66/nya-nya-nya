@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
@@ -452,9 +452,7 @@ export function SeriesReportsPanel() {
             </span>
           </div>
           {loading ? (
-            <p className="support-admin-empty" role="status">
-              Loading series reports…
-            </p>
+            <div className="dots-ring-loading support-admin-empty" role="status"><DotsRing size="md" label={null} /><span>Loading series reports…</span></div>
           ) : reports.length ? (
             <div className="support-admin-ticket-list">
               {reports.map((report) => (

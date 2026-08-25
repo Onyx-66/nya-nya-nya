@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
@@ -1331,9 +1331,9 @@ export function NewSeriesQueuePanel() {
         <div className="admin-master-detail nsq-master-detail">
           <aside className="admin-record-list nsq-request-list">
             {listLoading ? (
-              <div className="nsq-list-loading" role="status">
-                <span className="admin-spinner" />
-                Loading requests…
+              <div className="dots-ring-loading nsq-list-loading" role="status">
+                <DotsRing size="md" label={null} />
+                <span>Loading requests…</span>
               </div>
             ) : requests.length ? (
               requests.map((request) => (
@@ -1448,8 +1448,8 @@ export function NewSeriesQueuePanel() {
 
           <section className="nsq-detail-shell">
             {detailLoading ? (
-              <div className="admin-state-card" role="status">
-                <span className="admin-spinner" />
+              <div className="admin-state-card dots-ring-loading" role="status">
+                <DotsRing size="lg" label={null} />
                 <h3>Loading request</h3>
                 <p>Retrieving private media and review history…</p>
               </div>

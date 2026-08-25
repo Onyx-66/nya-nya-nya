@@ -1,9 +1,10 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
-import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, SpinnerGap, TextB, TextItalic, Trash } from "@phosphor-icons/react";
+import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, TextB, TextItalic, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 import { FormattedAnnouncementText } from "@/components/nyascans/FormattedAnnouncementText";
@@ -234,7 +235,7 @@ export function HomePromotionsPanel() {
             </div>
             <label><span>Link label</span><input value={announcement.linkLabel} onChange={(event) => setAnnouncement((current) => ({ ...current, linkLabel: event.target.value }))} /></label>
             <label><span>Link</span><input value={announcement.linkUrl} placeholder="/support" onChange={(event) => setAnnouncement((current) => ({ ...current, linkUrl: event.target.value }))} /></label>
-            <button className="button button-primary" type="button" disabled={busy || !announcement.title.trim() || !announcement.body.trim()} onClick={() => void createAnnouncement()}>{busy ? <SpinnerGap className="spin" /> : <Plus />} Add announcement</button>
+            <button className="button button-primary" type="button" disabled={busy || !announcement.title.trim() || !announcement.body.trim()} onClick={() => void createAnnouncement()}>{busy ? <DotsRing /> : <Plus />} Add announcement</button>
           </div>
           <div className="v46-announcement-admin-list">{data.announcements.map((item) => <article key={item.id} data-type={item.type}><Bell /><div><small>{item.type}</small><strong>{item.title}</strong><FormattedAnnouncementText body={item.body} /></div><button className="button button-secondary" type="button" onClick={() => void toggleAnnouncement(item)}>{item.isActive ? "Hide" : "Activate"}</button><button type="button" className="v46-icon-danger" aria-label={`Delete ${item.title}`} onClick={() => void mutate({ action: "DELETE_ANNOUNCEMENT", id: item.id, revision: item.revision }, "Announcement deleted.")}><Trash /></button></article>)}</div>
         </section>
@@ -314,7 +315,7 @@ export function HomePromotionsPanel() {
 <input type="checkbox" checked={ad.isActive} onChange={(event) => setAd((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active campaign (maximum two, one per slot)</span></label>
             <label className="v46-admin-switch"><input type="checkbox" checked={ad.resetAudience} onChange={(event) => setAd((current) => ({ ...current, resetAudience: event.target.checked }))} /><span>Show again to dismissed viewers</span></label>
             <div className="floating-ad-form-actions v46-span-two">
-              <button className="button button-primary" type="button" disabled={busy || !ad.title.trim()} onClick={() => void saveAd()}>{busy ? <SpinnerGap className="spin" /> : null} Save floating ad</button>
+              <button className="button button-primary" type="button" disabled={busy || !ad.title.trim()} onClick={() => void saveAd()}>{busy ? <DotsRing /> : null} Save floating ad</button>
               {selectedAd ? <button className="button button-danger" type="button" disabled={busy} onClick={() => void deleteAd()}><Trash /> Delete ad</button> : null}
             </div>
           </div>

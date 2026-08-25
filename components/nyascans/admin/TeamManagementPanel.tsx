@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
@@ -1048,7 +1048,7 @@ export function TeamManagementPanel() {
                       <Trash size={17} />
                     </button>
                     {memberBusy === member.userId ? (
-                      <ArrowClockwise className="is-spinning" size={18} />
+                      <DotsRing size="sm" label={null} />
                     ) : (
                       <ShieldCheck size={18} />
                     )}

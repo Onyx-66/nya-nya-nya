@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -332,7 +333,7 @@ export function RewardSettingsPanel() {
       </header>
 
       {status === "loading" ? (
-        <div className="settings-loading">Loading community economy…</div>
+        <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading community economy…</span></div>
       ) : (
         <fieldset
           className="reward-settings-content"

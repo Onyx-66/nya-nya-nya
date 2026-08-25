@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { CommercialSettingsPanel } from "@/components/nyascans/CommercialSettingsPanel";
 import { StoreManagementPanel } from "@/components/nyascans/StoreManagementPanel";

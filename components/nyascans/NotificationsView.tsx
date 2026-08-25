@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
 import {
@@ -11,7 +12,7 @@ import {
   MegaphoneSimple,
   Pulse,
   SignIn,
-  SpinnerGap,
+
   UsersThree,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -474,13 +475,8 @@ export function NotificationsView({
                   role="status"
                   aria-live="polite"
                 >
-                  <SpinnerGap className="is-spinning" size={24} />
+                  <DotsRing size={24} />
                   <span>Loading notifications…</span>
-                  <div aria-hidden="true">
-                    {Array.from({ length: 4 }, (_, index) => (
-                      <i key={index} />
-                    ))}
-                  </div>
                 </div>
               ) : loadError ? (
                 <div className="notifications-error" role="alert">

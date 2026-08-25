@@ -15,6 +15,7 @@ import {
   Star,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";
 
 type HotSeries = {
@@ -191,8 +192,9 @@ export function HotThisWeek() {
       </nav>
 
       {loading ? (
-        <div className="hot-week-list hot-week-list-loading" aria-label="Loading weekly rankings">
-          {Array.from({ length: 6 }, (_, index) => <span key={index} />)}
+        <div className="dots-ring-loading hot-week-list hot-week-list-loading" role="status" aria-label="Loading weekly rankings">
+          <DotsRing size="lg" label={null} />
+          <span>Loading weekly rankings…</span>
         </div>
       ) : error ? (
         <div className="hot-week-state" role="alert">

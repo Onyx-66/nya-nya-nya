@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
 import {
@@ -402,8 +402,8 @@ export function ContentVisibilityPanel(_props: {
         }
       >
         {paidVisibilityAccess === "loading" ? (
-          <div className="admin-paid-visibility-loading" role="status">
-            <span className="admin-spinner" />
+          <div className="dots-ring-loading admin-paid-visibility-loading" role="status">
+            <DotsRing size="md" label={null} />
             <span>Checking the live reader-site policy…</span>
           </div>
         ) : paidVisibilityAccess === "denied" ? (
@@ -484,8 +484,8 @@ export function ContentVisibilityPanel(_props: {
       </AdminSectionCard>
 
       {loading ? (
-        <section className="admin-state-card" role="status" aria-live="polite">
-          <span className="admin-spinner" />
+        <section className="admin-state-card dots-ring-loading" role="status" aria-live="polite">
+          <DotsRing size="lg" label={null} />
           <h3>Loading content visibility</h3>
           <p>Loading the latest chapter access policy and exceptions…</p>
         </section>

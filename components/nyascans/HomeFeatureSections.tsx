@@ -21,6 +21,8 @@ import {
   useState,
 } from "react";
 import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
+import { CardCoverFlow } from "@/components/nyascans/CardCoverFlow";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import {
@@ -346,10 +348,9 @@ function PinnedLoading() {
       aria-label="Pinned Series carousel"
       aria-busy="true"
     >
-      <div className="v481-pinned-track">
-        {Array.from({ length: 3 }, (_, index) => (
-          <span className="v481-pinned-slide" key={index} />
-        ))}
+      <div className="v481-pinned-track dots-ring-loading">
+        <DotsRing size="lg" label={null} />
+        <span>Loading Pinned Series…</span>
       </div>
     </div>
   );
@@ -435,8 +436,19 @@ export function PinnedSeriesSection({
       {loading ? (
         <PinnedLoading />
       ) : featuredRecords.length ? (
-        <div
-          className="v481-pinned-stage"
+        <>
+          <div className="card-coverflow-desktop">
+            <CardCoverFlow
+              items={featuredRecords}
+              label="Pinned Series"
+              activeIndex={activeIndex}
+              onActiveIndexChange={setActiveIndex}
+              autoAdvanceMs={7000}
+              renderCard={(record) => <PinnedSeriesCard record={record} featured />}
+            />
+          </div>
+          <div
+            className="v481-pinned-stage v481-pinned-touch-only"
           role="region"
           aria-roledescription="carousel"
           aria-label="Pinned Series carousel"
@@ -500,7 +512,8 @@ export function PinnedSeriesSection({
               ))}
             </div>
           ) : null}
-                </div>
+          </div>
+        </>
       ) : error ? (
         <div className="v481-empty-state" role="alert">
           <PushPin size={28} />
@@ -538,8 +551,9 @@ export function PinnedSeriesDirectory({
         </div>
       </header>
       {loading ? (
-        <div className="v481-directory-grid is-loading" aria-label="Loading Pinned Series">
-          {Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+        <div className="dots-ring-loading v481-directory-grid is-loading" role="status" aria-label="Loading Pinned Series">
+          <DotsRing size="xl" label={null} />
+          <span>Loading Pinned Series…</span>
         </div>
       ) : error ? (
         <div className="public-discovery-error" role="alert">{error}</div>
@@ -726,10 +740,11 @@ function DiscountTicket({
   }
 }
 
-function DiscountLoading({ count = 4 }: { count?: number }) {
+function DiscountLoading({ count: _count = 4 }: { count?: number }) {
   return (
-    <div className="v481-discount-rail is-loading" aria-label="Loading discounts">
-      {Array.from({ length: count }, (_, index) => <span key={index} />)}
+    <div className="dots-ring-loading v481-discount-rail is-loading" role="status" aria-label="Loading discounts">
+      <DotsRing size="xl" label={null} />
+      <span>Loading discounts…</span>
     </div>
   );
 }
@@ -863,7 +878,10 @@ export function RecentReviewsSection() {
           onPointerUp={syncActiveReview}
         >
         {loading
-          ? Array.from({ length: 3 }, (_, index) => <span className="recent-review-skeleton" key={index} />)
+          ? <div className="dots-ring-loading recent-review-loading" role="status" aria-label="Loading recent reviews">
+              <DotsRing size="xl" label={null} />
+              <span>Loading recent reviews…</span>
+            </div>
           : error ? (
             <div className="recent-reviews-empty" role="alert">
               <Star size={26} />
@@ -1018,9 +1036,7 @@ const HOME_FEATURE_CSS = `
   .v481-pin-copy em { display:-webkit-box; overflow:hidden; max-width:42rem; color:rgb(255 255 255 / 76%); font-size:.82rem; font-style:normal; line-height:1.55; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
   .v481-pinned-bento > .v481-pin-card.is-small { min-height:0; }
   .v481-art-placeholder { display:grid; place-items:center; background:linear-gradient(135deg,var(--surface-strong),color-mix(in srgb,var(--accent) 16%,var(--surface-2))); color:var(--muted); }
-  .v481-pinned-bento.is-loading > span,.v481-directory-grid.is-loading > span,.v481-discount-rail.is-loading > span { display:block; min-height:12rem; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:linear-gradient(100deg,var(--surface) 25%,var(--surface-2) 42%,var(--surface) 62%); background-size:300% 100%; animation:v481-skeleton 1.4s ease infinite; }
   .v481-pinned-stage.is-loading .v481-pinned-track { overflow:hidden; }
-  .v481-pinned-stage.is-loading .v481-pinned-slide { min-height:20rem; aspect-ratio:2 / 1; border:1px solid var(--line); border-radius:var(--site-card-radius,var(--radius)); background:linear-gradient(100deg,var(--surface) 25%,var(--surface-2) 42%,var(--surface) 62%); background-size:300% 100%; animation:v481-skeleton 1.4s ease infinite; }
   .v481-pinned-bento.is-loading > span:first-child { grid-column:span 2; grid-row:span 2; }
   .v481-discounts-section { position:relative; padding-block:clamp(1rem,2.3vw,1.6rem); border:0; border-radius:0; background:transparent; box-shadow:none; }
   .v481-discount-rail { display:grid; grid-auto-columns:minmax(0,100%); grid-auto-flow:column; gap:1rem; overflow-x:auto; overscroll-behavior-inline:contain; padding:.2rem .1rem .8rem; scroll-snap-type:inline mandatory; scrollbar-width:thin; }
@@ -1065,7 +1081,6 @@ const HOME_FEATURE_CSS = `
   @keyframes v481-pin-fade { from { opacity:.15; transform:translateY(.3rem); } to { opacity:1; transform:none; } }
   @property --v487-pin-angle { syntax:'<angle>'; initial-value:0deg; inherits:false; }
   @keyframes v487-pin-orbit { to { --v487-pin-angle:360deg; } }
-  @keyframes v481-skeleton { 0% { background-position:100% 0; } 100% { background-position:0 0; } }
   .v481-spotlight-card { display:block; width:min(100%,820px); margin-inline:auto; overflow:hidden; border:1px solid color-mix(in srgb,var(--accent) 34%,var(--line)); border-radius:var(--site-card-radius,var(--radius)); background:linear-gradient(145deg,color-mix(in srgb,var(--surface-2) 88%,#071426),var(--surface)); box-shadow:0 1.5rem 3rem rgb(0 0 0 / 28%); }
   .v481-spotlight-cover { position:relative; display:block; aspect-ratio:1.78 / 1; overflow:hidden; }
   .v481-spotlight-cover picture,.v481-spotlight-cover img { display:block; width:100%; height:100%; }

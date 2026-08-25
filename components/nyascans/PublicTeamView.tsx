@@ -15,6 +15,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { FormattedCommentText } from "@/components/nyascans/EnhancedDiscussionSection";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { TeamDiscussionPanel } from "@/components/nyascans/TeamDiscussionPanel";
@@ -352,9 +353,8 @@ export function PublicTeamView({
         role="status"
         aria-live="polite"
       >
-        <span className="public-team-loading-banner" aria-hidden="true" />
-        <span className="public-team-loading-logo" aria-hidden="true" />
-        <strong>Loading publishing team...</strong>
+        <DotsRing size="xl" label={null} />
+        <strong>Loading publishing team…</strong>
       </main>
     );
   }

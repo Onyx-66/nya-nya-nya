@@ -1,5 +1,4 @@
 "use client";
-
 import {
   ArrowClockwise,
   Check,
@@ -25,10 +24,12 @@ import type { ThemeController } from "@/components/nyascans/UserThemeSystem";
 import { themeForPreset } from "@/components/nyascans/UserThemeSystem";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import {
+  blankThemeMarkdownTemplate,
   blankThemeTemplate,
   cloneTheme,
   cssVariableForToken,
   customThemeReference,
+  exportThemeMarkdown,
   isCustomThemeReference,
   MAX_SAVED_CUSTOM_THEMES,
   MAX_SHORTLISTED_THEMES,
@@ -37,6 +38,7 @@ import {
   themeDocumentSchema,
   themeShareUrl,
   themeTokenGroups,
+  type ThemeShareFormat,
   themeTokenLabels,
   userThemePresets,
   THEME_IMPORT_LIMIT,
@@ -298,6 +300,9 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [contrastAccepted, setContrastAccepted] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set([themeTokenGroups[0]?.id ?? "core-palette"]),
+  );
   const initialized = useRef(false);
   const initializationScheduled = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -401,12 +406,36 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
     [restoreActiveTheme],
   );
 
-  function updateDraft(next: ThemeDocument) {
+  function updateDraft(next: ThemeDocument, editedGroupId?: string) {
     const parsed = themeDocumentSchema.parse(next);
     setDraft(parsed);
     setDirty(true);
     setContrastAccepted(false);
+    if (editedGroupId) {
+      setOpenGroups((current) => {
+        const nextOpen = new Set(current);
+        nextOpen.add(editedGroupId);
+        return nextOpen;
+      });
+    }
     clearFeedback();
+  }
+
+  function toggleGroup(groupId: string) {
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }
+
+  function expandAllGroups() {
+    setOpenGroups(new Set(themeTokenGroups.map((group) => group.id)));
+  }
+
+  function collapseAllGroups() {
+    setOpenGroups(new Set());
   }
 
   function createNew() {
@@ -562,13 +591,13 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
     return themeDocumentSchema.parse({ ...draft, name: draftName.trim() });
   }
 
-  async function copyShareUrl() {
+  async function copyShareUrl(format: ThemeShareFormat) {
     const document = portableDraft();
     if (!document) return;
-    const url = themeShareUrl(document, window.location.href);
+    const url = themeShareUrl(document, window.location.href, format);
     try {
       await navigator.clipboard.writeText(url);
-      setMessage("Theme URL copied. Anyone opening it can import this exact theme.");
+      setMessage(`${format === "markdown" ? "Markdown" : "JSON"} theme URL copied. Anyone opening it can import this exact theme.`);
       setError("");
     } catch {
       setImportValue(url);
@@ -576,40 +605,64 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
         importInput.current?.focus();
         importInput.current?.select();
       });
-      setMessage("Clipboard access was blocked. The share URL is selected below.");
+      setMessage(`Clipboard access was blocked. The ${format === "markdown" ? "Markdown" : "JSON"} share URL is selected below.`);
     }
+  }
+
+  function downloadTextFile(filename: string, content: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   function exportTheme() {
     const portable = portableDraft();
     if (!portable) return;
-    const blob = new Blob([`${JSON.stringify(portable, null, 2)}\n`], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${draftName.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "") || "nyascans-theme"}.json`;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    downloadTextFile(
+      `${draftName.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "") || "nyascans-theme"}.json`,
+      `${JSON.stringify(portable, null, 2)}\n`,
+      "application/json",
+    );
     setMessage("Theme JSON exported.");
     setError("");
   }
 
   function downloadBlankTemplate() {
     const template = blankThemeTemplate();
-    const blob = new Blob([`${JSON.stringify(template, null, 2)}\n`], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "nyascans-blank-theme-template.json";
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    downloadTextFile(
+      "nyascans-blank-theme-template.json",
+      `${JSON.stringify(template, null, 2)}\n`,
+      "application/json",
+    );
     setMessage(
       `Blank template downloaded with every ${Object.keys(template.tokens).length} token key. Fill every color before importing it.`,
     );
+    setError("");
+  }
+
+  function exportMarkdownTheme() {
+    const portable = portableDraft();
+    if (!portable) return;
+    downloadTextFile(
+      `${draftName.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "") || "nyascans-theme"}.md`,
+      exportThemeMarkdown(portable),
+      "text/markdown",
+    );
+    setMessage("Theme Markdown exported.");
+    setError("");
+  }
+
+  function downloadBlankMarkdownTemplate() {
+    downloadTextFile(
+      "nyascans-blank-theme-template.md",
+      blankThemeMarkdownTemplate(),
+      "text/markdown",
+    );
+    setMessage("Blank Markdown template downloaded.");
     setError("");
   }
 
@@ -760,14 +813,23 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
               <button className="button button-secondary" type="button" onClick={createNew}>
                 <Plus size={17} /> Create new
               </button>
-              <button className="button button-secondary" type="button" onClick={() => void copyShareUrl()}>
-                <LinkSimple size={17} /> Copy theme URL
+              <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("json")}>
+                <LinkSimple size={17} /> Copy JSON URL
+              </button>
+              <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("markdown")}>
+                <LinkSimple size={17} /> Copy Markdown URL
               </button>
               <button className="button button-secondary" type="button" onClick={exportTheme}>
-                <DownloadSimple size={17} /> Export theme
+                <DownloadSimple size={17} /> Export JSON
+              </button>
+              <button className="button button-secondary" type="button" onClick={exportMarkdownTheme}>
+                <DownloadSimple size={17} /> Export Markdown
               </button>
               <button className="button button-secondary" type="button" onClick={downloadBlankTemplate}>
-                <DownloadSimple size={17} /> Download blank template
+                <DownloadSimple size={17} /> Blank JSON template
+              </button>
+              <button className="button button-secondary" type="button" onClick={downloadBlankMarkdownTemplate}>
+                <DownloadSimple size={17} /> Blank Markdown template
               </button>
             </div>
             <p className="theme-builder-save-note">
@@ -834,22 +896,22 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
               <div><small>Portable themes</small><h2>Import theme</h2></div>
               <ClipboardText size={22} />
             </header>
-            <p>Paste a shared NyaScans theme URL or the complete exported JSON. Validation is atomic: incomplete themes are never applied.</p>
+            <p>Paste a shared NyaScans theme URL, exported JSON, or human-readable Markdown. Validation is atomic: incomplete themes are never applied.</p>
             <textarea
               ref={importInput}
               value={importValue}
               onChange={(event) => setImportValue(event.target.value)}
-              placeholder="https://…/theme-builder#theme=… or complete theme JSON"
-              aria-label="Theme URL or JSON"
+              placeholder="https://…/theme-builder#theme=…, complete JSON, or NyaScans Markdown"
+              aria-label="Theme URL, JSON, or Markdown"
             />
             <div className="theme-builder-actions">
               <button className="button button-primary" type="button" onClick={() => applyImport(importValue)}>
                 <UploadSimple size={17} /> Import theme
               </button>
               <button className="button button-secondary" type="button" onClick={() => fileInput.current?.click()}>
-                <UploadSimple size={17} /> Choose JSON file
+                <UploadSimple size={17} /> Choose JSON / Markdown file
               </button>
-              <input ref={fileInput} className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importFile(event)} />
+              <input ref={fileInput} className="sr-only" type="file" accept="application/json,.json,text/markdown,.md" onChange={(event) => void importFile(event)} />
             </div>
           </section>
 
@@ -869,21 +931,54 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
             </section>
           ) : null}
 
-          {themeTokenGroups.map((group) => (
-            <section className="theme-builder-card theme-token-group" key={group.name}>
-              <header><div><small>Design tokens</small><h2>{group.name}</h2></div><span>{group.tokens.length}</span></header>
-              <div className="theme-token-list">
-                {group.tokens.map((token) => (
-                  <TokenEditor
-                    key={token}
-                    token={token}
-                    value={draft.tokens[token]}
-                    onChange={(value) => updateDraft({ ...draft, tokens: { ...draft.tokens, [token]: value } })}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+          <section className="theme-builder-card theme-token-groups-toolbar" aria-label="Theme token group controls">
+            <div>
+              <small>Per-section controls</small>
+              <h2>Token groups</h2>
+              <p>Each group is independent. Core Palette opens first; editing any group keeps that group open for continued work.</p>
+            </div>
+            <div className="theme-token-group-actions">
+              <button className="button button-secondary" type="button" onClick={expandAllGroups}>Expand all</button>
+              <button className="button button-secondary" type="button" onClick={collapseAllGroups}>Collapse all</button>
+            </div>
+          </section>
+          {themeTokenGroups.map((group) => {
+            const isOpen = openGroups.has(group.id);
+            const groupPanelId = `theme-token-group-${group.id}`;
+            return (
+              <section className={`theme-builder-card theme-token-group${isOpen ? " is-open" : ""}`} data-group-id={group.id} key={group.id}>
+                <header>
+                  <button
+                    className="theme-token-group-toggle"
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={groupPanelId}
+                    onClick={() => toggleGroup(group.id)}
+                  >
+                    <span>
+                      <small>Design tokens</small>
+                      <h2>{group.name}</h2>
+                      <p>{group.description}</p>
+                    </span>
+                    <strong aria-hidden="true">{isOpen ? "−" : "+"}</strong>
+                  </button>
+                  <span className="theme-token-group-count">{group.tokens.length} {group.tokens.length === 1 ? "token" : "tokens"}</span>
+                </header>
+                {isOpen ? (
+                  <div className="theme-token-list" id={groupPanelId}>
+                    {group.tokens.map((token) => (
+                      <TokenEditor
+                        key={token}
+                        token={token}
+                        value={draft.tokens[token]}
+                        onChange={(value) => updateDraft({ ...draft, tokens: { ...draft.tokens, [token]: value } }, group.id)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
         </div>
         <aside className="theme-builder-preview-column">
           <ThemePreview theme={namedDraft} />

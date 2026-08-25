@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { normalizeChapterNumber } from "@/lib/chapter-number";
 import { languageName } from "@/lib/language-flags";
@@ -298,8 +299,9 @@ export function NewSeriesSection() {
         </div>
       </div>
       {loading ? (
-        <div className="public-discovery-loading" role="status">
-          Loading new series…
+        <div className="dots-ring-loading public-discovery-loading" role="status">
+          <DotsRing size="md" label={null} />
+          <span>Loading new series…</span>
         </div>
       ) : error ? (
         <div className="public-discovery-error" role="alert">
@@ -485,8 +487,9 @@ export function PublishingTeamsCarousel() {
         </div>
       </div>
       {loading ? (
-        <div className="public-discovery-loading" role="status">
-          Loading publishing teams…
+        <div className="dots-ring-loading public-discovery-loading" role="status">
+          <DotsRing size="md" label={null} />
+          <span>Loading publishing teams…</span>
         </div>
       ) : error ? (
         <div className="public-discovery-error" role="alert">
@@ -632,7 +635,7 @@ export function PublishingTeamsDirectory() {
           <button type="button" aria-label="List view" title="List view" aria-pressed={view === "LIST"} onClick={() => setView("LIST")}><List size={18} /></button>
         </div>
       </section>
-      {loading ? <div className="public-discovery-loading">Loading teams…</div> : error ? <div className="public-discovery-error" role="alert">{error}</div> : (
+      {loading ? <div className="dots-ring-loading public-discovery-loading" role="status"><DotsRing size="md" label={null} /><span>Loading teams…</span></div> : error ? <div className="public-discovery-error" role="alert">{error}</div> : (
         <section className={`teams-directory-results is-${view.toLowerCase()}`} aria-label={`${filtered.length} publishing teams`}>
           {filtered.map((record, index) => <PublishingTeamCard key={record.id} record={record} index={index} active variant="directory" />)}
         </section>

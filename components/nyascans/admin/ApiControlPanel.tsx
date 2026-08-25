@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -9,7 +10,7 @@ import {
   Key,
   PlugsConnected,
   Plus,
-  SpinnerGap,
+
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
@@ -206,7 +207,7 @@ export function ApiControlPanel() {
           <label><span>Application name</span><input value={appName} placeholder="NyaScans Discord Bot" maxLength={100} onChange={(event) => setAppName(event.target.value)} /></label>
           <label><span>Publishing team</span><AdminCombobox ariaLabel="Publishing team" value={teamId} emptyLabel="All verified teams" options={data.teams.map((team) => ({ value: team.id, label: team.name, description: team.slug }))} onChange={setTeamId} /></label>
           <fieldset><legend>Scopes</legend>{data.availableScopes.filter((scope) => clientType === "DISCORD_BOT" ? scope.startsWith("bot:") : !scope.startsWith("bot:")).map((scope) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} /><span><strong>{scope}</strong><small>{scope.includes(":series:") ? "Create or read series metadata" : scope.includes(":thumbnail") ? "Set or replace chapter thumbnails" : scope.includes(":publish") ? "Publish assigned chapters" : "Create or manage chapter upload jobs"}</small></span></label>)}</fieldset>
-          <button className="button button-primary" type="button" disabled={busy || !appName.trim() || !scopes.length} onClick={() => void createKey()}>{busy ? <SpinnerGap className="spin" /> : <Plus />} Create key</button>
+          <button className="button button-primary" type="button" disabled={busy || !appName.trim() || !scopes.length} onClick={() => void createKey()}>{busy ? <DotsRing /> : <Plus />} Create key</button>
         </div>
       </section>
       <section className="v46-api-list-section">

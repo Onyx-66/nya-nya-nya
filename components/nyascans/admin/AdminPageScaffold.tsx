@@ -1,5 +1,4 @@
 "use client";
-
 import {
   CheckCircle,
   Clock,
@@ -9,6 +8,7 @@ import {
   WarningCircle,
   XCircle,
 } from "@phosphor-icons/react";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {
   type ReactNode,
@@ -470,8 +470,8 @@ export function AdminPageScaffold({
         />
       ) : null}
       {state.kind === "loading" ? (
-        <div className="admin-state-card" role="status" aria-live="polite">
-          <span className="admin-spinner" />
+        <div className="admin-state-card dots-ring-loading" role="status" aria-live="polite">
+          <DotsRing size="lg" label={null} />
           <h3>Loading</h3>
           <p>{state.message ?? "Loading the latest administrative data…"}</p>
         </div>

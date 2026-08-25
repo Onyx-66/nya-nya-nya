@@ -1,9 +1,10 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import {
   CheckCircle,
   PaintBrush,
-  SpinnerGap,
+
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
@@ -183,7 +184,7 @@ export function ThemePalettePresetsPanel() {
   if (status === "loading") {
     return (
       <section className="palette-presets-state" role="status">
-        <SpinnerGap size={22} className="admin-spinner-icon" />
+        <DotsRing size={22} />
         <strong>Loading saved appearance</strong>
         <span>Preparing palettes from the latest published revision.</span>
       </section>
@@ -285,7 +286,7 @@ export function ThemePalettePresetsPanel() {
               <span className="palette-preset-action">
                 {saving ? (
                   <>
-                    <SpinnerGap size={16} /> Applying…
+                    <DotsRing size={16} /> Applying…
                   </>
                 ) : active ? (
                   <>

@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
 
 import {
@@ -8,7 +9,7 @@ import {
   GridFour,
   ListBullets,
   Rows,
-  SpinnerGap,
+
   UploadSimple,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -260,7 +261,7 @@ export function LibraryWorkspace() {
             onClick={() => importInput.current?.click()}
           >
             {importing ? (
-              <SpinnerGap className="spin" size={17} />
+              <DotsRing size={17} />
             ) : (
               <UploadSimple size={17} />
             )}

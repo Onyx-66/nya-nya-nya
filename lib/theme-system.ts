@@ -97,11 +97,21 @@ export const notificationThemeTokenKeys = [
   "notificationError",
 ] as const;
 
+export const workspaceThemeTokenKeys = [
+  "browseAccent",
+  "libraryAccent",
+  "readerAccent",
+  "teamPagesAccent",
+  "storeAccent",
+  "adminAccent",
+] as const;
+
 export const themeTokenKeys = [
   ...coreThemeTokenKeys,
   ...homeSectionThemeTokenKeys,
   ...effectThemeTokenKeys,
   ...notificationThemeTokenKeys,
+  ...workspaceThemeTokenKeys,
 ] as const;
 
 export type ThemeTokenKey = (typeof themeTokenKeys)[number];
@@ -189,6 +199,12 @@ export const themeTokensSchema = z
     notificationInfo: hexColor,
     notificationWarning: hexColor,
     notificationError: hexColor,
+    browseAccent: hexColor,
+    libraryAccent: hexColor,
+    readerAccent: hexColor,
+    teamPagesAccent: hexColor,
+    storeAccent: hexColor,
+    adminAccent: hexColor,
   })
   .strict();
 
@@ -233,10 +249,17 @@ function extensionDefaults(tokens: LegacyCoreTokens) {
     notificationInfo: tokens.indicationBlue,
     notificationWarning: tokens.statusYellow,
     notificationError: tokens.danger,
+    browseAccent: tokens.primary,
+    libraryAccent: tokens.statusBlue,
+    readerAccent: tokens.primaryL1,
+    teamPagesAccent: tokens.statusPurple,
+    storeAccent: tokens.statusGreen,
+    adminAccent: tokens.statusYellow,
   } satisfies Record<
     | (typeof homeSectionThemeTokenKeys)[number]
     | (typeof effectThemeTokenKeys)[number]
-    | (typeof notificationThemeTokenKeys)[number],
+    | (typeof notificationThemeTokenKeys)[number]
+    | (typeof workspaceThemeTokenKeys)[number],
     string
   >;
 }
@@ -283,74 +306,153 @@ export type ThemeDocument = z.infer<typeof themeDocumentSchema>;
 
 export const themeTokenGroups = [
   {
-    name: "Foundation",
-    tokens: ["textColor", "mainBackground"] as const,
-  },
-  {
-    name: "Accent",
+    id: "core-palette",
+    name: "Core Palette",
+    description: "Page surfaces, contrast, controls, accents, and primary brand colors.",
     tokens: [
-      "accent",
-      "accentHover",
-      "accentActive",
-      "accentL1",
-      "accentL1Hover",
-      "accentL1Active",
-      "accentL2",
-      "accentL2Hover",
-      "accentL2Active",
-      "accentL3",
-      "accentL3Hover",
-      "accentL3Active",
-      "accentL4",
-      "accentL4Hover",
-      "accentL4Active",
-      "accentL5",
-      "accentL5Hover",
-      "accentL5Active",
+      "textColor", "mainBackground",
+      "accent", "accentHover", "accentActive",
+      "accentL1", "accentL1Hover", "accentL1Active",
+      "accentL2", "accentL2Hover", "accentL2Active",
+      "accentL3", "accentL3Hover", "accentL3Active",
+      "accentL4", "accentL4Hover", "accentL4Active",
+      "accentL5", "accentL5Hover", "accentL5Active",
+      "midTone", "contrastL1", "scrollbarColor", "scrollbarColorHover",
+      "buttonAccent", "buttonAccentAlternate", "primary", "primaryL1", "primaryL2",
+      "danger", "dangerL1", "dangerL2",
     ] as const,
   },
   {
-    name: "Structure",
-    tokens: [
-      "midTone",
-      "contrastL1",
-      "scrollbarColor",
-      "scrollbarColorHover",
-      "buttonAccent",
-      "buttonAccentAlternate",
-    ] as const,
+    id: "status-signals",
+    name: "Status Signals",
+    description: "Reusable status colors for paid, free, success, warning, and attention states.",
+    tokens: ["statusRed", "statusGreen", "statusYellow", "statusBlue", "statusPurple", "statusGrey", "indicationBlue"] as const,
   },
   {
-    name: "Primary",
-    tokens: ["primary", "primaryL1", "primaryL2"] as const,
-  },
-  {
-    name: "Status",
-    tokens: [
-      "statusRed",
-      "statusGreen",
-      "statusYellow",
-      "statusBlue",
-      "statusPurple",
-      "statusGrey",
-      "indicationBlue",
-    ] as const,
-  },
-  {
-    name: "Danger",
-    tokens: ["danger", "dangerL1", "dangerL2"] as const,
-  },
-  {
-    name: "Home Sections",
-    tokens: homeSectionThemeTokenKeys,
-  },
-  {
+    id: "effects-glows",
     name: "Effects & Glows",
+    description: "Moving-light, focus, cover, button, rank, paid, discount, and announcement effects.",
     tokens: effectThemeTokenKeys,
   },
   {
+    id: "notifications",
     name: "Notifications",
+    description: "Toast, bell, dropdown, unread, read, and notification status surfaces.",
     tokens: notificationThemeTokenKeys,
+  },
+  {
+    id: "home-featured",
+    name: "Home · Hero Slider",
+    description: "The top Featured / slider section accent.",
+    tokens: ["homeFeaturedAccent"] as const,
+  },
+  {
+    id: "home-trending",
+    name: "Home · Trending",
+    description: "Trending cards, ranking details, and section controls.",
+    tokens: ["homeTrendingAccent"] as const,
+  },
+  {
+    id: "home-continue-reading",
+    name: "Home · Continue Reading",
+    description: "Continue Reading cards, progress, and library action.",
+    tokens: ["homeContinueReadingAccent"] as const,
+  },
+  {
+    id: "home-pinned",
+    name: "Home · Pinned Series",
+    description: "Pinned Series cover-flow, arrows, badges, and progress.",
+    tokens: ["homePinnedSeriesAccent"] as const,
+  },
+  {
+    id: "home-reviews",
+    name: "Home · Recent Reviews",
+    description: "Recent Reviews cards, rating, and reactions.",
+    tokens: ["homeRecentReviewsAccent"] as const,
+  },
+  {
+    id: "home-discounts",
+    name: "Home · Discounts",
+    description: "Discount cards, ribbons, countdowns, and section action.",
+    tokens: ["homeDiscountsAccent"] as const,
+  },
+  {
+    id: "home-announcements",
+    name: "Home · Announcements",
+    description: "Announcement slider and notice treatment.",
+    tokens: ["homeAnnouncementsAccent"] as const,
+  },
+  {
+    id: "home-latest-updates",
+    name: "Home · Latest Updates",
+    description: "Latest update rows, style switcher, and pagination.",
+    tokens: ["homeLatestUpdatesAccent"] as const,
+  },
+  {
+    id: "home-editors-pick",
+    name: "Home · Editor's Pick",
+    description: "Editor's Pick cards, title, and controls.",
+    tokens: ["homeEditorsPickAccent"] as const,
+  },
+  {
+    id: "home-new-series",
+    name: "Home · New Series",
+    description: "New Series cards, badges, and navigation.",
+    tokens: ["homeNewSeriesAccent"] as const,
+  },
+  {
+    id: "home-top-teams",
+    name: "Home · Top Teams",
+    description: "Top Teams carousel, logos, and controls.",
+    tokens: ["homePublishingTeamsAccent"] as const,
+  },
+  {
+    id: "home-latest-comments",
+    name: "Home · Latest Comments",
+    description: "Latest Comments activity cards and metadata.",
+    tokens: ["homeCommunityAccent"] as const,
+  },
+  {
+    id: "home-most-popular",
+    name: "Home · Most Popular",
+    description: "Most Popular / Hot This Week ranking cards and metrics.",
+    tokens: ["homeHotThisWeekAccent"] as const,
+  },
+  {
+    id: "browse",
+    name: "Browse Filters & Catalog",
+    description: "Browse search, filters, grid/list cards, and catalog pagination.",
+    tokens: ["browseAccent"] as const,
+  },
+  {
+    id: "library",
+    name: "Library",
+    description: "Followed-series library shelves and reading progress.",
+    tokens: ["libraryAccent"] as const,
+  },
+  {
+    id: "reader",
+    name: "Reader",
+    description: "Reader chrome, chapter navigation, and access states.",
+    tokens: ["readerAccent"] as const,
+  },
+  {
+    id: "team-pages",
+    name: "Team Pages",
+    description: "Public team pages, team discussions, and publishing identity.",
+    tokens: ["teamPagesAccent"] as const,
+  },
+  {
+    id: "store",
+    name: "Store",
+    description: "Store shelves, cosmetics, wallet, and purchase presentation.",
+    tokens: ["storeAccent"] as const,
+  },
+  {
+    id: "admin",
+    name: "Admin",
+    description: "Administrative workspaces, controls, and protected states.",
+    tokens: ["adminAccent"] as const,
   },
 ] as const;
 
@@ -431,6 +533,12 @@ export const themeTokenLabels: Record<ThemeTokenKey, string> = {
   notificationInfo: "Notification Info",
   notificationWarning: "Notification Warning",
   notificationError: "Notification Error",
+  browseAccent: "Browse Accent",
+  libraryAccent: "Library Accent",
+  readerAccent: "Reader Accent",
+  teamPagesAccent: "Team Pages Accent",
+  storeAccent: "Store Accent",
+  adminAccent: "Admin Accent",
 };
 
 type PaletteSeed = {
@@ -970,6 +1078,12 @@ const cssTokenNames: Record<ThemeTokenKey, string> = {
   notificationInfo: "--theme-notification-info",
   notificationWarning: "--theme-notification-warning",
   notificationError: "--theme-notification-error",
+  browseAccent: "--theme-browse-accent",
+  libraryAccent: "--theme-library-accent",
+  readerAccent: "--theme-reader-accent",
+  teamPagesAccent: "--theme-team-pages-accent",
+  storeAccent: "--theme-store-accent",
+  adminAccent: "--theme-admin-accent",
 };
 
 export function themeCssVariables(theme: ThemeDocument) {
@@ -996,6 +1110,106 @@ export function blankThemeTemplate() {
     tokens: Object.fromEntries(themeTokenKeys.map((key) => [key, ""])),
     logoColorOverride: null,
   };
+}
+
+const THEME_MARKDOWN_HEADER = "# NyaScans Theme";
+
+export function exportThemeMarkdown(theme: ThemeDocument) {
+  const normalized = themeDocumentSchema.parse(theme);
+  const lines = [
+    THEME_MARKDOWN_HEADER,
+    `schemaVersion: ${normalized.schemaVersion}`,
+    `name: ${JSON.stringify(normalized.name)}`,
+    `type: ${normalized.type}`,
+    `logoColorOverride: ${normalized.logoColorOverride ?? "null"}`,
+    "",
+  ];
+  for (const group of themeTokenGroups) {
+    lines.push(`## ${group.name} [${group.id}]`, `> ${group.description}`, "");
+    for (const token of group.tokens) lines.push(`${token}: ${normalized.tokens[token]}`);
+    lines.push("");
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export function blankThemeMarkdownTemplate() {
+  const blank = blankThemeTemplate();
+  const lines = [
+    THEME_MARKDOWN_HEADER,
+    `schemaVersion: ${blank.schemaVersion}`,
+    `name: ${JSON.stringify(blank.name)}`,
+    `type: ${blank.type}`,
+    "logoColorOverride: null",
+    "",
+  ];
+  for (const group of themeTokenGroups) {
+    lines.push(`## ${group.name} [${group.id}]`, `> ${group.description}`, "");
+    for (const token of group.tokens) lines.push(`${token}: `);
+    lines.push("");
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export function parseThemeMarkdown(raw: string): ThemeDocument {
+  const lines = raw.replaceAll("\r\n", "\n").split("\n");
+  if (lines[0]?.trim() !== THEME_MARKDOWN_HEADER) {
+    throw new Error("The theme Markdown header is missing or malformed.");
+  }
+  let schemaVersion: number | null = null;
+  let name: string | null = null;
+  let type: "dark" | "light" | null = null;
+  let logoColorOverride: string | null | undefined;
+  let currentGroup: (typeof themeTokenGroups)[number] | null = null;
+  const seenGroups = new Set<string>();
+  const tokens: Record<string, string> = {};
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line || line.startsWith("> ")) continue;
+    const groupMatch = line.match(/^## (.+) \[([a-z0-9-]+)\]$/u);
+    if (groupMatch) {
+      const group = themeTokenGroups.find((entry) => entry.id === groupMatch[2]);
+      if (!group || group.name !== groupMatch[1]) throw new Error(`Unknown theme Markdown group: ${groupMatch[2]}.`);
+      if (seenGroups.has(group.id)) throw new Error(`The theme Markdown repeats group ${group.id}.`);
+      seenGroups.add(group.id);
+      currentGroup = group;
+      continue;
+    }
+    const field = line.match(/^([A-Za-z][A-Za-z0-9]*):(?:\s*)(.*)$/u);
+    if (!field) throw new Error(`Malformed theme Markdown line ${index + 1}.`);
+    const [, key, value] = field;
+    if (key === "schemaVersion") {
+      if (schemaVersion !== null) throw new Error("The theme Markdown repeats schemaVersion.");
+      schemaVersion = Number(value);
+    } else if (key === "name") {
+      if (name !== null) throw new Error("The theme Markdown repeats name.");
+      try { name = JSON.parse(value) as string; } catch { throw new Error("The theme Markdown name must be a JSON string."); }
+    } else if (key === "type") {
+      if (type !== null) throw new Error("The theme Markdown repeats type.");
+      if (value !== "dark" && value !== "light") throw new Error("The theme Markdown type must be dark or light.");
+      type = value;
+    } else if (key === "logoColorOverride") {
+      if (logoColorOverride !== undefined) throw new Error("The theme Markdown repeats logoColorOverride.");
+      logoColorOverride = value === "null" ? null : value;
+    } else {
+      if (!themeTokenKeys.includes(key as ThemeTokenKey)) throw new Error(`Unknown theme token: ${key}.`);
+      if (!currentGroup || !currentGroup.tokens.includes(key as never)) throw new Error(`Token ${key} is outside its declared group.`);
+      if (Object.hasOwn(tokens, key)) throw new Error(`The theme Markdown repeats token ${key}.`);
+      tokens[key] = value;
+    }
+  }
+  if (schemaVersion !== THEME_SCHEMA_VERSION || !name || !type || logoColorOverride === undefined || seenGroups.size !== themeTokenGroups.length) {
+    throw new Error("The theme Markdown is incomplete. Include every metadata field and token group.");
+  }
+  for (const key of themeTokenKeys) {
+    if (!Object.hasOwn(tokens, key) || !tokens[key]) throw new Error(`The theme Markdown is missing token ${key}.`);
+  }
+  const parsed = themeDocumentSchema.safeParse({ schemaVersion, name, type, tokens, logoColorOverride });
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    const path = first?.path.length ? `${first.path.join(".")}: ` : "";
+    throw new Error(`The theme is incomplete or invalid. ${path}${first?.message ?? "Check every token."}`);
+  }
+  return parsed.data;
 }
 
 function base64UrlEncode(value: string) {
@@ -1032,9 +1246,19 @@ export function encodeThemeForUrl(theme: ThemeDocument) {
   return base64UrlEncode(JSON.stringify(themeDocumentSchema.parse(theme)));
 }
 
-export function themeShareUrl(theme: ThemeDocument, locationHref: string) {
+export type ThemeShareFormat = "json" | "markdown";
+
+export function themeShareUrl(
+  theme: ThemeDocument,
+  locationHref: string,
+  format: ThemeShareFormat = "json",
+) {
   const url = new URL("/theme-builder", locationHref);
-  url.hash = `${THEME_SHARE_KEY}=${encodeThemeForUrl(theme)}`;
+  const parsed = themeDocumentSchema.parse(theme);
+  const encoded = format === "markdown"
+    ? base64UrlEncode(exportThemeMarkdown(parsed))
+    : encodeThemeForUrl(parsed);
+  url.hash = `${THEME_SHARE_KEY}=${encoded}&format=${format}`;
   return url.toString();
 }
 
@@ -1053,10 +1277,19 @@ export function parseThemeImport(raw: string): ThemeDocument {
       throw new Error("The pasted theme URL is not valid.");
     }
     const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
-    const encoded = new URLSearchParams(hash).get(THEME_SHARE_KEY)
+    const hashParams = new URLSearchParams(hash);
+    const encoded = hashParams.get(THEME_SHARE_KEY)
       ?? url.searchParams.get(THEME_SHARE_KEY);
+    const format = hashParams.get("format")
+      ?? url.searchParams.get("format")
+      ?? "json";
     if (!encoded) throw new Error("The URL does not contain a complete shared theme.");
-    jsonText = base64UrlDecode(encoded);
+    if (format !== "json" && format !== "markdown") throw new Error("The shared theme URL format is unsupported.");
+    const decoded = base64UrlDecode(encoded);
+    if (format === "markdown") return parseThemeMarkdown(decoded);
+    jsonText = decoded;
+  } else if (/^# NyaScans Theme(?:\r?\n|$)/u.test(input)) {
+    return parseThemeMarkdown(input);
   } else if (!input.startsWith("{")) {
     jsonText = base64UrlDecode(input);
   }

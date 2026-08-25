@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -14,7 +15,7 @@ import {
   Image as ImageIcon,
   LockSimple,
   ShieldCheck,
-  SpinnerGap,
+
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -397,7 +398,7 @@ export function ChapterManagementWorkspace({
     return (
       <main className="chapter-management-page">
         <div className="chapter-management-loading" role="status">
-          <SpinnerGap size={28} className="is-spinning" />
+          <DotsRing size={28} />
           <strong>Loading chapter management…</strong>
           <span>Release ownership and permissions are being verified.</span>
         </div>
@@ -806,7 +807,7 @@ export function ChapterManagementWorkspace({
               disabled={Boolean(busy) || !dirty}
             >
               {busy === "save" ? (
-                <SpinnerGap size={18} className="is-spinning" />
+                <DotsRing size={18} />
               ) : (
                 <FloppyDisk size={18} />
               )}

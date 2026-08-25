@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -700,7 +701,7 @@ export function SiteConfigurationPanel({
       ) : null}
 
       {status === "loading" ? (
-        <div className="settings-loading">Loading site configuration…</div>
+        <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading site configuration…</span></div>
       ) : (
         <>
           {section === "branding" ? (

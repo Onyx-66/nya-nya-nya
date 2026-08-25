@@ -1,6 +1,6 @@
 {
   "name": "nyascans",
-  "version": "49.15.2",
+  "version": "49.15.3",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -26,6 +26,7 @@
     "emojilib": "^4.0.3",
     "fflate": "^0.8.3",
     "flag-icons": "^7.5.0",
+    "framer-motion": "12.43.0",
     "gifenc": "^1.0.3",
     "gifuct-js": "^2.1.2",
     "next": "16.2.6",

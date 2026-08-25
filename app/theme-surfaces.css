@@ -37,6 +37,12 @@
   --theme-notification-info: #8ecbff;
   --theme-notification-warning: #e6bd61;
   --theme-notification-error: #d95f55;
+  --theme-browse-accent: var(--theme-primary, var(--theme-home-featured-accent));
+  --theme-library-accent: var(--theme-status-blue, var(--theme-home-continue-reading-accent));
+  --theme-reader-accent: var(--theme-primary-l1, var(--theme-home-featured-accent));
+  --theme-team-pages-accent: var(--theme-status-purple, var(--theme-home-editors-pick-accent));
+  --theme-store-accent: var(--theme-status-green, var(--theme-home-new-series-accent));
+  --theme-admin-accent: var(--theme-status-yellow, var(--theme-home-trending-accent));
 }
 
 /* Every meaningful Home surface receives a distinct editable section accent. */
@@ -55,6 +61,14 @@
 .public-teams { --section-accent: var(--theme-home-publishing-teams-accent); }
 .community-highlights { --section-accent: var(--theme-home-community-accent); }
 .hot-this-week { --section-accent: var(--theme-home-hot-this-week-accent); }
+
+/* Major non-Home surfaces receive their own editable accent without replacing their existing styles. */
+.browseScope { --section-accent: var(--theme-browse-accent); --browse-accent: var(--theme-browse-accent); }
+.library-page, .library-workspace { --section-accent: var(--theme-library-accent); }
+.reader-page { --section-accent: var(--theme-reader-accent); }
+.public-team-page { --section-accent: var(--theme-team-pages-accent); }
+.store-page { --section-accent: var(--theme-store-accent); }
+.admin-workspace, .ops-shell { --section-accent: var(--theme-admin-accent); --admin-accent: var(--theme-admin-accent); }
 
 .trending-heading.tone-trending { --section-accent: var(--theme-home-trending-accent) !important; }
 .continue-reading-section.tone-continue { --section-accent: var(--theme-home-continue-reading-accent) !important; }

@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -575,7 +576,7 @@ export function AuditLogPanel({
             </dl>
             {selected.reason ? <p className="audit-reason"><LockKey size={17} /> {selected.reason}</p> : null}
             {detailLoading ? (
-              <div className="settings-loading">Loading event detail…</div>
+              <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="md" label={null} /><span>Loading event detail…</span></div>
             ) : null}
             {detailError ? (
               <div className="admin-state-card" role="alert">

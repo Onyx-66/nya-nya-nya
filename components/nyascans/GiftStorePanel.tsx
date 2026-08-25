@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-html-link-for-pages */
@@ -247,7 +248,7 @@ export function GiftStorePanel({
   if (loading) {
     return (
       <section className="gift-store page-wrap" aria-live="polite">
-        <div className="settings-loading">Loading Gifts…</div>
+        <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading Gifts…</span></div>
       </section>
     );
   }

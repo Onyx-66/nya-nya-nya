@@ -94,11 +94,21 @@ const exactNotificationTokenKeys = [
   "notificationError",
 ];
 
+const exactWorkspaceTokenKeys = [
+  "browseAccent",
+  "libraryAccent",
+  "readerAccent",
+  "teamPagesAccent",
+  "storeAccent",
+  "adminAccent",
+];
+
 const exactTokenKeys = [
   ...exactCoreTokenKeys,
   ...exactHomeSectionTokenKeys,
   ...exactEffectTokenKeys,
   ...exactNotificationTokenKeys,
+  ...exactWorkspaceTokenKeys,
 ];
 
 function runThemeModel(script) {
@@ -119,6 +129,7 @@ test("theme schema preserves the original 39-token core and exposes complete sec
       effectThemeTokenKeys,
       homeSectionThemeTokenKeys,
       notificationThemeTokenKeys,
+      workspaceThemeTokenKeys,
       themeTokenGroups,
       themeTokenKeys,
     } from "./lib/theme-system.ts";
@@ -127,6 +138,7 @@ test("theme schema preserves the original 39-token core and exposes complete sec
       sections: homeSectionThemeTokenKeys,
       effects: effectThemeTokenKeys,
       notifications: notificationThemeTokenKeys,
+      workspace: workspaceThemeTokenKeys,
       all: themeTokenKeys,
       groupNames: themeTokenGroups.map((group) => group.name),
     }));
@@ -135,10 +147,14 @@ test("theme schema preserves the original 39-token core and exposes complete sec
   assert.deepEqual(result.sections, exactHomeSectionTokenKeys);
   assert.deepEqual(result.effects, exactEffectTokenKeys);
   assert.deepEqual(result.notifications, exactNotificationTokenKeys);
+  assert.deepEqual(result.workspace, exactWorkspaceTokenKeys);
   assert.deepEqual(result.all, exactTokenKeys);
-  assert.ok(result.groupNames.includes("Home Sections"));
+  assert.ok(result.groupNames.includes("Core Palette"));
+  assert.ok(result.groupNames.includes("Home · Pinned Series"));
+  assert.ok(result.groupNames.includes("Browse Filters & Catalog"));
   assert.ok(result.groupNames.includes("Effects & Glows"));
   assert.ok(result.groupNames.includes("Notifications"));
+  assert.ok(result.groupNames.includes("Status Signals"));
   assert.match(source, /themeTokensSchema[\s\S]*?\.strict\(\)/u);
   assert.match(source, /canonicalThemeDocumentSchema[\s\S]*?logoColorOverride: hexColor\.nullable\(\)\.default\(null\)/u);
   assert.match(source, /canonicalThemeDocumentSchema[\s\S]*?\.strict\(\)/u);
@@ -150,10 +166,13 @@ test("theme schema preserves the original 39-token core and exposes complete sec
 test("portable themes round-trip, upgrade legacy core themes, and reject malformed or partial input atomically", () => {
   const result = runThemeModel(`
     import {
+      blankThemeMarkdownTemplate,
       blankThemeTemplate,
       coreThemeTokenKeys,
       encodeThemeForUrl,
+      exportThemeMarkdown,
       parseThemeImport,
+      parseThemeMarkdown,
       themeContrastWarnings,
       themeCssVariables,
       themeShareUrl,
@@ -181,6 +200,12 @@ test("portable themes round-trip, upgrade legacy core themes, and reject malform
     const filledBlank = structuredClone(blank);
     for (const key of themeTokenKeys) filledBlank.tokens[key] = theme.tokens[key];
     const parsedFilledBlank = parseThemeImport(JSON.stringify(filledBlank));
+    const markdown = exportThemeMarkdown(theme);
+    const parsedMarkdown = parseThemeMarkdown(markdown);
+    const parsedMarkdownViaImport = parseThemeImport(markdown);
+    const blankMarkdown = blankThemeMarkdownTemplate();
+    let blankMarkdownError = "";
+    try { parseThemeMarkdown(blankMarkdown); } catch (error) { blankMarkdownError = error.message; }
     const parsedLegacy = parseThemeImport(JSON.stringify(legacy));
     const parsedLegacyCore = parseThemeImport(JSON.stringify(legacyCore));
     console.log(JSON.stringify({
@@ -189,6 +214,12 @@ test("portable themes round-trip, upgrade legacy core themes, and reject malform
       presetCount: userThemePresets.length,
       codeRoundTrip: JSON.stringify(parseThemeImport(encodeThemeForUrl(theme))) === JSON.stringify(theme),
       urlRoundTrip: JSON.stringify(parseThemeImport(themeShareUrl(theme, "https://example.test/account"))) === JSON.stringify(theme),
+      markdownUrlRoundTrip: JSON.stringify(parseThemeImport(themeShareUrl(theme, "https://example.test/account", "markdown"))) === JSON.stringify(theme),
+      markdownRoundTrip: JSON.stringify(parsedMarkdown) === JSON.stringify(theme),
+      markdownImportRoundTrip: JSON.stringify(parsedMarkdownViaImport) === JSON.stringify(theme),
+      markdownGroupCount: (markdown.match(/^## /gmu) ?? []).length,
+      blankMarkdownTokenCount: (blankMarkdown.match(/^[a-z][A-Za-z0-9]*: ?$/gmu) ?? []).length,
+      blankMarkdownError,
       legacyLogoDefault: parsedLegacy.logoColorOverride,
       legacyCoreExpanded: Object.keys(parsedLegacyCore.tokens).length,
       blankTokenCount: Object.keys(blank.tokens).length,
@@ -200,14 +231,20 @@ test("portable themes round-trip, upgrade legacy core themes, and reject malform
     }));
   `);
   assert.deepEqual(result, {
-    tokenCount: 76,
-    runtimeVariableCount: 79,
+    tokenCount: 82,
+    runtimeVariableCount: 85,
     presetCount: 5,
     codeRoundTrip: true,
     urlRoundTrip: true,
+    markdownUrlRoundTrip: true,
+    markdownRoundTrip: true,
+    markdownImportRoundTrip: true,
+    markdownGroupCount: 23,
+    blankMarkdownTokenCount: 82,
+    blankMarkdownError: "The theme Markdown is missing token textColor.",
     legacyLogoDefault: null,
-    legacyCoreExpanded: 76,
-    blankTokenCount: 76,
+    legacyCoreExpanded: 82,
+    blankTokenCount: 82,
     blankError: "The theme is incomplete or invalid. tokens.textColor: Use a six-digit hexadecimal color.",
     filledBlankAccepted: true,
     rejected: true,
@@ -314,7 +351,7 @@ test("preference v2 enforces a combined five-theme shortlist and fifteen saved c
     migratedCount: 1,
     migratedActiveOwned: true,
     migratedActiveShortlisted: true,
-    normalizedStoredTokenCount: 76,
+    normalizedStoredTokenCount: 82,
   });
 });
 
@@ -354,9 +391,12 @@ test("Theme Identity exposes all five safe actions and a manual-delete saved lib
     "Save theme",
     "Load theme",
     "Create new",
-    "Copy theme URL",
-    "Export theme",
-    "Download blank template",
+    "Copy JSON URL",
+    "Copy Markdown URL",
+    "Export JSON",
+    "Export Markdown",
+    "Blank JSON template",
+    "Blank Markdown template",
     "Import theme",
     "Import system theme",
     "Preview",
@@ -369,6 +409,14 @@ test("Theme Identity exposes all five safe actions and a manual-delete saved lib
   assert.match(builder, /Create new never overwrites the loaded theme/u);
   assert.match(builder, /blankThemeTemplate\(\)/u);
   assert.match(builder, /nyascans-blank-theme-template\.json/u);
+  assert.match(builder, /nyascans-blank-theme-template\.md/u);
+  assert.match(builder, /themeTokenGroups\.map/u);
+  assert.match(builder, /aria-expanded=\{isOpen\}/u);
+  assert.match(builder, /Expand all/u);
+  assert.match(builder, /Collapse all/u);
+  assert.match(builder, /updateDraft\([\s\S]*?group\.id/u);
+  assert.match(builder, /exportThemeMarkdown/u);
+  assert.match(builder, /blankThemeMarkdownTemplate/u);
   assert.match(builder, /customThemes\.length\} \/ \{MAX_SAVED_CUSTOM_THEMES\} saved/u);
   assert.match(builder, /Delete “\$\{saved\.theme\.name\}” permanently/u);
   assert.match(builder, /controller\.deleteCustomTheme\(saved\.id\)/u);
@@ -609,7 +657,7 @@ test("Home section accents and active moving-light families are editable and vis
   assert.match(layout, /import "\.\/theme-surfaces\.css"/u);
 });
 
-test("first-paint cache accepts dynamic custom references and all 79 runtime variables", async () => {
+test("first-paint cache accepts dynamic custom references and all canonical runtime variables", async () => {
   const layout = await readProjectFile("app/layout.tsx");
   assert.match(layout, /nyascans:user-theme-cache:v2/u);
   assert.match(layout, /schemaVersion!==2/u);
@@ -629,7 +677,7 @@ test("all canonical CSS variables bridge into app semantics and legacy profile t
   ]);
   const css = `${globalsCss}\n${themeSurfacesCss}`;
   const cssNames = [...model.matchAll(/: "(--theme-[a-z0-9-]+)"/gu)].map((match) => match[1]);
-  assert.equal(new Set(cssNames).size, 76);
+  assert.equal(new Set(cssNames).size, 82);
   for (const name of new Set(cssNames)) {
     assert.ok(
       css.split(name).length - 1 >= 2,

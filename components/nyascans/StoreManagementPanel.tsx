@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -13,7 +14,7 @@ import {
   Image as ImageIcon,
   PencilSimple,
   Plus,
-  SpinnerGap,
+
   Storefront,
   Trash,
   X,
@@ -1227,7 +1228,7 @@ export function StoreManagementPanel({
             </div>
             {loading ? (
               <div className="store-admin-loading" role="status">
-                <SpinnerGap size={22} className="spin" /> Loading collections…
+                <DotsRing size={22} /> Loading collections…
               </div>
             ) : collections.length ? (
               <div
@@ -1460,7 +1461,7 @@ export function StoreManagementPanel({
             <h2>Items ({total})</h2>
             {loading ? (
               <div className="store-admin-loading">
-                <SpinnerGap size={22} className="spin" /> Loading Store…
+                <DotsRing size={22} /> Loading Store…
               </div>
             ) : (
               groupedItems.map(({ collection, items: collectionItems }) => (

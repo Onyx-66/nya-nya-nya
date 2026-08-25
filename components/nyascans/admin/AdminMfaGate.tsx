@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import {
   Check,
@@ -8,7 +9,6 @@ import {
   Key,
   LockKey,
   ShieldCheck,
-  SpinnerGap,
 } from "@phosphor-icons/react";
 import {
   useRef,
@@ -218,7 +218,7 @@ export function AdminMfaGate({
           </div>
           {!enrollmentReady ? (
             <button className="button button-primary" type="button" disabled={busy} onClick={() => void begin()}>
-              {busy ? <SpinnerGap className="spin" /> : <Key />} Set up authenticator
+              {busy ? <DotsRing /> : <Key />} Set up authenticator
             </button>
           ) : null}
           {setup ? (
@@ -266,7 +266,7 @@ export function AdminMfaGate({
               </fieldset>
               {message ? <p className="admin-mfa-error" role="alert">{message}</p> : null}
               <button className="button button-primary" type="submit" disabled={busy || code.length !== 6}>
-                {busy ? <SpinnerGap className="spin" /> : <ShieldCheck />} Verify and open admin
+                {busy ? <DotsRing /> : <ShieldCheck />} Verify and open admin
               </button>
             </form>
             <details className="admin-mfa-recovery">
@@ -285,7 +285,7 @@ export function AdminMfaGate({
                   />
                 </label>
                 <button className="button button-secondary" type="submit" disabled={busy || !recoveryPassword}>
-                  {busy ? <SpinnerGap className="spin" /> : <Key />} Reset and enroll a new authenticator
+                  {busy ? <DotsRing /> : <Key />} Reset and enroll a new authenticator
                 </button>
               </form>
             </details>

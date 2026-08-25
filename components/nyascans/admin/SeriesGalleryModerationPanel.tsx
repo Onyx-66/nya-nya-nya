@@ -1,10 +1,11 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
 import {
   Check,
   ImageSquare,
-  SpinnerGap,
+
   X,
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
@@ -134,7 +135,7 @@ export function SeriesGalleryModerationPanel() {
       ) : null}
       {loading ? (
         <p className="admin-inline-empty" role="status">
-          <SpinnerGap size={17} className="spin" /> Loading gallery queue…
+          <DotsRing size={17} /> Loading gallery queue…
         </p>
       ) : assets.length ? (
         <div className="admin-gallery-queue">
@@ -213,7 +214,7 @@ export function SeriesGalleryModerationPanel() {
                     onClick={() => void moderate(asset, "APPROVED")}
                   >
                     {busyId === asset.id ? (
-                      <SpinnerGap size={16} className="spin" />
+                      <DotsRing size={16} />
                     ) : (
                       <Check size={16} />
                     )}

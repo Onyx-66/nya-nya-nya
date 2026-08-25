@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -231,7 +232,7 @@ export function EditorialManagementPanel({ mode = "editorial" }: { mode?: "edito
       </div>
 
       {loading ? (
-        <div className="store-admin-loading">Loading editorial catalogue…</div>
+        <div className="dots-ring-loading store-admin-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading editorial catalogue…</span></div>
       ) : picks.length ? (
         <div className="editorial-pick-list">
           {picks.map((pick, index) => {

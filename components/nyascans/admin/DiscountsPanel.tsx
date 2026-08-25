@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -7,7 +8,7 @@ import {
   PencilSimple,
   Plus,
   Power,
-  SpinnerGap,
+
   Tag,
   Trash,
 } from "@phosphor-icons/react";
@@ -673,7 +674,7 @@ export function DiscountsPanel({
                       placeholder="Series title or chapter"
                       onChange={(event) => setQuery(event.target.value)}
                     />
-                    {searching ? <SpinnerGap className="spin" aria-label="Searching" /> : null}
+                    {searching ? <DotsRing label="Searching" /> : null}
                   </span>
                 </label>
                 <label className="v481-span-two">
@@ -779,7 +780,7 @@ export function DiscountsPanel({
                 aria-describedby={validationAttempted && draftValidationIssues.length ? "discount-validation-summary" : undefined}
                 onClick={() => void saveDraft()}
               >
-                {busy ? <SpinnerGap className="spin" /> : <Tag />}
+                {busy ? <DotsRing /> : <Tag />}
                 {busy ? "Saving…" : draft.id ? "Update discount" : "Create discount"}
               </button>
             </footer>

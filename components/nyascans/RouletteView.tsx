@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-html-link-for-pages */
 /* eslint-disable @next/next/no-img-element */
 
@@ -422,7 +423,7 @@ export function RouletteView({
   if (loading) {
     return (
       <main className="page-main page-wrap roulette-page">
-        <div className="settings-loading" role="status">Loading Roulette…</div>
+        <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading Roulette…</span></div>
       </main>
     );
   }
@@ -613,7 +614,7 @@ export function RouletteView({
                   disabled={!canDailySpin || mutationBusy}
                   onClick={() => void spin("DAILY")}
                 >
-                  <ArrowClockwise size={19} className={spinning ? "is-spinning" : ""} />
+                  {spinning ? <DotsRing size="sm" label={null} /> : <ArrowClockwise size={19} />}
                   {spinning
                     ? "Spinning…"
                     : canDailySpin

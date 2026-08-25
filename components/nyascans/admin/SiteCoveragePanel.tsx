@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -9,7 +10,7 @@ import {
   Medal,
   ShieldCheck,
   SlidersHorizontal,
-  SpinnerGap,
+
   Ticket,
   UsersThree,
   WarningCircle,
@@ -311,7 +312,7 @@ export function SiteCoveragePanel({
             <label><span>Sort order</span><input type="number" min="0" value={achievement.sortOrder} onChange={(event) => setAchievement((current) => ({ ...current, sortOrder: Number(event.target.value) }))} /></label>
             <label className="settings-check"><input type="checkbox" checked={achievement.isActive} onChange={(event) => setAchievement((current) => ({ ...current, isActive: event.target.checked }))} /><span>Visible achievement</span></label>
             <label><span>Change reason</span><input value={achievement.reason} onChange={(event) => setAchievement((current) => ({ ...current, reason: event.target.value }))} /></label>
-            <div><button className="button button-primary" type="button" disabled={Boolean(busy)} onClick={() => void saveAchievement()}>{busy === "achievement-save" ? <SpinnerGap className="spin" /> : <CheckCircle />} {achievement.id ? "Save definition" : "Create definition"}</button>{achievement.id ? <button className="button button-secondary" type="button" disabled={Boolean(busy)} onClick={() => setAchievement(emptyAchievement)}>Cancel edit</button> : null}</div>
+            <div><button className="button button-primary" type="button" disabled={Boolean(busy)} onClick={() => void saveAchievement()}>{busy === "achievement-save" ? <DotsRing /> : <CheckCircle />} {achievement.id ? "Save definition" : "Create definition"}</button>{achievement.id ? <button className="button button-secondary" type="button" disabled={Boolean(busy)} onClick={() => setAchievement(emptyAchievement)}>Cancel edit</button> : null}</div>
           </div>
           <div className="governance-card-grid">{data.achievements.map((entry) => <article key={entry.id}><div><strong>{entry.name}</strong><span>{entry.rarity} · {entry.awardedCount} awards · {entry.isActive ? "Visible" : "Hidden"}</span><small>{entry.description || "No description"}</small></div><button className="button button-secondary" type="button" onClick={() => setAchievement({ id: entry.id, expectedUpdatedAt: entry.updatedAt, slug: entry.slug, name: entry.name, description: entry.description, rarity: entry.rarity, iconKey: entry.iconKey ?? "", isActive: entry.isActive, sortOrder: entry.sortOrder, reason: "" })}>Edit</button></article>)}</div>
         </section>

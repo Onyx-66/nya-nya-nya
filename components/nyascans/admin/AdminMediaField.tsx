@@ -1,10 +1,11 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
 import {
   Check,
   FileImage,
-  SpinnerGap,
+
   Trash,
   X,
 } from "@phosphor-icons/react";
@@ -400,7 +401,7 @@ export function AdminMediaField({
                 onClick={() => void applyCrop()}
               >
                 {preparing ? (
-                  <SpinnerGap className="spin" size={17} />
+                  <DotsRing size={17} />
                 ) : (
                   <Check size={17} />
                 )}

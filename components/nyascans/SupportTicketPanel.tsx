@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
 import {
@@ -346,7 +346,7 @@ export function SupportTicketPanel({
             </button>
           </header>
           {loading ? (
-            <p>Loading your tickets…</p>
+            <div className="dots-ring-loading" role="status"><DotsRing size="md" label={null} /><span>Loading your tickets…</span></div>
           ) : tickets.length ? (
             <div>
               {tickets.map((ticket) => (

@@ -1,11 +1,12 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import {
   ArrowClockwise,
   CheckCircle,
   Coins,
   LockKey,
-  SpinnerGap,
+
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -254,7 +255,7 @@ export function ChapterAccessDecisionPanel() {
                     }
                   >
                     {busyId === record.id ? (
-                      <SpinnerGap className="spin" />
+                      <DotsRing />
                     ) : (
                       <Coins />
                     )}

@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -316,7 +317,7 @@ export function ThemeSettingsPanel() {
         </div>
       </header>
 
-      {status === "loading" ? <div className="settings-loading">Loading appearance controls…</div> : null}
+      {status === "loading" ? <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading appearance controls…</span></div> : null}
       {status !== "loading" ? (
         <>
           {recoveredFromInvalid ? (

@@ -1,7 +1,8 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, ImageSquare, Plus, SpinnerGap, Trash, X } from "@phosphor-icons/react";
+import { Check, ImageSquare, Plus, Trash, X } from "@phosphor-icons/react";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AdminCombobox, AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 
@@ -202,7 +203,7 @@ export function SliderManagementPanel() {
           <label><span>Destination</span><input value={draft.destinationUrl} placeholder="/title/series-slug" onChange={(event) => setDraft((current) => ({ ...current, destinationUrl: event.target.value }))} /></label>
           <label><span>Special slider image</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickImage} /><small>{customImage?.name ?? "Optional wide artwork"}</small></label>
           <label className="v46-admin-switch"><input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft((current) => ({ ...current, isActive: event.target.checked }))} /><span>Publish immediately</span></label>
-          <button className="button button-primary" type="button" disabled={busy || !draft.title.trim()} onClick={() => void createSlider()}>{busy ? <SpinnerGap className="spin" /> : <Plus />} Add slider</button>
+          <button className="button button-primary" type="button" disabled={busy || !draft.title.trim()} onClick={() => void createSlider()}>{busy ? <DotsRing /> : <Plus />} Add slider</button>
         </div>
         <div className="v46-slider-preview" aria-label="Public slider preview">
           {customPreviewUrl ? <img src={customPreviewUrl} alt="" /> : selectedSeries?.imageUrl ? <img src={selectedSeries.imageUrl} alt="" /> : <ImageSquare />}

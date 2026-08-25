@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-html-link-for-pages, @next/next/no-img-element */
@@ -53,7 +54,7 @@ import {
   SignIn,
   SignOut,
   SlidersHorizontal,
-  SpinnerGap,
+
   SquaresFour,
   Sparkle,
   Star,
@@ -1478,7 +1479,7 @@ function SiteHeader({
                             className="header-notification-state"
                             role="status"
                           >
-                            <SpinnerGap size={18} className="spin" />
+                            <DotsRing size={18} />
                             Loading notifications…
                           </span>
                         </li>
@@ -2925,14 +2926,9 @@ function LatestUpdatesGrid({
         </div>
       ) : null}
       {loading ? (
-        <div className={`latest-grid latest-loading-grid${useHomeTable ? " is-list" : ""}`} aria-busy="true">
-          {Array.from({ length: useHomeTable ? 15 : pageSize }, (_, index) => (
-            <span key={index}>
-              <i />
-              <b />
-              <small />
-            </span>
-          ))}
+        <div className="dots-ring-loading latest-loading-grid" role="status" aria-busy="true">
+          <DotsRing size="lg" label={null} />
+          <span>Loading latest releases…</span>
         </div>
       ) : error ? (
         <div className="catalog-error" role="alert">
@@ -3325,8 +3321,9 @@ function TrendingShowcase() {
       </div>
       <div className="trending-viewport">
         {loading ? (
-          <div className="catalog-loading" role="status">
-            Loading live reader activity…
+          <div className="dots-ring-loading catalog-loading" role="status">
+            <DotsRing size="lg" label={null} />
+            <span>Loading live reader activity…</span>
           </div>
         ) : loadError ? (
           <div className="catalog-error" role="alert">
@@ -3462,8 +3459,9 @@ function CommunityHighlights() {
         tone="comments"
       />
       {loading ? (
-        <div className="community-highlight-loading" role="status">
-          Loading community activity…
+        <div className="dots-ring-loading community-highlight-loading" role="status">
+          <DotsRing size="lg" label={null} />
+          <span>Loading community activity…</span>
         </div>
       ) : error ? (
         <div className="community-highlight-loading" role="alert">
@@ -3635,10 +3633,9 @@ function ContinueReadingSection({ signedIn }: { signedIn: boolean }) {
           </a>
         </div>
       ) : loading ? (
-        <div className="continue-reading-skeleton" aria-label="Loading recent series" aria-busy="true">
-          {Array.from({ length: 6 }, (_, index) => (
-            <span key={index}><i /><b /><small /></span>
-          ))}
+        <div className="dots-ring-loading continue-reading-loading" role="status" aria-label="Loading recent series" aria-busy="true">
+          <DotsRing size="lg" label={null} />
+          <span>Loading recent series…</span>
         </div>
       ) : error ? (
         <div className="continue-reading-state" role="alert">
@@ -4210,7 +4207,8 @@ function EditorsPickSection({
     return (
       <section className="editors-pick-section page-wrap" aria-labelledby="editors-pick-title">
         {editorsPickHeading}
-        <div className="editors-pick-state-card" role={loading ? "status" : error ? "alert" : "status"}>
+        <div className={`editors-pick-state-card${loading ? " dots-ring-loading" : ""}`} role={loading ? "status" : error ? "alert" : "status"}>
+          {loading ? <DotsRing size="lg" label={null} /> : null}
           <strong>{loading ? "Loading Editor's Pick" : error ? "Editor's Pick unavailable" : "No Editor's Pick assigned yet"}</strong>
           <span>{loading ? "Finding a standout series for you." : error || "An editor can feature a standout series here when one is assigned."}</span>
           {!loading && error ? <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button> : null}
@@ -5788,18 +5786,9 @@ function BrowseView({
       ) : null}
 
       {loading ? (
-        <section
-          className="catalog-skeleton-grid"
-          aria-label="Loading catalog"
-          aria-busy="true"
-        >
-          {Array.from({ length: Math.min(pageSize, 16) }, (_, index) => (
-            <span key={index}>
-              <i />
-              <b />
-              <small />
-            </span>
-          ))}
+        <section className="dots-ring-loading catalog-loading-grid" role="status" aria-label="Loading catalog" aria-busy="true">
+          <DotsRing size="xl" label={null} />
+          <span>Loading catalog…</span>
         </section>
       ) : error ? (
         <div className="catalog-error" role="alert">
@@ -6530,17 +6519,9 @@ function StoreView({
   function renderStoreItems(items: StoreCosmetic[], emptyTitle: string) {
     if (storeLoading) {
       return (
-        <div
-          className="store-cosmetics-grid store-cosmetics-loading"
-          aria-busy="true"
-        >
-          {Array.from({ length: 4 }, (_, index) => (
-            <span key={index}>
-              <i />
-              <b />
-              <small />
-            </span>
-          ))}
+        <div className="dots-ring-loading store-cosmetics-grid store-cosmetics-loading" role="status" aria-label="Loading Store" aria-busy="true">
+          <DotsRing size="xl" label={null} />
+          <span>Loading Store…</span>
         </div>
       );
     }
@@ -6731,8 +6712,9 @@ function StoreView({
       {!["gifts", "banners", "cosmetics", "logo-effects"].includes(
         selectedCategory,
       ) && storeLoading ? (
-        <div className="settings-loading page-wrap" role="status">
-          Loading this Store category…
+        <div className="dots-ring-loading settings-loading page-wrap" role="status">
+          <DotsRing size="lg" label={null} />
+          <span>Loading this Store category…</span>
         </div>
       ) : null}
       {!["gifts", "banners", "cosmetics", "logo-effects"].includes(
@@ -7624,10 +7606,9 @@ export function LegacyDiscussionSection({
       )}
 
       {loading ? (
-        <div className="comment-loading" role="status">
-          <span />
-          <span />
-          <span />
+        <div className="dots-ring-loading comment-loading" role="status" aria-label="Loading comments">
+          <DotsRing size="lg" label={null} />
+          <span>Loading comments…</span>
         </div>
       ) : loadError ? (
         <div className="comment-error" role="alert">
@@ -8274,8 +8255,9 @@ function TitleView({
   if (detailLoading && !available) {
     return (
       <main className="page-main page-wrap">
-        <div className="catalog-loading" role="status">
-          Loading series details…
+        <div className="dots-ring-loading catalog-loading" role="status">
+          <DotsRing size="lg" label={null} />
+          <span>Loading series details…</span>
         </div>
       </main>
     );
@@ -9157,7 +9139,7 @@ function ReaderPageImage({
         >
           {state === "loading" ? (
             <>
-              <SpinnerGap size={24} className="is-spinning" />
+              <DotsRing size={24} />
               <span>Loading page {index + 1}…</span>
             </>
           ) : (
@@ -10403,7 +10385,7 @@ function ReaderView({
           <CaretLeft size={18} /> Back to {seriesTitle}
         </a>
         <section className="reader-access-card reader-access-loading" role="status">
-          <span />
+          <DotsRing size="lg" label={null} />
           <strong>Checking chapter access…</strong>
           <p>
             The reader stays closed until this chapter’s release and entitlement
@@ -10563,7 +10545,7 @@ function ReaderView({
                     onClick={() => void startAdUnlock()}
                   >
                     {adUnlockBusy ? (
-                      <SpinnerGap size={18} className="is-spinning" />
+                      <DotsRing size={18} />
                     ) : (
                       <Play size={18} weight="fill" />
                     )}
@@ -10799,7 +10781,7 @@ function ReaderView({
             <div className="reader-chapter-list">
               {chapterListLoading ? (
                 <div className="reader-chapter-list-state" role="status">
-                  <SpinnerGap size={22} className="is-spinning" />
+                  <DotsRing size={22} />
                   <span>Loading chapters…</span>
                 </div>
               ) : chapterListError ? (
@@ -10900,7 +10882,7 @@ function ReaderView({
       <section className="reader-stage">
         {pagesLoading ? (
           <div className="reader-page-state" role="status">
-            <SpinnerGap size={28} className="is-spinning" />
+            <DotsRing size={28} />
             <strong>Loading chapter pages…</strong>
           </div>
         ) : pagesError ? (
@@ -11450,11 +11432,9 @@ function useCommerceData(
 
 function CommerceLoading() {
   return (
-    <div className="commerce-loading" role="status">
-      <span />
-      <span />
-      <span />
-      Loading wallet and purchases…
+    <div className="dots-ring-loading commerce-loading" role="status">
+      <DotsRing size="lg" label={null} />
+      <span>Loading wallet and purchases…</span>
     </div>
   );
 }
@@ -12039,7 +12019,7 @@ function AuthEntryView({
             </div>
             {verifyingLink ? (
               <div className="auth-local-status" role="status">
-                <SpinnerGap size={19} className="spin" />
+                <DotsRing size={19} />
                 Verifying your one-time link…
               </div>
             ) : null}
@@ -12111,7 +12091,7 @@ function AuthEntryView({
                   type="submit"
                   disabled={authBusy || verifyingLink}
                 >
-                  {authBusy ? <SpinnerGap size={18} className="spin" /> : null}
+                  {authBusy ? <DotsRing size={18} /> : null}
                   {isSignup ? "Create Account" : "Sign In"}
                 </button>
                 {verificationRequired ? (
@@ -12128,7 +12108,7 @@ function AuthEntryView({
             </form>
             {!isSignup ? (
               <button className="auth-passkey-button" type="button" onClick={() => void signInWithPasskey()} disabled={authBusy || verifyingLink}>
-                {authBusy ? <SpinnerGap size={19} className="spin" /> : <Key size={20} weight="fill" />}
+                {authBusy ? <DotsRing size={19} /> : <Key size={20} weight="fill" />}
                 <span>Sign in with a passkey</span>
                 <ArrowRight size={18} />
               </button>

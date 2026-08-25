@@ -1,9 +1,10 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
 import {
-  SpinnerGap,
+
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -223,7 +224,7 @@ export function SeriesReportDialog({
           >
             {submitting ? (
               <>
-                <SpinnerGap size={16} className="spin" /> Sending…
+                <DotsRing size={16} /> Sending…
               </>
             ) : signedIn ? (
               "Send report"

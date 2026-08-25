@@ -1,5 +1,4 @@
 "use client";
-
 import { Keyboard, X } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 import { useSiteConfiguration } from "@/components/nyascans/useSiteConfiguration";

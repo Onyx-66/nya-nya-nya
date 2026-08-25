@@ -1,5 +1,4 @@
 "use client";
-
 import Link from "next/link";
 import { SiteConfigurationPanel } from "@/components/nyascans/SiteConfigurationPanel";
 import { ThemeSettingsPanel } from "@/components/nyascans/ThemeSettingsPanel";

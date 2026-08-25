@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -189,7 +190,7 @@ export function DiscussionSettingsPanel() {
       </header>
 
       {status === "loading" ? (
-        <div className="settings-loading">Loading discussion controls…</div>
+        <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading discussion controls…</span></div>
       ) : (
         <div className="discussion-settings-content">
           <section className="discussion-policy-grid" aria-label="Media policy">

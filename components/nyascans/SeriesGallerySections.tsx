@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -8,7 +9,7 @@ import {
   CheckCircle,
   ImageSquare,
   Plus,
-  SpinnerGap,
+
   X,
 } from "@phosphor-icons/react";
 import {
@@ -438,7 +439,7 @@ export function SeriesGallerySections({
         >
           {loading ? (
             <div className="series-gallery-state" role="status">
-              <SpinnerGap size={18} className="spin" /> Loading {title.toLowerCase()}…
+              <DotsRing size={18} /> Loading {title.toLowerCase()}…
             </div>
           ) : assets.length ? (
             <div className="series-gallery-rail" aria-label={`${seriesTitle} ${title}`}>
@@ -545,7 +546,7 @@ export function SeriesGallerySections({
                 title={submission.rejectionReason ?? undefined}
               >
                 {submission.status === "PENDING" ? (
-                  <SpinnerGap size={14} />
+                  <DotsRing size={14} />
                 ) : (
                   <CheckCircle size={14} />
                 )}
@@ -812,7 +813,7 @@ export function SeriesGallerySections({
               >
                 {submitting ? (
                   <>
-                    <SpinnerGap size={16} className="spin" /> Submitting…
+                    <DotsRing size={16} /> Submitting…
                   </>
                 ) : (
                   publishesDirectly ? "Add to gallery" : "Submit for review"

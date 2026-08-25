@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
@@ -354,7 +354,7 @@ export function SupportTicketsAdminPanel() {
             </span>
           </div>
           {loading ? (
-            <p className="support-admin-empty">Loading support queue…</p>
+            <div className="dots-ring-loading support-admin-empty" role="status"><DotsRing size="md" label={null} /><span>Loading support queue…</span></div>
           ) : tickets.length ? (
             <div className="support-admin-ticket-list">
               {tickets.map((ticket) => (
@@ -437,7 +437,7 @@ export function SupportTicketsAdminPanel() {
 
         <article className="support-admin-detail" aria-busy={detailLoading}>
           {detailLoading ? (
-            <p className="support-admin-empty">Loading conversation…</p>
+            <div className="dots-ring-loading support-admin-empty" role="status"><DotsRing size="md" label={null} /><span>Loading conversation…</span></div>
           ) : selected ? (
             <>
               <header>

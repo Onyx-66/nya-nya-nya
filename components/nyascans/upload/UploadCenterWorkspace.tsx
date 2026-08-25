@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -22,7 +23,7 @@ import {
   MagnifyingGlass,
   Plus,
   ShieldCheck,
-  SpinnerGap,
+
   Trash,
   WarningCircle,
   X,
@@ -2955,7 +2956,7 @@ function UploadComposer({
       ) : null}
       {resumeLoading ? (
         <div className="upload-empty upload-resume-state" role="status">
-          <SpinnerGap className="spin" size={28} />
+          <DotsRing size={28} />
           <strong>Loading your private upload draft</strong>
           <p>Restoring the saved team, chapters, pages, and access settings…</p>
         </div>
@@ -3309,7 +3310,7 @@ function UploadComposer({
                     disabled={busy || !seriesId || !hasQueuedPages}
                   >
                     {busy ? (
-                      <SpinnerGap className="spin" size={18} />
+                      <DotsRing size={18} />
                     ) : (
                       <CloudArrowUp size={18} />
                     )}
@@ -3920,7 +3921,7 @@ function UploadComposer({
             className="button button-primary"
             disabled={busy || !seriesId || Boolean(duplicateRejectedKey)}
           >
-            {busy ? <SpinnerGap className="spin" size={18} /> : <CloudArrowUp size={18} />}
+            {busy ? <DotsRing size={18} /> : <CloudArrowUp size={18} />}
             Upload chapter content
           </button>
           </div>
@@ -4326,7 +4327,7 @@ export function UploadCenterWorkspace({
           />
         ) : loading && !options ? (
           <div className="upload-loading">
-            <SpinnerGap className="spin" size={24} /> Loading publishing workspace…
+            <DotsRing size={24} /> Loading publishing workspace…
           </div>
         ) : options ? (
           selectedMode === "dashboard" ? (

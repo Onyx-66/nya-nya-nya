@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -9,7 +10,7 @@ import {
   MagnifyingGlass,
   Plus,
   PushPin,
-  SpinnerGap,
+
   Star,
   Trash,
 } from "@phosphor-icons/react";
@@ -394,7 +395,7 @@ export function PinnedSeriesPanel({
           disabled={!dirty || busy || invalidDates || overlapLimitExceeded}
           onClick={() => void save()}
         >
-          {busy ? <SpinnerGap className="spin" /> : <PushPin />}
+          {busy ? <DotsRing /> : <PushPin />}
           {busy ? "Saving…" : "Save pins"}
         </button>
       }
@@ -434,7 +435,7 @@ export function PinnedSeriesPanel({
               placeholder="Title or native title"
               onChange={(event) => setQuery(event.target.value)}
             />
-            {searching ? <SpinnerGap className="spin" aria-label="Searching" /> : null}
+            {searching ? <DotsRing label="Searching" /> : null}
           </span>
         </label>
         <div className="v481-series-results">

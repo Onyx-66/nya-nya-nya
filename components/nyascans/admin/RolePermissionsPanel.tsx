@@ -1,8 +1,9 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
-import { Key, SpinnerGap } from "@phosphor-icons/react";
+import { Key } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 
@@ -63,7 +64,7 @@ export function RolePermissionsPanel() {
         <div className="role-permission-groups">{groups.map(([group, definitions]) => <section key={group}><header><Key /><div><strong>{group}</strong><small>Default policy plus explicit audited overrides</small></div></header>{definitions.map((definition) => {
           const rule = data.rules.find((entry) => entry.role === role && entry.capability === definition.id);
           const value = rule ? rule.allowed ? "ALLOW" : "DENY" : "DEFAULT";
-          return <article key={definition.id}><div><strong>{definition.label}</strong><code>{definition.id}</code><small>Default: {data.defaults[role]?.[definition.id] ? "Allowed" : "Denied"}</small></div><UnifiedSingleSelect aria-label={`${definition.label} for ${role}`} value={value} disabled={busy === definition.id} onChange={(event) => void update(definition.id, event.target.value as "DEFAULT" | "ALLOW" | "DENY")}><option value="DEFAULT">Use role default</option><option value="ALLOW">Explicitly allow</option><option value="DENY">Explicitly deny</option></UnifiedSingleSelect>{busy === definition.id ? <SpinnerGap className="spin" /> : null}</article>;
+          return <article key={definition.id}><div><strong>{definition.label}</strong><code>{definition.id}</code><small>Default: {data.defaults[role]?.[definition.id] ? "Allowed" : "Denied"}</small></div><UnifiedSingleSelect aria-label={`${definition.label} for ${role}`} value={value} disabled={busy === definition.id} onChange={(event) => void update(definition.id, event.target.value as "DEFAULT" | "ALLOW" | "DENY")}><option value="DEFAULT">Use role default</option><option value="ALLOW">Explicitly allow</option><option value="DENY">Explicitly deny</option></UnifiedSingleSelect>{busy === definition.id ? <DotsRing /> : null}</article>;
         })}</section>)}</div>
       </div> : null}
     </AdminPageScaffold>

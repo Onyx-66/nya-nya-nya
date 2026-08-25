@@ -10,6 +10,7 @@ import {
   Trophy,
 } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 type RankingPeriod = "weekly" | "monthly" | "all";
 
@@ -242,8 +243,8 @@ export function UserLeaderboardView() {
       </div>
 
       {loading ? (
-        <div className="user-leaderboard-state" role="status">
-          <Trophy size={24} />
+        <div className="dots-ring-loading user-leaderboard-state" role="status">
+          <DotsRing size="lg" label={null} />
           <strong>Loading the top 100 users…</strong>
         </div>
       ) : error ? (

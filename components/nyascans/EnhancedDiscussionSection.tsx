@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -16,7 +17,7 @@ import {
   PencilSimple,
   PushPin,
   Smiley,
-  SpinnerGap,
+
   Trash,
   WarningCircle,
   X,
@@ -1256,7 +1257,7 @@ export function EnhancedDiscussionSection({
                 </div>
                 {loading ? (
                   <p className="comment-gif-empty" role="status">
-                    <SpinnerGap size={20} className="spin" /> Loading GIFs…
+                    <DotsRing size={20} /> Loading GIFs…
                   </p>
                 ) : loadError ? (
                   <div className="comment-gif-empty" role="alert">
@@ -1377,7 +1378,7 @@ export function EnhancedDiscussionSection({
                   </label>
                 </div>
                 {emojiLoading ? (
-                  <p className="emoji-picker-status" role="status"><SpinnerGap size={20} className="spin" /> Loading emoji…</p>
+                  <p className="emoji-picker-status" role="status"><DotsRing size={20} /> Loading emoji…</p>
                 ) : emojiError ? (
                   <div className="emoji-picker-status" role="alert"><WarningCircle size={20} /><span>{emojiError}</span><button type="button" onClick={() => { setEmojiLoading(true); setEmojiError(""); setEmojiReload((value) => value + 1); }}>Retry</button></div>
                 ) : visibleEmojis.length === 0 ? (
@@ -1422,7 +1423,7 @@ export function EnhancedDiscussionSection({
         </div>
         {uploadingMedia ? (
           <span className="media-uploading" role="status">
-            <SpinnerGap size={16} className="spin" /> Uploading…
+            <DotsRing size={16} /> Uploading…
           </span>
         ) : null}
       </div>
@@ -1458,7 +1459,7 @@ export function EnhancedDiscussionSection({
                   onClick={() => void removePendingMedia(media)}
                 >
                   {media.uploadState === "removing" ? (
-                    <SpinnerGap size={16} className="spin" />
+                    <DotsRing size={16} />
                   ) : (
                     <X size={16} />
                   )}
@@ -1586,7 +1587,7 @@ export function EnhancedDiscussionSection({
             >
               {submitting ? (
                 <>
-                  <SpinnerGap size={16} className="spin" /> Posting…
+                  <DotsRing size={16} /> Posting…
                 </>
               ) : (
                 <>
@@ -2239,10 +2240,9 @@ export function EnhancedDiscussionSection({
       ) : null}
 
       {loading ? (
-        <div className="comment-loading" role="status" aria-label="Loading comments">
-          <span />
-          <span />
-          <span />
+        <div className="dots-ring-loading comment-loading" role="status" aria-label="Loading comments">
+          <DotsRing size="lg" label={null} />
+          <span>Loading comments…</span>
         </div>
       ) : loadError ? (
         <div className="comment-error" role="alert">

@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
@@ -9,7 +10,7 @@ import {
   FileText,
   FloppyDisk,
   Image as ImageIcon,
-  SpinnerGap,
+
   WarningCircle,
 } from "@phosphor-icons/react";
 import Link from "next/link";
@@ -714,7 +715,7 @@ export function AddSeriesRequestPanel() {
   if (!teamsLoaded && !error) {
     return (
       <div className="upload-loading">
-        <SpinnerGap className="spin" size={22} /> Loading eligible teams…
+        <DotsRing size={22} /> Loading eligible teams…
       </div>
     );
   }
@@ -1093,7 +1094,7 @@ export function AddSeriesRequestPanel() {
               onClick={() => void previewMangaDex()}
             >
               {importBusy ? (
-                <SpinnerGap className="spin" size={18} />
+                <DotsRing size={18} />
               ) : (
                 <FileText size={18} />
               )}
@@ -1262,7 +1263,7 @@ export function AddSeriesRequestPanel() {
             className="button button-primary"
             disabled={!editable || busy}
           >
-            {busy ? <SpinnerGap className="spin" size={18} /> : <ArrowRight size={18} />}
+            {busy ? <DotsRing size={18} /> : <ArrowRight size={18} />}
             Submit for review
           </button>
         </div>
@@ -1471,7 +1472,7 @@ export function SeriesRequestsPanel() {
         <div className="request-record-list">
           {busy && !records.length ? (
             <div className="upload-loading">
-              <SpinnerGap className="spin" size={22} /> Loading requests…
+              <DotsRing size={22} /> Loading requests…
             </div>
           ) : records.length ? (
             records.map((record) => (

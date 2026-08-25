@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
@@ -463,10 +463,9 @@ function PanelMessage({
 
 function LoadingPanel() {
   return (
-    <div className="control-loading" role="status" aria-label="Loading">
-      <span />
-      <span />
-      <span />
+    <div className="dots-ring-loading control-loading" role="status" aria-label="Loading">
+      <DotsRing size="lg" label={null} />
+      <span>Loading…</span>
     </div>
   );
 }
@@ -4333,8 +4332,9 @@ function ChapterAccessPanel() {
                   </a>
                 </div>
                 {detailLoading ? (
-                  <div className="chapter-detail-loading">
-                    Loading chapter assets…
+                  <div className="dots-ring-loading chapter-detail-loading" role="status">
+                    <DotsRing size="md" label={null} />
+                    <span>Loading chapter assets…</span>
                   </div>
                 ) : pages.length ? (
                   <div className="chapter-page-order">
@@ -5895,8 +5895,9 @@ function WorkspacePanel({
         />
       ) : null}
       {loading ? (
-        <div className="control-loading">
-          <Pulse size={22} /> Loading live workspace data…
+        <div className="dots-ring-loading control-loading" role="status">
+          <DotsRing size="lg" label={null} />
+          <span>Loading live workspace data…</span>
         </div>
       ) : error ? (
         <div className="control-error" role="alert">

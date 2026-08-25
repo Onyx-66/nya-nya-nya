@@ -1,6 +1,7 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
-import { CaretDown, Check, Clock, LinkSimple, ShieldCheck, SpinnerGap, X } from "@phosphor-icons/react";
+import { CaretDown, Check, Clock, LinkSimple, ShieldCheck, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { AdminEmptyState, AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 
@@ -77,7 +78,7 @@ export function TeamRequestsPanel() {
                 <a className="team-request-proof" href={claim.proofValue} target="_blank" rel="noreferrer"><LinkSimple /> Open submitted proof</a>
                 {claim.links.length ? <ul>{claim.links.map((link) => <li key={link.url}><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a><small>{link.linkType}</small></li>)}</ul> : null}
                 <label><span>Decision reason</span><textarea rows={4} value={reasons[claim.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [claim.id]: event.target.value }))} /></label>
-                <footer><button type="button" disabled={busy === claim.id} onClick={() => void decide("OWNERSHIP", claim, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === claim.id} onClick={() => void decide("OWNERSHIP", claim, "APPROVE")}>{busy === claim.id ? <SpinnerGap className="spin" /> : <Check />} Approve ownership</button></footer>
+                <footer><button type="button" disabled={busy === claim.id} onClick={() => void decide("OWNERSHIP", claim, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === claim.id} onClick={() => void decide("OWNERSHIP", claim, "APPROVE")}>{busy === claim.id ? <DotsRing /> : <Check />} Approve ownership</button></footer>
               </div>
             </details>
           )) : <AdminEmptyState icon={<ShieldCheck />} title="Ownership queue is clear" description="No ownership claim is waiting for review." />}
@@ -99,7 +100,7 @@ export function TeamRequestsPanel() {
                 </dl>
                 <p>{request.reason}</p>
                 <label><span>Decision reason</span><textarea rows={4} value={reasons[request.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [request.id]: event.target.value }))} /></label>
-                <footer><button type="button" disabled={busy === request.id} onClick={() => void decide("TITLE", request, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === request.id} onClick={() => void decide("TITLE", request, "APPROVE")}>{busy === request.id ? <SpinnerGap className="spin" /> : <Check />} Approve title</button></footer>
+                <footer><button type="button" disabled={busy === request.id} onClick={() => void decide("TITLE", request, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === request.id} onClick={() => void decide("TITLE", request, "APPROVE")}>{busy === request.id ? <DotsRing /> : <Check />} Approve title</button></footer>
               </div>
             </details>
           )) : <AdminEmptyState icon={<ShieldCheck />} title="Title-change queue is clear" description="No permanent title change is waiting for review." />}

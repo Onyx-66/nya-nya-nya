@@ -2344,7 +2344,6 @@
   summary,
   [role="button"],
   a,
-  .admin-spinner,
   .admin-command-input,
   .ops-sidebar-search,
   [class*="avatar"],
@@ -2795,10 +2794,6 @@
   height: 32px;
 }
 
-.ops-shell[data-operations-mode="admin"] .admin-spinner {
-  width: 32px;
-  height: 32px;
-}
 
 /* Accessible shared confirmation dialog: centered on desktop. */
 .ops-shell[data-operations-mode="admin"] .admin-dialog-backdrop {

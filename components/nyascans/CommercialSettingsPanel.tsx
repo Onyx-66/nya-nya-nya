@@ -1,5 +1,5 @@
 "use client";
-
+import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
 import {
@@ -218,8 +218,8 @@ export function CommercialSettingsPanel({
 
   if (loading) {
     return (
-      <section className="control-panel commercial-settings-loading" role="status">
-        <span />
+      <section className="dots-ring-loading control-panel commercial-settings-loading" role="status">
+        <DotsRing size="lg" label={null} />
         <strong>Loading commercial settings…</strong>
       </section>
     );

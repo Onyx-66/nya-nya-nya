@@ -1,4 +1,5 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
@@ -429,7 +430,7 @@ export function TaxonomyManager() {
         </button>
       </div>
       {loading ? (
-        <div className="settings-loading">Loading taxonomy entries…</div>
+        <div className="dots-ring-loading settings-loading" role="status"><DotsRing size="lg" label={null} /><span>Loading taxonomy entries…</span></div>
       ) : entries.length ? (
         <div className="taxonomy-layout">
           <div className="taxonomy-list">

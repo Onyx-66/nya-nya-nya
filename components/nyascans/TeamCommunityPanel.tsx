@@ -1,9 +1,10 @@
 "use client";
+import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, ImageSquare, LinkSimple, Plus, ShieldCheck, SpinnerGap, UploadSimple, UserPlus, X } from "@phosphor-icons/react";
+import { Check, ImageSquare, LinkSimple, Plus, ShieldCheck, UploadSimple, UserPlus, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
 
@@ -107,10 +108,10 @@ export function TeamCommunityPanel() {
           <div className="team-link-editor"><strong>Public links (at least one)</strong>{create.links.map((link, index) => <div key={`create-link:${index}`}><input aria-label="Link label" value={link.label} onChange={(event) => setCreate((current) => ({ ...current, links: current.links.map((entry, entryIndex) => entryIndex === index ? { ...entry, label: event.target.value } : entry) }))} /><input aria-label="HTTPS link" type="url" placeholder="https://…" value={link.url} onChange={(event) => setCreate((current) => ({ ...current, links: current.links.map((entry, entryIndex) => entryIndex === index ? { ...entry, url: event.target.value } : entry), proofUrl: current.proofUrl || event.target.value }))} />{create.links.length > 1 ? <button type="button" onClick={() => setCreate((current) => ({ ...current, links: current.links.filter((_, entryIndex) => entryIndex !== index) }))}><X /></button> : null}</div>)}<button className="button button-secondary" type="button" disabled={create.links.length >= 10} onClick={() => setCreate((current) => ({ ...current, links: [...current.links, { label: "Social", url: "", linkType: "SOCIAL" }] }))}><Plus /> Add link</button></div>
           <label><span>Ownership proof link</span><UnifiedSingleSelect value={create.proofUrl} onChange={(event) => setCreate((current) => ({ ...current, proofUrl: event.target.value }))}><option value="">Select a completed link</option>{create.links.filter((link) => link.url).map((link) => <option key={link.url} value={link.url}>{link.label} · {link.url}</option>)}</UnifiedSingleSelect></label>
           <label><span>Verification statement</span><textarea rows={4} minLength={20} maxLength={1000} placeholder="Explain where the administrator can confirm your ownership or control of this link." value={create.statement} onChange={(event) => setCreate((current) => ({ ...current, statement: event.target.value }))} /></label>
-          <button className="button button-primary" type="button" disabled={Boolean(busy) || create.name.trim().length < 2 || create.description.trim().length < 20 || !create.proofUrl || create.statement.trim().length < 20} onClick={() => void mutate({ action: "CREATE", ...create }, "Team submitted for ownership verification.").then((saved) => { if (saved) setCreate(emptyCreate); })}>{busy === "CREATE" ? <SpinnerGap className="spin" /> : <ShieldCheck />} Submit team for verification</button>
+          <button className="button button-primary" type="button" disabled={Boolean(busy) || create.name.trim().length < 2 || create.description.trim().length < 20 || !create.proofUrl || create.statement.trim().length < 20} onClick={() => void mutate({ action: "CREATE", ...create }, "Team submitted for ownership verification.").then((saved) => { if (saved) setCreate(emptyCreate); })}>{busy === "CREATE" ? <DotsRing /> : <ShieldCheck />} Submit team for verification</button>
         </div>
       </details>
-      {loading ? <div className="settings-loading"><SpinnerGap className="spin" /> Loading your teams…</div> : null}
+      {loading ? <div className="settings-loading"><DotsRing /> Loading your teams…</div> : null}
       <div className="team-management-list">{data.teams.map((team) => {
         const draft = drafts[team.id] ?? { description: team.description, links: team.links };
         const authorized = team.membershipStatus === "ACTIVE" && ["OWNER", "LEADER"].includes(team.membershipRole ?? "");
