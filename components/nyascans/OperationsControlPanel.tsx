@@ -1,6 +1,8 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -4260,19 +4262,7 @@ function ChapterAccessPanel() {
                       <option value="PUBLISHED">Published</option>
                     </UnifiedSingleSelect>
                   </label>
-                  <label>
-                    <span>Release date</span>
-                    <input
-                      type="datetime-local"
-                      value={form.publishedAt}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          publishedAt: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
+                  <div className="admin-date-picker-field"><span>Release date</span><PremiumDateTimePicker value={form.publishedAt} label="Release date" onChange={(next) => setForm((current) => ({ ...current, publishedAt: next }))} /></div>
                 </div>
               </section>
               <section className="chapter-editor-section">
@@ -4831,27 +4821,7 @@ function AnalyticsPanel({
         </label>
       </div>
       {range === "custom" ? (
-        <div className="analytics-custom-range">
-          <label>
-            <span>Start date</span>
-            <input
-              type="date"
-              value={customStart}
-              max={customEnd}
-              onChange={(event) => setCustomStart(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>End date</span>
-            <input
-              type="date"
-              value={customEnd}
-              min={customStart}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(event) => setCustomEnd(event.target.value)}
-            />
-          </label>
-        </div>
+        <PremiumDateRangePicker start={customStart} end={customEnd} label="Custom analytics range" valueFormat="date" onChange={({ start, end }) => { if (start) setCustomStart(start); if (end) setCustomEnd(end); }} />
       ) : null}
       {error ? (
         <PanelMessage kind="error">
@@ -5306,7 +5276,7 @@ function AnalyticsPanel({
 
 function SecurityPanel() {
   const [health, setHealth] = useState<HealthData | null>(null);
-  const [mfa, setMfa] = useState<{ enrolled: boolean; verified: boolean; expiresAt: string | null } | null>(null);
+  const [securityStatus, setSecurityStatus] = useState<{ passkeyCount: number } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -5322,9 +5292,9 @@ function SecurityPanel() {
       );
   }, []);
   useEffect(() => {
-    void fetch("/api/v1/admin-mfa", { cache: "no-store" })
-      .then((response) => readJson<{ data: { enrolled: boolean; verified: boolean; expiresAt: string | null } }>(response))
-      .then((payload) => setMfa(payload.data))
+    void fetch("/api/v1/security", { cache: "no-store" })
+      .then((response) => readJson<{ data: { passkeyCount: number } }>(response))
+      .then((payload) => setSecurityStatus(payload.data))
       .catch(() => undefined);
   }, []);
 
@@ -5348,20 +5318,20 @@ function SecurityPanel() {
           </div>
           {[
             [
-              "Mandatory authenticator 2FA",
-              mfa?.enrolled
-                ? "A TOTP authenticator is enabled on this administrator account. Future admin-panel opens do not require another challenge."
-                : "This administrator must enable a TOTP authenticator once before opening the administration panel.",
-              Boolean(mfa?.enrolled),
+              "Mandatory admin passkey enrollment",
+              securityStatus && securityStatus.passkeyCount > 0
+                ? `${securityStatus.passkeyCount} passkey${securityStatus.passkeyCount === 1 ? "" : "s"} registered. Future admin-console opens do not require another challenge.`
+                : "This administrator must register a passkey once before opening the administration panel.",
+              Boolean(securityStatus && securityStatus.passkeyCount > 0),
             ],
             [
-              "Attempt limits and sign-in alerts",
-              "TOTP failures are limited per account and device fingerprint. A successful sign-in from a new device or network creates a security notification.",
+              "WebAuthn ceremony and sign-in alerts",
+              "Passkey registration uses the server-issued WebAuthn challenge and existing sign-in alerts; normal site login remains unaffected.",
               true,
             ],
             [
               "Server-side roles",
-              "Administrator access combines server-side roles, editable capability overrides, non-delegable Owner controls, and MFA assurance.",
+              "Administrator access combines server-side roles, editable capability overrides, non-delegable Owner controls, and passkey enrollment.",
               true,
             ],
             [
@@ -6315,31 +6285,7 @@ function WorkspacePanel({
             ))}
           </div>
           {workspaceAnalyticsRange === "custom" ? (
-            <div className="analytics-custom-range">
-              <label>
-                <span>Start date</span>
-                <input
-                  type="date"
-                  value={workspaceAnalyticsStart}
-                  max={workspaceAnalyticsEnd}
-                  onChange={(event) =>
-                    setWorkspaceAnalyticsStart(event.target.value)
-                  }
-                />
-              </label>
-              <label>
-                <span>End date</span>
-                <input
-                  type="date"
-                  value={workspaceAnalyticsEnd}
-                  min={workspaceAnalyticsStart}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={(event) =>
-                    setWorkspaceAnalyticsEnd(event.target.value)
-                  }
-                />
-              </label>
-            </div>
+            <PremiumDateRangePicker start={workspaceAnalyticsStart} end={workspaceAnalyticsEnd} label="Custom workspace range" valueFormat="date" onChange={({ start, end }) => { if (start) setWorkspaceAnalyticsStart(start); if (end) setWorkspaceAnalyticsEnd(end); }} />
           ) : null}
           <div className="workspace-analytics-summary">
             {[

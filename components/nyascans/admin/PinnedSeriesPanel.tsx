@@ -20,6 +20,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 import {
   AdminPageScaffold,
   useUnsavedChanges,
@@ -125,19 +126,6 @@ function serializedItems(items: PinnedDraft[]) {
       endsAt: item.endsAt,
     })),
   );
-}
-
-function dateTimeInputValue(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16);
-}
-
-function isoDate(value: string) {
-  return value ? new Date(value).toISOString() : null;
 }
 
 function scheduleStatus(item: Pick<PinnedDraft, "startsAt" | "endsAt">) {
@@ -515,30 +503,8 @@ export function PinnedSeriesPanel({
                     </span>
                   </div>
                   <div className="v481-pin-date-grid">
-                    <label>
-                      <span><CalendarBlank /> Start (optional)</span>
-                      <input
-                        type="datetime-local"
-                        value={dateTimeInputValue(item.startsAt)}
-                        onChange={(event) => updateItem(item.seriesId, (current) => ({
-                          ...current,
-                          startsAt: isoDate(event.target.value),
-                        }))}
-                      />
-                    </label>
-                    <label>
-                      <span><CalendarBlank /> End (optional)</span>
-                      <input
-                        type="datetime-local"
-                        aria-invalid={!validDates}
-                        value={dateTimeInputValue(item.endsAt)}
-                        onChange={(event) => updateItem(item.seriesId, (current) => ({
-                          ...current,
-                          endsAt: isoDate(event.target.value),
-                        }))}
-                      />
-                      {!validDates ? <em>End must be after start.</em> : null}
-                    </label>
+                    <div className="admin-date-picker-field"><span><CalendarBlank /> Start (optional)</span><PremiumDateTimePicker value={item.startsAt} label="Start date" onChange={(next) => updateItem(item.seriesId, (current) => ({ ...current, startsAt: next }))} /></div>
+                    <div className="admin-date-picker-field"><span><CalendarBlank /> End (optional)</span><PremiumDateTimePicker value={item.endsAt} label="End date" onChange={(next) => updateItem(item.seriesId, (current) => ({ ...current, endsAt: next }))} />{!validDates ? <em>End must be after start.</em> : null}</div>
                   </div>
                   <div className="v481-pin-row-actions">
                     <span className="v481-feature-toggle is-active" aria-label={`${item.title} is Featured`}>

@@ -5,9 +5,10 @@
 - Confirm the Sites access policy and intended audience.
 - Point `nyascans.com` DNS to the verified Sites deployment and confirm TLS.
 - Promote administrators through an audited operator procedure.
-- Configure `ADMIN_TOTP_ENCRYPTION_KEY` as a 32-byte base64url hosted secret.
-  TOTP is mandatory for Owner, Administrator, and Manager accounts; the
-  server-issued administrator assurance cookie expires after one hour.
+- Require Owner, Administrator, and Manager accounts with admin-console
+  capability to register a WebAuthn passkey before first console access. This is
+  a one-time server-side enrollment gate; normal site login remains unchanged,
+  and no repeated verification challenge or assurance cookie is used.
 - Configure an administrator IP or trusted-device policy when appropriate.
 - Set payment, webhook, email, and search secrets in hosted environment values.
 - Register `/api/v1/payments/stripe/webhook` for signed Stripe events and

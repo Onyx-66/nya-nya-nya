@@ -64,11 +64,6 @@ const actionSchema = z.discriminatedUnion("action", [
     reason: z.string().trim().min(10).max(1_000),
   }),
   z.object({
-    action: z.literal("MFA_SESSION_REVOKE"),
-    id: z.string().trim().min(3).max(160),
-    reason: z.string().trim().min(10).max(1_000),
-  }),
-  z.object({
     action: z.literal("NOTIFICATION_SEND"),
     clientMutationId: z.string().uuid(),
     email: z.string().trim().email().max(320),
@@ -108,7 +103,6 @@ const capabilityByAction: Record<GovernanceAction["action"], string> = {
   ACHIEVEMENT_REVOKE: "community.achievements.manage",
   REVIEW_STATUS: "reviews.moderate.global",
   TEAM_POST_STATUS: "comments.moderate.global",
-  MFA_SESSION_REVOKE: "security.sessions.manage",
   NOTIFICATION_SEND: "notifications.manage",
 };
 
@@ -137,12 +131,11 @@ async function snapshot(
     access: actorHasCapability(actor, "commerce.entitlements.read"),
     notifications: actorHasCapability(actor, "notifications.manage"),
     securityRead: actorHasCapability(actor, "security.read"),
-    sessionsManage: actorHasCapability(actor, "security.sessions.manage"),
   };
   const offset = (page - 1) * limit;
   const fetchLimit = limit + 1;
   const pattern = `%${query}%`;
-  const [runtimeFeatures, featureFlagsRaw, achievementsRaw, reviewsRaw, teamPostsRaw, entitlementsRaw, giftCardsRaw, notificationsRaw, sessionsRaw, loginEventsRaw] = await Promise.all([
+  const [runtimeFeatures, featureFlagsRaw, achievementsRaw, reviewsRaw, teamPostsRaw, entitlementsRaw, giftCardsRaw, notificationsRaw, passkeysRaw] = await Promise.all([
     getFeatureStates(),
     rows<Record<string, unknown>>(area === "registry",
       `SELECT key, enabled, description, updated_at AS updatedAt
@@ -201,20 +194,15 @@ async function snapshot(
         WHERE (? = '' OR n.title LIKE ? COLLATE NOCASE OR u.display_name LIKE ? COLLATE NOCASE OR u.email LIKE ? COLLATE NOCASE)
         ORDER BY datetime(n.created_at) DESC LIMIT ? OFFSET ?`, query, pattern, pattern, pattern, fetchLimit, offset),
     rows<Record<string, unknown>>(area === "security" && permissions.securityRead,
-      `SELECT s.id, s.expires_at AS expiresAt, s.last_seen_at AS lastSeenAt,
-              s.revoked_at AS revokedAt, s.created_at AS createdAt,
+      `SELECT p.id, p.device_name AS deviceName, p.device_type AS deviceType,
+              p.backed_up AS backedUp, p.created_at AS createdAt,
+              p.last_used_at AS lastUsedAt,
               u.display_name AS userName, u.email
-         FROM admin_mfa_sessions s JOIN users u ON u.id = s.user_id
-        WHERE (? = '' OR u.display_name LIKE ? COLLATE NOCASE OR u.email LIKE ? COLLATE NOCASE)
-        ORDER BY datetime(s.created_at) DESC LIMIT ? OFFSET ?`, query, pattern, pattern, fetchLimit, offset),
-    rows<Record<string, unknown>>(area === "security" && permissions.securityRead,
-      `SELECT e.id, e.result, e.reason, e.created_at AS createdAt,
-              u.display_name AS userName, u.email
-         FROM admin_login_events e LEFT JOIN users u ON u.id = e.user_id
-        WHERE (? = '' OR e.result LIKE ? COLLATE NOCASE OR e.reason LIKE ? COLLATE NOCASE OR u.display_name LIKE ? COLLATE NOCASE OR u.email LIKE ? COLLATE NOCASE)
-        ORDER BY datetime(e.created_at) DESC LIMIT ? OFFSET ?`, query, pattern, pattern, pattern, pattern, fetchLimit, offset),
+         FROM account_passkeys p JOIN users u ON u.id = p.user_id
+        WHERE (? = '' OR p.device_name LIKE ? COLLATE NOCASE OR u.display_name LIKE ? COLLATE NOCASE OR u.email LIKE ? COLLATE NOCASE)
+        ORDER BY datetime(p.created_at) DESC LIMIT ? OFFSET ?`, query, pattern, pattern, pattern, fetchLimit, offset),
   ]);
-  const hasMore = [achievementsRaw, reviewsRaw, teamPostsRaw, entitlementsRaw, giftCardsRaw, notificationsRaw, sessionsRaw, loginEventsRaw]
+  const hasMore = [achievementsRaw, reviewsRaw, teamPostsRaw, entitlementsRaw, giftCardsRaw, notificationsRaw, passkeysRaw]
     .some((entries) => entries.length > limit);
   return {
     area,
@@ -236,8 +224,7 @@ async function snapshot(
     entitlements: visiblePage(entitlementsRaw, limit),
     giftCards: visiblePage(giftCardsRaw, limit),
     notifications: visiblePage(notificationsRaw, limit),
-    sessions: visiblePage(sessionsRaw, limit),
-    loginEvents: visiblePage(loginEventsRaw, limit),
+    passkeys: visiblePage(passkeysRaw, limit),
     pagination: { page, limit, hasMore },
     generatedAt: new Date().toISOString(),
   };
@@ -354,11 +341,6 @@ export async function POST(request: Request) {
             EXISTS (SELECT 1 FROM teams t WHERE t.id = team_discussion_posts.team_id AND t.verification_status = 'VERIFIED' AND t.is_archived = 0)
             AND (parent_id IS NULL OR EXISTS (SELECT 1 FROM team_discussion_posts parent WHERE parent.id = team_discussion_posts.parent_id AND parent.moderation_status = 'VISIBLE'))
           ))`).bind(payload.status, payload.id, payload.expectedRevision, payload.status);
-    } else if (payload.action === "MFA_SESSION_REVOKE") {
-      auditTarget = payload.id;
-      oldValue = { revokedAt: null };
-      newValue = { revokedAt: "CURRENT_TIMESTAMP", reason: payload.reason };
-      mutation = db.prepare("UPDATE admin_mfa_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL AND datetime(expires_at) > CURRENT_TIMESTAMP").bind(payload.id);
     } else if (payload.action === "NOTIFICATION_SEND") {
       const userId = await userIdForEmail(payload.email);
       const notificationId = `ntf_${randomId()}`;
@@ -384,9 +366,7 @@ export async function POST(request: Request) {
       mutation,
       auditStatement(db, actor, requestId, {
         action: `platform.${payload.action.toLowerCase()}`,
-        category: payload.action === "MFA_SESSION_REVOKE"
-          ? "AUTHENTICATION_SECURITY"
-          : payload.action === "REVIEW_STATUS" || payload.action === "TEAM_POST_STATUS"
+        category: payload.action === "REVIEW_STATUS" || payload.action === "TEAM_POST_STATUS"
             ? "DISCUSSIONS_MODERATION"
             : payload.action.startsWith("ACHIEVEMENT")
               ? "USERS_ROLES"
@@ -401,7 +381,6 @@ export async function POST(request: Request) {
           ACHIEVEMENT_REVOKE: "ACHIEVEMENT_AWARD",
           REVIEW_STATUS: "REVIEW",
           TEAM_POST_STATUS: "TEAM_DISCUSSION_POST",
-          MFA_SESSION_REVOKE: "ADMIN_MFA_SESSION",
           NOTIFICATION_SEND: "NOTIFICATION",
         } as const)[payload.action],
         targetId: auditTarget,

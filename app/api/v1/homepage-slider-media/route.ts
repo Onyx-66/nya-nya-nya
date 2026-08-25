@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     if (!row?.imageKey) throw new ApiError(404, "MEDIA_NOT_FOUND", "This slider image is not available.");
     if (!row.isActive) {
       const actor = await getActor().catch(() => null);
-      if (!actor || !actor.adminMfaEnrolled || !actorHasCapability(actor, "content.sliders.manage")) {
+      if (!actor || !actor.adminPasskeyEnrolled || !actorHasCapability(actor, "content.sliders.manage")) {
         throw new ApiError(404, "MEDIA_NOT_FOUND", "This slider image is not available.");
       }
     }

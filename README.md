@@ -113,7 +113,7 @@ launch:
   ChatGPT and verified email/password sign-in are already implemented
 - External search engine when the catalog outgrows D1 search
 - Legal review for all editable policy templates
-- Administrator email promotion and MFA enforcement policy
+- Administrator email promotion and mandatory WebAuthn passkey enrollment policy; normal site login remains unaffected
 - Monitoring, alert routing, backup schedule, and restore drill
 
 The interface keeps unconfigured commerce disabled. Payments, memberships,

@@ -871,7 +871,7 @@ function analyticsWindow(url: URL) {
 function isAdminActor(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
-  return actor.adminMfaEnrolled && actor.roles.some((role) =>
+  return actor.adminPasskeyEnrolled && actor.roles.some((role) =>
     ["OWNER", "ADMINISTRATOR"].includes(role),
   ) && actorHasCapability(actor, "admin.console.access");
 }
@@ -880,7 +880,7 @@ function isGlobalModerator(
   actor: NonNullable<Awaited<ReturnType<typeof getActor>>>,
 ) {
   const elevatedAdmin = actor.roles.some((role) => ["OWNER", "ADMINISTRATOR"].includes(role));
-  return actorHasCapability(actor, "comments.moderate.global") && (!elevatedAdmin || actor.adminMfaEnrolled);
+  return actorHasCapability(actor, "comments.moderate.global") && (!elevatedAdmin || actor.adminPasskeyEnrolled);
 }
 
 function publicSeriesPredicate(alias = "s") {
@@ -9611,11 +9611,6 @@ export async function PUT(request: Request, context: RouteContext) {
               )`,
           ).bind(payload.id, role, actor.id, payload.id, updateToken),
         ),
-        env.DB.prepare(
-          `UPDATE admin_mfa_sessions SET revoked_at = CURRENT_TIMESTAMP
-            WHERE user_id = ? AND revoked_at IS NULL
-              AND EXISTS (SELECT 1 FROM users WHERE id = ? AND access_update_token = ?)`,
-        ).bind(payload.id, payload.id, updateToken),
         env.DB.prepare(
           `UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE user_id = ? AND revoked_at IS NULL

@@ -24,7 +24,6 @@ const providerVariableNames = [
   "MEILISEARCH_API_KEY",
   "GITHUB_TOKEN",
   "NYASCANS_GIFT_CODE_SECRET",
-  "ADMIN_TOTP_ENCRYPTION_KEY",
 ];
 
 const detectorDefinitions = [

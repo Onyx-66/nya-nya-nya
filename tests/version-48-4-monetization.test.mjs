@@ -213,13 +213,14 @@ test("content visibility supports real Premium and preserves manual free schedul
     database
       .prepare(
         `INSERT INTO chapters
-         (id, series_id, slug, chapter_number, state, access_type,
+         (id, public_ref, series_id, slug, chapter_number, state, access_type,
           price_onyx, published_at, free_at)
-         VALUES (?, 'series-money', ?, ?, 'PUBLISHED', 'PAID', 25,
+         VALUES (?, ?, 'series-money', ?, ?, 'PUBLISHED', 'PAID', 25,
                  '2026-01-01 00:00:00', ?)`,
       )
       .run(
         "chapter-manual",
+        "CH-MANUAL",
         "chapter-manual",
         "1",
         "2030-01-01 00:00:00",
@@ -227,9 +228,9 @@ test("content visibility supports real Premium and preserves manual free schedul
     database
       .prepare(
         `INSERT INTO chapters
-         (id, series_id, slug, chapter_number, state, access_type,
+         (id, public_ref, series_id, slug, chapter_number, state, access_type,
           price_onyx, published_at)
-         VALUES ('chapter-scheduled', 'series-money', 'chapter-scheduled', '2',
+         VALUES ('chapter-scheduled', 'CH-SCHEDULED', 'series-money', 'chapter-scheduled', '2',
                  'PUBLISHED', 'PAID', 25, '2026-01-01 00:00:00')`,
       )
       .run();
@@ -413,7 +414,7 @@ test("Stripe checkout and webhook are configured fail-closed and fulfill snapsho
   assert.match(stripe, /"\/v1\/billing_portal\/sessions"/u);
 });
 
-test("Premium visibility, membership access, Onyx refusal, and admin MFA share one contract", async () => {
+test("Premium visibility, membership access, Onyx refusal, and admin passkey policy share one contract", async () => {
   const [visibilityRoute, visibility, chapterAccess, catchAll, management] =
     await Promise.all([
       read("app/api/v1/admin/content-visibility/route.ts"),

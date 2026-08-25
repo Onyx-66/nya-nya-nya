@@ -1,7 +1,7 @@
 import { getAuthenticatedUser, loginPath } from "@/app/chatgpt-auth";
 import { NyaScansApp } from "@/components/nyascans/NyaScansApp";
 import { ChapterManagementWorkspace } from "@/components/nyascans/ChapterManagementWorkspace";
-import { AdminMfaGate } from "@/components/nyascans/admin/AdminMfaGate";
+import { AdminPasskeyGate } from "@/components/nyascans/admin/AdminPasskeyGate";
 import { requireChapterManagementScope } from "@/lib/server/chapter-management";
 import { actorHasCapability, getActor } from "@/lib/server/policy";
 import { forbidden } from "next/navigation";
@@ -47,14 +47,8 @@ export default async function AdminChapterManagementPage({
   ) {
     forbidden();
   }
-  if (actor.adminMfaRequired && !actor.adminMfaEnrolled) {
-    return (
-      <AdminMfaGate
-        displayName={actor.displayName}
-        email={actor.email}
-        enrolled={actor.adminMfaEnrolled}
-      />
-    );
+  if (actor.adminPasskeyRequired && !actor.adminPasskeyEnrolled) {
+    return <AdminPasskeyGate displayName={actor.displayName} email={actor.email} />;
   }
   try {
     await requireChapterManagementScope(actor, seriesId, chapterId);

@@ -2,6 +2,7 @@
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -61,6 +62,13 @@ import {
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
+
+function localDateTimeInput(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
 
 type UploadMode =
   | "dashboard"
@@ -987,17 +995,7 @@ function ChapterMetadataFields({
           <option value="HIDDEN">Hidden</option>
         </UnifiedSingleSelect>
       </label>
-      <label>
-        <span>Schedule</span>
-        <input
-          disabled={disabled}
-          type="datetime-local"
-          value={item.scheduledAt}
-          onChange={(event) =>
-            onChange({ ...item, scheduledAt: event.target.value })
-          }
-        />
-      </label>
+      <div className="admin-date-picker-field"><span>Schedule</span><PremiumDateTimePicker value={item.scheduledAt} label="Schedule" disabled={disabled} onChange={(next) => onChange({ ...item, scheduledAt: next ? localDateTimeInput(next) : "" })} /></div>
       {showFixedPageChoices ? (
         <fieldset className="upload-fixed-page-options upload-field-wide">
           <legend>Reader intro and outro</legend>

@@ -2,6 +2,7 @@
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 
 import {
   ArrowClockwise,
@@ -355,26 +356,7 @@ export function AuditLogPanel({
           setUrlState(filters, 1);
         }}
       >
-        <label>
-          Start date
-          <input
-            type="date"
-            value={filters.start}
-            onChange={(event) =>
-              setFilters((current) => ({ ...current, start: event.target.value }))
-            }
-          />
-        </label>
-        <label>
-          End date
-          <input
-            type="date"
-            value={filters.end}
-            onChange={(event) =>
-              setFilters((current) => ({ ...current, end: event.target.value }))
-            }
-          />
-        </label>
+        <div className="audit-date-range-field"><span>Date range</span><PremiumDateRangePicker start={filters.start} end={filters.end} label="Audit date range" valueFormat="date" onChange={({ start, end }) => setFilters((current) => ({ ...current, start: start ?? "", end: end ?? "" }))} /></div>
         <label>
           Category
           <AdminCombobox

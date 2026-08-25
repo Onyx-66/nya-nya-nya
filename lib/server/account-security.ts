@@ -10,20 +10,9 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { ApiError } from "@/lib/server/api";
-import { hashOpaqueToken } from "@/lib/server/auth-crypto";
-import {
-  beginAdminMfaEnrollment,
-  resetAdminMfaEnrollment,
-  verifyAdminMfa,
-} from "@/lib/server/admin-mfa";
-import {
-  createUserSession,
-  verifyCurrentPassword,
-} from "@/lib/server/local-auth";
+import { createUserSession } from "@/lib/server/local-auth";
 import { randomId } from "@/lib/server/random-id";
 
-const RECOVERY_CODE_COUNT = 10;
-const RECOVERY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const WEBAUTHN_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
 
 type Database = D1Database;
@@ -77,21 +66,6 @@ function parseTransports(value: string | null | undefined) {
   }
 }
 
-function normalizeRecoveryCode(value: string) {
-  return value.replace(/[\s-]/gu, "").toUpperCase().slice(0, 32);
-}
-
-async function recoveryHash(userId: string, code: string) {
-  return hashOpaqueToken(`nyascans-recovery:${userId}:${normalizeRecoveryCode(code)}`);
-}
-
-function randomRecoveryCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  let value = "";
-  for (const byte of bytes) value += RECOVERY_ALPHABET[byte % RECOVERY_ALPHABET.length];
-  return `${value.slice(0, 4)}-${value.slice(4, 8)}-${value.slice(8, 12)}`;
-}
-
 function webAuthnConfig(request: Request) {
   const configuredRpId = (env as unknown as { WEBAUTHN_RP_ID?: string }).WEBAUTHN_RP_ID?.trim();
   const configuredOrigin = (env as unknown as { WEBAUTHN_ORIGIN?: string }).WEBAUTHN_ORIGIN?.trim();
@@ -119,18 +93,11 @@ async function userForPasskey(userId: string) {
 }
 
 export async function getSecurityStatus(userId: string) {
-  const db = database();
-  const [factor, passkeyCount, recoveryCount] = await Promise.all([
-    db.prepare("SELECT confirmed_at AS confirmedAt FROM admin_mfa_factors WHERE user_id = ? LIMIT 1").bind(userId).first<{ confirmedAt: string | null }>(),
-    db.prepare("SELECT COUNT(*) AS count FROM account_passkeys WHERE user_id = ?").bind(userId).first<{ count: number }>(),
-    db.prepare("SELECT COUNT(*) AS count FROM account_recovery_codes WHERE user_id = ? AND used_at IS NULL").bind(userId).first<{ count: number }>(),
-  ]);
-  return {
-    totpEnrolled: Boolean(factor?.confirmedAt),
-    totpPending: Boolean(factor && !factor.confirmedAt),
-    passkeyCount: Number(passkeyCount?.count ?? 0),
-    recoveryCodesRemaining: Number(recoveryCount?.count ?? 0),
-  };
+  const passkeyCount = await database()
+    .prepare("SELECT COUNT(*) AS count FROM account_passkeys WHERE user_id = ?")
+    .bind(userId)
+    .first<{ count: number }>();
+  return { passkeyCount: Number(passkeyCount?.count ?? 0) };
 }
 
 export async function listPasskeys(userId: string) {
@@ -154,91 +121,6 @@ export async function listPasskeys(userId: string) {
     createdAt: row.createdAt,
     lastUsedAt: row.lastUsedAt,
   }));
-}
-
-export async function generateRecoveryCodes(userId: string) {
-  const db = database();
-  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, randomRecoveryCode);
-  await db.batch([
-    db.prepare("DELETE FROM account_recovery_codes WHERE user_id = ?").bind(userId),
-    ...await Promise.all(
-      codes.map(async (code) => db.prepare(
-        `INSERT INTO account_recovery_codes (id, user_id, code_hash)
-         VALUES (?, ?, ?)`,
-      ).bind(`recovery_${randomId()}`, userId, await recoveryHash(userId, code))),
-    ),
-  ]);
-  return codes;
-}
-
-export async function verifyRecoveryCode(userId: string, code: string) {
-  const normalized = normalizeRecoveryCode(code);
-  if (normalized.length < 8) return false;
-  const hash = await recoveryHash(userId, normalized);
-  const row = await database()
-    .prepare(
-      `SELECT id FROM account_recovery_codes
-        WHERE user_id = ? AND code_hash = ? AND used_at IS NULL
-        LIMIT 1`,
-    )
-    .bind(userId, hash)
-    .first<{ id: string }>();
-  if (!row) return false;
-  const result = await database()
-    .prepare(
-      `UPDATE account_recovery_codes SET used_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND user_id = ? AND used_at IS NULL`,
-    )
-    .bind(row.id, userId)
-    .run();
-  return Number(result.meta.changes ?? 0) === 1;
-}
-
-export async function disableTotp(input: {
-  userId: string;
-  password?: string;
-  code?: string;
-  requestHeaders: Headers;
-}) {
-  let reauthenticated = false;
-  if (input.password) {
-    reauthenticated = await verifyCurrentPassword(input.userId, input.password);
-  }
-  if (!reauthenticated && input.code) {
-    await verifyAdminMfa(input.userId, input.code, input.requestHeaders);
-    reauthenticated = true;
-  }
-  if (!reauthenticated) {
-    throw new ApiError(401, "SECURITY_REAUTH_REQUIRED", "Re-enter your password or authenticator code to disable two-factor authentication.");
-  }
-  await database().batch([
-    database().prepare("DELETE FROM admin_mfa_factors WHERE user_id = ?").bind(input.userId),
-    database().prepare("DELETE FROM account_recovery_codes WHERE user_id = ?").bind(input.userId),
-    database().prepare("UPDATE admin_mfa_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ? AND revoked_at IS NULL").bind(input.userId),
-  ]);
-}
-
-export async function beginTotpEnrollment(userId: string, email: string) {
-  return beginAdminMfaEnrollment(userId, email);
-}
-
-export async function finishTotpEnrollment(userId: string, code: string, requestHeaders: Headers) {
-  const verified = await verifyAdminMfa(userId, code, requestHeaders);
-  return {
-    enrolledNow: verified.enrolledNow,
-    recoveryCodes: await generateRecoveryCodes(userId),
-  };
-}
-
-export async function regenerateRecoveryCodes(userId: string, password: string) {
-  if (!(await verifyCurrentPassword(userId, password))) {
-    throw new ApiError(401, "SECURITY_REAUTH_REJECTED", "The account password could not be verified.");
-  }
-  const status = await getSecurityStatus(userId);
-  if (!status.totpEnrolled) {
-    throw new ApiError(409, "TOTP_ENROLLMENT_REQUIRED", "Enable two-factor authentication before generating recovery codes.");
-  }
-  return generateRecoveryCodes(userId);
 }
 
 export async function beginPasskeyRegistration(input: {
@@ -433,5 +315,3 @@ export async function finishPasskeyAuthentication(input: {
     },
   };
 }
-
-export { resetAdminMfaEnrollment };

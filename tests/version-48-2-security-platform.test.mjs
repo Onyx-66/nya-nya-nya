@@ -14,84 +14,42 @@ function between(source, start, end) {
   return source.slice(from, to);
 }
 
-test("admin MFA uses an environment-only AES key, RFC 6238 TOTP, rate limiting, and a strict one-hour cookie", async () => {
-  const [mfa, exampleEnvironment, scanner] = await Promise.all([
-    read("lib/server/admin-mfa.ts"),
+test("admin console requires a registered WebAuthn passkey without a TOTP secret", async () => {
+  const [policy, security, adminPage, exampleEnvironment, scanner] = await Promise.all([
+    read("lib/server/policy.ts"),
+    read("app/api/v1/security/route.ts"),
+    read("app/onyx/admin/access/[[...slug]]/page.tsx"),
     read(".env.example"),
     read("scripts/check-secrets.mjs"),
   ]);
 
-  assert.match(mfa, /ADMIN_TOTP_ENCRYPTION_KEY\?: string/u);
-  assert.match(mfa, /if \(!configured\) throw new ApiError\(503, "ADMIN_MFA_NOT_CONFIGURED"/u);
-  assert.match(mfa, /if \(bytes\.byteLength !== 32\)/u);
-  assert.match(mfa, /importKey\("raw",[\s\S]*"AES-GCM"[\s\S]*\["encrypt", "decrypt"\]/u);
-  assert.match(mfa, /crypto\.getRandomValues\(new Uint8Array\(12\)\)/u);
-  assert.match(mfa, /crypto\.subtle\.encrypt\(\{ name: "AES-GCM", iv:/u);
-  assert.match(mfa, /crypto\.subtle\.decrypt\([\s\S]*name: "AES-GCM"/u);
-  assert.doesNotMatch(mfa, /ADMIN_TOTP_ENCRYPTION_KEY\s*\?\?\s*["'`][A-Za-z0-9_-]{20,}/u);
-
-  assert.match(mfa, /const message = new Uint8Array\(8\)/u);
-  assert.match(mfa, /\{ name: "HMAC", hash: "SHA-1" \}/u);
-  assert.match(mfa, /digest\[digest\.length - 1\]! & 0x0f/u);
-  assert.match(mfa, /% 1_000_000/u);
-  assert.match(mfa, /algorithm=SHA1&digits=6&period=30/u);
-  assert.match(mfa, /\[currentCounter - 1, currentCounter, currentCounter \+ 1\]/u);
-  assert.match(mfa, /const MAX_FAILURES = 5/u);
-  assert.match(mfa, /datetime\('now', '-15 minutes'\)/u);
-  assert.match(mfa, /ADMIN_MFA_RATE_LIMITED/u);
-
-  assert.match(mfa, /const ADMIN_SESSION_SECONDS = 60 \* 60/u);
-  assert.match(mfa, /__Host-nyascans_admin_mfa/u);
-  assert.match(mfa, /`Max-Age=\$\{ADMIN_SESSION_SECONDS\}`/u);
-  for (const flag of ["HttpOnly", "Secure", "SameSite=Strict"]) {
-    assert.match(mfa, new RegExp(`"${flag}"`, "u"));
-  }
-  assert.match(exampleEnvironment, /^ADMIN_TOTP_ENCRYPTION_KEY=$/mu);
-  assert.match(scanner, /ADMIN_TOTP_ENCRYPTION_KEY/u);
+  assert.match(policy, /FROM account_passkeys/u);
+  assert.match(policy, /adminPasskeyRequired/u);
+  assert.match(policy, /adminPasskeyEnrolled/u);
+  assert.match(policy, /ADMIN_PASSKEY_SETUP_REQUIRED/u);
+  assert.match(security, /PASSKEY_REGISTER_BEGIN/u);
+  assert.match(security, /PASSKEY_REGISTER_FINISH/u);
+  assert.doesNotMatch(security, /TOTP|MFA|admin-mfa/u);
+  assert.match(adminPage, /AdminPasskeyGate/u);
+  assert.match(adminPage, /adminPasskeyEnrolled/u);
+  assert.doesNotMatch(exampleEnvironment, /ADMIN_TOTP_ENCRYPTION_KEY/u);
+  assert.doesNotMatch(scanner, /ADMIN_TOTP_ENCRYPTION_KEY/u);
 });
 
-test("admin MFA accepts each counter once and logout revokes the durable session", async () => {
-  const [mfa, logout, endpoint] = await Promise.all([
-    read("lib/server/admin-mfa.ts"),
+test("passkey security preserves normal logout and exposes no legacy admin-MFA endpoint", async () => {
+  const [security, logout, accountSecurity] = await Promise.all([
+    read("app/api/v1/security/route.ts"),
     read("app/api/v1/auth/logout/route.ts"),
-    read("app/api/v1/admin-mfa/route.ts"),
+    read("lib/server/account-security.ts"),
   ]);
-  const updateMatch = mfa.match(
-    /const updated = await db\.prepare\(\s*`([\s\S]*?UPDATE admin_mfa_factors[\s\S]*?)`\s*,?\s*\)\.bind/u,
-  );
-  assert.ok(updateMatch, "the replay-resistant factor update must remain explicit SQL");
-  assert.match(updateMatch[1], /WHERE user_id = \? AND last_accepted_counter < \?/u);
-
-  const database = new DatabaseSync(":memory:");
-  database.exec(`
-    CREATE TABLE admin_mfa_factors (
-      user_id TEXT PRIMARY KEY,
-      confirmed_at TEXT,
-      last_accepted_counter INTEGER NOT NULL DEFAULT -1,
-      revision INTEGER NOT NULL DEFAULT 1,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    INSERT INTO admin_mfa_factors (user_id) VALUES ('owner');
-  `);
-  const acceptCounter = database.prepare(updateMatch[1]);
-  assert.equal(acceptCounter.run(42, "owner", 42).changes, 1);
-  assert.equal(
-    acceptCounter.run(42, "owner", 42).changes,
-    0,
-    "a concurrent or replayed authenticator counter must lose atomically",
-  );
-  assert.equal(
-    database.prepare("SELECT last_accepted_counter AS counter FROM admin_mfa_factors").get().counter,
-    42,
-  );
-  database.close();
-
-  assert.match(mfa, /ADMIN_MFA_CODE_REPLAYED/u);
-  assert.match(mfa, /UPDATE admin_mfa_sessions SET revoked_at = CURRENT_TIMESTAMP[\s\S]*token_hash = \?/u);
-  assert.match(logout, /await revokeAdminMfaSessionFromHeaders\(request\.headers\)/u);
-  assert.match(logout, /response\.headers\.append\("set-cookie", clearAdminMfaCookie\(\)\)/u);
-  assert.match(endpoint, /await revokeAdminMfaSession\(actor\.id, request\.headers\)/u);
-  assert.match(endpoint, /"set-cookie": clearAdminMfaCookie\(\)/u);
+  assert.match(security, /requireActor\(\)/u);
+  assert.match(security, /beginPasskeyRegistration/u);
+  assert.match(security, /finishPasskeyRegistration/u);
+  assert.match(accountSecurity, /startRegistration|generateRegistrationOptions/u);
+  assert.match(logout, /revokePasswordSession/u);
+  assert.match(logout, /clearPasswordSessionCookie/u);
+  assert.doesNotMatch(logout, /admin-mfa|MFA|TOTP/u);
+  assert.doesNotMatch(security, /admin-mfa|MFA|TOTP/u);
 });
 
 test("RBAC resolves explicit deny before allow and keeps Owner-only capabilities non-delegable", async () => {
@@ -115,12 +73,12 @@ test("RBAC resolves explicit deny before allow and keeps Owner-only capabilities
   const adminGuard = between(policy, "export function requireAdminCapability", "export function requireAdmin");
   assert.match(adminGuard, /requireAdminConsole\(actor\)/u);
   assert.match(adminGuard, /actorHasCapability\(actor, capability\)/u);
-  assert.match(policy, /ADMIN_MFA_REQUIRED/u);
+  assert.match(policy, /ADMIN_PASSKEY_SETUP_REQUIRED/u);
+  assert.match(policy, /actor\.adminPasskeyEnrolled/u);
 
   for (const capability of [
     "roles.manage",
     "api.manage",
-    "security.sessions.manage",
     "admin.audit.read",
   ]) {
     assert.match(registry, new RegExp(`"${capability}"`, "u"));
@@ -201,7 +159,7 @@ test("platform governance fetches one searchable, paginated area and omits cross
     ['area === "access" && permissions.access', "FROM entitlements"],
     ['area === "access" && permissions.access', "FROM gift_cards"],
     ['area === "registry" && permissions.notifications', "FROM notifications"],
-    ['area === "security" && permissions.securityRead', "FROM admin_mfa_sessions"],
+    ['area === "security" && permissions.securityRead', "FROM account_passkeys"],
   ];
   for (const [guard, table] of areaGuards) {
     const guardIndex = route.indexOf(guard);
@@ -210,11 +168,11 @@ test("platform governance fetches one searchable, paginated area and omits cross
     assert.ok(tableIndex > guardIndex && tableIndex - guardIndex < 1_800, `${table} must stay behind its area and capability guard`);
   }
 
-  const sessionQuery = route.match(
-    /rows<Record<string, unknown>>\(area === "security" && permissions\.securityRead,\s*`(SELECT s\.id[\s\S]*?FROM admin_mfa_sessions[\s\S]*?)`/u,
+  const passkeyQuery = route.match(
+    /rows<Record<string, unknown>>\(area === "security" && permissions\.securityRead,\s*`(SELECT p\.id[\s\S]*?FROM account_passkeys[\s\S]*?)`/u,
   );
-  assert.ok(sessionQuery, "the security-session projection must remain inspectable");
-  assert.doesNotMatch(sessionQuery[1], /token_hash|fingerprint_hash/u);
+  assert.ok(passkeyQuery, "the security passkey projection must remain inspectable");
+  assert.doesNotMatch(passkeyQuery[1], /credential_id|public_key/u);
   assert.match(panel, /area: areaForTab\[tab\]/u);
   assert.match(panel, /page: String\(page\)/u);
   assert.match(panel, /params\.set\("q", appliedQuery\)/u);
@@ -230,7 +188,6 @@ test("platform governance maps every mutation to a capability, rejects no-ops, a
     ACHIEVEMENT_REVOKE: "community.achievements.manage",
     REVIEW_STATUS: "reviews.moderate.global",
     TEAM_POST_STATUS: "comments.moderate.global",
-    MFA_SESSION_REVOKE: "security.sessions.manage",
     NOTIFICATION_SEND: "notifications.manage",
   };
   for (const [action, capability] of Object.entries(expectedCapabilities)) {
@@ -272,7 +229,7 @@ test("platform governance maps every mutation to a capability, rejects no-ops, a
   database.close();
 });
 
-test("event campaigns are scheduled and fully admin-managed with a responsive accessible modal", async () => {
+test("event campaigns are scheduled and fully admin-managed with a responsive accessible banner", async () => {
   const [migration, adminRoute, publicRoute, panel, app, css] = await Promise.all([
     read("drizzle/0040_sticky_reptil.sql"),
     read("app/api/v1/admin/home-promotions/route.ts"),
@@ -293,20 +250,13 @@ test("event campaigns are scheduled and fully admin-managed with a responsive ac
   assert.match(publicRoute, /datetime\(ends_at\) > CURRENT_TIMESTAMP/u);
   assert.match(publicRoute, /infoBlocks: \(\(\) =>/u);
 
-  assert.match(panel, /localDateTimeValue/u);
-  assert.match(panel, /utcDateTimeValue/u);
+  assert.match(panel, /PremiumDateTimePicker/u);
+  assert.match(panel, /startsAt: next/u);
   assert.match(panel, /ad\.infoBlocks\.length < 4/u);
   assert.match(panel, /Primary action label/u);
   assert.match(panel, /Starts at \(optional\)/u);
   assert.match(panel, /Ends at \(optional\)/u);
-  assert.match(app, /role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="event-campaign-title"/u);
   assert.match(app, /campaign\.infoBlocks\.slice\(0, 4\)/u);
-  assert.match(app, /Do not show again today/u);
-  assert.match(app, /now\.getFullYear\(\)[\s\S]*now\.getMonth\(\)[\s\S]*now\.getDate\(\)/u);
-  assert.match(app, /localStorage\.setItem\(storageKey, "dismissed"\)/u);
-  assert.match(app, /doNotShowTodayRef\.current/u);
-  assert.match(app, /onClick=\{persistDismissal\}/u);
-  assert.match(app, /window\.addEventListener\("keydown", close\)/u);
   assert.match(css, /\.event-campaign-art/u);
   assert.match(css, /\.event-campaign-shade/u);
   assert.match(css, /@keyframes v482-(?:backdrop|modal)-in/u);
@@ -405,7 +355,7 @@ test("authenticated actor avatars use the public profile-media contract", async 
 
   assert.equal(
     (policy.match(/p\.username AS profile_username/gu) ?? []).length,
-    3,
+    4,
     "every actor refresh path must retain the media username",
   );
   assert.match(

@@ -33,7 +33,6 @@ type GovernanceData = {
     access: boolean;
     notifications: boolean;
     securityRead: boolean;
-    sessionsManage: boolean;
   };
   featureFlags: Array<{
     key: string;
@@ -51,8 +50,7 @@ type GovernanceData = {
   entitlements: Array<{ id: string; sourceType: string; sourceId: string; startsAt: string; expiresAt: string | null; revokedAt: string | null; userName: string; email: string; seriesTitle: string; chapterNumber: string }>;
   giftCards: Array<{ id: string; codeSuffix: string; coinAmount: number; recipientLabel: string; status: "ACTIVE" | "REDEEMED" | "EXPIRED"; expiresAt: string | null; redeemedAt: string | null; createdAt: string; purchaserName: string; purchaserEmail: string; recipientName: string | null }>;
   notifications: Array<{ id: string; kind: string; title: string; readAt: string | null; actionUrl: string | null; createdAt: string; userName: string; email: string }>;
-  sessions: Array<{ id: string; expiresAt: string; lastSeenAt: string; revokedAt: string | null; createdAt: string; userName: string; email: string }>;
-  loginEvents: Array<{ id: string; result: string; reason: string; createdAt: string; userName: string | null; email: string | null }>;
+  passkeys: Array<{ id: string; deviceName: string; deviceType: string; backedUp: number; createdAt: string; lastUsedAt: string | null; userName: string; email: string }>;
   pagination: { page: number; limit: number; hasMore: boolean };
   generatedAt: string;
 };
@@ -345,12 +343,8 @@ export function SiteCoveragePanel({
       </> : null}
 
       {tab === "security" && data.permissions.securityRead ? <>
-        <label className="governance-reason"><span>Session-revocation reason</span><input value={reasons.security} onChange={(event) => setReasons((current) => ({ ...current, security: event.target.value }))} placeholder="Explain the security response" /></label>
-        <section className="governance-section"><header><ShieldCheck /><div><h3>Administrator MFA sessions</h3><p>One-hour assurance sessions. Token hashes and fingerprints are never returned to the browser.{data.permissions.sessionsManage ? " Owner-only revocation is enabled." : " Your role has read-only access."}</p></div></header><div className="governance-record-list">{data.sessions.map((session) => { const expired = Date.parse(session.expiresAt) <= Date.parse(data.generatedAt); return <article key={session.id}><div><strong>{session.userName}</strong><span>{session.email}</span><small>{session.revokedAt ? `Revoked ${humanDate(session.revokedAt)}` : expired ? `Expired ${humanDate(session.expiresAt)}` : `Expires ${humanDate(session.expiresAt)}`} · last seen {humanDate(session.lastSeenAt)}</small></div><div><button className="button button-secondary" type="button" disabled={!data.permissions.sessionsManage || Boolean(session.revokedAt) || expired || Boolean(busy)} onClick={() => {
-          if (!requireReason(reasons.security)) return;
-          setConfirmation({ title: "Revoke this administrator session?", description: `${session.userName} will have to complete TOTP again before any further administrator action.`, confirmLabel: "Revoke session", run: () => mutate(`session:${session.id}`, { action: "MFA_SESSION_REVOKE", id: session.id, reason: reasons.security }, "Administrator session revoked.") });
-        }}>Revoke session</button><Reference id={session.id} /></div></article>; })}</div></section>
-        <section className="governance-section"><header><WarningCircle /><div><h3>Administrator login events</h3><p>Recent success, failure, lockout, and suspicious-login records.</p></div></header><div className="governance-record-list">{data.loginEvents.map((event) => <article key={event.id}><div><strong>{event.result}</strong><span>{event.userName || "Unresolved account"} · {event.email || "No account email"}</span><small>{event.reason || "No additional reason"} · {humanDate(event.createdAt)}</small></div><Reference id={event.id} /></article>)}</div></section>
+        <section className="governance-section"><header><ShieldCheck /><div><h3>Administrator passkeys</h3><p>Registered authenticators are listed without credential material. A passkey is a one-time enrollment requirement for admin-console access; normal site login is unchanged.</p></div></header><div className="governance-record-list">{data.passkeys.map((passkey) => <article key={passkey.id}><div><strong>{passkey.deviceName}</strong><span>{passkey.userName} · {passkey.email}</span><small>{passkey.deviceType}{passkey.backedUp ? " · Synced" : ""} · Added {humanDate(passkey.createdAt)} · Last used {humanDate(passkey.lastUsedAt)}</small></div><Reference id={passkey.id} /></article>)}</div></section>
+        <section className="governance-section"><header><WarningCircle /><div><h3>Security audit trail</h3><p>Immutable administrator authentication, authorization, and security events remain available through the dedicated Audit Log.</p></div></header><div className="governance-record-list"><article><div><strong>Audit Log</strong><span>Passkey enrollment and admin access decisions</span><small>Use the owner-only Audit Log for event-level investigation and request references.</small></div><a className="button button-secondary" href="/onyx/admin/access/audit-log">Open Audit Log</a></article></div></section>
       </> : null}
       <div className="admin-pagination" aria-label="Platform registry pages">
         <span>Page {data.pagination.page}{appliedQuery ? ` · Filter: ${appliedQuery}` : ""}</span>

@@ -1,6 +1,7 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1236,19 +1237,10 @@ export function TeamManagementPanel() {
                     <option value="VERIFIED">Verified treatment</option>
                   </UnifiedSingleSelect>
                 </label>
-                <label>
-                  Accent color
-                  <input
-                    type="color"
-                    value={draft.effect.accentColor}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        effect: { ...current.effect, accentColor: event.target.value },
-                      }))
-                    }
-                  />
-                </label>
+                <div className="team-effect-color-field">
+                  <span>Accent color</span>
+                  <PremiumColorPicker value={draft.effect.accentColor} label="Accent color" onChange={(next) => setDraft((current) => ({ ...current, effect: { ...current.effect, accentColor: next.slice(0, 7) } }))} />
+                </div>
                 <label>
                   Intensity
                   <UnifiedSingleSelect

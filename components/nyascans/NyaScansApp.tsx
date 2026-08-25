@@ -76,6 +76,7 @@ import {
 } from "@phosphor-icons/react";
 import { startAuthentication } from "@simplewebauthn/browser";
 import {
+  Fragment,
   useCallback,
   useEffect,
   lazy,
@@ -12352,7 +12353,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
           </a>
           <div className="auth-assurances">
             <span><ShieldCheck size={17} /> Secure session</span>
-            <span><Key size={17} /> MFA supported</span>
+            <span><Key size={17} /> Passkey sign-in available</span>
           </div>
           <small>
             By continuing, you agree to the Terms and acknowledge the Privacy
@@ -13899,19 +13900,36 @@ function OperationsView({
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   return (
-                  <a
-                    href={sectionHref(item.label)}
-                    key={item.slug}
-                    title={effectiveSidebarCollapsed ? item.label : undefined}
-                    aria-current={activeSection === item.label ? "page" : undefined}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      openSection(item.label);
-                    }}
-                  >
-                    <Icon size={20} />
-                    <span className="ops-nav-label">{item.label}</span>
-                  </a>
+                    <Fragment key={item.slug}>
+                      <a
+                        href={sectionHref(item.label)}
+                        title={effectiveSidebarCollapsed ? item.label : undefined}
+                        aria-current={activeSection === item.label && !activeSubsection ? "page" : undefined}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          openSection(item.label);
+                        }}
+                      >
+                        <Icon size={20} />
+                        <span className="ops-nav-label">{item.label}</span>
+                      </a>
+                      {item.children?.map((child) => (
+                        <a
+                          className="ops-nav-child"
+                          href={sectionHref(item.label, child.slug)}
+                          key={`${item.slug}-${child.slug}`}
+                          title={effectiveSidebarCollapsed ? `${item.label}: ${child.label}` : undefined}
+                          aria-current={activeSection === item.label && activeSubsection === child.slug ? "page" : undefined}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            openSection(item.label, child.slug);
+                          }}
+                        >
+                          <span className="ops-nav-child-marker" aria-hidden="true" />
+                          <span className="ops-nav-label">{child.label}</span>
+                        </a>
+                      ))}
+                    </Fragment>
                   );
                 })}
               </div>
@@ -14167,7 +14185,7 @@ function AccessView({
           {adminGate
             ? actor?.authMethod === "PASSWORD"
               ? "An active administrator role and server-side policy checks are required. This email session has already passed verification."
-              : "An active administrator role and server-side policy checks are required. MFA is configured through the identity provider."
+              : "An active administrator role, server-side capability checks, and a registered passkey are required for the admin console."
             : "Role and active team membership are checked before protected publishing actions."}
         </small>
         <a href="/">Return to NyaScans</a>

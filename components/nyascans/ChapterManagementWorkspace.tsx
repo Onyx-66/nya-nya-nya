@@ -2,6 +2,7 @@
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -616,17 +617,7 @@ export function ChapterManagementWorkspace({
                 <option value="HIDDEN">Hidden</option>
               </UnifiedSingleSelect>
             </label>
-            <label>
-              <span>Release schedule</span>
-              <input
-                type="datetime-local"
-                value={form.publishedAt}
-                disabled={!chapter.permissions.canPublish}
-                onChange={(event) =>
-                  updateForm("publishedAt", event.target.value)
-                }
-              />
-            </label>
+            <div className="admin-date-picker-field"><span>Release schedule</span><PremiumDateTimePicker value={form.publishedAt} label="Release schedule" disabled={!chapter.permissions.canPublish} onChange={(next) => updateForm("publishedAt", next ? localDateTime(next) : "")} /></div>
           </div>
         </section>
 

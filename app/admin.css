@@ -1,7 +1,7 @@
 /* Update 49.12.0 — administration semantics bridged to the active user theme. */
 
 .ops-shell[data-operations-mode="admin"],
-.admin-mfa-page {
+.admin-passkey-page {
   --admin-bg-app: var(--theme-main-background);
   --admin-bg-surface: var(--theme-accent);
   --admin-bg-card: var(--theme-accent-l1);
@@ -283,7 +283,7 @@
 }
 
 .ops-shell[data-operations-mode="admin"] *,
-.admin-mfa-page * {
+.admin-passkey-page * {
   box-sizing: border-box;
 }
 
@@ -307,7 +307,7 @@
 }
 
 .ops-shell[data-operations-mode="admin"] :is(button, a, summary, input, select, textarea):focus-visible,
-.admin-mfa-page :is(button, a, input):focus-visible {
+.admin-passkey-page :is(button, a, input):focus-visible {
   outline: 2px solid var(--admin-primary);
   outline-offset: 2px;
 }
@@ -1768,8 +1768,8 @@
   color: var(--admin-text);
 }
 
-/* Two-factor gate */
-.admin-mfa-page {
+/* WebAuthn passkey enrollment gate */
+.admin-passkey-page {
   display: grid;
   min-height: 100dvh;
   padding: 32px 24px;
@@ -1778,7 +1778,7 @@
   place-items: center;
 }
 
-.admin-mfa-card {
+.admin-passkey-card {
   display: grid;
   grid-template-columns: minmax(280px, 2fr) minmax(440px, 3fr);
   width: min(100%, 960px);
@@ -1790,7 +1790,7 @@
   box-shadow: none;
 }
 
-.admin-mfa-visual {
+.admin-passkey-visual {
   position: relative;
   display: grid;
   align-content: end;
@@ -1801,13 +1801,13 @@
   border-right: 1px solid var(--admin-border);
 }
 
-.admin-mfa-visual::before,
-.admin-mfa-visual::after {
+.admin-passkey-visual::before,
+.admin-passkey-visual::after {
   display: none;
   content: none;
 }
 
-.admin-mfa-visual::before {
+.admin-passkey-visual::before {
   top: 64px;
   left: 50%;
   width: 240px;
@@ -1815,7 +1815,7 @@
   transform: translateX(-50%);
 }
 
-.admin-mfa-visual::after {
+.admin-passkey-visual::after {
   top: 96px;
   left: 50%;
   width: 176px;
@@ -1823,8 +1823,8 @@
   transform: translateX(-50%);
 }
 
-.admin-mfa-orbit,
-.admin-mfa-visual-mark {
+.admin-passkey-orbit,
+.admin-passkey-visual-mark {
   position: absolute;
   z-index: 1;
   top: 152px;
@@ -1835,11 +1835,11 @@
   place-items: center;
 }
 
-.admin-mfa-orbit {
+.admin-passkey-orbit {
   opacity: 0.24;
 }
 
-.admin-mfa-visual-mark {
+.admin-passkey-visual-mark {
   top: 264px;
   width: 88px;
   height: 88px;
@@ -1849,27 +1849,27 @@
   border-radius: 12px;
 }
 
-.admin-mfa-visual > strong,
-.admin-mfa-visual > p {
+.admin-passkey-visual > strong,
+.admin-passkey-visual > p {
   position: relative;
   z-index: 2;
   margin: 0;
 }
 
-.admin-mfa-visual > strong {
+.admin-passkey-visual > strong {
   color: var(--admin-text);
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.03em;
 }
 
-.admin-mfa-visual > p {
+.admin-passkey-visual > p {
   max-width: 30ch;
   margin-top: 8px;
   color: var(--admin-text-muted);
 }
 
-.admin-mfa-content {
+.admin-passkey-content {
   display: grid;
   align-content: center;
   gap: 24px;
@@ -1877,14 +1877,14 @@
   padding: 48px;
 }
 
-.admin-mfa-content > header {
+.admin-passkey-content > header {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
 }
 
-.admin-mfa-icon {
+.admin-passkey-icon {
   display: grid;
   width: 48px;
   height: 48px;
@@ -1895,12 +1895,12 @@
   place-items: center;
 }
 
-.admin-mfa-content .eyebrow,
-.admin-mfa-content h1 {
+.admin-passkey-content .eyebrow,
+.admin-passkey-content h1 {
   margin: 0;
 }
 
-.admin-mfa-content .eyebrow {
+.admin-passkey-content .eyebrow {
   color: var(--admin-accent);
   font-size: 12px;
   font-weight: 600;
@@ -1908,7 +1908,7 @@
   text-transform: uppercase;
 }
 
-.admin-mfa-content h1 {
+.admin-passkey-content h1 {
   color: var(--admin-text);
   font-size: 30px;
   font-weight: 700;
@@ -1916,7 +1916,7 @@
   line-height: 1.1;
 }
 
-.admin-mfa-progress {
+.admin-passkey-progress {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
@@ -1925,7 +1925,7 @@
   list-style: none;
 }
 
-.admin-mfa-progress li {
+.admin-passkey-progress li {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -1937,27 +1937,27 @@
   border-bottom: 2px solid var(--admin-border);
 }
 
-.admin-mfa-progress li svg {
+.admin-passkey-progress li svg {
   width: 16px;
   height: 16px;
 }
 
-.admin-mfa-progress li.is-complete {
+.admin-passkey-progress li.is-complete {
   color: var(--admin-success);
   border-bottom-color: var(--admin-success);
 }
 
-.admin-mfa-progress li.is-active {
+.admin-passkey-progress li.is-active {
   color: var(--admin-text);
   border-bottom-color: var(--admin-primary);
 }
 
-.admin-mfa-intro {
+.admin-passkey-intro {
   margin: 0;
   color: var(--admin-text-muted);
 }
 
-.admin-mfa-identity {
+.admin-passkey-identity {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
@@ -1968,7 +1968,7 @@
   border-radius: 12px;
 }
 
-.admin-mfa-identity > span:first-child {
+.admin-passkey-identity > span:first-child {
   display: grid;
   width: 40px;
   height: 40px;
@@ -1979,29 +1979,29 @@
   place-items: center;
 }
 
-.admin-mfa-identity > div {
+.admin-passkey-identity > div {
   display: grid;
   min-width: 0;
 }
 
-.admin-mfa-identity :is(strong, small) {
+.admin-passkey-identity :is(strong, small) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.admin-mfa-identity strong {
+.admin-passkey-identity strong {
   color: var(--admin-text);
   font-size: 14px;
   font-weight: 600;
 }
 
-.admin-mfa-identity small {
+.admin-passkey-identity small {
   color: var(--admin-text-muted);
   font-size: 12px;
 }
 
-.admin-mfa-identity-check {
+.admin-passkey-identity-check {
   display: grid;
   width: 24px;
   height: 24px;
@@ -2011,8 +2011,8 @@
   place-items: center;
 }
 
-.admin-mfa-content form,
-.admin-mfa-content fieldset {
+.admin-passkey-content form,
+.admin-passkey-content fieldset {
   display: grid;
   gap: 16px;
   min-width: 0;
@@ -2021,7 +2021,7 @@
   border: 0;
 }
 
-.admin-mfa-content legend {
+.admin-passkey-content legend {
   margin-bottom: 8px;
   color: var(--admin-text-muted);
   font-size: 12px;
@@ -2030,14 +2030,14 @@
   text-transform: uppercase;
 }
 
-.admin-mfa-code {
+.admin-passkey-code {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 48px));
   justify-content: space-between;
   gap: 8px;
 }
 
-.admin-mfa-code input {
+.admin-passkey-code input {
   width: 100%;
   height: 64px;
   padding: 0;
@@ -2054,17 +2054,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-.admin-mfa-code input:focus {
+.admin-passkey-code input:focus {
   border-color: var(--admin-primary);
   outline: 0;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--admin-primary) 24%, transparent);
 }
 
-.admin-mfa-code input[aria-invalid="true"] {
+.admin-passkey-code input[aria-invalid="true"] {
   border-color: var(--admin-danger);
 }
 
-.admin-mfa-content .button {
+.admin-passkey-content .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2079,29 +2079,29 @@
   cursor: pointer;
 }
 
-.admin-mfa-content .button-primary {
+.admin-passkey-content .button-primary {
   background: var(--admin-primary);
   border-color: var(--admin-primary);
 }
 
-.admin-mfa-content .button-primary:hover:not(:disabled) {
+.admin-passkey-content .button-primary:hover:not(:disabled) {
   background: var(--admin-accent);
   border-color: var(--admin-accent);
   filter: brightness(1.08);
 }
 
-.admin-mfa-content .button-secondary {
+.admin-passkey-content .button-secondary {
   background: transparent;
   border-color: var(--admin-border-strong);
 }
 
-.admin-mfa-content .button:disabled {
+.admin-passkey-content .button:disabled {
   color: var(--admin-text-faint);
   cursor: not-allowed;
   opacity: 0.72;
 }
 
-.admin-mfa-error {
+.admin-passkey-error {
   margin: 0;
   padding: 8px 12px;
   color: var(--admin-danger);
@@ -2110,7 +2110,7 @@
   border-radius: 8px;
 }
 
-.admin-mfa-setup {
+.admin-passkey-setup {
   display: grid;
   gap: 12px;
   padding: 16px;
@@ -2120,25 +2120,25 @@
   border-radius: 12px;
 }
 
-.admin-mfa-setup > strong {
+.admin-passkey-setup > strong {
   color: var(--admin-text);
 }
 
-.admin-mfa-setup > ol {
+.admin-passkey-setup > ol {
   display: grid;
   gap: 8px;
   margin: 0;
   padding-left: 24px;
 }
 
-.admin-mfa-setup > div {
+.admin-passkey-setup > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
   gap: 8px;
 }
 
-.admin-mfa-setup code {
+.admin-passkey-setup code {
   min-width: 0;
   padding: 8px 12px;
   overflow: hidden;
@@ -2149,7 +2149,7 @@
   border-radius: 8px;
 }
 
-.admin-mfa-setup > div button {
+.admin-passkey-setup > div button {
   display: grid;
   width: 40px;
   height: 40px;
@@ -2162,7 +2162,7 @@
   place-items: center;
 }
 
-.admin-mfa-content > footer {
+.admin-passkey-content > footer {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
@@ -2172,16 +2172,16 @@
   border-top: 1px solid var(--admin-border);
 }
 
-.admin-mfa-content > footer svg {
+.admin-passkey-content > footer svg {
   color: var(--admin-success);
 }
 
-.admin-mfa-content > footer span {
+.admin-passkey-content > footer span {
   display: grid;
   gap: 4px;
 }
 
-.admin-mfa-content > footer strong {
+.admin-passkey-content > footer strong {
   color: var(--admin-text-muted);
   font-weight: 600;
 }
@@ -2189,7 +2189,7 @@
 /* Binding type contract. Prototype pages still carry page-owned declarations;
    this scoped layer maps every admin text node back to the six shared styles. */
 .ops-shell[data-operations-mode="admin"] *,
-.admin-mfa-page * {
+.admin-passkey-page * {
   font-size: 14px !important;
   font-weight: 400 !important;
   line-height: 1.5;
@@ -2204,7 +2204,7 @@
   .support-admin-heading h2,
   .store-management-heading h2
 ),
-.admin-mfa-content h1 {
+.admin-passkey-content h1 {
   font-size: 30px !important;
   font-weight: 700 !important;
   letter-spacing: -0.03em !important;
@@ -2220,7 +2220,7 @@
   .admin-command-panel > header h2,
   .reward-settings-content > details > summary
 ),
-.admin-mfa-visual > strong {
+.admin-passkey-visual > strong {
   font-size: 20px !important;
   font-weight: 600 !important;
   line-height: 1.25;
@@ -2240,11 +2240,11 @@
   .support-admin-ticket-subject,
   .user-permission-category > ul strong
 ),
-.admin-mfa-page :is(
+.admin-passkey-page :is(
   strong,
   b,
   button,
-  .admin-mfa-identity > span:first-child
+  .admin-passkey-identity > span:first-child
 ) {
   font-size: 15px !important;
   font-weight: 600 !important;
@@ -2273,12 +2273,12 @@
   .support-admin-heading > div > span,
   .support-admin-detail > header > div > span
 ),
-.admin-mfa-page :is(
+.admin-passkey-page :is(
   label,
   legend,
   .eyebrow,
-  .admin-mfa-progress li,
-  .admin-mfa-progress li > span
+  .admin-passkey-progress li,
+  .admin-passkey-progress li > span
 ) {
   font-size: 12px !important;
   font-weight: 600 !important;
@@ -2296,7 +2296,7 @@
   .admin-form-field > small,
   .admin-command-results em
 ),
-.admin-mfa-page :is(small, time, code, kbd, caption) {
+.admin-passkey-page :is(small, time, code, kbd, caption) {
   font-size: 12px !important;
   font-weight: 400 !important;
   letter-spacing: normal !important;
@@ -2309,7 +2309,7 @@
   .v481-pin-admin-summary > * > strong,
   .v481-discount-summary > * > strong
 ),
-.admin-mfa-code input {
+.admin-passkey-code input {
   font-size: 30px !important;
   font-weight: 700 !important;
   font-variant-numeric: tabular-nums;
@@ -2329,9 +2329,9 @@
 .ops-shell[data-operations-mode="admin"] *,
 .ops-shell[data-operations-mode="admin"] *::before,
 .ops-shell[data-operations-mode="admin"] *::after,
-.admin-mfa-page *,
-.admin-mfa-page *::before,
-.admin-mfa-page *::after {
+.admin-passkey-page *,
+.admin-passkey-page *::before,
+.admin-passkey-page *::after {
   border-radius: 0 !important;
 }
 
@@ -2351,7 +2351,7 @@
   [class*="-cover"],
   [class*="-mark"]
 ),
-.admin-mfa-page :is(button, input, select, textarea, kbd, [class*="-icon"], [class*="-mark"]) {
+.admin-passkey-page :is(button, input, select, textarea, kbd, [class*="-icon"], [class*="-mark"]) {
   border-radius: 8px !important;
 }
 
@@ -2385,9 +2385,9 @@
   .control-table article,
   .audit-list article
 ),
-.admin-mfa-card,
-.admin-mfa-setup,
-.admin-mfa-identity {
+.admin-passkey-card,
+.admin-passkey-setup,
+.admin-passkey-identity {
   border-radius: 12px !important;
 }
 
@@ -2412,7 +2412,7 @@
   .team-community-heading,
   .admin-dialog-backdrop
 ),
-.admin-mfa-page {
+.admin-passkey-page {
   border-radius: 0 !important;
 }
 
@@ -2434,7 +2434,7 @@
 }
 
 .ops-shell[data-operations-mode="admin"] .button:disabled,
-.admin-mfa-page .button:disabled {
+.admin-passkey-page .button:disabled {
   cursor: not-allowed !important;
   filter: none !important;
   opacity: 0.48;
@@ -3196,31 +3196,31 @@
     grid-template-columns: 40px minmax(0, 1fr);
   }
 
-  .admin-mfa-page {
+  .admin-passkey-page {
     padding: 12px;
     overflow: auto;
     place-items: start center;
   }
 
-  .admin-mfa-card {
+  .admin-passkey-card {
     grid-template-columns: minmax(0, 1fr);
     min-height: calc(100dvh - 24px);
   }
 
-  .admin-mfa-visual {
+  .admin-passkey-visual {
     min-height: 160px;
     padding: 24px;
     border-right: 0;
     border-bottom: 1px solid var(--admin-border);
   }
 
-  .admin-mfa-visual::before,
-  .admin-mfa-visual::after,
-  .admin-mfa-orbit {
+  .admin-passkey-visual::before,
+  .admin-passkey-visual::after,
+  .admin-passkey-orbit {
     display: none;
   }
 
-  .admin-mfa-visual-mark {
+  .admin-passkey-visual-mark {
     top: 50%;
     right: 24px;
     left: auto;
@@ -3229,34 +3229,34 @@
     transform: translateY(-50%);
   }
 
-  .admin-mfa-visual > p {
+  .admin-passkey-visual > p {
     max-width: calc(100% - 88px);
   }
 
-  .admin-mfa-content {
+  .admin-passkey-content {
     align-content: start;
     gap: 24px;
     padding: 24px 16px 32px;
   }
 
-  .admin-mfa-content h1 {
+  .admin-passkey-content h1 {
     font-size: 30px;
   }
 
-  .admin-mfa-progress li {
+  .admin-passkey-progress li {
     justify-content: center;
   }
 
-  .admin-mfa-progress li span {
+  .admin-passkey-progress li span {
     display: none;
   }
 
-  .admin-mfa-code {
+  .admin-passkey-code {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
   }
 
-  .admin-mfa-code input {
+  .admin-passkey-code input {
     height: 56px;
     font-size: 20px;
   }
@@ -3974,7 +3974,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ops-shell[data-operations-mode="admin"] *,
-  .admin-mfa-page * {
+  .admin-passkey-page * {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
@@ -5062,7 +5062,7 @@
 }
 
 
-/* Admin experience refresh — responsive shell, navigation drawer and MFA gate. */
+/* Admin experience refresh — responsive shell, navigation drawer and passkey gate. */
 :root {
   --admin-bg-app: var(--theme-main-background);
   --admin-bg-surface: var(--theme-accent);
@@ -5206,7 +5206,7 @@
   );
   color: var(--admin-text);
 }
-.admin-mfa-page {
+.admin-passkey-page {
   position: relative;
   isolation: isolate;
   padding: clamp(1rem, 4vw, 3rem);
@@ -5215,7 +5215,7 @@
     radial-gradient(circle at 90% 90%, color-mix(in srgb, var(--theme-status-purple) 14%, transparent), transparent 30rem),
     var(--admin-bg-app);
 }
-.admin-mfa-card {
+.admin-passkey-card {
   width: min(1080px, 100%);
   min-height: 0;
   border: 1px solid var(--admin-border-strong);
@@ -5227,7 +5227,7 @@
   );
   box-shadow: 0 2rem 6rem rgb(0 0 0 / 28%);
 }
-.admin-mfa-visual {
+.admin-passkey-visual {
   padding: clamp(1.5rem, 4vw, 3rem);
   background:
     linear-gradient(
@@ -5239,27 +5239,27 @@
     var(--admin-bg-surface);
   border-right-color: var(--admin-border);
 }
-.admin-mfa-visual::before,
-.admin-mfa-visual::after {
+.admin-passkey-visual::before,
+.admin-passkey-visual::after {
   display: block;
   position: absolute;
   border: 1px solid color-mix(in srgb, var(--admin-primary) 20%, transparent);
   border-radius: 50%;
   content: "";
 }
-.admin-mfa-visual::before { top: 7rem; left: 50%; width: 16rem; height: 16rem; transform: translateX(-50%); box-shadow: 0 0 5rem color-mix(in srgb, var(--admin-primary) 16%, transparent); }
-.admin-mfa-visual::after { top: 9rem; left: 50%; width: 11rem; height: 11rem; transform: translateX(-50%); border-color: color-mix(in srgb, var(--theme-indication-blue) 24%, transparent); }
-.admin-mfa-visual-mark { background: linear-gradient(135deg, color-mix(in srgb, var(--admin-primary) 24%, transparent), color-mix(in srgb, var(--theme-indication-blue) 14%, transparent)); border-color: color-mix(in srgb, var(--admin-primary) 50%, transparent); border-radius: 1rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / 22%); }
-.admin-mfa-content { gap: 1.35rem; padding: clamp(1.25rem, 4vw, 3rem); }
-.admin-mfa-content h1 { font-size: clamp(1.8rem, 4vw, 2.7rem); letter-spacing: -.06em; }
-.admin-mfa-progress li { min-height: 2.75rem; padding: .55rem .7rem; border-radius: .7rem .7rem 0 0; }
-.admin-mfa-identity { padding: .9rem; border-radius: .9rem; background: color-mix(in srgb, var(--admin-text) 4%, transparent); }
-.admin-mfa-code-tools { display: flex; align-items: center; justify-content: space-between; gap: .75rem; color: var(--admin-text-muted); font-size: .75rem; }
-.admin-mfa-paste { display: inline-flex; min-height: 2.25rem; align-items: center; gap: .4rem; padding: .45rem .7rem; border: 1px solid color-mix(in srgb, var(--admin-primary) 30%, transparent); border-radius: .65rem; background: color-mix(in srgb, var(--admin-primary) 10%, transparent); color: var(--admin-primary-hover); cursor: pointer; transition: background .2s ease, border-color .2s ease, transform .2s ease; }
-.admin-mfa-paste:hover:not(:disabled) { border-color: color-mix(in srgb, var(--admin-primary) 62%, transparent); background: color-mix(in srgb, var(--admin-primary) 18%, transparent); transform: translateY(-1px); }
-.admin-mfa-code input { height: clamp(3.6rem, 8vw, 4.4rem); border-radius: .9rem; background: color-mix(in srgb, var(--admin-bg-app) 55%, transparent); border-color: var(--admin-border-strong); }
-.admin-mfa-error { padding: .8rem .9rem; border-radius: .8rem; background: color-mix(in srgb, var(--theme-danger) 10%, transparent); }
-.admin-mfa-content .button { min-height: 3rem; border-radius: .8rem; }
+.admin-passkey-visual::before { top: 7rem; left: 50%; width: 16rem; height: 16rem; transform: translateX(-50%); box-shadow: 0 0 5rem color-mix(in srgb, var(--admin-primary) 16%, transparent); }
+.admin-passkey-visual::after { top: 9rem; left: 50%; width: 11rem; height: 11rem; transform: translateX(-50%); border-color: color-mix(in srgb, var(--theme-indication-blue) 24%, transparent); }
+.admin-passkey-visual-mark { background: linear-gradient(135deg, color-mix(in srgb, var(--admin-primary) 24%, transparent), color-mix(in srgb, var(--theme-indication-blue) 14%, transparent)); border-color: color-mix(in srgb, var(--admin-primary) 50%, transparent); border-radius: 1rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / 22%); }
+.admin-passkey-content { gap: 1.35rem; padding: clamp(1.25rem, 4vw, 3rem); }
+.admin-passkey-content h1 { font-size: clamp(1.8rem, 4vw, 2.7rem); letter-spacing: -.06em; }
+.admin-passkey-progress li { min-height: 2.75rem; padding: .55rem .7rem; border-radius: .7rem .7rem 0 0; }
+.admin-passkey-identity { padding: .9rem; border-radius: .9rem; background: color-mix(in srgb, var(--admin-text) 4%, transparent); }
+.admin-passkey-code-tools { display: flex; align-items: center; justify-content: space-between; gap: .75rem; color: var(--admin-text-muted); font-size: .75rem; }
+.admin-passkey-paste { display: inline-flex; min-height: 2.25rem; align-items: center; gap: .4rem; padding: .45rem .7rem; border: 1px solid color-mix(in srgb, var(--admin-primary) 30%, transparent); border-radius: .65rem; background: color-mix(in srgb, var(--admin-primary) 10%, transparent); color: var(--admin-primary-hover); cursor: pointer; transition: background .2s ease, border-color .2s ease, transform .2s ease; }
+.admin-passkey-paste:hover:not(:disabled) { border-color: color-mix(in srgb, var(--admin-primary) 62%, transparent); background: color-mix(in srgb, var(--admin-primary) 18%, transparent); transform: translateY(-1px); }
+.admin-passkey-code input { height: clamp(3.6rem, 8vw, 4.4rem); border-radius: .9rem; background: color-mix(in srgb, var(--admin-bg-app) 55%, transparent); border-color: var(--admin-border-strong); }
+.admin-passkey-error { padding: .8rem .9rem; border-radius: .8rem; background: color-mix(in srgb, var(--theme-danger) 10%, transparent); }
+.admin-passkey-content .button { min-height: 3rem; border-radius: .8rem; }
 @media (max-width: 1023px) {
   .ops-shell[data-operations-mode="admin"] .ops-sidebar,
   .ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar {
@@ -5286,29 +5286,29 @@
   .ops-shell[data-operations-mode="admin"] :is(.admin-workspace-header, .panel-header, .control-panel-header) { border-radius: 1rem; }
 }
 @media (max-width: 767px) {
-  .admin-mfa-page { padding: .75rem; place-items: stretch; }
-  .admin-mfa-card { grid-template-columns: 1fr; border-radius: 1.1rem; }
-  .admin-mfa-visual { min-height: 12rem; padding: 1.25rem; border-right: 0; border-bottom: 1px solid var(--admin-border); }
-  .admin-mfa-visual::before { top: 1.2rem; left: auto; right: -2rem; width: 13rem; height: 13rem; transform: none; }
-  .admin-mfa-visual::after { top: 2.3rem; left: auto; right: 2.3rem; width: 8.8rem; height: 8.8rem; transform: none; }
-  .admin-mfa-orbit { top: 5rem; left: auto; right: 6rem; }
-  .admin-mfa-visual-mark { top: 4.5rem; left: auto; right: 2rem; }
-  .admin-mfa-visual > strong { align-self: end; max-width: 16rem; }
-  .admin-mfa-visual > p { max-width: 22rem; }
-  .admin-mfa-content { padding: 1.15rem; }
-  .admin-mfa-content > header { grid-template-columns: 2.8rem minmax(0, 1fr); }
-  .admin-mfa-icon { width: 2.8rem; height: 2.8rem; }
-  .admin-mfa-progress li { justify-content: center; padding-inline: .35rem; }
-  .admin-mfa-progress li span { display: none; }
-  .admin-mfa-code { gap: .4rem; }
-  .admin-mfa-code input { min-width: 0; height: 3.8rem; font-size: 1.55rem; }
-  .admin-mfa-code-tools { align-items: flex-start; flex-direction: column; }
-  .admin-mfa-paste { width: 100%; justify-content: center; }
+  .admin-passkey-page { padding: .75rem; place-items: stretch; }
+  .admin-passkey-card { grid-template-columns: 1fr; border-radius: 1.1rem; }
+  .admin-passkey-visual { min-height: 12rem; padding: 1.25rem; border-right: 0; border-bottom: 1px solid var(--admin-border); }
+  .admin-passkey-visual::before { top: 1.2rem; left: auto; right: -2rem; width: 13rem; height: 13rem; transform: none; }
+  .admin-passkey-visual::after { top: 2.3rem; left: auto; right: 2.3rem; width: 8.8rem; height: 8.8rem; transform: none; }
+  .admin-passkey-orbit { top: 5rem; left: auto; right: 6rem; }
+  .admin-passkey-visual-mark { top: 4.5rem; left: auto; right: 2rem; }
+  .admin-passkey-visual > strong { align-self: end; max-width: 16rem; }
+  .admin-passkey-visual > p { max-width: 22rem; }
+  .admin-passkey-content { padding: 1.15rem; }
+  .admin-passkey-content > header { grid-template-columns: 2.8rem minmax(0, 1fr); }
+  .admin-passkey-icon { width: 2.8rem; height: 2.8rem; }
+  .admin-passkey-progress li { justify-content: center; padding-inline: .35rem; }
+  .admin-passkey-progress li span { display: none; }
+  .admin-passkey-code { gap: .4rem; }
+  .admin-passkey-code input { min-width: 0; height: 3.8rem; font-size: 1.55rem; }
+  .admin-passkey-code-tools { align-items: flex-start; flex-direction: column; }
+  .admin-passkey-paste { width: 100%; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned, .admin-mfa-paste),
+  .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned, .admin-passkey-paste),
   .ops-shell[data-operations-mode="admin"] .ops-sidebar,
-  .admin-mfa-page * { transition: none !important; }
+  .admin-passkey-page * { transition: none !important; }
 }
 
 /* Admin sidebar mobile fix: one off-canvas drawer, one scrolling navigation region. */
@@ -5407,13 +5407,13 @@
 
 /* v49.14.0 — admin state colors inherit the same editable user tokens. */
 .ops-shell[data-operations-mode="admin"] ::placeholder,
-.admin-mfa-page ::placeholder {
+.admin-passkey-page ::placeholder {
   color: var(--theme-placeholder);
   opacity: 1;
 }
 
 .ops-shell[data-operations-mode="admin"] :is(button, input, select, textarea):disabled,
-.admin-mfa-page :is(button, input):disabled {
+.admin-passkey-page :is(button, input):disabled {
   border-color: var(--theme-accent-l3) !important;
   color: var(--theme-disabled-text) !important;
   background-color: var(--theme-disabled-surface) !important;
@@ -6119,5 +6119,320 @@
 @media (prefers-reduced-motion: reduce) {
   .theme-catalog-card {
     transition: none;
+  }
+}
+
+
+/* v49.15.13 — shared premium admin navigation and passkey enrollment gate. */
+.ops-shell[data-operations-mode="admin"] .ops-sidebar {
+  width: 276px;
+  gap: .8rem;
+  padding: 1.05rem .8rem .85rem;
+  background: linear-gradient(180deg, var(--admin-bg-surface), color-mix(in srgb, var(--admin-bg-app) 92%, var(--admin-bg-surface))) !important;
+  border-right: 1px solid var(--admin-border-strong) !important;
+  box-shadow: .9rem 0 2.8rem color-mix(in srgb, var(--admin-bg-app) 46%, transparent) !important;
+}
+.ops-shell[data-operations-mode="admin"] .ops-sidebar-head {
+  min-height: 3.35rem;
+  padding: .25rem .35rem .85rem;
+  border-bottom: 1px solid var(--admin-border);
+}
+.ops-shell[data-operations-mode="admin"] .ops-sidebar-head .brand {
+  min-width: 0;
+  color: var(--admin-text);
+}
+.ops-shell[data-operations-mode="admin"] .ops-sidebar-head .brand-name {
+  overflow: hidden;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: -.045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ops-shell[data-operations-mode="admin"] :is(.ops-sidebar-collapse, .ops-sidebar-mobile-close) {
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid var(--admin-border);
+  border-radius: .72rem;
+  background: color-mix(in srgb, var(--admin-text) 4%, transparent);
+  color: var(--admin-text-muted);
+}
+.ops-shell[data-operations-mode="admin"] :is(.ops-sidebar-collapse, .ops-sidebar-mobile-close):hover {
+  border-color: color-mix(in srgb, var(--admin-primary) 58%, transparent);
+  background: color-mix(in srgb, var(--admin-primary) 13%, transparent);
+  color: var(--admin-text);
+}
+.ops-shell[data-operations-mode="admin"] .ops-admin-navigation-tools {
+  gap: .55rem;
+  padding: .1rem .1rem .2rem;
+}
+.ops-shell[data-operations-mode="admin"] .ops-command-trigger,
+.ops-shell[data-operations-mode="admin"] .ops-sidebar-search {
+  min-height: 2.65rem;
+  border: 1px solid var(--admin-border);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--admin-bg-card) 78%, transparent);
+}
+.ops-shell[data-operations-mode="admin"] .ops-command-trigger:hover,
+.ops-shell[data-operations-mode="admin"] .ops-sidebar-search:focus-within {
+  border-color: color-mix(in srgb, var(--admin-primary) 52%, transparent);
+  background: color-mix(in srgb, var(--admin-primary) 9%, var(--admin-bg-card));
+}
+.ops-shell[data-operations-mode="admin"] .ops-grouped-nav {
+  display: grid;
+  min-height: 0;
+  gap: .25rem;
+  overflow: auto;
+  padding: .15rem .1rem .5rem;
+  scrollbar-gutter: stable;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group {
+  margin: 0;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle {
+  width: 100%;
+  min-height: 2.15rem;
+  padding: .35rem .65rem;
+  border: 0;
+  border-radius: .62rem;
+  color: var(--admin-text-faint);
+  background: transparent;
+  font-size: .7rem;
+  font-weight: 750;
+  letter-spacing: .09em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: .45rem;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle > svg {
+  color: var(--admin-text-faint);
+  transition: transform .18s var(--ease-out, cubic-bezier(.23, 1, .32, 1));
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle[aria-expanded="true"] > svg {
+  transform: rotate(0deg);
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-toggle[aria-expanded="false"] > svg {
+  transform: rotate(-90deg);
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-count {
+  display: inline-grid;
+  min-width: 1.35rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 .28rem;
+  border: 1px solid color-mix(in srgb, var(--admin-primary) 38%, transparent);
+  border-radius: 999px;
+  color: var(--admin-primary-hover);
+  background: color-mix(in srgb, var(--admin-primary) 12%, transparent);
+  font-size: .67rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-group-items {
+  display: grid;
+  gap: .18rem;
+  padding: .1rem 0 .55rem;
+}
+.ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned) {
+  position: relative;
+  min-height: 2.7rem;
+  gap: .72rem;
+  padding: .56rem .72rem .56rem .82rem !important;
+  border: 1px solid transparent;
+  border-radius: .76rem !important;
+  color: var(--admin-text-muted);
+  background: transparent;
+  text-decoration: none;
+  transition: transform .18s var(--ease-out, cubic-bezier(.23, 1, .32, 1)), color .18s ease, background .18s ease, border-color .18s ease;
+}
+.ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned):hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--admin-primary) 24%, transparent);
+  color: var(--admin-text);
+  background: color-mix(in srgb, var(--admin-text) 5%, transparent);
+  box-shadow: none;
+}
+.ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a[aria-current="page"], .ops-active-pinned) {
+  border-color: color-mix(in srgb, var(--admin-primary) 30%, transparent);
+  color: var(--admin-text) !important;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--admin-primary) 28%, transparent), color-mix(in srgb, var(--theme-indication-blue) 12%, transparent)) !important;
+  box-shadow: inset 0 0 1.4rem color-mix(in srgb, var(--admin-primary) 9%, transparent);
+}
+.ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a[aria-current="page"], .ops-active-pinned)::before {
+  inset: .42rem auto .42rem 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, var(--admin-primary), var(--theme-indication-blue));
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-child {
+  min-height: 2.15rem !important;
+  margin-left: .75rem;
+  padding: .4rem .65rem .4rem 2.45rem !important;
+  border-radius: .64rem !important;
+  color: var(--admin-text-faint) !important;
+  font-size: .82rem;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-child:hover {
+  color: var(--admin-text) !important;
+  background: color-mix(in srgb, var(--admin-text) 5%, transparent) !important;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-child[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--admin-primary) 28%, transparent);
+  color: var(--admin-text) !important;
+  background: color-mix(in srgb, var(--admin-primary) 17%, transparent) !important;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-child-marker {
+  position: absolute;
+  left: 1.18rem;
+  width: .35rem;
+  height: .35rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: .72;
+}
+.ops-shell[data-operations-mode="admin"] .ops-nav-child[aria-current="page"] .ops-nav-child-marker {
+  border-color: var(--admin-primary);
+  background: var(--admin-primary);
+  box-shadow: 0 0 .5rem color-mix(in srgb, var(--admin-primary) 55%, transparent);
+}
+.ops-shell[data-operations-mode="admin"] .ops-release-version {
+  margin-top: auto;
+  padding: .55rem .7rem 0;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-text-faint);
+}
+.ops-shell[data-operations-mode="admin"] .ops-release-version strong {
+  color: var(--admin-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ops-shell[data-operations-mode="admin"] .ops-account-menu {
+  flex: 0 0 auto;
+  border: 1px solid var(--admin-border);
+  border-radius: .9rem !important;
+  background: color-mix(in srgb, var(--admin-bg-card) 84%, transparent);
+}
+.ops-shell[data-operations-mode="admin"] .ops-account-menu > summary {
+  min-height: 3.35rem;
+  padding: .58rem .62rem;
+  border-radius: .9rem !important;
+}
+.ops-shell[data-operations-mode="admin"] .ops-account-menu > summary:hover {
+  background: color-mix(in srgb, var(--admin-primary) 9%, transparent);
+}
+.ops-shell[data-operations-mode="admin"] .ops-account-menu > div {
+  margin: .25rem;
+  border: 1px solid var(--admin-border);
+  border-radius: .7rem !important;
+  background: var(--admin-bg-surface);
+}
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar {
+  width: 5.2rem;
+  padding-inline: .62rem;
+}
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar-head {
+  justify-content: center;
+}
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar-head .brand {
+  justify-content: center;
+}
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-nav-group-items > a {
+  justify-content: center;
+  padding-inline: .55rem !important;
+}
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-nav-child,
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-nav-group-toggle,
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-nav-child-marker {
+  display: none;
+}
+.ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-account-menu > summary {
+  justify-content: center;
+  padding-inline: .4rem;
+}
+
+.admin-passkey-page {
+  padding: clamp(1rem, 4vw, 3rem);
+  background: radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--admin-primary) 14%, transparent), transparent 28rem), var(--admin-bg-app);
+}
+.admin-passkey-card {
+  width: min(1080px, 100%);
+  min-height: 0;
+  border-radius: 1.4rem !important;
+  box-shadow: 0 1.75rem 4rem color-mix(in srgb, var(--admin-bg-app) 48%, transparent);
+}
+.admin-passkey-device {
+  display: grid;
+  gap: .45rem;
+  color: var(--admin-text-muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+.admin-passkey-device input {
+  min-height: 2.9rem;
+  padding: .7rem .8rem;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: .75rem;
+  color: var(--admin-text);
+  background: var(--admin-bg-app);
+}
+.admin-passkey-device input:focus {
+  border-color: var(--admin-primary);
+  outline: 2px solid color-mix(in srgb, var(--admin-primary) 24%, transparent);
+  outline-offset: 1px;
+}
+.admin-passkey-register {
+  width: 100%;
+}
+.admin-passkey-help {
+  margin: -.35rem 0 0;
+  color: var(--admin-text-faint);
+  font-size: .78rem;
+  line-height: 1.55;
+}
+@media (max-width: 1023px) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar,
+  .ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar {
+    width: min(22rem, calc(100vw - 1rem)) !important;
+    padding: max(.85rem, env(safe-area-inset-top)) .75rem max(.75rem, env(safe-area-inset-bottom)) !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-account-menu {
+    display: block !important;
+  }
+  .ops-shell[data-operations-mode="admin"] .ops-release-version {
+    display: none !important;
+  }
+}
+@media (max-width: 767px) {
+  .admin-passkey-page {
+    padding: .75rem;
+    place-items: stretch;
+  }
+  .admin-passkey-card {
+    grid-template-columns: 1fr;
+    border-radius: 1.1rem !important;
+  }
+  .admin-passkey-visual {
+    min-height: 12rem;
+    padding: 1.25rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--admin-border);
+  }
+  .admin-passkey-content {
+    gap: 1rem;
+    padding: 1.15rem;
+  }
+  .admin-passkey-content h1 {
+    font-size: 1.8rem !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-nav-child, .ops-sidebar, .ops-nav-group-toggle > svg),
+  .admin-passkey-page * {
+    transition: none !important;
   }
 }

@@ -2,6 +2,8 @@
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1115,32 +1117,8 @@ export function StoreManagementPanel({
                 }
               />
             </label>
-            <label>
-              Starts
-              <input
-                type="datetime-local"
-                value={collectionDraft.startsAt}
-                onChange={(event) =>
-                  setCollectionDraft((current) => ({
-                    ...current,
-                    startsAt: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              Ends
-              <input
-                type="datetime-local"
-                value={collectionDraft.endsAt}
-                onChange={(event) =>
-                  setCollectionDraft((current) => ({
-                    ...current,
-                    endsAt: event.target.value,
-                  }))
-                }
-              />
-            </label>
+            <div className="admin-date-picker-field"><span>Starts</span><PremiumDateTimePicker value={collectionDraft.startsAt} label="Collection starts" onChange={(next) => setCollectionDraft((current) => ({ ...current, startsAt: next ? dateInput(next) : "" }))} /></div>
+            <div className="admin-date-picker-field"><span>Ends</span><PremiumDateTimePicker value={collectionDraft.endsAt} label="Collection ends" onChange={(next) => setCollectionDraft((current) => ({ ...current, endsAt: next ? dateInput(next) : "" }))} /></div>
             <label className="store-admin-check">
               <input
                 type="checkbox"
@@ -1371,32 +1349,8 @@ export function StoreManagementPanel({
                                 }
                               />
                             </label>
-                            <label>
-                              Starts
-                              <input
-                                type="datetime-local"
-                                value={collectionEditDraft.startsAt}
-                                onChange={(event) =>
-                                  setCollectionEditDraft({
-                                    ...collectionEditDraft,
-                                    startsAt: event.target.value,
-                                  })
-                                }
-                              />
-                            </label>
-                            <label>
-                              Ends
-                              <input
-                                type="datetime-local"
-                                value={collectionEditDraft.endsAt}
-                                onChange={(event) =>
-                                  setCollectionEditDraft({
-                                    ...collectionEditDraft,
-                                    endsAt: event.target.value,
-                                  })
-                                }
-                              />
-                            </label>
+                            <div className="admin-date-picker-field"><span>Starts</span><PremiumDateTimePicker value={collectionEditDraft.startsAt} label="Collection starts" onChange={(next) => setCollectionEditDraft({ ...collectionEditDraft, startsAt: next ? dateInput(next) : "" })} /></div>
+                            <div className="admin-date-picker-field"><span>Ends</span><PremiumDateTimePicker value={collectionEditDraft.endsAt} label="Collection ends" onChange={(next) => setCollectionEditDraft({ ...collectionEditDraft, endsAt: next ? dateInput(next) : "" })} /></div>
                             <label className="store-admin-check">
                               <input
                                 type="checkbox"
@@ -1955,54 +1909,18 @@ export function StoreManagementPanel({
                   </label>
                 </>
               )}
-              <label>
-                {categoryEditorCopy(draft.category).startLabel}
-                <input
-                  type="color"
-                  value={draft.previewConfig.from}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      previewConfig: {
-                        ...draft.previewConfig,
-                        from: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label>
-                {categoryEditorCopy(draft.category).endLabel}
-                <input
-                  type="color"
-                  value={draft.previewConfig.to}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      previewConfig: {
-                        ...draft.previewConfig,
-                        to: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label>
-                {categoryEditorCopy(draft.category).accentLabel}
-                <input
-                  type="color"
-                  value={draft.previewConfig.accent}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      previewConfig: {
-                        ...draft.previewConfig,
-                        accent: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
+              <div className="store-preview-color-field">
+                <span>{categoryEditorCopy(draft.category).startLabel}</span>
+                <PremiumColorPicker value={draft.previewConfig.from} label={categoryEditorCopy(draft.category).startLabel} onChange={(next) => setDraft({ ...draft, previewConfig: { ...draft.previewConfig, from: next.slice(0, 7) } })} />
+              </div>
+              <div className="store-preview-color-field">
+                <span>{categoryEditorCopy(draft.category).endLabel}</span>
+                <PremiumColorPicker value={draft.previewConfig.to} label={categoryEditorCopy(draft.category).endLabel} onChange={(next) => setDraft({ ...draft, previewConfig: { ...draft.previewConfig, to: next.slice(0, 7) } })} />
+              </div>
+              <div className="store-preview-color-field">
+                <span>{categoryEditorCopy(draft.category).accentLabel}</span>
+                <PremiumColorPicker value={draft.previewConfig.accent} label={categoryEditorCopy(draft.category).accentLabel} onChange={(next) => setDraft({ ...draft, previewConfig: { ...draft.previewConfig, accent: next.slice(0, 7) } })} />
+              </div>
               {["COMMENT_EFFECT", "COMMENT_GRADIENT"].includes(
                 draft.category,
               ) ? (

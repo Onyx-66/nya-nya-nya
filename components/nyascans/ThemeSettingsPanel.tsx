@@ -2,6 +2,7 @@
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
 
 import { FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
@@ -123,12 +124,10 @@ function PaletteEditor({
         {fields.map(([field, label]) => (
           <label key={field}>
             <span>{label}</span>
-            <input
-              type="color"
+            <PremiumColorPicker
               value={value[field]}
-              onChange={(event) =>
-                onChange({ ...value, [field]: event.target.value })
-              }
+              label={label}
+              onChange={(next) => onChange({ ...value, [field]: next.slice(0, 7) })}
             />
             <code>{value[field]}</code>
           </label>
@@ -560,7 +559,7 @@ export function ThemeSettingsPanel() {
             ).map(([field, label]) => (
               <label key={field}>
                 <span>{label}</span>
-                <input type="color" value={settings[field]} onChange={(event) => update(field, event.target.value)} />
+                <PremiumColorPicker value={settings[field]} label={label} onChange={(next) => update(field, next.slice(0, 7))} />
                 <code>{settings[field]}</code>
               </label>
             ))}
@@ -788,8 +787,8 @@ export function ThemeSettingsPanel() {
               <span>Use gradient on primary actions and brand moments</span>
             </label>
             <div>
-              <label><span>From</span><input type="color" value={settings.gradient.from} onChange={(event) => update("gradient", { ...settings.gradient, from: event.target.value })} /></label>
-              <label><span>To</span><input type="color" value={settings.gradient.to} onChange={(event) => update("gradient", { ...settings.gradient, to: event.target.value })} /></label>
+              <label><span>From</span><PremiumColorPicker value={settings.gradient.from} label="From" onChange={(next) => update("gradient", { ...settings.gradient, from: next.slice(0, 7) })} /></label>
+              <label><span>To</span><PremiumColorPicker value={settings.gradient.to} label="To" onChange={(next) => update("gradient", { ...settings.gradient, to: next.slice(0, 7) })} /></label>
               <label><span>Angle · {settings.gradient.angle}°</span><input type="range" min="0" max="360" value={settings.gradient.angle} onChange={(event) => update("gradient", { ...settings.gradient, angle: Number(event.target.value) })} /></label>
               <label><span>Intensity · {settings.gradient.intensity}%</span><input type="range" min="0" max="100" value={settings.gradient.intensity} onChange={(event) => update("gradient", { ...settings.gradient, intensity: Number(event.target.value) })} /></label>
               <label><span>Corner radius · {settings.radius}px</span><input type="range" min="0" max="28" value={settings.radius} onChange={(event) => update("radius", Number(event.target.value))} /></label>

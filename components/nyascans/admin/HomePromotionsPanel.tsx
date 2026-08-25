@@ -7,6 +7,8 @@ import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, TextB, TextItalic, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
+import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 import { FormattedAnnouncementText } from "@/components/nyascans/FormattedAnnouncementText";
 
 type Announcement = {
@@ -66,20 +68,6 @@ function adDraftFromRecord(record: FloatingAd): FloatingAdDraft {
     isActive: record.isActive,
     resetAudience: false,
   };
-}
-
-function localDateTimeValue(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function utcDateTimeValue(value: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 export function HomePromotionsPanel() {
@@ -277,14 +265,14 @@ export function HomePromotionsPanel() {
             <label className="v46-span-two"><span>Message</span><textarea rows={3} value={ad.body} onChange={(event) => setAd((current) => ({ ...current, body: event.target.value }))} /></label>
             <label><span>Primary action label</span><input value={ad.actionLabel} onChange={(event) => setAd((current) => ({ ...current, actionLabel: event.target.value }))} /></label>
             <label><span>Destination</span><input value={ad.destinationUrl} placeholder="https://patreon.com/…" onChange={(event) => setAd((current) => ({ ...current, destinationUrl: event.target.value }))} /></label>
-            <label><span>Starts at (optional)</span><input type="datetime-local" value={localDateTimeValue(ad.startsAt)} onChange={(event) => setAd((current) => ({ ...current, startsAt: utcDateTimeValue(event.target.value) }))} /></label>
-            <label><span>Ends at (optional)</span><input type="datetime-local" value={localDateTimeValue(ad.endsAt)} onChange={(event) => setAd((current) => ({ ...current, endsAt: utcDateTimeValue(event.target.value) }))} /></label>
+            <div className="admin-date-picker-field"><span>Starts at (optional)</span><PremiumDateTimePicker value={ad.startsAt} label="Starts at" onChange={(next) => setAd((current) => ({ ...current, startsAt: next }))} /></div>
+            <div className="admin-date-picker-field"><span>Ends at (optional)</span><PremiumDateTimePicker value={ad.endsAt} label="Ends at" onChange={(next) => setAd((current) => ({ ...current, endsAt: next }))} /></div>
             <label><span>Fallback image URL</span><input value={ad.fallbackImageUrl} placeholder="https://…" onChange={(event) => setAd((current) => ({ ...current, fallbackImageUrl: event.target.value }))} /></label>
             <label><span>Visual effect</span><UnifiedSingleSelect value={ad.effect} onChange={(event) => setAd((current) => ({ ...current, effect: event.target.value as FloatingAd["effect"] }))}><option value="WAVE">Wave</option><option value="PULSE">Pulse</option><option value="GLOW">Glow</option></UnifiedSingleSelect></label>
-            <label className="campaign-color-field"><span>Primary light</span><span><input type="color" value={ad.primaryColor} onChange={(event) => setAd((current) => ({ ...current, primaryColor: event.target.value.toUpperCase() }))} /><code>{ad.primaryColor}</code></span></label>
-            <label className="campaign-color-field"><span>Secondary light</span><span><input type="color" value={ad.secondaryColor} onChange={(event) => setAd((current) => ({ ...current, secondaryColor: event.target.value.toUpperCase() }))} /><code>{ad.secondaryColor}</code></span></label>
-                        <label className="campaign-color-field"><span>Background</span><span><input type="color" value={ad.backgroundColor} onChange={(event) => setAd((current) => ({ ...current, backgroundColor: event.target.value.toUpperCase() }))} /><code>{ad.backgroundColor}</code></span></label>
-            <label className="campaign-color-field"><span>Border / accent</span><span><input type="color" value={ad.borderColor || ad.primaryColor} onChange={(event) => setAd((current) => ({ ...current, borderColor: event.target.value.toUpperCase() }))} /><code>{ad.borderColor || ad.primaryColor}</code></span></label>
+            <label className="campaign-color-field"><span>Primary light</span><PremiumColorPicker value={ad.primaryColor} label="Primary light" onChange={(next) => setAd((current) => ({ ...current, primaryColor: next.slice(0, 7).toUpperCase() }))} /><code>{ad.primaryColor}</code></label>
+            <label className="campaign-color-field"><span>Secondary light</span><PremiumColorPicker value={ad.secondaryColor} label="Secondary light" onChange={(next) => setAd((current) => ({ ...current, secondaryColor: next.slice(0, 7).toUpperCase() }))} /><code>{ad.secondaryColor}</code></label>
+            <label className="campaign-color-field"><span>Background</span><PremiumColorPicker value={ad.backgroundColor} label="Background" onChange={(next) => setAd((current) => ({ ...current, backgroundColor: next.slice(0, 7).toUpperCase() }))} /><code>{ad.backgroundColor}</code></label>
+            <label className="campaign-color-field"><span>Border / accent</span><PremiumColorPicker value={ad.borderColor || ad.primaryColor} label="Border / accent" onChange={(next) => setAd((current) => ({ ...current, borderColor: next.slice(0, 7).toUpperCase() }))} /><code>{ad.borderColor || ad.primaryColor}</code></label>
             <label><span>Accent line edge</span><UnifiedSingleSelect value={ad.accentLinePosition} onChange={(event) => setAd((current) => ({ ...current, accentLinePosition: event.target.value as FloatingAdDraft["accentLinePosition"] }))}><option value="top">Top</option><option value="left">Left</option><option value="bottom">Bottom</option></UnifiedSingleSelect></label>
             <label><span>Upload image</span>
 <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => setAdImage(event.target.files?.[0] ?? null)} /><small>{adImage?.name ?? "Static PNG, JPEG or WebP · 500×400px minimum · 8 MB maximum"}</small></label>

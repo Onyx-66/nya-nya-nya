@@ -25,6 +25,7 @@ import { ThemeAwareLogo } from "@/components/nyascans/ThemeAwareLogo";
 import type { ThemeController } from "@/components/nyascans/UserThemeSystem";
 import { themeForPreset } from "@/components/nyascans/UserThemeSystem";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
 import {
   blankThemeMarkdownTemplate,
   blankThemeTemplate,
@@ -89,58 +90,20 @@ function TokenEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const [error, setError] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (inputRef.current && document.activeElement !== inputRef.current) {
-      inputRef.current.value = value;
-    }
-  }, [value]);
-
-  function commit(next: string) {
-    const normalized = next.trim().toUpperCase();
-    if (!/^#[0-9A-F]{6}$/u.test(normalized)) {
-      setError("Enter a six-digit hex color.");
-      return;
-    }
-    setError("");
-    if (inputRef.current) inputRef.current.value = normalized;
-    onChange(normalized);
-  }
-
   return (
-    <label className="theme-token-row">
+    <div className="theme-token-row">
       <span>
         <strong>{themeTokenLabels[token]}</strong>
         <code>{cssVariableForToken(token)}</code>
       </span>
       <span className="theme-token-control">
-        <input
-          className="theme-color-picker"
-          type="color"
+        <PremiumColorPicker
           value={value}
-          aria-label={`Pick ${themeTokenLabels[token]}`}
-          onChange={(event) => commit(event.target.value)}
+          label={themeTokenLabels[token]}
+          onChange={(next) => onChange(next.slice(0, 7).toUpperCase())}
         />
-        <input
-          ref={inputRef}
-          className={error ? "theme-hex-input is-invalid" : "theme-hex-input"}
-          defaultValue={value}
-          inputMode="text"
-          spellCheck={false}
-          aria-invalid={Boolean(error)}
-          aria-label={`${themeTokenLabels[token]} hexadecimal value`}
-          onChange={(event) => {
-            if (/^#[0-9a-fA-F]{6}$/u.test(event.target.value)) {
-              commit(event.target.value);
-            }
-          }}
-          onBlur={(event) => commit(event.currentTarget.value)}
-        />
-        {error ? <small role="alert">{error}</small> : null}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -792,14 +755,13 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
                   />
                   <span>Custom</span>
                 </label>
-                <input
-                  type="color"
-                  aria-label="Custom logo color"
+                <PremiumColorPicker
                   value={draft.logoColorOverride ?? draft.tokens.primary}
+                  label="Custom logo color"
                   disabled={!draft.logoColorOverride}
-                  onChange={(event) => updateDraft({
+                  onChange={(next) => updateDraft({
                     ...draft,
-                    logoColorOverride: event.target.value.toUpperCase(),
+                    logoColorOverride: next.slice(0, 7).toUpperCase(),
                   })}
                 />
                 <code>{draft.logoColorOverride ?? "Token-matched"}</code>

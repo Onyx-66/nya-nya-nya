@@ -1,6 +1,7 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 
 import {
   ArrowClockwise,
@@ -32,19 +33,6 @@ type StoredDocument = {
   updatedAt: string | null;
   recoveredFromInvalid?: boolean;
 };
-
-function readDate(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function writeDate(value: string) {
-  if (!value) return null;
-  return new Date(value).toISOString();
-}
 
 function nextPackage(index: number): CoinPackage {
   return {
@@ -383,38 +371,8 @@ export function CommercialSettingsPanel({
               }
             />
           </label>
-          <label>
-            <span>Start date (optional)</span>
-            <input
-              type="datetime-local"
-              value={readDate(announcement.startsAt)}
-              onChange={(event) =>
-                update((current) => ({
-                  ...current,
-                  announcement: {
-                    ...current.announcement,
-                    startsAt: writeDate(event.target.value),
-                  },
-                }))
-              }
-            />
-          </label>
-          <label>
-            <span>End date (optional)</span>
-            <input
-              type="datetime-local"
-              value={readDate(announcement.endsAt)}
-              onChange={(event) =>
-                update((current) => ({
-                  ...current,
-                  announcement: {
-                    ...current.announcement,
-                    endsAt: writeDate(event.target.value),
-                  },
-                }))
-              }
-            />
-          </label>
+          <div className="admin-date-picker-field"><span>Start date (optional)</span><PremiumDateTimePicker value={announcement.startsAt} label="Start date" onChange={(next) => update((current) => ({ ...current, announcement: { ...current.announcement, startsAt: next } }))} /></div>
+          <div className="admin-date-picker-field"><span>End date (optional)</span><PremiumDateTimePicker value={announcement.endsAt} label="End date" onChange={(next) => update((current) => ({ ...current, announcement: { ...current.announcement, endsAt: next } }))} /></div>
         </div>
         <div className="announcement-reset">
           <span>

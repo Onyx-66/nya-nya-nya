@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import { headers } from "next/headers";
 import { getAuthenticatedUser } from "@/app/chatgpt-auth";
 import { ApiError } from "@/lib/server/api";
 import {
@@ -9,7 +8,6 @@ import {
   ROLES,
 } from "@/lib/permissions.mjs";
 import { randomId } from "@/lib/server/random-id";
-import { getAdminMfaState } from "@/lib/server/admin-mfa";
 import type { SessionAuthMethod } from "@/lib/server/local-auth";
 import { NON_DELEGABLE_CAPABILITIES } from "@/lib/admin-permissions";
 
@@ -26,10 +24,8 @@ export type Actor = {
   uploadTeamIds: string[];
   canUseUploadCenter: boolean;
   authMethod: "CHATGPT" | SessionAuthMethod;
-  adminMfaRequired: boolean;
-  adminMfaEnrolled: boolean;
-  adminMfaVerified: boolean;
-  adminMfaExpiresAt: string | null;
+  adminPasskeyRequired: boolean;
+  adminPasskeyEnrolled: boolean;
   permissionOverrides: Array<{ role: string; capability: string; allowed: boolean }>;
 };
 
@@ -408,14 +404,11 @@ export async function getActor(): Promise<Actor | null> {
     : consoleOverrides.some((rule) => rule.allowed)
       ? true
       : canAny(roles, "admin.console.access");
-  const adminMfaRequired = roles.some((role) => adminRoleSet.has(role)) || consoleAllowed;
-  const adminMfa = adminMfaRequired
-    ? await getAdminMfaState(row.id, new Headers(await headers()))
-    : { enrolled: false, verified: false, expiresAt: null };
-  const registeredPasskey = adminMfaRequired
+  const adminPasskeyRequired = roles.some((role) => adminRoleSet.has(role)) || consoleAllowed;
+  const registeredPasskey = adminPasskeyRequired
     ? await env.DB.prepare("SELECT 1 FROM account_passkeys WHERE user_id = ? LIMIT 1").bind(row.id).first()
     : null;
-  const adminMfaEnrolled = adminMfa.enrolled || Boolean(registeredPasskey);
+  const adminPasskeyEnrolled = Boolean(registeredPasskey);
 
   return {
     id: row.id,
@@ -436,10 +429,8 @@ export async function getActor(): Promise<Actor | null> {
       uploadTeamIds.length > 0 ||
       managedTeamIds.length > 0,
     authMethod: identity.authMethod,
-    adminMfaRequired,
-    adminMfaEnrolled,
-    adminMfaVerified: adminMfa.verified,
-    adminMfaExpiresAt: adminMfa.expiresAt,
+    adminPasskeyRequired,
+    adminPasskeyEnrolled,
     permissionOverrides,
   };
 }
@@ -529,10 +520,8 @@ export async function getActorForUserId(userId: string): Promise<Actor | null> {
     uploadTeamIds,
     canUseUploadCenter: requestTeamIds.length > 0 || uploadTeamIds.length > 0 || managedTeamIds.length > 0 || effectiveRoles.some((role) => role === ROLES.OWNER || role === ROLES.ADMINISTRATOR),
     authMethod: "PASSWORD",
-    adminMfaRequired: false,
-    adminMfaEnrolled: false,
-    adminMfaVerified: false,
-    adminMfaExpiresAt: null,
+    adminPasskeyRequired: false,
+    adminPasskeyEnrolled: false,
     permissionOverrides,
   };
 }
@@ -566,8 +555,8 @@ export function requireAdminConsole(actor: Actor) {
   if (!actorHasCapability(actor, "admin.console.access")) {
     throw new ApiError(403, "ADMIN_PERMISSION_REQUIRED", "Administrator console permission is required.");
   }
-  if (!actor.adminMfaEnrolled) {
-    throw new ApiError(403, "ADMIN_MFA_SETUP_REQUIRED", "Set up administrator two-factor authentication before continuing.");
+  if (actor.adminPasskeyRequired && !actor.adminPasskeyEnrolled) {
+    throw new ApiError(403, "ADMIN_PASSKEY_SETUP_REQUIRED", "Register a passkey before continuing to the administrator console.");
   }
 }
 
@@ -592,8 +581,8 @@ export function requireAdmin(actor: Actor) {
   if (!actorHasCapability(actor, "admin.console.access")) {
     throw new ApiError(403, "ADMIN_PERMISSION_REQUIRED", "Administrator console permission is required.");
   }
-  if (!actor.adminMfaEnrolled) {
-    throw new ApiError(403, "ADMIN_MFA_SETUP_REQUIRED", "Set up administrator two-factor authentication before continuing.");
+  if (actor.adminPasskeyRequired && !actor.adminPasskeyEnrolled) {
+    throw new ApiError(403, "ADMIN_PASSKEY_SETUP_REQUIRED", "Register a passkey before continuing to the administrator console.");
   }
 }
 
@@ -605,7 +594,7 @@ export function requireOwner(actor: Actor) {
       "Owner authorization is required.",
     );
   }
-  if (!actor.adminMfaEnrolled) {
-    throw new ApiError(403, "ADMIN_MFA_SETUP_REQUIRED", "Set up administrator two-factor authentication before continuing.");
+  if (actor.adminPasskeyRequired && !actor.adminPasskeyEnrolled) {
+    throw new ApiError(403, "ADMIN_PASSKEY_SETUP_REQUIRED", "Register a passkey before continuing to the administrator console.");
   }
 }

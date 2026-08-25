@@ -1,4 +1,5 @@
 "use client";
+import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
 import {
   ArrowCounterClockwise,
   ArrowsHorizontal,
@@ -222,21 +223,21 @@ export function ReaderSettingsPanel({
           ]}
           onChange={(readerTheme) => onChange({ readerTheme })}
         />
-        <label className="reader-color-control">
+        <div className="reader-color-control">
           <span>
             <Moon size={16} /> Background color
           </span>
-          <input
-            type="color"
+          <PremiumColorPicker
             value={settings.backgroundColor}
-            onChange={(event) =>
+            label="Background color"
+            onChange={(next) =>
               onChange({
-                backgroundColor: event.target.value,
+                backgroundColor: next.slice(0, 7),
                 readerTheme: "dark",
               })
             }
           />
-        </label>
+        </div>
       </section>
 
       <section>

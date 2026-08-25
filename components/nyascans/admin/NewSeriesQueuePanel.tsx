@@ -1,6 +1,7 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1258,33 +1259,7 @@ export function NewSeriesQueuePanel() {
             <option value="MANGAUPDATES">MangaUpdates</option>
           </UnifiedSingleSelect>
         </label>
-        <label>
-          Submitted from
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                from: event.target.value,
-              }))
-            }
-          />
-        </label>
-        <label>
-          Submitted through
-          <input
-            type="date"
-            min={filters.from || undefined}
-            value={filters.to}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                to: event.target.value,
-              }))
-            }
-          />
-        </label>
+        <div className="admin-date-range-field"><span>Submitted date range</span><PremiumDateRangePicker start={filters.from} end={filters.to} label="Submitted date range" valueFormat="date" onChange={({ start, end }) => setFilters((current) => ({ ...current, from: start ?? "", to: end ?? "" }))} /></div>
         <div className="nsq-filter-actions">
           <button className="button button-primary" type="submit">
             Apply filters

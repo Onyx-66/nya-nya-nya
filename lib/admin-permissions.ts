@@ -31,8 +31,7 @@ export const ADMIN_PERMISSION_REGISTRY = [
   ["community.achievements.manage", "Community", "Manage achievement definitions and awards"],
   ["commerce.entitlements.read", "Commerce", "Inspect chapter entitlements and gift-card lifecycle"],
   ["notifications.manage", "Platform", "Inspect delivery and send targeted administrator notices"],
-  ["security.read", "Security", "Read administrator security posture and login events"],
-  ["security.sessions.manage", "Security", "Revoke administrator MFA sessions"],
+  ["security.read", "Security", "Read administrator passkey posture and security audit coverage"],
   ["admin.audit.read", "Security", "Read immutable administrator audit events"],
   ["admin.audit.export", "Security", "Export immutable administrator audit events"],
   ["api.manage", "Security", "Manage external API credentials"],
@@ -60,7 +59,6 @@ export const NON_DELEGABLE_CAPABILITIES = new Set<string>([
   "api.manage",
   "admin.identifiers.read",
   "admin.bot-actions.read",
-  "security.sessions.manage",
 ]);
 
 // Compatibility export: server guards and older callers consume this symbol,

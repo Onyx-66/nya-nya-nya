@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 import {
   AdminPageScaffold,
   ConfirmActionDialog,
@@ -105,19 +106,6 @@ const emptyDraft: Draft = {
   metadata: {},
   purchaseCount: 0,
 };
-
-function inputDate(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16);
-}
-
-function outputDate(value: string) {
-  return value ? new Date(value).toISOString() : null;
-}
 
 async function api<T>(input: RequestInfo | URL, init?: RequestInit) {
   const response = await fetch(input, init);
@@ -918,32 +906,8 @@ export function CommerceOfferManager({
                         }
                       />
                     </label>
-                    <label>
-                      Start date
-                      <input
-                        type="datetime-local"
-                        value={inputDate(draft.startsAt)}
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            startsAt: outputDate(event.target.value),
-                          }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      End date
-                      <input
-                        type="datetime-local"
-                        value={inputDate(draft.endsAt)}
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            endsAt: outputDate(event.target.value),
-                          }))
-                        }
-                      />
-                    </label>
+                    <div className="admin-date-picker-field"><span>Start date</span><PremiumDateTimePicker value={draft.startsAt} label="Start date" onChange={(next) => setDraft((current) => ({ ...current, startsAt: next }))} /></div>
+                    <div className="admin-date-picker-field"><span>End date</span><PremiumDateTimePicker value={draft.endsAt} label="End date" onChange={(next) => setDraft((current) => ({ ...current, endsAt: next }))} /></div>
                     <label>
                       Theme
                       <UnifiedSingleSelect

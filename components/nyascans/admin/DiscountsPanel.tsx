@@ -26,6 +26,7 @@ import {
 } from "@/components/nyascans/admin/AdminPageScaffold";
 import { DISCOUNTS_UPDATED_EVENT } from "@/components/nyascans/ActiveDiscountBadge";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
+import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import { coinLabel } from "@/lib/commercial-settings";
 
@@ -743,16 +744,11 @@ export function DiscountsPanel({
                 </label>
                 <label>
                   Start date
-                  <input type="datetime-local" value={draft.startsAt} onChange={(event) => setDraft((current) => current ? { ...current, startsAt: event.target.value } : current)} />
+                  <PremiumDateTimePicker value={draft.startsAt} label="Start date and time" onChange={(next) => setDraft((current) => current ? { ...current, startsAt: dateTimeInputValue(next) } : current)} />
                 </label>
                 <label>
                   End date
-                  <input
-                    type="datetime-local"
-                    aria-invalid={Boolean(draft.endsAt && draft.startsAt && new Date(draft.endsAt).getTime() <= new Date(draft.startsAt).getTime())}
-                    value={draft.endsAt}
-                    onChange={(event) => setDraft((current) => current ? { ...current, endsAt: event.target.value } : current)}
-                  />
+                  <PremiumDateTimePicker value={draft.endsAt} label="End date and time" onChange={(next) => setDraft((current) => current ? { ...current, endsAt: dateTimeInputValue(next) } : current)} />
                 </label>
                 <label className="admin-toggle-row v481-span-two">
                   <input type="checkbox" checked={draft.active} onChange={(event) => setDraft((current) => current ? { ...current, active: event.target.checked } : current)} />
