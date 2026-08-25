@@ -10396,12 +10396,16 @@ function ReaderView({
         <a className="reader-access-back" href={`/title/${routeSeriesSlug}`}>
           <CaretLeft size={18} /> Back to {seriesTitle}
         </a>
-        <section className="reader-access-card reader-access-loading" role="status">
-          <DotsRing size="lg" label={null} />
-          <strong>Checking chapter access…</strong>
+        <section
+          className={`reader-access-card ${accessError ? "reader-access-error" : "reader-access-loading"}`}
+          role={accessError ? "alert" : "status"}
+        >
+          {accessError ? <WarningCircle size={30} /> : <DotsRing size="lg" label={null} />}
+          <strong>{accessError ? "This chapter is currently unavailable." : "Checking chapter access…"}</strong>
           <p>
-            The reader stays closed until this chapter’s release and entitlement
-            rules are verified.
+            {accessError
+              ? "The reader stays closed while this chapter is unavailable."
+              : "The reader stays closed until this chapter’s release and entitlement rules are verified."}
           </p>
           {accessError ? (
             <button

@@ -22,7 +22,7 @@ test("Paid System uses the payments flag plus premium availability and fails clo
 });
 
 test("paid API surfaces are server-gated and public chapter SQL hides paid releases", async () => {
-  const [api, products, checkout, billing, purchases, discounts, gifts, bulk, visibility, page, access] = await Promise.all([
+  const [api, products, checkout, billing, purchases, discounts, gifts, bulk, visibility, page, access, app] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("app/api/v1/store/products/route.ts"),
     read("app/api/v1/payments/checkout/route.ts"),
@@ -34,6 +34,7 @@ test("paid API surfaces are server-gated and public chapter SQL hides paid relea
     read("lib/server/public-content-visibility.ts"),
     read("app/[...slug]/page.tsx"),
     read("lib/server/chapter-access.ts"),
+    read("components/nyascans/NyaScansApp.tsx"),
   ]);
   assert.match(api, /path === "wallet"[\s\S]+requirePaidSystem\(env\.DB, 404\)/u);
   assert.match(api, /path === "orders"[\s\S]+requirePaidSystem\(env\.DB, 404\)/u);
@@ -49,6 +50,7 @@ test("paid API surfaces are server-gated and public chapter SQL hides paid relea
   assert.match(visibility, /public_paid_system_feature/u);
   assert.doesNotMatch(page.slice(page.indexOf('const chapterWhere'), page.indexOf('return env.DB.prepare')), /publicPaidChapterPredicate/u);
   assert.match(access, /This chapter is currently unavailable\./u);
+  assert.match(app, /accessError \? "This chapter is currently unavailable\."/u);
 });
 
 test("Paid/Free labels are suppressed and technical upload validation remains", async () => {
