@@ -1962,10 +1962,13 @@ function SeriesStatusBadge({
 function ChapterAccessBadge({
   accessType,
   unlocked = false,
+  visible = true,
 }: {
   accessType: string;
   unlocked?: boolean;
+  visible?: boolean;
 }) {
+  if (!visible) return null;
   const normalized = accessType === "FREE" || unlocked ? "free" : "paid";
   const label = normalized === "free" ? "Free" : "Paid";
   const icon =
@@ -2673,6 +2676,8 @@ function LatestUpdatesGrid({
   period?: "today" | "week" | "month" | "all";
   pageSize?: number;
 }) {
+  const { runtimeFeatures } = useCommercialSettings();
+  const paidSystemEnabled = runtimeFeatures.paidSystem;
   const [page, setPage] = useState(1);
   const [records, setRecords] = useState<LatestRelease[]>([]);
   const [pageCount, setPageCount] = useState(1);
@@ -3003,7 +3008,10 @@ function LatestUpdatesGrid({
                               <LanguageFlag language={chapter.language} showCode={false} />
                               <span className="latest-feed-chapter">Chapter {normalizeChapterNumber(chapter.chapterNumber)}</span>
                               <span className="latest-feed-status">
-                                <ChapterAccessBadge accessType={chapter.effectiveAccessType ?? chapter.accessType} />
+                                <ChapterAccessBadge
+                                  accessType={chapter.effectiveAccessType ?? chapter.accessType}
+                                  visible={paidSystemEnabled}
+                                />
                               </span>
                             </div>
                             <div className="latest-feed-row-meta">
@@ -3098,7 +3106,10 @@ function LatestUpdatesGrid({
                               <time className="latest-chapter-period" dateTime={chapter.publishedAt}>
                                 {releaseTime(chapter.publishedAt)} ago
                               </time>
-                              <ChapterAccessBadge accessType={chapter.effectiveAccessType ?? chapter.accessType} />
+                              <ChapterAccessBadge
+                                  accessType={chapter.effectiveAccessType ?? chapter.accessType}
+                                  visible={paidSystemEnabled}
+                                />
                             </a>
                           </span>
                           <span className="latest-chapter-attribution">
@@ -4574,13 +4585,9 @@ function HomeView({
   actor: Actor | null;
   showToast: (text: string) => void;
 }) {
-  const {
-    settings: commercialSettings,
-    runtimeFeatures,
-  } = useCommercialSettings();
+  const { runtimeFeatures } = useCommercialSettings();
   const { settings: siteConfiguration } = useSiteConfiguration();
-  const premiumEconomyPublic =
-    commercialSettings.economy.premiumEconomyPublic;
+  const paidSystemEnabled = runtimeFeatures.paidSystem;
   const [promotions, setPromotions] = useState<{
     announcements: HomeAnnouncement[];
     floatingAds: FloatingCampaign[];
@@ -4608,7 +4615,7 @@ function HomeView({
         <PinnedSeriesSection carouselStyle={siteConfiguration.homepage.pinnedSeriesStyle} />
 
         <RecentReviewsSection />
-        <DiscountsSection enabled={premiumEconomyPublic} />
+        {paidSystemEnabled ? <DiscountsSection enabled /> : null}
 
         <FloatingHomeAds
           campaigns={
@@ -6060,9 +6067,8 @@ function StoreView({
   category?: string;
   showToast: (text: string) => void;
 }) {
-  const { settings: commercial } = useCommercialSettings();
-  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
-  const lockAndPayVisible = premiumEconomyPublic;
+  const { settings: commercial, runtimeFeatures } = useCommercialSettings();
+  const lockAndPayVisible = runtimeFeatures.paidSystem;
   const requestedCategory = normalizeStoreCategory(category);
   const selectedCategory =
     !lockAndPayVisible &&
@@ -7847,8 +7853,8 @@ function TitleView({
   actor: Actor | null;
   showToast: (text: string) => void;
 }) {
-  const { settings: commercial } = useCommercialSettings();
-  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
+  const { settings: commercial, runtimeFeatures } = useCommercialSettings();
+  const premiumEconomyPublic = runtimeFeatures.paidSystem;
   const [fetchedPublicDetail, setPublicDetail] = useState<PublicSeriesDetail | null>(
     null,
   );
@@ -8725,30 +8731,30 @@ function TitleView({
                                         chapter.teamName ?? "Independent release"
                                       )}
                                     </span>
-                                    <span
-                                      className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}
-                                    >
-                                      {access === "Free" ? (
-                                        <Check size={14} />
-                                      ) : (
-                                        <LockSimple size={14} />
-                                      )}
-                                      {access}
-                                      {premiumEconomyPublic &&
-                                      chapter.priceOnyx > 0 &&
-                                      access === "Paid" ? (
-                                        <span className="chapter-discount-price">
-                                          {chapter.basePriceOnyx &&
-                                          chapter.basePriceOnyx > chapter.priceOnyx ? (
-                                            <s>{coinLabel(chapter.basePriceOnyx, commercial)}</s>
-                                          ) : null}
-                                          <span>· {coinLabel(chapter.priceOnyx, commercial)}</span>
-                                          {chapter.discountPercentage ? (
-                                            <b>−{chapter.discountPercentage}%</b>
-                                          ) : null}
-                                        </span>
-                                      ) : null}
-                                    </span>
+                                    {premiumEconomyPublic ? (
+                                      <span
+                                        className={`chapter-access chapter-access-${access.toLowerCase().replaceAll(" ", "-")}`}
+                                      >
+                                        {access === "Free" ? (
+                                          <Check size={14} />
+                                        ) : (
+                                          <LockSimple size={14} />
+                                        )}
+                                        {access}
+                                        {chapter.priceOnyx > 0 && access === "Paid" ? (
+                                          <span className="chapter-discount-price">
+                                            {chapter.basePriceOnyx &&
+                                            chapter.basePriceOnyx > chapter.priceOnyx ? (
+                                              <s>{coinLabel(chapter.basePriceOnyx, commercial)}</s>
+                                            ) : null}
+                                            <span>· {coinLabel(chapter.priceOnyx, commercial)}</span>
+                                            {chapter.discountPercentage ? (
+                                              <b>−{chapter.discountPercentage}%</b>
+                                            ) : null}
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    ) : null}
                                   </span>
                                   <time
                                     dateTime={chapter.publishedAt ?? undefined}
@@ -9201,8 +9207,8 @@ function ReaderView({
   const routeChapterSlug = chapterSlug ?? "";
   const catalogItem =
     demoSeries.find((entry) => entry.slug === routeSeriesSlug) ?? null;
-  const { settings: commercial } = useCommercialSettings();
-  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
+  const { settings: commercial, runtimeFeatures } = useCommercialSettings();
+  const premiumEconomyPublic = runtimeFeatures.paidSystem;
   const [readerContext, setReaderContext] =
     useState<ReaderContextData | null>(null);
   const [contextRevision, setContextRevision] = useState(0);
@@ -10840,10 +10846,12 @@ function ReaderView({
                           ) : (
                             <span>{chapter.teamName ?? "Independent release"}</span>
                           )}
-                          <span className={`reader-chapter-access is-${paid ? "paid" : "free"}`}>
-                            {paid ? <LockSimple size={12} /> : <Check size={12} />}
-                            {paid ? "Paid" : "Free"}
-                          </span>
+                          {premiumEconomyPublic ? (
+                            <span className={`reader-chapter-access is-${paid ? "paid" : "free"}`}>
+                              {paid ? <LockSimple size={12} /> : <Check size={12} />}
+                              {paid ? "Paid" : "Free"}
+                            </span>
+                          ) : null}
                         </small>
                       </div>
                       {current ? (
@@ -11137,9 +11145,11 @@ function ReaderView({
                     <strong>{alternative.chapterLabel}</strong>
                     <small>{alternative.teamName ?? "Independent release"}</small>
                   </span>
-                  <em className={`reader-chapter-access is-${alternative.accessType === "FREE" ? "free" : "paid"}`}>
-                    {alternative.accessType === "FREE" ? "Free" : "Paid"}
-                  </em>
+                  {premiumEconomyPublic ? (
+                    <em className={`reader-chapter-access is-${alternative.accessType === "FREE" ? "free" : "paid"}`}>
+                      {alternative.accessType === "FREE" ? "Free" : "Paid"}
+                    </em>
+                  ) : null}
                   <CaretRight size={17} />
                 </a>
               ))}
@@ -12173,9 +12183,8 @@ function AuthEntryView({
 }
 
 function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (text: string) => void }) {
-  const { settings: commercial } = useCommercialSettings();
-  const premiumEconomyPublic =
-    commercial.economy.premiumEconomyPublic;
+  const { settings: commercial, runtimeFeatures } = useCommercialSettings();
+  const premiumEconomyPublic = runtimeFeatures.paidSystem;
   const [section, setSection] = useState("Profile");
   const [accountSettings, setAccountSettings] = useState({
     displayName: actor?.displayName ?? "",
@@ -14781,9 +14790,8 @@ export function NyaScansApp({
     () => siteConfiguration.keyboardShortcuts.filter((shortcut) => shortcut.enabled),
     [siteConfiguration.keyboardShortcuts],
   );
-  const { settings: commercialSettings } = useCommercialSettings();
-  const lockAndPayVisible =
-    commercialSettings.economy.premiumEconomyPublic;
+  const { runtimeFeatures } = useCommercialSettings();
+  const lockAndPayVisible = runtimeFeatures.paidSystem;
   const { notifyText } = useSystemNotifications();
   const showToast = useCallback(
     (message: string) => {
@@ -15008,7 +15016,7 @@ export function NyaScansApp({
       <BrowseView actor={actor} showToast={showToast} />
     ) : view === "library" ? (
       <LibraryView actor={actor} />
-    ) : ["store", "wallet", "orders"].includes(view) && !lockAndPayVisible ? (
+    ) : ["store", "wallet", "orders", "discounts"].includes(view) && !lockAndPayVisible ? (
       <main className="page-main page-wrap lock-and-pay-private-view">
         <section>
           <ShieldCheck size={34} />
@@ -15065,8 +15073,9 @@ export function NyaScansApp({
     <div
       className="site-shell"
       data-premium-economy={
-        commercialSettings.economy.premiumEconomyPublic ? "public" : "hidden"
+        lockAndPayVisible ? "public" : "hidden"
       }
+      data-paid-system={lockAndPayVisible ? "on" : "off"}
     >
       <SiteHeader
         key={actor?.email ?? "guest"}

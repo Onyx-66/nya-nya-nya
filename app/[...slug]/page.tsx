@@ -8,10 +8,7 @@ import {
 import { NyaScansApp, type AppView } from "@/components/nyascans/NyaScansApp";
 import { ApiError } from "@/lib/server/api";
 import { getActor } from "@/lib/server/policy";
-import {
-  publicPaidChapterPredicate,
-  publicPaidSeriesPredicate,
-} from "@/lib/server/public-content-visibility";
+import { publicPaidSeriesPredicate } from "@/lib/server/public-content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -85,8 +82,7 @@ async function publicRouteSeries(
        AND c.state = 'PUBLISHED'
        AND c.visibility = 'PUBLIC'
        AND c.published_at IS NOT NULL
-       AND datetime(c.published_at) <= datetime('now')
-       AND ${publicPaidChapterPredicate("c", "visibility_override")}`
+       AND datetime(c.published_at) <= datetime('now')`
     : "";
   return env.DB.prepare(
     `SELECT s.title, s.synopsis

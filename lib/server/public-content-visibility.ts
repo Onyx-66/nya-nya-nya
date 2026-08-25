@@ -25,6 +25,12 @@ export const PAID_CONTENT_PUBLIC_SQL = `EXISTS (
         WHERE public_premium_feature.key = 'premium_unlocks'
           AND public_premium_feature.enabled = 1
      )
+     AND EXISTS (
+       SELECT 1
+         FROM feature_flags public_paid_system_feature
+        WHERE public_paid_system_feature.key = 'payments'
+          AND public_paid_system_feature.enabled = 1
+     )
 )`;
 
 export function effectiveChapterAccessSql(

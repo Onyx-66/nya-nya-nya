@@ -14,6 +14,7 @@ import {
 } from "@/lib/admin-metadata";
 import {
   commercialSettingsSchema,
+  failClosedCommercialSettings,
   sanitizeCommercialSettingsForPublic,
 } from "@/lib/commercial-settings";
 import {
@@ -107,6 +108,7 @@ import { createHostedCheckout } from "@/lib/server/payments/checkout";
 import {
   getFeatureStates,
   requireFeature,
+  requirePaidSystem,
 } from "@/lib/server/feature-flags";
 import {
   effectiveChapterAccessSql,
@@ -1354,29 +1356,33 @@ export async function GET(request: Request, context: RouteContext) {
     if (path === "site-commercial-settings") {
       const document = await getCommercialSettingsDocument();
       const featureStates = env.DB ? await getFeatureStates(env.DB) : null;
-      const sanitizedSettings = sanitizeCommercialSettingsForPublic(
-        document.settings,
+      const paidSystemEnabled = Boolean(
+        featureStates?.payments.enabled && featureStates?.premium_unlocks.effective,
       );
+      const sanitizedSettings = paidSystemEnabled
+        ? sanitizeCommercialSettingsForPublic(document.settings)
+        : failClosedCommercialSettings;
       const publicDocument = {
         ...document,
         runtimeFeatures: {
-          premiumUnlocks:
-            featureStates?.premium_unlocks.effective === true,
+          paidSystem: paidSystemEnabled,
+          premiumUnlocks: paidSystemEnabled,
           payments: featureStates?.payments.effective === true,
-          memberships: featureStates?.memberships.effective === true,
+          memberships:
+            paidSystemEnabled && featureStates?.memberships.effective === true,
           onyxPurchases:
-            featureStates?.onyx_purchases.effective === true,
+            paidSystemEnabled && featureStates?.onyx_purchases.effective === true,
           adSupportedUnlocks:
-            featureStates?.ad_supported_unlocks.effective === true,
-          teamPayouts:
-            featureStates?.team_payouts.effective === true,
+            paidSystemEnabled && featureStates?.ad_supported_unlocks.effective === true,
+          teamPayouts: featureStates?.team_payouts.effective === true,
         },
         settings: {
           ...sanitizedSettings,
           economy: {
             ...sanitizedSettings.economy,
             premiumEconomyPublic: Boolean(
-              sanitizedSettings.economy.premiumEconomyPublic &&
+              paidSystemEnabled &&
+                sanitizedSettings.economy.premiumEconomyPublic &&
                 featureStates?.premium_unlocks.effective,
             ),
           },
@@ -4767,22 +4773,7 @@ export async function GET(request: Request, context: RouteContext) {
           "Wallet storage is unavailable.",
         );
       }
-      const featureStates = await getFeatureStates(env.DB);
-      if (!featureStates.premium_unlocks.effective) {
-        return json(
-          id,
-          {
-            ...(await currencyWalletSnapshot(env.DB, actor.id, "SHARDS")),
-            premiumEconomyPublic: false,
-          },
-          {
-            headers: {
-              "cache-control": "private, no-store",
-              vary: "cookie",
-            },
-          },
-        );
-      }
+      await requirePaidSystem(env.DB, 404);
       return json(id, await walletSnapshot(actor.id), {
         headers: {
           "cache-control": "private, no-store",
@@ -4800,19 +4791,7 @@ export async function GET(request: Request, context: RouteContext) {
           "Purchase history is unavailable.",
         );
       }
-      const featureStates = await getFeatureStates(env.DB);
-      if (!featureStates.premium_unlocks.effective) {
-        return json(
-          id,
-          { data: [], premiumEconomyPublic: false },
-          {
-            headers: {
-              "cache-control": "private, no-store",
-              vary: "cookie",
-            },
-          },
-        );
-      }
+      await requirePaidSystem(env.DB, 404);
       const result = await env.DB.prepare(
         `SELECT id, status,
                 total_minor AS totalMinor,
@@ -13367,6 +13346,8 @@ export async function POST(request: Request, context: RouteContext) {
           "Checkout storage is unavailable.",
         );
       }
+      await requirePaidSystem(env.DB);
+      await requireFeature("payments", env.DB);
       return json(id, await createHostedCheckout(env.DB, actor, payload), {
         status: 201,
         headers: { "cache-control": "private, no-store" },
@@ -13384,6 +13365,7 @@ export async function POST(request: Request, context: RouteContext) {
           "Wallet storage is unavailable.",
         );
       }
+      await requirePaidSystem(env.DB);
       await requireFeature("premium_unlocks", env.DB);
 
       const access = await resolveChapterAccess(

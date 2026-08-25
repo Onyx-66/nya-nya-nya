@@ -25,7 +25,7 @@ import {
   requirePaidEconomyPublic,
 } from "@/lib/server/commercial-settings";
 import { randomId } from "@/lib/server/random-id";
-import { getFeatureStates } from "@/lib/server/feature-flags";
+import { getFeatureStates, requirePaidSystem } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -250,6 +250,7 @@ export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
+    await requirePaidSystem(database(), 404);
     return json(requestId, await responseData(actor.id), {
       headers: privateHeaders,
     });
@@ -958,6 +959,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
+    await requirePaidSystem(database());
     const commercial = await requirePaidEconomyPublic();
     const coinPlural = commercial.economy.coinPlural;
     const payload = giftActionSchema.parse(await request.json());

@@ -56,12 +56,12 @@ test("public commercial settings and icon routes redact hidden premium configura
   );
   assert.match(
     publicSettingsBranch,
-    /const sanitizedSettings = sanitizeCommercialSettingsForPublic\([\s\S]+document\.settings[\s\S]+settings:\s*\{[\s\S]+\.\.\.sanitizedSettings,[\s\S]+premiumEconomyPublic:\s*Boolean\([\s\S]+featureStates\?\.premium_unlocks\.effective/u,
+    /const paidSystemEnabled = Boolean\([\s\S]+payments\.enabled[\s\S]+premium_unlocks\.effective[\s\S]+const sanitizedSettings = paidSystemEnabled[\s\S]+failClosedCommercialSettings[\s\S]+premiumEconomyPublic:\s*Boolean\([\s\S]+paidSystemEnabled/u,
   );
   assert.doesNotMatch(publicSettingsBranch, /\.\.\.document\.settings\.economy/u);
   assert.match(
     publicSettingsBranch,
-    /runtimeFeatures:[\s\S]+premiumUnlocks:[\s\S]+featureStates\?\.premium_unlocks\.effective === true/u,
+    /runtimeFeatures:[\s\S]+paidSystem:[\s\S]+premiumUnlocks:\s*paidSystemEnabled/u,
   );
 
   const visibilityCheck = coinIcon.indexOf(
@@ -79,7 +79,7 @@ test("public commercial settings and icon routes redact hidden premium configura
   );
 });
 
-test("hidden economy account endpoints return only Shards-safe data", async () => {
+test("hidden economy account endpoints fail closed instead of exposing wallet or order data", async () => {
   const [catchAll, notifications] = await Promise.all([
     read("app/api/v1/[...resource]/route.ts"),
     read("app/api/v1/notifications/route.ts"),
@@ -97,14 +97,8 @@ test("hidden economy account endpoints return only Shards-safe data", async () =
     catchAll.indexOf('if (path === "uploads")'),
   );
 
-  assert.match(
-    walletBranch,
-    /getFeatureStates\(env\.DB\)[\s\S]+if \(!featureStates\.premium_unlocks\.effective\)[\s\S]+currencyWalletSnapshot\(env\.DB, actor\.id, "SHARDS"\)[\s\S]+premiumEconomyPublic:\s*false/u,
-  );
-  assert.match(
-    ordersBranch,
-    /getFeatureStates\(env\.DB\)[\s\S]+if \(!featureStates\.premium_unlocks\.effective\)[\s\S]+\{\s*data:\s*\[\],\s*premiumEconomyPublic:\s*false\s*\}/u,
-  );
+  assert.match(walletBranch, /requirePaidSystem\(env\.DB, 404\)/u);
+  assert.match(ordersBranch, /requirePaidSystem\(env\.DB, 404\)/u);
   assert.match(
     notificationsBranch,
     /AND \(\? = 1 OR kind <> 'TEAM_SUPPORT'\)/u,

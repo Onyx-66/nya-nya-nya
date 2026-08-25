@@ -61,22 +61,24 @@ test("Version 47 migration installs the audited chapter access decision queue", 
   }
 });
 
-test("free upload continuity is enforced before the atomic publish batch", async () => {
+test("free uploads keep the requested access type and no longer auto-convert before the atomic publish batch", async () => {
   const [route, policy, schema] = await Promise.all([
     read("app/api/v1/upload-jobs/route.ts"),
     read("lib/server/chapter-access-policy.ts"),
     read("db/schema.ts"),
   ]);
+  assert.doesNotMatch(route, /findPaidChapterReference/u);
+  assert.doesNotMatch(route, /SET access_type = 'PAID'/u);
+  assert.doesNotMatch(route, /INSERT INTO chapter_access_decisions/u);
+  assert.doesNotMatch(route, /CHAPTER_ACCESS_DECISION/u);
+  assert.doesNotMatch(route, /accessAdjustments/u);
+  assert.match(route, /item\.accessType/u);
+  assert.match(route, /upload_publish_guards/u);
+  assert.match(route, /duplicate/u);
   assert.match(policy, /SAME_CHAPTER_VERSION/u);
   assert.match(policy, /PREVIOUS_CHAPTER/u);
   assert.match(policy, /compareChapterNumbers/u);
   assert.match(policy, /CHAPTER_PRICE_POLICY_CONFLICT/u);
-  assert.match(route, /findPaidChapterReference/u);
-  assert.match(route, /SET access_type = 'PAID'/u);
-  assert.match(route, /INSERT INTO chapter_access_decisions/u);
-  assert.match(route, /CHAPTER_ACCESS_DECISION/u);
-  assert.match(route, /'OWNER', 'ADMINISTRATOR', 'MANAGER'/u);
-  assert.match(route, /accessAdjustments/u);
   assert.match(schema, /chapterAccessDecisions/u);
 });
 

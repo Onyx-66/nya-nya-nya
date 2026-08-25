@@ -349,7 +349,7 @@ export async function resolveChapterAccess(
       throw new ApiError(
         404,
         "CHAPTER_NOT_FOUND",
-        "This chapter is not available.",
+        "This chapter is currently unavailable.",
       );
     }
   }
@@ -359,7 +359,7 @@ export async function resolveChapterAccess(
       throw new ApiError(
         404,
         "CHAPTER_NOT_FOUND",
-        "This chapter is not available.",
+        "This chapter is currently unavailable.",
       );
     }
   }

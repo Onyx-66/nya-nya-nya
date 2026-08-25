@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
-import { normalizeChapterNumber as normalizePolicyChapterNumber } from "@/lib/chapter-number";
 import { UPLOAD_LIMITS, UPLOAD_METHODS } from "@/lib/uploads";
 import { canAny } from "@/lib/permissions.mjs";
 import {
@@ -15,10 +14,6 @@ import {
   requirePaidEconomyPublicDocument,
 } from "@/lib/server/commercial-settings";
 import {
-  findPaidChapterReference,
-  type PaidChapterReference,
-} from "@/lib/server/chapter-access-policy";
-import {
   assertUploadRateLimit,
   chapterSlug,
   cleanupExpiredUploadDrafts,
@@ -31,7 +26,6 @@ import {
 import { requireActor, type Actor } from "@/lib/server/policy";
 import { newPublicReference } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
-import { getFeatureStates } from "@/lib/server/feature-flags";
 
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
@@ -1897,36 +1891,6 @@ export async function PATCH(request: Request) {
         "Every chapter needs validated pages before it can be published.",
       );
     }
-    const [commercialDocument, featureStates] = await Promise.all([
-      getCommercialSettingsDocument(),
-      getFeatureStates(env.DB),
-    ]);
-    const paidPolicyPublic =
-      !commercialDocument.recoveredFromInvalid &&
-      commercialDocument.revision > 0 &&
-      commercialDocument.settings.economy.premiumEconomyPublic &&
-      featureStates.premium_unlocks.effective;
-    const forcedAccess = new Map<
-      string,
-      { reference: PaidChapterReference; decisionId: string }
-    >();
-    if (paidPolicyPublic) {
-      for (const item of items) {
-        if (item.accessType !== "FREE") continue;
-        const reference = await findPaidChapterReference(
-          env.DB,
-          job.seriesId,
-          item.chapterNumber,
-        );
-        if (!reference) continue;
-        item.accessType = "PAID";
-        item.priceOnyx = Number(reference.priceOnyx);
-        forcedAccess.set(item.id, {
-          reference,
-          decisionId: `cad_${randomId()}`,
-        });
-      }
-    }
     const batchPaidPrices = new Set(
       items
         .filter((item) => item.accessType === "PAID")
@@ -2085,36 +2049,6 @@ export async function PATCH(request: Request) {
           ),
         ),
     ];
-    for (const [itemId, forced] of forcedAccess) {
-      statements.push(
-        env.DB.prepare(
-          `UPDATE upload_job_items
-              SET access_type = 'PAID',
-                  price_onyx = ?,
-                  revision = revision + 1,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-              AND job_id = ?
-              AND status = 'READY'
-              AND access_type = 'FREE'
-              AND EXISTS (
-                SELECT 1
-                  FROM chapters policy_reference
-                 WHERE policy_reference.id = ?
-                   AND policy_reference.series_id = upload_job_items.series_id
-                   AND policy_reference.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
-                   AND policy_reference.access_type = 'PAID'
-                   AND policy_reference.price_onyx = ?
-              )`,
-        ).bind(
-          forced.reference.priceOnyx,
-          itemId,
-          payload.jobId,
-          forced.reference.id,
-          forced.reference.priceOnyx,
-        ),
-      );
-    }
     const reservedChapterRefs = await env.DB.prepare(
       `SELECT public_ref AS publicRef, entity_id AS entityId
          FROM public_identifier_reservations
@@ -2125,7 +2059,6 @@ export async function PATCH(request: Request) {
     for (const item of items) {
       const newChapterId = `ch_${randomId()}`;
       const newChapterPublicRef = reservedRefByItem.get(item.id) ?? newPublicReference("CHAPTER");
-      const forced = forcedAccess.get(item.id);
       const isReplacement = Boolean(item.replacementChapterId);
       const chapterState = isReplacement
         ? "DRAFT"
@@ -2183,11 +2116,6 @@ export async function PATCH(request: Request) {
               AND uji.page_count > 0
               AND uj.status = 'PUBLISHING'
               AND uj.revision = ?
-              AND ${
-                forced
-                  ? "uji.access_type = 'PAID' AND uji.price_onyx = ?"
-                  : "1 = 1"
-              }
               AND (
                 (
                   uji.replacement_chapter_id IS NOT NULL
@@ -2238,7 +2166,6 @@ export async function PATCH(request: Request) {
           item.id,
           payload.jobId,
           nextRevision,
-          ...(forced ? [forced.reference.priceOnyx] : []),
         ),
         env.DB.prepare(
           `INSERT OR IGNORE INTO public_identifier_reservations (public_ref, entity_type, entity_id)
@@ -2284,88 +2211,6 @@ export async function PATCH(request: Request) {
           newChapterId,
         ),
       );
-      if (forced) {
-        const referenceNumber = normalizePolicyChapterNumber(
-          forced.reference.chapterNumber,
-        );
-        statements.push(
-          env.DB.prepare(
-            `INSERT INTO chapter_access_decisions
-             (id, upload_job_id, upload_job_item_id, chapter_id, series_id,
-              reference_chapter_id, reference_chapter_number, reason,
-              requested_access_type, forced_price_onyx, status)
-             SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'FREE', ?, 'PENDING'
-              WHERE EXISTS (
-                SELECT 1 FROM chapters forced_chapter
-                 WHERE forced_chapter.id = ?
-                   AND forced_chapter.access_type = 'PAID'
-                   AND forced_chapter.price_onyx = ?
-              )
-                AND EXISTS (
-                  SELECT 1 FROM chapters policy_reference
-                   WHERE policy_reference.id = ?
-                     AND policy_reference.state IN ('READY_FOR_REVIEW', 'PUBLISHED')
-                     AND policy_reference.access_type = 'PAID'
-                     AND policy_reference.price_onyx = ?
-                )`,
-          ).bind(
-            forced.decisionId,
-            payload.jobId,
-            item.id,
-            newChapterId,
-            job.seriesId,
-            forced.reference.id,
-            referenceNumber,
-            forced.reference.reason,
-            forced.reference.priceOnyx,
-            newChapterId,
-            forced.reference.priceOnyx,
-            forced.reference.id,
-            forced.reference.priceOnyx,
-          ),
-          env.DB.prepare(
-            `INSERT INTO notifications
-             (id, user_id, kind, title, body, dedupe_key, action_url,
-              metadata_json)
-             SELECT 'ntf_' || lower(hex(randomblob(16))), u.id,
-                    'CHAPTER_ACCESS_DECISION',
-                    'Chapter access decision required', ?, ?, ?, ?
-               FROM users u
-              WHERE u.status = 'ACTIVE'
-                AND (
-                  u.primary_role IN ('OWNER', 'ADMINISTRATOR', 'MANAGER')
-                  OR EXISTS (
-                    SELECT 1 FROM user_roles ur
-                     WHERE ur.user_id = u.id
-                       AND ur.role IN ('OWNER', 'ADMINISTRATOR', 'MANAGER')
-                  )
-                )
-                AND EXISTS (
-                  SELECT 1 FROM chapter_access_decisions pending_decision
-                   WHERE pending_decision.id = ?
-                     AND pending_decision.status = 'PENDING'
-                )
-                AND NOT EXISTS (
-                  SELECT 1 FROM notifications existing
-                   WHERE existing.user_id = u.id
-                     AND existing.dedupe_key = ?
-                )`,
-          ).bind(
-            `${String(detailSummary.seriesTitle ?? "Series")} chapter ${item.chapterNumber} was requested Free and was forced Paid at ${forced.reference.priceOnyx} paws because ${forced.reference.reason === "SAME_CHAPTER_VERSION" ? `another version of chapter ${referenceNumber}` : `chapter ${referenceNumber}`} is Paid. Decide whether the reference chapter stays Paid or becomes Free.`,
-            `CHAPTER_ACCESS_DECISION:${forced.decisionId}`,
-            `/onyx/admin/access/access-decisions?decision=${encodeURIComponent(forced.decisionId)}`,
-            JSON.stringify({
-              decisionId: forced.decisionId,
-              chapterNumber: item.chapterNumber,
-              referenceChapterNumber: referenceNumber,
-              reason: forced.reference.reason,
-              forcedPriceOnyx: forced.reference.priceOnyx,
-            }),
-            forced.decisionId,
-            `CHAPTER_ACCESS_DECISION:${forced.decisionId}`,
-          ),
-        );
-      }
       if (isReplacement) {
         statements.push(
           env.DB.prepare(
@@ -2467,7 +2312,6 @@ export async function PATCH(request: Request) {
           teamId: job.teamId,
           chapterCount: items.length,
           pageCount: Number(detailSummary.pageCount ?? 0),
-          forcedAccessDecisions: forcedAccess.size,
         },
       }),
       env.DB.prepare(
@@ -2500,19 +2344,6 @@ export async function PATCH(request: Request) {
       {
         data: await jobDetail(env.DB, actor, payload.jobId),
         reused: false,
-        accessAdjustments: [...forcedAccess.entries()].map(
-          ([itemId, forced]) => ({
-            itemId,
-            decisionId: forced.decisionId,
-            requestedAccessType: "FREE",
-            effectiveAccessType: "PAID",
-            priceOnyx: forced.reference.priceOnyx,
-            reason: forced.reference.reason,
-            referenceChapterNumber: normalizePolicyChapterNumber(
-              forced.reference.chapterNumber,
-            ),
-          }),
-        ),
       },
       {
         status: needsReview ? 202 : 201,

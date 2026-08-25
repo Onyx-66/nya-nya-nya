@@ -9,7 +9,7 @@ import {
   walletSnapshot,
 } from "@/lib/server/economy";
 import { getActor } from "@/lib/server/policy";
-import { getFeatureStates } from "@/lib/server/feature-flags";
+import { getFeatureStates, requirePaidSystem } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +57,7 @@ export async function storeProductsResponse(request: Request) {
     const category = categorySchema.parse(
       url.searchParams.get("category") ?? "coins",
     );
+    await requirePaidSystem(env.DB, 404);
     const actor = await getActor().catch(() => null);
     const [commercial, featureStates] = await Promise.all([
       getCommercialSettingsDocument(),

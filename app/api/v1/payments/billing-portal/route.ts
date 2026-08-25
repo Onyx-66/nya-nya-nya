@@ -4,6 +4,7 @@ import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, requestIdFor } from "@/lib/server/admin-utils";
 import { createStripeBillingPortalSession } from "@/lib/server/payments/stripe";
 import { requireActor } from "@/lib/server/policy";
+import { requirePaidSystem } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
         "Membership billing storage is unavailable.",
       );
     }
+    await requirePaidSystem(env.DB);
     const rawBody = await request.text();
     let rawPayload: unknown = {};
     if (rawBody.trim()) {

@@ -9,7 +9,7 @@ import {
   requirePaidEconomyPublicDocument,
 } from "@/lib/server/commercial-settings";
 import { walletSnapshot } from "@/lib/server/economy";
-import { requireFeature } from "@/lib/server/feature-flags";
+import { requireFeature, requirePaidSystem } from "@/lib/server/feature-flags";
 import { requireActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { resolveChapterAccess } from "@/lib/server/chapter-access";
@@ -101,6 +101,7 @@ export async function POST(request: Request) {
     if (!env.DB) {
       throw new ApiError(503, "DATABASE_UNAVAILABLE", "Wallet storage is unavailable.");
     }
+    await requirePaidSystem(env.DB);
     await requireFeature("premium_unlocks", env.DB);
     const commercial = await requirePaidEconomyPublicDocument();
     const paidEconomyRevision = commercial.revision;

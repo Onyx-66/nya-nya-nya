@@ -148,17 +148,15 @@ test("public premium navigation and chapter lists consume effective feature stat
     read("lib/server/commercial-settings.ts"),
     read("lib/server/public-content-visibility.ts"),
   ]);
-  assert.match(
-    api,
-    /premiumEconomyPublic: Boolean\([\s\S]+featureStates\?\.premium_unlocks\.effective/u,
-  );
+  assert.match(api, /paidSystemEnabled = Boolean\([\s\S]+payments\.enabled[\s\S]+premium_unlocks\.effective/u);
+  assert.match(api, /paidSystem: paidSystemEnabled/u);
   assert.match(api, /publicPaidChapterPredicate/u);
   assert.match(api, /if \(featureStates\.memberships\.effective\) \{[\s\S]+FROM user_memberships/u);
-  assert.match(app, /const lockAndPayVisible = premiumEconomyPublic/u);
+  assert.match(app, /const lockAndPayVisible = runtimeFeatures\.paidSystem/u);
   assert.doesNotMatch(app, /ownerPreview/u);
   assert.match(publicVisibility, /premium_unlocks/u);
-  assert.match(commercial, /key = 'premium_unlocks'/u);
-  assert.match(commercial, /premium_feature\.enabled = 1/u);
+  assert.match(commercial, /key IN \('premium_unlocks', 'payments'\)/u);
+  assert.match(commercial, /paid_system_feature\.enabled = 1/u);
 });
 
 test("monetization pages remain discoverable while paid mutations fail closed", async () => {
@@ -174,8 +172,8 @@ test("monetization pages remain discoverable while paid mutations fail closed", 
   assert.match(navigation, /slug: "content-access-control"/u);
   assert.doesNotMatch(app, /paidContentActive/u);
   assert.doesNotMatch(gate, /redirect\("\/onyx\/admin\/access\/commerce"\)/u);
-  assert.match(visibility, /!states\.payments\.effective/u);
-  assert.match(discounts, /!states\.premium_unlocks\.effective \|\| !states\.payments\.effective/u);
-  assert.match(app, /enabled=\{premiumEconomyPublic && runtimeFeatures\.payments\}/u);
+  assert.match(visibility, /states\.payments/u);
+  assert.match(discounts, /requirePaidSystem/u);
+  assert.match(app, /paidSystemEnabled \? <DiscountsSection enabled \/> : null/u);
   assert.match(commercialHook, /failClosedRuntimeFeatures/u);
 });

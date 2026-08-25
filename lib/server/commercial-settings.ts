@@ -88,17 +88,21 @@ export async function getCommercialSettingsDocument(): Promise<CommercialSetting
 
 export async function requirePaidEconomyPublicDocument() {
   const document = await getCommercialSettingsDocument();
-  const premiumFeature = env.DB
+  const featureRows = env.DB
     ? await env.DB.prepare(
-        "SELECT enabled FROM feature_flags WHERE key = 'premium_unlocks' LIMIT 1",
-      ).first<{ enabled: number | boolean }>()
-    : null;
+        "SELECT key, enabled FROM feature_flags WHERE key IN ('premium_unlocks', 'payments')",
+      ).all<{ key: string; enabled: number | boolean }>()
+    : { results: [] as Array<{ key: string; enabled: number | boolean }> };
+  const featureEnabled = new Map(
+    featureRows.results.map((row) => [row.key, Boolean(row.enabled)]),
+  );
   if (
     document.recoveredFromInvalid ||
     !Number.isSafeInteger(document.revision) ||
     document.revision < 1 ||
     !document.settings.economy.premiumEconomyPublic ||
-    !Boolean(premiumFeature?.enabled)
+    !featureEnabled.get("premium_unlocks") ||
+    !featureEnabled.get("payments")
   ) {
     throw new ApiError(
       403,
@@ -140,6 +144,12 @@ export function paidEconomyRevisionGuardSql(expectedRevision: number) {
            FROM feature_flags premium_feature
           WHERE premium_feature.key = 'premium_unlocks'
             AND premium_feature.enabled = 1
+       )
+       AND EXISTS (
+         SELECT 1
+           FROM feature_flags paid_system_feature
+          WHERE paid_system_feature.key = 'payments'
+            AND paid_system_feature.enabled = 1
        )
   )`;
 }

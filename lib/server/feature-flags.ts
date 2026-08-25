@@ -137,6 +137,32 @@ export async function requireFeature(key: FeatureKey, db?: D1Database) {
   return state;
 }
 
+/**
+ * The global Paid System switch is deliberately separate from Stripe
+ * readiness. When administrators turn the switch off, every paid surface is
+ * unavailable immediately; when it is on, checkout still has to pass the
+ * provider-specific `payments.effective` check before a charge can start.
+ */
+export async function paidSystemIsEnabled(db?: D1Database) {
+  const states = await getFeatureStates(db);
+  return states.payments.enabled && states.premium_unlocks.effective;
+}
+
+export async function requirePaidSystem(db?: D1Database, status = 503) {
+  const selected = database(db);
+  const states = await getFeatureStates(selected);
+  if (!states.payments.enabled || !states.premium_unlocks.effective) {
+    throw new ApiError(
+      status,
+      "PAID_SYSTEM_DISABLED",
+      "The Paid System is currently unavailable.",
+      undefined,
+      { feature: "payments" },
+    );
+  }
+  return states;
+}
+
 export async function assertFeatureCanEnable(key: FeatureKey, db?: D1Database) {
   const state = (await getFeatureStates(db))[key];
   if (!state.wired) {

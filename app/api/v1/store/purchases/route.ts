@@ -16,7 +16,7 @@ import {
   requirePaidEconomyPublicDocument,
 } from "@/lib/server/commercial-settings";
 import { requireActor } from "@/lib/server/policy";
-import { getFeatureStates } from "@/lib/server/feature-flags";
+import { getFeatureStates, requirePaidSystem } from "@/lib/server/feature-flags";
 import { randomId } from "@/lib/server/random-id";
 import { storePurchaseSchema } from "@/lib/storefront";
 
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
         "Store purchases are temporarily unavailable.",
       );
     }
+    await requirePaidSystem(env.DB);
     const commercial = await getCommercialSettingsDocument();
     const featureStates = await getFeatureStates(env.DB);
     const premiumEconomyPublic = Boolean(

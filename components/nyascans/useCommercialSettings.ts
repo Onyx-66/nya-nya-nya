@@ -8,6 +8,7 @@ import {
 } from "@/lib/commercial-settings";
 
 type CommercialRuntimeFeatures = {
+  paidSystem: boolean;
   premiumUnlocks: boolean;
   payments: boolean;
   memberships: boolean;
@@ -17,6 +18,7 @@ type CommercialRuntimeFeatures = {
 };
 
 const failClosedRuntimeFeatures: CommercialRuntimeFeatures = {
+  paidSystem: false,
   premiumUnlocks: false,
   payments: false,
   memberships: false,

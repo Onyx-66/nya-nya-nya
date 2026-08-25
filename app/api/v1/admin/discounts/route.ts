@@ -6,7 +6,7 @@ import {
   listAdminDiscounts,
   saveDiscount,
 } from "@/lib/server/content-discounts";
-import { getFeatureStates } from "@/lib/server/feature-flags";
+import { requirePaidSystem } from "@/lib/server/feature-flags";
 import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
@@ -72,15 +72,17 @@ const deleteSchema = z.object({
 });
 
 async function requireDiscountsActive() {
-  const states = await getFeatureStates();
-  if (!states.premium_unlocks.effective) {
-    throw new ApiError(
-      404,
-      "DISCOUNTS_UNAVAILABLE",
-      "Discounts are hidden while the paid system is private.",
-      undefined,
-      { feature: "premium_unlocks", reason: states.premium_unlocks.reason },
-    );
+  try {
+    await requirePaidSystem(undefined, 404);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "PAID_SYSTEM_DISABLED") {
+      throw new ApiError(
+        404,
+        "DISCOUNTS_UNAVAILABLE",
+        "Discounts are hidden while the paid system is private.",
+      );
+    }
+    throw error;
   }
 }
 

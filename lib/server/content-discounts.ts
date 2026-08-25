@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
 import { auditStatement } from "@/lib/server/admin-utils";
-import { getFeatureStates } from "@/lib/server/feature-flags";
+import { getFeatureStates, requirePaidSystem } from "@/lib/server/feature-flags";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { seriesMediaUrl } from "@/lib/server/series-media-url";
@@ -186,11 +186,13 @@ const discountSelect = `
     LEFT JOIN chapters c ON c.id = discount.chapter_id`;
 
 export async function listPublicDiscounts(sort: "discount" | "expiry") {
+  const db = database();
+  await requirePaidSystem(db, 404);
   const order =
     sort === "expiry"
       ? "datetime(discount.ends_at), discount.id"
       : "(discount.original_price - discount.reduced_price) * 1.0 / discount.original_price DESC, datetime(discount.ends_at), discount.id";
-  const rows = await database()
+  const rows = await db
     .prepare(
       `${discountSelect}
        WHERE discount.is_active = 1

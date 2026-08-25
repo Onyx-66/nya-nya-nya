@@ -148,7 +148,7 @@ function timeLabel(value: string) {
 }
 
 export function PublicProfileView({ username }: { username: string }) {
-  const { settings: commercial } = useCommercialSettings();
+  const { runtimeFeatures } = useCommercialSettings();
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -159,7 +159,7 @@ export function PublicProfileView({ username }: { username: string }) {
   const tabRefs = useRef<Partial<Record<ProfileSection, HTMLButtonElement | null>>>(
     {},
   );
-  const premiumEconomyPublic = commercial.economy.premiumEconomyPublic;
+  const premiumEconomyPublic = runtimeFeatures.paidSystem;
 
   useEffect(() => {
     function syncSection() {

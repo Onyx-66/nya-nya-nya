@@ -4,6 +4,7 @@ import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, requestIdFor } from "@/lib/server/admin-utils";
 import { createHostedCheckout } from "@/lib/server/payments/checkout";
 import { requireActor } from "@/lib/server/policy";
+import { requireFeature, requirePaidSystem } from "@/lib/server/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,8 @@ export async function POST(request: Request) {
     if (!env.DB) {
       throw new ApiError(503, "DATABASE_UNAVAILABLE", "Checkout storage is unavailable.");
     }
+    await requirePaidSystem(env.DB);
+    await requireFeature("payments", env.DB);
     const payload = checkoutSchema.parse(await request.json());
     return json(requestId, await createHostedCheckout(env.DB, actor, payload), {
       status: 201,
