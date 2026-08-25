@@ -1,12 +1,11 @@
 import { z } from "zod";
-import { ApiError, errorResponse, json } from "@/lib/server/api";
+import { errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, requestIdFor } from "@/lib/server/admin-utils";
 import {
   deleteDiscount,
   listAdminDiscounts,
   saveDiscount,
 } from "@/lib/server/content-discounts";
-import { requirePaidSystem } from "@/lib/server/feature-flags";
 import { requireActor, requireAdminCapability } from "@/lib/server/policy";
 
 export const dynamic = "force-dynamic";
@@ -71,27 +70,11 @@ const deleteSchema = z.object({
   revision: z.coerce.number().int().min(1),
 });
 
-async function requireDiscountsActive() {
-  try {
-    await requirePaidSystem(undefined, 404);
-  } catch (error) {
-    if (error instanceof ApiError && error.code === "PAID_SYSTEM_DISABLED") {
-      throw new ApiError(
-        404,
-        "DISCOUNTS_UNAVAILABLE",
-        "Discounts are hidden while the paid system is private.",
-      );
-    }
-    throw error;
-  }
-}
-
 export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
     const actor = await requireActor();
     requireAdminCapability(actor, "discounts.manage");
-    await requireDiscountsActive();
     const query = new URL(request.url).searchParams.get("q") ?? "";
     return json(requestId, await listAdminDiscounts(query), {
       headers: { "cache-control": "private, no-store" },
@@ -107,7 +90,6 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const actor = await requireActor();
     requireAdminCapability(actor, "discounts.manage");
-    await requireDiscountsActive();
     const payload = discountSchema.parse(await request.json());
     return json(
       requestId,
@@ -125,7 +107,6 @@ export async function PATCH(request: Request) {
     assertSameOrigin(request);
     const actor = await requireActor();
     requireAdminCapability(actor, "discounts.manage");
-    await requireDiscountsActive();
     const payload = discountSchema.parse(await request.json());
     return json(requestId, await saveDiscount(payload, actor, requestId));
   } catch (error) {
@@ -139,7 +120,6 @@ export async function DELETE(request: Request) {
     assertSameOrigin(request);
     const actor = await requireActor();
     requireAdminCapability(actor, "discounts.manage");
-    await requireDiscountsActive();
     const payload = deleteSchema.parse(await request.json());
     return json(
       requestId,

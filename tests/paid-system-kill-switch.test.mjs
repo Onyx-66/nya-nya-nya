@@ -71,6 +71,17 @@ test("Paid/Free labels are suppressed and technical upload validation remains", 
   assert.match(technical, /validateImageFile|sha256|processing_status|page_count/u);
 });
 
+test("administrator paid management remains available while the public system is private", async () => {
+  const [discounts, offers] = await Promise.all([
+    read("app/api/v1/admin/discounts/route.ts"),
+    read("app/api/v1/admin/commerce-offers/route.ts"),
+  ]);
+  assert.match(discounts, /requireAdminCapability\(actor, "discounts\.manage"\)/u);
+  assert.doesNotMatch(discounts, /requirePaidSystem|DISCOUNTS_UNAVAILABLE/u);
+  assert.match(offers, /requireAdminCapability\(actor, "commerce\.manage"\)/u);
+  assert.doesNotMatch(offers, /requirePaidSystem|PAID_SYSTEM_DISABLED/u);
+});
+
 test("Feature Flags admin panel labels payments as Paid System", async () => {
   const panel = await read("components/nyascans/admin/SiteCoveragePanel.tsx");
   assert.match(panel, /flag\.key === "payments" \? "Paid System"/u);
