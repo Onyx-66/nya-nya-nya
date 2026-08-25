@@ -20,6 +20,10 @@ const MAX_CONFIGURATION_BYTES = 500_000;
 function auditSnapshot(settings: SiteConfiguration) {
   return {
     siteName: settings.brand.siteName,
+    homepage: {
+      pinnedSeriesStyle: settings.homepage.pinnedSeriesStyle,
+      recentReviewsStyle: settings.homepage.recentReviewsStyle,
+    },
     footerGroups: settings.footer.groups.map((group) => group.id),
     socialLinks: settings.footer.socialLinks.map((link) => link.id),
     shortcuts: settings.keyboardShortcuts.map((shortcut) => shortcut.id),

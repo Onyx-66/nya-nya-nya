@@ -193,6 +193,7 @@ export function PinnedSeriesPanel({
     kind: "success" | "error" | "neutral";
     text: string;
   } | null>(null);
+  const [activeView, setActiveView] = useState<"select" | "schedule">("select");
 
   const currentSignature = useMemo(() => serializedItems(items), [items]);
   const dirty = !loading && currentSignature !== savedSignature;
@@ -387,6 +388,12 @@ export function PinnedSeriesPanel({
       kicker="Homepage curation"
       title="Pinned Series"
       description="Curate up to nine simultaneously active Featured titles and schedule future homepage rotations. Every pin is Featured automatically."
+      tabs={[
+        { key: "select", label: "Select series" },
+        { key: "schedule", label: "Order & schedule", count: items.length },
+      ]}
+      activeTab={activeView}
+      onTabChange={(value) => setActiveView(value as "select" | "schedule")}
       message={message}
       primaryAction={
         <button
@@ -417,6 +424,7 @@ export function PinnedSeriesPanel({
         ) : null}
       </div>
 
+      {activeView === "select" ? (
       <section className="admin-form-section v481-pin-picker">
         <header>
           <span className="v481-admin-icon"><MagnifyingGlass /></span>
@@ -466,7 +474,9 @@ export function PinnedSeriesPanel({
           )}
         </div>
       </section>
+      ) : null}
 
+      {activeView === "schedule" ? (
       <section className="admin-form-section v481-pin-order">
         <header>
           <span className="v481-admin-icon"><DotsSixVertical /></span>
@@ -559,6 +569,7 @@ export function PinnedSeriesPanel({
           </div>
         )}
       </section>
+      ) : null}
     </AdminPageScaffold>
   );
 }

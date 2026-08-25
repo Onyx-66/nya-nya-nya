@@ -61164,3 +61164,50 @@ dialog::backdrop,
     display: none !important;
   }
 }
+
+/* Admin-configurable Recent Reviews presentation modes. */
+.home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-reviews-rail {
+  grid-auto-columns: minmax(270px, .82fr);
+  gap: 14px;
+}
+.home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-card {
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 176px;
+  padding: 12px;
+  border-radius: var(--site-card-radius, var(--radius));
+}
+.home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-cover {
+  min-height: 150px;
+  border-radius: var(--site-button-radius, var(--radius-small));
+}
+.home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-copy {
+  gap: 6px;
+}
+.home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-copy > strong {
+  font-size: .94rem;
+}
+.home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-copy p {
+  font-size: .8rem;
+  line-height: 1.4;
+  -webkit-line-clamp: 3;
+}
+@media (max-width: 760px) {
+  .home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-reviews-rail {
+    grid-auto-columns: minmax(248px, 86vw);
+  }
+  .home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-card {
+    grid-template-columns: 78px minmax(0, 1fr);
+    min-height: 158px;
+    gap: 10px;
+    padding: 10px;
+  }
+  .home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-cover {
+    min-height: 136px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-main .recent-reviews-section[data-review-style="COMPACT_RAIL"] .recent-review-card {
+    transition: none;
+  }
+}

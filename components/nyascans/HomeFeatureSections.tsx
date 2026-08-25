@@ -25,6 +25,7 @@ import { CardCoverFlow } from "@/components/nyascans/CardCoverFlow";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
+import { useSiteConfiguration } from "@/components/nyascans/useSiteConfiguration";
 import {
   coinLabel,
   type CommercialSettings,
@@ -813,6 +814,7 @@ export function DiscountsSection({
 }
 
 export function RecentReviewsSection() {
+  const { settings: siteConfiguration } = useSiteConfiguration();
   const [records, setRecords] = useState<RecentReviewRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -868,7 +870,10 @@ export function RecentReviewsSection() {
   }, [records, syncActiveReview]);
 
   return (
-    <div className="page-wrap recent-reviews-section">
+    <div
+      className={`page-wrap recent-reviews-section is-${siteConfiguration.homepage.recentReviewsStyle.toLowerCase()}`}
+      data-review-style={siteConfiguration.homepage.recentReviewsStyle}
+    >
       <HomeFeatureStyles />
       <FeatureHeading
         icon={<Star size={21} weight="fill" />}

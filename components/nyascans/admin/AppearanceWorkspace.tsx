@@ -2,7 +2,11 @@
 import Link from "next/link";
 import { SiteConfigurationPanel } from "@/components/nyascans/SiteConfigurationPanel";
 import { ThemeSettingsPanel } from "@/components/nyascans/ThemeSettingsPanel";
+import { ThemeBuilderPage } from "@/components/nyascans/ThemeBuilderPage";
+import type { ThemeController } from "@/components/nyascans/UserThemeSystem";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
+import { DiscountCardStylePanel } from "@/components/nyascans/admin/DiscountCardStylePanel";
+import { RecentReviewsSettingsPanel } from "@/components/nyascans/admin/RecentReviewsSettingsPanel";
 import { ThemePalettePresetsPanel } from "@/components/nyascans/admin/ThemePalettePresetsPanel";
 
 type AppearanceTab =
@@ -14,6 +18,9 @@ type AppearanceTab =
   | "shortcuts"
   | "theme"
   | "palettes"
+  | "theme-management"
+  | "discounts"
+  | "reviews"
   | "preview";
 
 export type AppearanceWorkspaceKind =
@@ -27,6 +34,9 @@ const appearanceTabs: Array<{ key: AppearanceTab; label: string }> = [
   { key: "reader", label: "Header assets" },
   { key: "theme", label: "Colors, typography & layout" },
   { key: "palettes", label: "Ready-to-use palettes" },
+  { key: "theme-management", label: "Theme Management" },
+  { key: "discounts", label: "Discount presentation" },
+  { key: "reviews", label: "Recent Reviews" },
   { key: "preview", label: "Advanced preview" },
 ];
 
@@ -39,10 +49,14 @@ export function AppearanceWorkspace({
   workspace = "branding-appearance",
   initialTab,
   onTabChange,
+  themeController,
+  notify,
 }: {
   workspace?: AppearanceWorkspaceKind;
   initialTab?: AppearanceTab;
   onTabChange?(tab: AppearanceTab): void;
+  themeController?: ThemeController;
+  notify?: (message: string) => void;
 }) {
   const tabs =
     workspace === "branding-appearance"
@@ -112,6 +126,11 @@ export function AppearanceWorkspace({
         <div hidden={tab !== "palettes"} aria-hidden={tab !== "palettes"}>
           <ThemePalettePresetsPanel />
         </div>
+        {tab === "theme-management" && themeController ? (
+          <ThemeBuilderPage controller={themeController} notify={notify} embedded />
+        ) : null}
+        {tab === "discounts" ? <DiscountCardStylePanel /> : null}
+        {tab === "reviews" ? <RecentReviewsSettingsPanel /> : null}
         {tab === "preview" ? (
           <section className="appearance-component-preview">
             <header>

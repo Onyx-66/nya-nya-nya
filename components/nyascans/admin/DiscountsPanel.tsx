@@ -296,6 +296,7 @@ export function DiscountsPanel({
     kind: "success" | "error" | "neutral";
     text: string;
   } | null>(null);
+  const [activeView, setActiveView] = useState<"schedule" | "editor">("schedule");
 
   const dirty = Boolean(
     draft && draftSignature(draft) !== initialDraftSignature,
@@ -432,6 +433,7 @@ export function DiscountsPanel({
 
   function openNew() {
     const next = blankDraft();
+    setActiveView("editor");
     setDraft(next);
     setInitialDraftSignature(draftSignature(next));
     setQuery("");
@@ -440,6 +442,7 @@ export function DiscountsPanel({
 
   function openEdit(record: DiscountAdminRecord) {
     const next = draftFromRecord(record);
+    setActiveView("editor");
     setDraft(next);
     setInitialDraftSignature(draftSignature(next));
     setQuery("");
@@ -447,6 +450,7 @@ export function DiscountsPanel({
   }
 
   function closeEditor() {
+    setActiveView("schedule");
     setDraft(null);
     setInitialDraftSignature("");
     setQuery("");
@@ -603,6 +607,16 @@ export function DiscountsPanel({
         kicker="Paid content merchandising"
         title="Discounts"
         description="Schedule a reduced chapter price or a series-wide offer for every eligible paid chapter. Original prices always come from current server data."
+        tabs={[
+          { key: "schedule", label: "Discount schedule", count: payload.discounts.length },
+          { key: "editor", label: "New / edit discount" },
+        ]}
+        activeTab={activeView}
+        onTabChange={(value) => {
+          const next = value as "schedule" | "editor";
+          if (next === "editor") openNew();
+          else closeEditor();
+        }}
         message={message}
         primaryAction={
           <button className="button button-primary" type="button" disabled={busy || Boolean(draft)} onClick={openNew}>
@@ -632,7 +646,7 @@ export function DiscountsPanel({
           <div><strong>{scheduledCount}</strong><span>Scheduled</span></div>
         </div>
 
-        {draft ? (
+        {activeView === "editor" && draft ? (
           <section className="admin-form-section v481-discount-editor">
             <header>
               <span className="v481-admin-icon"><Tag /></span>
@@ -787,6 +801,7 @@ export function DiscountsPanel({
           </section>
         ) : null}
 
+        {activeView === "schedule" ? (
         <section className="admin-form-section v481-discount-list-section">
           <header>
             <span className="v481-admin-icon"><Tag /></span>
@@ -838,6 +853,7 @@ export function DiscountsPanel({
             </div>
           )}
         </section>
+        ) : null}
       </AdminPageScaffold>
       <ConfirmActionDialog
         open={Boolean(deleteTarget)}

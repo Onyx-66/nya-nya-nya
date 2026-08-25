@@ -51,6 +51,7 @@ export function SliderManagementPanel() {
   const [replacementFor, setReplacementFor] = useState<{ kind: "create"; draft: typeof blankDraft } | { kind: "activate"; slider: Slider } | null>(null);
   const [replacementId, setReplacementId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Slider | null>(null);
+  const [activeView, setActiveView] = useState<"create" | "history">("create");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -185,6 +186,12 @@ export function SliderManagementPanel() {
       kicker="Homepage presentation"
       title="Sliders"
       description="Preview the exact public card, upload dedicated artwork, and control up to nine public sliders."
+      tabs={[
+        { key: "create", label: "Create slider" },
+        { key: "history", label: "Slider history", count: payload.sliders.length },
+      ]}
+      activeTab={activeView}
+      onTabChange={(value) => setActiveView(value as "create" | "history")}
       message={message}
       state={loading ? { kind: "loading", message: "Loading slider history and previews…" } : { kind: "ready" }}
     >
@@ -193,6 +200,7 @@ export function SliderManagementPanel() {
         <div><strong>{payload.sliders.length - active.length}</strong><span>private sliders</span></div>
         <p>Activating a tenth slider requires one explicit one-for-one replacement.</p>
       </div>
+      {activeView === "create" ? (
       <section className="v46-slider-create">
         <header><div><span>New slider</span><h3>Create from a series or custom campaign</h3></div></header>
         <div className="v46-slider-form">
@@ -210,6 +218,8 @@ export function SliderManagementPanel() {
           <div><small>{draft.categoryLabel || "Featured"}</small><strong>{draft.title || "Slider title"}</strong><p>{draft.shortDescription || "Your public slider description will appear here."}</p></div>
         </div>
       </section>
+      ) : null}
+      {activeView === "history" ? (
       <section className="v46-slider-list-section">
         <header><div><span>Newest first</span><h3>Slider history</h3></div></header>
         <div className="v46-slider-list">
@@ -222,6 +232,7 @@ export function SliderManagementPanel() {
           ))}
         </div>
       </section>
+      ) : null}
       {replacementFor ? (
         <div className="v46-replacement-dialog" role="dialog" aria-modal="true" aria-labelledby="slider-limit-title">
           <div>

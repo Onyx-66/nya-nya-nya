@@ -13144,12 +13144,16 @@ function OperationsView({
   initialSectionSlug,
   initialSubsectionSlug,
   initialUploadMode,
+  themeController,
+  notify,
 }: {
   mode: "dashboard" | "admin";
   actor: Actor;
   initialSectionSlug?: string;
   initialSubsectionSlug?: string;
   initialUploadMode?: "SINGLE" | "BATCH";
+  themeController: ThemeController;
+  notify: (message: string) => void;
 }) {
   const admin = mode === "admin";
   const groups = useMemo<OperationsNavigationGroup[]>(() => {
@@ -13992,6 +13996,9 @@ function OperationsView({
                 "reader",
                 "theme",
                 "palettes",
+                "theme-management",
+                "discounts",
+                "reviews",
                 "preview",
               ].includes(activeSubsection)
                 ? (activeSubsection as
@@ -13999,10 +14006,15 @@ function OperationsView({
                     | "reader"
                     | "theme"
                     | "palettes"
+                    | "theme-management"
+                    | "discounts"
+                    | "reviews"
                     | "preview")
                 : "branding"
             }
             onTabChange={(tab) => openSection("branding-appearance", tab)}
+            themeController={themeController}
+            notify={notify}
           />
         ) : admin && activeNavigationItem?.slug === "footer-legal" ? (
           <AppearanceWorkspace
@@ -14916,13 +14928,16 @@ export function NyaScansApp({
           onSearch={() => setSearchOpen(true)}
           lockAndPayVisible={lockAndPayVisible}
         />
-        <OperationsView
+                      <OperationsView
           mode="dashboard"
           actor={actor}
           initialSectionSlug={operationPath?.[0] ?? resourceSlug}
           initialSubsectionSlug={operationPath?.[1]}
           initialUploadMode={uploadMode}
+          themeController={themeController}
+          notify={showToast}
         />
+
         <SiteFooter onOpenShortcuts={() => setShortcutsOpen(true)} />
         <MobileNav view={view} actor={actor} lockAndPayVisible={lockAndPayVisible} />
         {commonOverlays}
@@ -14938,6 +14953,8 @@ export function NyaScansApp({
           initialSectionSlug={operationPath?.[0] ?? resourceSlug}
           initialSubsectionSlug={operationPath?.[1]}
           initialUploadMode={uploadMode}
+          themeController={themeController}
+          notify={showToast}
         />
         {commonOverlays}
       </>

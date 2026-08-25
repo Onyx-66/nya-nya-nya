@@ -77,6 +77,7 @@ const previewNotificationKinds = [
 type ThemeBuilderProps = {
   controller: ThemeController;
   notify?: (message: string) => void;
+  embedded?: boolean;
 };
 
 function TokenEditor({
@@ -288,7 +289,7 @@ function ThemeSwatch({ theme }: { theme: ThemeDocument }) {
   );
 }
 
-export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
+export function ThemeBuilderPage({ controller, notify, embedded = false }: ThemeBuilderProps) {
   const [draft, setDraft] = useState<ThemeDocument>(() =>
     cloneTheme(controller.currentTheme),
   );
@@ -679,15 +680,20 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
     applyImport(await file.text());
   }
 
+  const Root = embedded ? "div" : "main";
+  const heroClassName = embedded ? "theme-builder-hero theme-builder-hero-embedded" : "theme-builder-hero page-wrap";
+  const layoutClassName = embedded ? "theme-builder-layout theme-builder-layout-embedded" : "theme-builder-layout page-wrap";
+
   return (
-    <main className="theme-builder-page page-main" id="theme-token-editor">
-      <section className="theme-builder-hero page-wrap">
+    <Root className={`theme-builder-page${embedded ? " theme-builder-page-embedded" : " page-main"}`} id="theme-token-editor">
+      <section className={heroClassName}>
         <div>
-          <p className="eyebrow"><Palette size={16} /> Personal appearance</p>
-          <h1>Theme Builder</h1>
+          <p className="eyebrow"><Palette size={16} /> {embedded ? "Admin design system" : "Personal appearance"}</p>
+          <h1>{embedded ? "Full Theme Management" : "Theme Builder"}</h1>
           <p>
-            Tune every NyaScans color token and watch real interface states update
-            instantly. Custom themes never change the administrator’s base design.
+            {embedded
+              ? "Tune every NyaScans color token, manage saved themes, and use the same validated import/export tools from the admin appearance workspace."
+              : "Tune every NyaScans color token and watch real interface states update instantly. Custom themes never change the administrator’s base design."}
           </p>
         </div>
         <div className="theme-builder-save-state">
@@ -696,7 +702,7 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
         </div>
       </section>
 
-      <div className="theme-builder-layout page-wrap">
+      <div className={layoutClassName}>
         <div className="theme-builder-editor">
           <section className="theme-builder-card theme-builder-basics">
             <header>
@@ -1001,6 +1007,6 @@ export function ThemeBuilderPage({ controller, notify }: ThemeBuilderProps) {
           <ThemePreview theme={namedDraft} />
         </aside>
       </div>
-    </main>
+    </Root>
   );
 }

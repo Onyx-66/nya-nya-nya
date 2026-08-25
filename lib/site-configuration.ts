@@ -23,6 +23,9 @@ const mediaKeySchema = z
 export const pinnedSeriesCarouselStyleSchema = z.enum(["CLASSIC", "CARD_COVER_FLOW"]);
 export type PinnedSeriesCarouselStyle = z.infer<typeof pinnedSeriesCarouselStyleSchema>;
 
+export const recentReviewsPresentationStyleSchema = z.enum(["CLASSIC_RAIL", "COMPACT_RAIL"]);
+export type RecentReviewsPresentationStyle = z.infer<typeof recentReviewsPresentationStyleSchema>;
+
 const mediaSlotSchema = z.object({
   enabled: z.boolean(),
   key: mediaKeySchema,
@@ -119,6 +122,7 @@ export const siteConfigurationSchema = z
     }),
     homepage: z.object({
       pinnedSeriesStyle: pinnedSeriesCarouselStyleSchema.default("CLASSIC"),
+      recentReviewsStyle: recentReviewsPresentationStyleSchema.default("CLASSIC_RAIL"),
     }),
     footer: z.object({
       description: z.string().trim().max(400).default(""),
@@ -262,6 +266,7 @@ export const defaultSiteConfiguration: SiteConfiguration = {
   },
   homepage: {
     pinnedSeriesStyle: "CLASSIC",
+    recentReviewsStyle: "CLASSIC_RAIL",
   },
   footer: {
     description: "A focused home for manga, manhwa, manhua, webtoons, readers, and the teams that make every release possible.",
