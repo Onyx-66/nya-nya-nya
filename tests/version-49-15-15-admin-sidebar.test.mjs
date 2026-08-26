@@ -15,12 +15,29 @@ test("admin sidebar does not render search, filter, or release-version controls"
   assert.match(source, /className="ops-account-menu"/);
 });
 
-test("mobile admin drawer uses the viewport and child labels wrap", () => {
+test("mobile admin drawer is content-sized with a scroll-only nav and fixed account footer", () => {
   const styles = read("app/admin.css");
-  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-sidebar[\s\S]*?width: 100vw !important/);
+  assert.match(styles, /width: max-content !important/);
+  assert.match(styles, /max-width: calc\(100vw - 8px\) !important/);
+  assert.match(styles, /padding: max\(8px, env\(safe-area-inset-top\)\) 8px max\(8px, env\(safe-area-inset-bottom\)\) !important/);
+  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-grouped-nav[\s\S]*?overflow-y: auto !important/);
+  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-account-menu[\s\S]*?display: block !important/);
+  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-account-menu[\s\S]*?flex: 0 0 auto !important/);
   assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-nav-label[\s\S]*?white-space: normal/);
   assert.match(styles, /overflow-wrap: anywhere/);
-  assert.match(styles, /padding-left: 1\.9rem !important/);
+});
+
+test("mobile drawer header keeps the logo left and close button right", () => {
+  const styles = read("app/admin.css");
+  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-sidebar-head[\s\S]*?justify-content: space-between !important/);
+  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-sidebar-mobile-close[\s\S]*?margin-left: auto/);
+  assert.match(styles, /\.ops-shell\[data-operations-mode="admin"\] \.ops-sidebar-head \.brand[\s\S]*?justify-content: flex-start/);
+});
+
+test("mobile drawer no longer contains a full-viewport width override", () => {
+  const styles = read("app/admin.css");
+  assert.doesNotMatch(styles, /width:\s*100vw !important/);
+  assert.doesNotMatch(styles, /max-width:\s*100vw !important/);
 });
 
 test("header profile photo uses the actor URL immediately and refreshes with identity changes", () => {

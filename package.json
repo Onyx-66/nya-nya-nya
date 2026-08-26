@@ -1,6 +1,6 @@
 {
   "name": "nyascans",
-  "version": "49.15.15",
+  "version": "49.15.16",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
