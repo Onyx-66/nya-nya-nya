@@ -1110,7 +1110,12 @@ function SiteHeader({
   const [notificationsActionError, setNotificationsActionError] = useState("");
   const [notificationBusy, setNotificationBusy] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(
+    () => actor?.avatarUrl ?? null,
+  );
+  useEffect(() => {
+    setProfileAvatarUrl(actor?.avatarUrl ?? null);
+  }, [actor?.avatarUrl]);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -13308,7 +13313,6 @@ function OperationsView({
     () => new Set(groups.map((group) => group.id)),
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarQuery, setSidebarQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [drawerViewport, setDrawerViewport] = useState(false);
   const effectiveSidebarCollapsed = sidebarCollapsed && !drawerViewport;
@@ -13340,32 +13344,6 @@ function OperationsView({
     adminCommandOpenRef.current = adminCommandOpen;
   }, [adminCommandOpen]);
 
-  const filteredGroups = useMemo(() => {
-    const query = sidebarQuery.trim().toLowerCase();
-    if (!admin || !query) return groups;
-    return groups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) =>
-          [
-            item.label,
-            item.slug,
-            ...item.aliases,
-            ...item.keywords,
-            ...(item.children ?? []).flatMap((nested) => [
-              nested.label,
-              nested.slug,
-              ...nested.aliases,
-              ...nested.keywords,
-            ]),
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(query),
-        ),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [admin, groups, sidebarQuery]);
   const resolveSectionLabel = useCallback(
     (section: string) => {
       if (admin) {
@@ -13813,47 +13791,12 @@ function OperationsView({
             </button>
           ) : null}
         </div>
-        {admin ? (
-          <div className="ops-admin-navigation-tools">
-            <button
-              className="ops-command-trigger"
-              type="button"
-              title={effectiveSidebarCollapsed ? "Open command palette" : undefined}
-              aria-label="Open admin command palette"
-              aria-keyshortcuts="Control+K Meta+K"
-              onClick={() => setAdminCommandOpen(true)}
-            >
-              <MagnifyingGlass size={18} aria-hidden="true" />
-              <span>Search pages &amp; actions</span>
-              <kbd>Ctrl K</kbd>
-            </button>
-            <label className="ops-sidebar-search">
-              <span className="sr-only">Filter administration navigation</span>
-              <MagnifyingGlass size={16} aria-hidden="true" />
-              <input
-                type="search"
-                value={sidebarQuery}
-                onChange={(event) => setSidebarQuery(event.target.value)}
-                placeholder="Filter navigation…"
-              />
-              {sidebarQuery ? (
-                <button
-                  type="button"
-                  aria-label="Clear navigation filter"
-                  onClick={() => setSidebarQuery("")}
-                >
-                  <X size={14} aria-hidden="true" />
-                </button>
-              ) : null}
-            </label>
-          </div>
-        ) : null}
         <nav
           className="ops-grouped-nav"
           id="operations-navigation"
           aria-label="Operations sections"
         >
-          {filteredGroups.map((group) => (
+          {groups.map((group) => (
             <section className="ops-nav-group" key={group.id}>
               {group.label ? (
                 <button
@@ -13861,9 +13804,7 @@ function OperationsView({
                   type="button"
                   id={`ops-nav-${mode}-${group.id}-toggle`}
                   aria-expanded={
-                    effectiveSidebarCollapsed ||
-                    Boolean(sidebarQuery.trim()) ||
-                    visibleExpandedGroups.has(group.id)
+                    effectiveSidebarCollapsed || visibleExpandedGroups.has(group.id)
                   }
                   aria-controls={`ops-nav-${mode}-${group.id}-items`}
                   onClick={() => toggleGroup(group.id)}
@@ -13887,12 +13828,12 @@ function OperationsView({
                 className="ops-nav-group-items"
                 id={`ops-nav-${mode}-${group.id}-items`}
                 aria-labelledby={
-                  group.label ? `ops-nav-${mode}-${group.id}-toggle` : undefined
+                                    group.label
+                    ? `ops-nav-${mode}-${group.id}-toggle` : undefined
                 }
                 hidden={
                   group.label
                     ? !effectiveSidebarCollapsed &&
-                      !sidebarQuery.trim() &&
                       !visibleExpandedGroups.has(group.id)
                     : false
                 }
@@ -13934,7 +13875,6 @@ function OperationsView({
                 })}
               </div>
               {!effectiveSidebarCollapsed &&
-              !sidebarQuery.trim() &&
               !visibleExpandedGroups.has(group.id) &&
               group.items.some((item) => item.label === activeSection) ? (
                 <a
@@ -13954,21 +13894,7 @@ function OperationsView({
               ) : null}
             </section>
           ))}
-          {admin && filteredGroups.length === 0 ? (
-            <div className="ops-nav-empty" role="status">
-              <MagnifyingGlass size={20} aria-hidden="true" />
-              <strong>No matching page</strong>
-              <span>Try a shorter task or page name.</span>
-            </div>
-          ) : null}
         </nav>
-        <div
-          className="ops-release-version"
-          title={`NyaScans Version ${APP_VERSION}`}
-        >
-          <span>Version</span>
-          <strong>{APP_VERSION}</strong>
-        </div>
         <details className="ops-account-menu">
           <summary aria-label={`Open account menu for ${actor.displayName}`}>
             <span className="ops-account-avatar">

@@ -6436,3 +6436,85 @@
     transition: none !important;
   }
 }
+
+/* v49.15.15 — mobile drawer gutters, readable subsection labels, and clean admin identity. */
+.ops-shell[data-operations-mode="admin"] :is(.ops-admin-navigation-tools, .ops-release-version) {
+  display: none !important;
+}
+
+.ops-shell[data-operations-mode="admin"] .ops-nav-label {
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.28;
+}
+
+.ops-shell[data-operations-mode="admin"] .ops-nav-child {
+  min-width: 0;
+}
+
+.ops-shell[data-operations-mode="admin"] .ops-account-avatar,
+.ops-shell[data-operations-mode="admin"] .ops-account-avatar img {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1023px) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar,
+  .ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar {
+    inset: 0 auto 0 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    padding-left: max(.5rem, env(safe-area-inset-left)) !important;
+    padding-right: max(.5rem, env(safe-area-inset-right)) !important;
+  }
+
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar-head,
+  .ops-shell[data-operations-mode="admin"] .ops-grouped-nav,
+  .ops-shell[data-operations-mode="admin"] .ops-account-menu {
+    margin-inline: 0 !important;
+  }
+
+  .ops-shell[data-operations-mode="admin"] .ops-grouped-nav {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .ops-shell[data-operations-mode="admin"] :is(.ops-nav-group-items > a, .ops-active-pinned) {
+    width: 100%;
+  }
+
+  .ops-shell[data-operations-mode="admin"] .ops-nav-child {
+    margin-left: 0;
+    padding-left: 1.9rem !important;
+    padding-right: .55rem !important;
+  }
+
+  .ops-shell[data-operations-mode="admin"] .ops-nav-label {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 480px) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar,
+  .ops-shell[data-operations-mode="admin"].is-sidebar-collapsed .ops-sidebar {
+    width: 100vw !important;
+    padding-inline: max(.5rem, env(safe-area-inset-left)) max(.5rem, env(safe-area-inset-right)) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-shell[data-operations-mode="admin"] .ops-sidebar {
+    transition: none !important;
+  }
+}
+
+/* Child markers are absolute, so child labels must occupy the full link grid. */
+.ops-shell[data-operations-mode="admin"] .ops-nav-child {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.ops-shell[data-operations-mode="admin"] .ops-nav-child .ops-nav-label {
+  grid-column: 1;
+}

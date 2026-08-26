@@ -18,7 +18,7 @@ const usernameSchema = z
   .trim()
   .min(3)
   .max(30)
-  .regex(/^[a-zA-Z0-9_]+$/);
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 const slotSchema = z.enum(["avatar", "banner"]);
 const revisionSchema = z.coerce.number().int().min(1);
 
