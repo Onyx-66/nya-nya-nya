@@ -11,7 +11,7 @@ import {
   MagnifyingGlass,
   PaperPlaneTilt,
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   useCallback,
   useEffect,

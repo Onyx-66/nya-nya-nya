@@ -15,7 +15,7 @@ import {
   Plus,
   SquaresFour,
   Translate,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActiveDiscountBadge } from "@/components/nyascans/ActiveDiscountBadge";
 import { DotsRing } from "@/components/nyascans/DotsRing";
@@ -576,7 +576,7 @@ export function PublishingTeamsDirectory() {
   const [records, setRecords] = useState<PublicTeamRecord[]>([]);
   const [query, setQuery] = useState("");
   const [language, setLanguage] = useState("");
-  const [view, setView] = useState<"GRID" | "LIST">("GRID");
+  const [view, setView] = useState<"GRID" | "LIST">("LIST");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 

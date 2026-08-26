@@ -5,7 +5,7 @@ import {
   PaintBrush,
   UserCircle,
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useState } from "react";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";

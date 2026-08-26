@@ -4,7 +4,7 @@ import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
 
-import { FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { FloppyDisk, PaintBrush, ArrowCounterClockwise } from "@/components/nyascans/heroicons";
 import { useEffect, useRef, useState } from "react";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {

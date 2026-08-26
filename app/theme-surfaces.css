@@ -161,7 +161,7 @@
 .recent-reviews-section :is(.recent-review-rating, .recent-review-reactions),
 .v481-discounts-section :is(.v481-feature-heading .latest-all-action, .v481-ticket-prices b),
 .latest-updates-block :is(.latest-style-toggle[aria-pressed="true"], .latest-page-dots button[aria-current="page"]),
-.editors-pick-section :is(.editors-pick-title-group h2, .editors-pick-controls button),
+.editors-pick-section .editors-pick-controls button,
 .public-new-series :is(.new-series-heading-actions a, .new-series-badges),
 .public-teams :is(.teams-heading-actions a, .teams-carousel-controls button),
 .community-highlights :is(.community-highlight-meta svg, .community-highlight-source em),

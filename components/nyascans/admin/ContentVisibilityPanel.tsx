@@ -8,7 +8,7 @@ import {
   CheckCircle,
   LockKey,
   MagnifyingGlass,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {

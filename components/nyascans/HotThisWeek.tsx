@@ -13,7 +13,7 @@ import {
   Heart,
   Minus,
   Star,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { type ReactNode, useEffect, useState } from "react";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { fetchWithHomeTimeout, homeRequestMessage } from "@/lib/home-fetch";

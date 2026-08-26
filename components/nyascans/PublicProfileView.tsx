@@ -15,7 +15,7 @@ import {
   UserMinus,
   UserPlus,
   UsersThree,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type KeyboardEvent,
   useEffect,

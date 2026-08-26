@@ -9,7 +9,7 @@ import {
   Moon,
   NavigationArrow,
   SlidersHorizontal,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 
 export type ReaderSettings = {
   mode: "vertical" | "single" | "double";

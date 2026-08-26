@@ -5,7 +5,7 @@ import {
   Warning,
   WarningCircle,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   createContext,
   type CSSProperties,

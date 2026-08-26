@@ -11,7 +11,7 @@ import {
   Desktop,
   Plus,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type FormEvent,
   type ReactNode,

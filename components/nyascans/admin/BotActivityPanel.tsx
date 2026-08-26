@@ -7,7 +7,7 @@ import {
   CaretRight,
   MagnifyingGlass,
   Pulse,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   AdminPageScaffold,

@@ -2,7 +2,7 @@
 import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, ImageSquare, Plus, Trash, X } from "@phosphor-icons/react";
+import { Check, ImageSquare, Plus, Trash, X } from "@/components/nyascans/heroicons";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AdminCombobox, AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 

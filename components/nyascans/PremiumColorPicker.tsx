@@ -7,7 +7,7 @@ import {
   Plus,
   SlidersHorizontal,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 type RGB = { r: number; g: number; b: number };

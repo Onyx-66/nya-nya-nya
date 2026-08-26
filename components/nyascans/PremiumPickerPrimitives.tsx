@@ -3,7 +3,7 @@ import {
   CaretLeft,
   CaretRight,
   Check,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 export const MONTH_NAMES = [

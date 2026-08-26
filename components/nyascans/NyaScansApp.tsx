@@ -73,7 +73,7 @@ import {
   WarningCircle,
   X,
   type Icon as PhosphorIcon,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { startAuthentication } from "@simplewebauthn/browser";
 import {
   Fragment,

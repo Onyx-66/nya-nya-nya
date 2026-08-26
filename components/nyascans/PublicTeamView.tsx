@@ -13,7 +13,7 @@ import {
   Sparkle,
   Translate,
   UsersThree,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useState } from "react";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { FormattedCommentText } from "@/components/nyascans/EnhancedDiscussionSection";

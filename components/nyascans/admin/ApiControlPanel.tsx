@@ -12,7 +12,7 @@ import {
   Plus,
 
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useState } from "react";
 import { AdminCombobox, AdminPageScaffold, ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 

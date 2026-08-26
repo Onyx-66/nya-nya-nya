@@ -1,4 +1,4 @@
-import { Check, FloppyDisk, Tag, WarningCircle } from "@phosphor-icons/react";
+import { Check, FloppyDisk, Tag, WarningCircle } from "@/components/nyascans/heroicons";
 import { useEffect, useState, type FormEvent } from "react";
 import {
   defaultCommercialSettings,

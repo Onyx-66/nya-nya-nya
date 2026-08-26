@@ -7,7 +7,7 @@ import {
   ChatCircle,
   CheckCircle,
   PaperPlaneTilt,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import Link from "next/link";
 import {
   useCallback,

@@ -12,7 +12,7 @@ import {
   Tag,
   Trash,
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
 import {

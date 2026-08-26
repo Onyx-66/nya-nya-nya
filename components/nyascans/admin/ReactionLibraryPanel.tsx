@@ -10,7 +10,7 @@ import {
   Image as ImageIcon,
   Plus,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type FormEvent,
   type ReactNode,

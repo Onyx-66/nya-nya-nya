@@ -7,7 +7,7 @@ import {
   ImageSquare,
 
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useState } from "react";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 

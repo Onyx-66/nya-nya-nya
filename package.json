@@ -1,6 +1,6 @@
 {
   "name": "nyascans",
-  "version": "49.15.13",
+  "version": "49.15.14",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -18,7 +18,7 @@
     "security:hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
-    "@phosphor-icons/react": "^2.1.10",
+    "@heroicons/react": "2.2.0",
     "@simplewebauthn/browser": "13.3.0",
     "@simplewebauthn/server": "13.3.2",
     "@types/qrcode": "1.5.5",

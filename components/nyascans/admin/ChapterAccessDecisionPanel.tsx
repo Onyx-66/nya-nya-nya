@@ -8,7 +8,7 @@ import {
   LockKey,
 
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AdminPageScaffold,

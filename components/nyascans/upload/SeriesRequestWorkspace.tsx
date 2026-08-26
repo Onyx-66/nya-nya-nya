@@ -12,7 +12,7 @@ import {
   Image as ImageIcon,
 
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import Link from "next/link";
 import {
   useEffect,

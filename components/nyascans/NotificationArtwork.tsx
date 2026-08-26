@@ -6,7 +6,7 @@ import {
   Books,
   MegaphoneSimple,
   UsersThree,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useState } from "react";
 
 export type NotificationSeries = {

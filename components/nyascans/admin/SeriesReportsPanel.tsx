@@ -13,7 +13,7 @@ import {
   ShieldWarning,
   WarningCircle,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   useCallback,
   useEffect,

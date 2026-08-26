@@ -1,7 +1,7 @@
 "use client";
 
 import { DotsRing } from "@/components/nyascans/DotsRing";
-import { CheckCircle, Clock, Fingerprint, ShieldCheck, Trash, WarningCircle } from "@phosphor-icons/react";
+import { CheckCircle, Clock, Fingerprint, ShieldCheck, Trash, WarningCircle } from "@/components/nyascans/heroicons";
 import { startRegistration } from "@simplewebauthn/browser";
 import { useEffect, useState } from "react";
 

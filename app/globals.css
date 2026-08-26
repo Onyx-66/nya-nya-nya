@@ -61400,3 +61400,8 @@ dialog::backdrop,
   .premium-color-grid button,
   .premium-color-swatch-row button { transition: none; }
 }
+
+/* Editor’s Pick title follows the neutral section-heading text token; only its icon/card retain the section accent. */
+.home-main .editors-pick-heading h2 {
+  color: var(--theme-text-color) !important;
+}

@@ -4,7 +4,7 @@ import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
-import { Check, ImageSquare, LinkSimple, Plus, ShieldCheck, UploadSimple, UserPlus, X } from "@phosphor-icons/react";
+import { Check, ImageSquare, LinkSimple, Plus, ShieldCheck, UploadSimple, UserPlus, X } from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
 

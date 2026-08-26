@@ -7,7 +7,7 @@ import {
   Tray,
   WarningCircle,
   XCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {

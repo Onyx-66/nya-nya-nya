@@ -1,4 +1,4 @@
-import { LockKey } from "@phosphor-icons/react/dist/ssr";
+import { LockKey } from "@/components/nyascans/heroicons";
 import Link from "next/link";
 
 export default function ForbiddenPage() {

@@ -1,4 +1,4 @@
-import { CaretLeft, CaretRight } from "@phosphor-icons/react";
+import { CaretLeft, CaretRight } from "@/components/nyascans/heroicons";
 import { type RefObject, useCallback, useEffect, useState } from "react";
 
 type HomeRailControlsProps = {

@@ -14,7 +14,7 @@ import {
   Plus,
   SlidersHorizontal,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type FormEvent,
   type KeyboardEvent,

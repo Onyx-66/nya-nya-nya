@@ -10,7 +10,7 @@ import {
   Plus,
   Sparkle,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useRef, useState } from "react";
 import {
   AdminCombobox,

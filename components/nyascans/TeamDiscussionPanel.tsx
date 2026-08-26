@@ -10,7 +10,7 @@ import {
   Trash,
   UsersThree,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   Fragment,
   useCallback,

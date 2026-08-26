@@ -4,7 +4,7 @@ import {
   Check,
   Clock,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   useEffect,
   useRef,

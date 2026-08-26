@@ -8,7 +8,7 @@ import {
   FloppyDisk,
   Gif,
   ImageSquare,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useState } from "react";
 import { useUnsavedChanges } from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";

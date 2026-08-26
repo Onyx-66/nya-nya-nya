@@ -11,7 +11,7 @@ import {
   Star,
   Tag,
   Timer,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type ReactNode,
   useCallback,

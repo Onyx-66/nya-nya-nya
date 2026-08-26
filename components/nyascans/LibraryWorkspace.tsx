@@ -11,7 +11,7 @@ import {
   Rows,
 
   UploadSimple,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readingProgressTone } from "@/lib/reading-progress";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";

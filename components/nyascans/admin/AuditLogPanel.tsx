@@ -11,7 +11,7 @@ import {
   FileText,
   LockKey,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   AdminCombobox,

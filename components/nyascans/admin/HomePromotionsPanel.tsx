@@ -4,7 +4,7 @@ import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 /* eslint-disable @next/next/no-img-element */
 
-import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, TextB, TextItalic, Trash } from "@phosphor-icons/react";
+import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, TextB, TextItalic, Trash } from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";

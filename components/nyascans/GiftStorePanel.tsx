@@ -12,7 +12,7 @@ import {
   Heart,
   PaperPlaneTilt,
   UsersThree,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 

@@ -9,7 +9,7 @@ import {
   Plus,
   Sparkle,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useState } from "react";
 import { AdminCombobox } from "@/components/nyascans/admin/AdminPageScaffold";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";

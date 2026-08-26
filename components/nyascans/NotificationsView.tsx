@@ -15,7 +15,7 @@ import {
 
   UsersThree,
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useMemo, useState } from "react";
 import {
   NotificationArtwork,

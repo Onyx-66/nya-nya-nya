@@ -8,7 +8,7 @@ import {
   Fire,
   Medal,
   Trophy,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useState, type ReactNode } from "react";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 

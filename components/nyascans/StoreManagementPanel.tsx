@@ -20,7 +20,7 @@ import {
   Storefront,
   Trash,
   X,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type ChangeEvent,
   type FormEvent,

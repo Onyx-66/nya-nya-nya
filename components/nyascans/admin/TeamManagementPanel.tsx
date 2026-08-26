@@ -23,7 +23,7 @@ import {
   UsersThree,
   Trash,
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   type CSSProperties,
   type FormEvent,

@@ -6,7 +6,7 @@ import {
   PaintBrush,
 
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import { useEffect, useRef, useState } from "react";
 import { SystemNoticeBridge } from "@/components/nyascans/SystemNotifications";
 import {

@@ -3,7 +3,7 @@ import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 
-import { Key } from "@phosphor-icons/react";
+import { Key } from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 

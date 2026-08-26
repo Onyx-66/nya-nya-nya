@@ -1,5 +1,5 @@
 "use client";
-import { CaretDown, CheckCircle } from "@phosphor-icons/react";
+import { CaretDown, CheckCircle } from "@/components/nyascans/heroicons";
 import {
   Children,
   Fragment,

@@ -1,7 +1,7 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
-import { CaretDown, Check, Clock, LinkSimple, ShieldCheck, X } from "@phosphor-icons/react";
+import { CaretDown, Check, Clock, LinkSimple, ShieldCheck, X } from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useState } from "react";
 import { AdminEmptyState, AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 

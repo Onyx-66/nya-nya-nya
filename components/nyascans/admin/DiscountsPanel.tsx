@@ -11,7 +11,7 @@ import {
 
   Tag,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   useCallback,
   useEffect,

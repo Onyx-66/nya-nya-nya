@@ -13,7 +13,7 @@ import {
   Trash,
   UploadSimple,
   WarningCircle,
-} from "@phosphor-icons/react";
+} from "@/components/nyascans/heroicons";
 import {
   useEffect,
   useMemo,
