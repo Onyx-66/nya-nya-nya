@@ -75,6 +75,9 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(leaderboard, /label="Reacts"/);
   assert.match(leaderboard, /label="Chapters"/);
   assert.match(leaderboard, /BookOpenText weight="fill" aria-hidden="true"/);
+  assert.match(leaderboard, /user-ranking-medal rank-\$\{entry\.rank\}/);
+  assert.match(leaderboard, /<Medal size=\{34\} weight="fill" aria-hidden="true" \/>/);
+  assert.doesNotMatch(leaderboard, /<small>\{label\}<\/small>/);
   assert.match(leaderboard, /user-ranking-podium-score/);
   assert.match(leaderboard, /user-ranking-podium-secondary/);
   assert.match(leaderboard, /value=\{number\(entry\.commentCount\)\}/);
@@ -101,6 +104,11 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-list-heading[\s\S]*display: grid[\s\S]*grid-template-columns: 2\.6rem 3\.2rem minmax\(0, 1fr\) minmax\(19rem, 0\.72fr\)/);
   assert.match(globals, /user-ranking-list-labels[\s\S]*grid-column: 4[\s\S]*justify-items: center/);
   assert.match(globals, /user-ranking-row-metrics > \.user-ranking-metric:first-child[\s\S]*transform: translateX\(-\.55rem\)/);
+  assert.match(globals, /user-ranking-metric[\s\S]*display: inline-flex/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal[\s\S]*border: 0/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-1[\s\S]*--medal-fill: var\(--leaderboard-first\)/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-2[\s\S]*--medal-fill: var\(--leaderboard-second\)/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-3[\s\S]*--medal-fill: var\(--leaderboard-third\)/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {

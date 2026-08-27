@@ -62140,3 +62140,78 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
     transform: translateX(-.55rem);
   }
 }
+
+
+/* v49.22.0 — icon-only Leaderboard metrics and podium medals */
+.user-leaderboard .user-ranking-metric {
+  display: inline-flex;
+  align-items: center;
+  grid-template-columns: none;
+  gap: 0.32rem;
+}
+
+.user-leaderboard .user-ranking-metric > strong {
+  display: block;
+}
+
+.user-leaderboard .user-ranking-metric small {
+  display: none;
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal {
+  width: 3.7rem;
+  height: 3.7rem;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  color: var(--medal-fill, var(--leaderboard-accent));
+  background: transparent;
+  box-shadow: none;
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal > svg {
+  position: absolute;
+  width: 3.35rem;
+  height: 3.35rem;
+  color: var(--medal-fill, currentColor);
+  opacity: 1;
+  filter: drop-shadow(0 0.35rem 0.55rem color-mix(in srgb, var(--medal-fill, currentColor) 30%, transparent));
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal > strong {
+  position: relative;
+  z-index: 1;
+  color: var(--medal-ink, var(--theme-text-color));
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px color-mix(in srgb, var(--theme-text-color) 28%, transparent);
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal.rank-1 {
+  --medal-fill: var(--leaderboard-first);
+  --medal-ink: color-mix(in srgb, var(--leaderboard-first) 30%, var(--theme-main-background));
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal.rank-2 {
+  --medal-fill: var(--leaderboard-second);
+  --medal-ink: color-mix(in srgb, var(--leaderboard-second) 30%, var(--theme-main-background));
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal.rank-3 {
+  --medal-fill: var(--leaderboard-third);
+  --medal-ink: color-mix(in srgb, var(--leaderboard-third) 30%, var(--theme-main-background));
+}
+
+@media (max-width: 760px) {
+  .user-leaderboard .user-ranking-place.user-ranking-medal {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .user-leaderboard .user-ranking-place.user-ranking-medal > svg {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}

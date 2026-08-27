@@ -5,7 +5,6 @@ import {
   ArrowFatUp,
   BookOpenText,
   ChatCircle,
-  Crown,
   Fire,
   Medal,
   Trophy,
@@ -102,12 +101,10 @@ function RankingMetric({
       className={`user-ranking-metric${accent ? " is-accent" : ""}`}
       data-label={label}
       data-visibility={expanded ? "expanded" : "all"}
+      aria-label={`${label}: ${value}`}
     >
       {icon}
-      <span>
-        <strong>{value}</strong>
-        <small>{label}</small>
-      </span>
+      <strong>{value}</strong>
     </span>
   );
 }
@@ -116,9 +113,9 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
   return (
     <li className={`user-ranking-podium-card is-rank-${entry.rank}`}>
       <a href={profileHref(entry)} aria-label={accessibleEntryLabel(entry)}>
-        <span className="user-ranking-place" aria-hidden="true">
-          {entry.rank === 1 ? <Crown weight="fill" /> : <Medal weight="fill" />}
-          <strong>{entry.rank}</strong>
+        <span className={`user-ranking-place user-ranking-medal rank-${entry.rank}`} aria-label={`Rank ${entry.rank}`}>
+          <Medal size={34} weight="fill" aria-hidden="true" />
+          <strong aria-hidden="true">{entry.rank}</strong>
         </span>
         <RankingAvatar entry={entry} featured />
         <strong className="user-ranking-podium-name">{entry.displayName}</strong>
