@@ -109,6 +109,10 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-1[\s\S]*--medal-fill: var\(--leaderboard-first\)/);
   assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-2[\s\S]*--medal-fill: var\(--leaderboard-second\)/);
   assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-3[\s\S]*--medal-fill: var\(--leaderboard-third\)/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-2[\s\S]*border-color: color-mix\(in srgb, var\(--leaderboard-second\)/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-3[\s\S]*border-color: color-mix\(in srgb, var\(--leaderboard-third\)/);
+  assert.match(globals, /user-ranking-list-row \.user-ranking-avatar[\s\S]*aspect-ratio: 1 \/ 1[\s\S]*border-radius: 1rem/);
+  assert.match(globals, /user-ranking-list-row \.user-ranking-avatar img[\s\S]*border-radius: \.85rem/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {

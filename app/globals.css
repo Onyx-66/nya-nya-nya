@@ -62215,3 +62215,57 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
     height: 2.75rem;
   }
 }
+
+
+/* v49.22.1 — medal-matched podium cards and square lower-row avatars */
+.user-leaderboard .user-ranking-podium-card.is-rank-2 {
+  border-color: color-mix(in srgb, var(--leaderboard-second) 72%, var(--theme-accent-l3));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--leaderboard-second) 14%, var(--theme-accent-l2)), var(--theme-accent));
+  box-shadow: 0 1.35rem 3rem color-mix(in srgb, var(--leaderboard-second) 14%, transparent), 0 1.2rem 2.5rem color-mix(in srgb, var(--theme-main-background) 38%, transparent), inset 0 1px color-mix(in srgb, var(--theme-text-color) 10%, transparent);
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-3 {
+  border-color: color-mix(in srgb, var(--leaderboard-third) 72%, var(--theme-accent-l3));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--leaderboard-third) 14%, var(--theme-accent-l2)), var(--theme-accent));
+  box-shadow: 0 1.35rem 3rem color-mix(in srgb, var(--leaderboard-third) 14%, transparent), 0 1.2rem 2.5rem color-mix(in srgb, var(--theme-main-background) 38%, transparent), inset 0 1px color-mix(in srgb, var(--theme-text-color) 10%, transparent);
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-2 .user-ranking-avatar.is-featured {
+  border-color: color-mix(in srgb, var(--leaderboard-second) 72%, var(--theme-accent-l3));
+  color: var(--leaderboard-second);
+  background: color-mix(in srgb, var(--leaderboard-second) 14%, var(--theme-accent-l2));
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--leaderboard-second) 12%, transparent), 0 .65rem 1.2rem color-mix(in srgb, var(--theme-main-background) 38%, transparent);
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-3 .user-ranking-avatar.is-featured {
+  border-color: color-mix(in srgb, var(--leaderboard-third) 72%, var(--theme-accent-l3));
+  color: var(--leaderboard-third);
+  background: color-mix(in srgb, var(--leaderboard-third) 14%, var(--theme-accent-l2));
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--leaderboard-third) 12%, transparent), 0 .65rem 1.2rem color-mix(in srgb, var(--theme-main-background) 38%, transparent);
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-2 .user-ranking-tier {
+  border-color: color-mix(in srgb, var(--leaderboard-second) 63%, transparent);
+  color: var(--leaderboard-second);
+  background: color-mix(in srgb, var(--leaderboard-second) 10%, var(--theme-accent-l2));
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-3 .user-ranking-tier {
+  border-color: color-mix(in srgb, var(--leaderboard-third) 63%, transparent);
+  color: var(--leaderboard-third);
+  background: color-mix(in srgb, var(--leaderboard-third) 10%, var(--theme-accent-l2));
+}
+
+.user-leaderboard .user-ranking-list-row .user-ranking-avatar {
+  width: 3.2rem;
+  height: 3.2rem;
+  aspect-ratio: 1 / 1;
+  border-radius: 1rem;
+}
+
+.user-leaderboard .user-ranking-list-row .user-ranking-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: .85rem;
+  object-fit: cover;
+}
