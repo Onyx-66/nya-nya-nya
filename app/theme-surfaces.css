@@ -332,7 +332,6 @@
     0 0 1.5rem color-mix(in srgb, var(--theme-effect-cover-glow) 34%, transparent) !important;
 }
 
-.home-announcement-slider > article::after,
 .home-announcement-banner::after,
 .event-campaign-modal.floating-home-ad::after {
   background: conic-gradient(

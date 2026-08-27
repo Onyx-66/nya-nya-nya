@@ -26,7 +26,7 @@ import {
 } from "@/components/nyascans/admin/AdminPageScaffold";
 import { DISCOUNTS_UPDATED_EVENT } from "@/components/nyascans/ActiveDiscountBadge";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
-import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 import { useCommercialSettings } from "@/components/nyascans/useCommercialSettings";
 import { coinLabel } from "@/lib/commercial-settings";
 
@@ -742,13 +742,15 @@ export function DiscountsPanel({
                   />
                   <small>Used by the Spotlight/Hero card style. Leave the default text or customize it for this discount.</small>
                 </label>
-                <label>
-                  Start date
-                  <PremiumDateTimePicker value={draft.startsAt} label="Start date and time" onChange={(next) => setDraft((current) => current ? { ...current, startsAt: dateTimeInputValue(next) } : current)} />
-                </label>
-                <label>
-                  End date
-                  <PremiumDateTimePicker value={draft.endsAt} label="End date and time" onChange={(next) => setDraft((current) => current ? { ...current, endsAt: dateTimeInputValue(next) } : current)} />
+                <label className="v481-span-two v481-discount-date-range-field">
+                  Schedule window
+                  <PremiumDateRangePicker
+                    start={draft.startsAt}
+                    end={draft.endsAt}
+                    label="Discount schedule"
+                    includeTime
+                    onChange={({ start, end }) => setDraft((current) => current ? { ...current, startsAt: start ? dateTimeInputValue(start) : "", endsAt: end ? dateTimeInputValue(end) : "" } : current)}
+                  />
                 </label>
                 <label className="admin-toggle-row v481-span-two">
                   <input type="checkbox" checked={draft.active} onChange={(event) => setDraft((current) => current ? { ...current, active: event.target.checked } : current)} />

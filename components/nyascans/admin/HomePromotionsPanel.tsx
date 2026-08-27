@@ -8,7 +8,7 @@ import { Bell, ImageSquare, LinkSimple, Megaphone, Plus, TextB, TextItalic, Tras
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AdminPageScaffold } from "@/components/nyascans/admin/AdminPageScaffold";
 import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
-import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 import { FormattedAnnouncementText } from "@/components/nyascans/FormattedAnnouncementText";
 
 type Announcement = {
@@ -265,8 +265,16 @@ export function HomePromotionsPanel() {
             <label className="v46-span-two"><span>Message</span><textarea rows={3} value={ad.body} onChange={(event) => setAd((current) => ({ ...current, body: event.target.value }))} /></label>
             <label><span>Primary action label</span><input value={ad.actionLabel} onChange={(event) => setAd((current) => ({ ...current, actionLabel: event.target.value }))} /></label>
             <label><span>Destination</span><input value={ad.destinationUrl} placeholder="https://patreon.com/…" onChange={(event) => setAd((current) => ({ ...current, destinationUrl: event.target.value }))} /></label>
-            <div className="admin-date-picker-field"><span>Starts at (optional)</span><PremiumDateTimePicker value={ad.startsAt} label="Starts at" onChange={(next) => setAd((current) => ({ ...current, startsAt: next }))} /></div>
-            <div className="admin-date-picker-field"><span>Ends at (optional)</span><PremiumDateTimePicker value={ad.endsAt} label="Ends at" onChange={(next) => setAd((current) => ({ ...current, endsAt: next }))} /></div>
+            <div className="admin-date-picker-field floating-ad-date-range-field">
+              <span>Schedule window (optional)</span>
+              <PremiumDateRangePicker
+                start={ad.startsAt}
+                end={ad.endsAt}
+                label="Floating ad schedule"
+                includeTime
+                onChange={({ start, end }) => setAd((current) => ({ ...current, startsAt: start, endsAt: end }))}
+              />
+            </div>
             <label><span>Fallback image URL</span><input value={ad.fallbackImageUrl} placeholder="https://…" onChange={(event) => setAd((current) => ({ ...current, fallbackImageUrl: event.target.value }))} /></label>
             <label><span>Visual effect</span><UnifiedSingleSelect value={ad.effect} onChange={(event) => setAd((current) => ({ ...current, effect: event.target.value as FloatingAd["effect"] }))}><option value="WAVE">Wave</option><option value="PULSE">Pulse</option><option value="GLOW">Glow</option></UnifiedSingleSelect></label>
             <label className="campaign-color-field"><span>Primary light</span><PremiumColorPicker value={ad.primaryColor} label="Primary light" onChange={(next) => setAd((current) => ({ ...current, primaryColor: next.slice(0, 7).toUpperCase() }))} /><code>{ad.primaryColor}</code></label>

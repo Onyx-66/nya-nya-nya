@@ -1,7 +1,7 @@
 "use client";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
-import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 
 import {
   ArrowClockwise,
@@ -371,8 +371,16 @@ export function CommercialSettingsPanel({
               }
             />
           </label>
-          <div className="admin-date-picker-field"><span>Start date (optional)</span><PremiumDateTimePicker value={announcement.startsAt} label="Start date" onChange={(next) => update((current) => ({ ...current, announcement: { ...current.announcement, startsAt: next } }))} /></div>
-          <div className="admin-date-picker-field"><span>End date (optional)</span><PremiumDateTimePicker value={announcement.endsAt} label="End date" onChange={(next) => update((current) => ({ ...current, announcement: { ...current.announcement, endsAt: next } }))} /></div>
+          <div className="admin-date-picker-field commercial-date-range-field">
+            <span>Schedule window (optional)</span>
+            <PremiumDateRangePicker
+              start={announcement.startsAt}
+              end={announcement.endsAt}
+              label="Announcement schedule"
+              includeTime
+              onChange={({ start, end }) => update((current) => ({ ...current, announcement: { ...current.announcement, startsAt: start, endsAt: end } }))}
+            />
+          </div>
         </div>
         <div className="announcement-reset">
           <span>

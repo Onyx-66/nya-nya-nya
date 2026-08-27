@@ -5,7 +5,6 @@ import { DotsRing } from "@/components/nyascans/DotsRing";
 import {
   ArrowDown,
   ArrowUp,
-  CalendarBlank,
   DotsSixVertical,
   MagnifyingGlass,
   Plus,
@@ -20,7 +19,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 import {
   AdminPageScaffold,
   useUnsavedChanges,
@@ -503,8 +502,17 @@ export function PinnedSeriesPanel({
                     </span>
                   </div>
                   <div className="v481-pin-date-grid">
-                    <div className="admin-date-picker-field"><span><CalendarBlank /> Start (optional)</span><PremiumDateTimePicker value={item.startsAt} label="Start date" onChange={(next) => updateItem(item.seriesId, (current) => ({ ...current, startsAt: next }))} /></div>
-                    <div className="admin-date-picker-field"><span><CalendarBlank /> End (optional)</span><PremiumDateTimePicker value={item.endsAt} label="End date" onChange={(next) => updateItem(item.seriesId, (current) => ({ ...current, endsAt: next }))} />{!validDates ? <em>End must be after start.</em> : null}</div>
+                    <div className="admin-date-picker-field v481-pin-range-field">
+                      <span>Schedule window (optional)</span>
+                      <PremiumDateRangePicker
+                        start={item.startsAt}
+                        end={item.endsAt}
+                        label="Schedule window"
+                        includeTime
+                        onChange={({ start, end }) => updateItem(item.seriesId, (current) => ({ ...current, startsAt: start, endsAt: end }))}
+                      />
+                      {!validDates ? <em>End must be after start.</em> : null}
+                    </div>
                   </div>
                   <div className="v481-pin-row-actions">
                     <span className="v481-feature-toggle is-active" aria-label={`${item.title} is Featured`}>
@@ -568,11 +576,10 @@ const PINNED_ADMIN_CSS = `
   .v481-schedule-badge[data-status='active'] { border-color:color-mix(in srgb,var(--success) 45%,var(--line)); color:var(--success); }
   .v481-schedule-badge[data-status='scheduled'] { border-color:color-mix(in srgb,var(--warning) 45%,var(--line)); color:var(--warning); }
   .v481-schedule-badge[data-status='expired'] { color:var(--muted); }
-  .v481-pin-date-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.55rem; }
-  .v481-pin-date-grid label { display:grid; gap:.3rem; color:var(--muted); font-size:.62rem; font-weight:700; }
-  .v481-pin-date-grid label > span { display:flex; align-items:center; gap:.25rem; }
-  .v481-pin-date-grid input { min-width:0; min-height:2.45rem; padding:.45rem .55rem; border:1px solid var(--line); border-radius:var(--site-button-radius,var(--radius-small)); background:var(--bg-soft); color:var(--text); font-size:.68rem; }
-  .v481-pin-date-grid input[aria-invalid='true'] { border-color:var(--danger); }
+  .v481-pin-date-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:.55rem; }
+  .v481-pin-range-field { display:grid; gap:.3rem; min-width:0; color:var(--muted); font-size:.62rem; font-weight:700; }
+  .v481-pin-range-field > span { display:flex; align-items:center; gap:.25rem; }
+  .v481-pin-range-field .premium-picker { width:100%; }
   .v481-pin-date-grid em { color:var(--danger); font-size:.6rem; font-style:normal; }
   .v481-pin-row-actions,.v481-order-buttons { display:flex; align-items:center; gap:.35rem; }
   .v481-feature-toggle,.v481-order-buttons button,.v481-remove-button { display:inline-flex; min-height:2.35rem; align-items:center; justify-content:center; gap:.32rem; padding:0 .65rem; border:1px solid var(--line); border-radius:var(--site-button-radius,var(--radius-small)); background:var(--surface); color:var(--text-soft); cursor:pointer; font-size:.68rem; font-weight:750; }

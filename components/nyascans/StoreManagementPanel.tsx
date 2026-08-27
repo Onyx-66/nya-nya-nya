@@ -3,7 +3,7 @@ import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { PremiumColorPicker } from "@/components/nyascans/PremiumColorPicker";
-import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 /* eslint-disable @next/next/no-img-element */
 
 import {
@@ -1117,8 +1117,16 @@ export function StoreManagementPanel({
                 }
               />
             </label>
-            <div className="admin-date-picker-field"><span>Starts</span><PremiumDateTimePicker value={collectionDraft.startsAt} label="Collection starts" onChange={(next) => setCollectionDraft((current) => ({ ...current, startsAt: next ? dateInput(next) : "" }))} /></div>
-            <div className="admin-date-picker-field"><span>Ends</span><PremiumDateTimePicker value={collectionDraft.endsAt} label="Collection ends" onChange={(next) => setCollectionDraft((current) => ({ ...current, endsAt: next ? dateInput(next) : "" }))} /></div>
+            <div className="admin-date-picker-field store-collection-date-range-field">
+              <span>Seasonal window (optional)</span>
+              <PremiumDateRangePicker
+                start={collectionDraft.startsAt}
+                end={collectionDraft.endsAt}
+                label="Collection schedule"
+                includeTime
+                onChange={({ start, end }) => setCollectionDraft((current) => ({ ...current, startsAt: start ? dateInput(start) : "", endsAt: end ? dateInput(end) : "" }))}
+              />
+            </div>
             <label className="store-admin-check">
               <input
                 type="checkbox"
@@ -1349,8 +1357,16 @@ export function StoreManagementPanel({
                                 }
                               />
                             </label>
-                            <div className="admin-date-picker-field"><span>Starts</span><PremiumDateTimePicker value={collectionEditDraft.startsAt} label="Collection starts" onChange={(next) => setCollectionEditDraft({ ...collectionEditDraft, startsAt: next ? dateInput(next) : "" })} /></div>
-                            <div className="admin-date-picker-field"><span>Ends</span><PremiumDateTimePicker value={collectionEditDraft.endsAt} label="Collection ends" onChange={(next) => setCollectionEditDraft({ ...collectionEditDraft, endsAt: next ? dateInput(next) : "" })} /></div>
+                            <div className="admin-date-picker-field store-collection-date-range-field">
+                              <span>Seasonal window (optional)</span>
+                              <PremiumDateRangePicker
+                                start={collectionEditDraft.startsAt}
+                                end={collectionEditDraft.endsAt}
+                                label="Collection schedule"
+                                includeTime
+                                onChange={({ start, end }) => setCollectionEditDraft({ ...collectionEditDraft, startsAt: start ? dateInput(start) : "", endsAt: end ? dateInput(end) : "" })}
+                              />
+                            </div>
                             <label className="store-admin-check">
                               <input
                                 type="checkbox"

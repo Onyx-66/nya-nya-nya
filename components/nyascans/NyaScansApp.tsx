@@ -13843,6 +13843,7 @@ function OperationsView({
                   return (
                     <Fragment key={item.slug}>
                       <a
+                        className={item.children?.length ? "ops-nav-parent" : undefined}
                         href={sectionHref(item.label)}
                         title={effectiveSidebarCollapsed ? item.label : undefined}
                         aria-current={activeSection === item.label && !activeSubsection ? "page" : undefined}

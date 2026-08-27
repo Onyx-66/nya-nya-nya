@@ -9,6 +9,7 @@ import {
   CalendarWeekHeader,
   daysBetween,
   formatPickerDate,
+  formatPickerTime,
   MonthYearNavigator,
   parsePickerDate,
   PickerCalendarGrid,
@@ -22,6 +23,7 @@ export function PremiumDateRangePicker({
   disabled = false,
   className = "",
   valueFormat = "iso",
+  includeTime = false,
 }: {
   start?: string | null;
   end?: string | null;
@@ -30,6 +32,7 @@ export function PremiumDateRangePicker({
   disabled?: boolean;
   className?: string;
   valueFormat?: "iso" | "date";
+  includeTime?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -81,6 +84,21 @@ export function PremiumDateRangePicker({
     setViewMonth(new Date(selected.getFullYear(), selected.getMonth(), 1));
   }
 
+  function updateRangeTime(which: "start" | "end", value: string) {
+    const current = which === "start" ? draftStart : draftEnd;
+    if (!current || !value) return;
+    const [hours, minutes] = value.split(":").map(Number);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
+    const next = new Date(current);
+    next.setHours(hours, minutes, 0, 0);
+    if (which === "start") setDraftStart(next);
+    else setDraftEnd(next);
+  }
+
+  function timeInputValue(value: Date | null) {
+    return value ? `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}` : "";
+  }
+
   function apply() {
     onChange({
       start: draftStart ? (valueFormat === "date" ? `${draftStart.getFullYear()}-${String(draftStart.getMonth() + 1).padStart(2, "0")}-${String(draftStart.getDate()).padStart(2, "0")}` : draftStart.toISOString()) : null,
@@ -110,6 +128,8 @@ export function PremiumDateRangePicker({
   const duration = daysBetween(draftStart, draftEnd);
   const shownStart = start ? formatPickerDate(start) : "Select start date";
   const shownEnd = end ? formatPickerDate(end) : "Select end date";
+  const displayRangeValue = (value: string | null | undefined, placeholder: string) => value ? `${formatPickerDate(value)}${includeTime ? ` · ${formatPickerTime(value)}` : ""}` : placeholder;
+  const displayDraftValue = (value: Date | null) => value ? `${formatPickerDate(value)}${includeTime ? ` · ${formatPickerTime(value)}` : ""}` : "—";
 
   return (
     <div ref={rootRef} className={`premium-picker premium-date-range-picker ${className}`.trim()}>
@@ -122,7 +142,7 @@ export function PremiumDateRangePicker({
       </div>
       <button type="button" className="premium-picker-trigger premium-range-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
         <span className="premium-picker-trigger-label">{label}</span>
-        <span className="premium-range-trigger-value"><CalendarBlank size={18} />{shownStart}<span aria-hidden="true">→</span>{shownEnd}</span>
+        <span className="premium-range-trigger-value"><CalendarBlank size={18} />{displayRangeValue(start, shownStart)}<span aria-hidden="true">→</span>{displayRangeValue(end, shownEnd)}</span>
         <span className="premium-range-duration">{daysBetween(start ? parsePickerDate(start) : null, end ? parsePickerDate(end) : null)} Days</span>
       </button>
       {open ? (
@@ -135,9 +155,9 @@ export function PremiumDateRangePicker({
             <aside className="premium-range-summary">
               <span className="premium-range-summary-icon"><CalendarBlank size={24} /></span>
               <strong>SELECTED RANGE</strong>
-              <p>{draftStart ? formatPickerDate(draftStart) : "—"}</p>
+              <p>{displayDraftValue(draftStart)}</p>
               <span className="premium-range-arrow" aria-hidden="true">↓</span>
-              <p>{draftEnd ? formatPickerDate(draftEnd) : "—"}</p>
+              <p>{displayDraftValue(draftEnd)}</p>
               <span className="premium-range-duration">{duration} Days</span>
             </aside>
             <section className="premium-picker-calendar-pane" aria-label="Calendar range selector">
@@ -146,8 +166,15 @@ export function PremiumDateRangePicker({
               <PickerCalendarGrid viewMonth={viewMonth} selected={null} rangeStart={draftStart} rangeEnd={draftEnd} onSelect={selectDate} />
             </section>
           </div>
+          {includeTime ? (
+            <div className="premium-range-time-fields" aria-label="Range times">
+              <label><span>Start time</span><input type="time" value={timeInputValue(draftStart)} disabled={!draftStart} onChange={(event) => updateRangeTime("start", event.target.value)} /></label>
+              <span className="premium-range-time-arrow" aria-hidden="true">→</span>
+              <label><span>End time</span><input type="time" value={timeInputValue(draftEnd)} disabled={!draftEnd} onChange={(event) => updateRangeTime("end", event.target.value)} /></label>
+            </div>
+          ) : null}
           <div className="premium-picker-popover-footer">
-            <span>{draftStart ? formatPickerDate(draftStart) : "Select start date"} → {draftEnd ? formatPickerDate(draftEnd) : "Select end date"}</span>
+            <span>{draftStart ? displayDraftValue(draftStart) : "Select start date"} → {draftEnd ? displayDraftValue(draftEnd) : "Select end date"}</span>
             <button type="button" className="button button-primary premium-picker-done" onClick={apply} disabled={!draftStart}><Check size={17} />Apply Range</button>
           </div>
         </div>

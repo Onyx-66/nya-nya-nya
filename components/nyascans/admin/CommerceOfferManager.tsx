@@ -20,7 +20,7 @@ import {
   useState,
 } from "react";
 import { AdminMediaField } from "@/components/nyascans/admin/AdminMediaField";
-import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
+import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
 import {
   AdminPageScaffold,
   ConfirmActionDialog,
@@ -906,8 +906,16 @@ export function CommerceOfferManager({
                         }
                       />
                     </label>
-                    <div className="admin-date-picker-field"><span>Start date</span><PremiumDateTimePicker value={draft.startsAt} label="Start date" onChange={(next) => setDraft((current) => ({ ...current, startsAt: next }))} /></div>
-                    <div className="admin-date-picker-field"><span>End date</span><PremiumDateTimePicker value={draft.endsAt} label="End date" onChange={(next) => setDraft((current) => ({ ...current, endsAt: next }))} /></div>
+                    <div className="admin-date-picker-field commerce-offer-date-range-field">
+                      <span>Schedule window</span>
+                      <PremiumDateRangePicker
+                        start={draft.startsAt}
+                        end={draft.endsAt}
+                        label="Offer schedule"
+                        includeTime
+                        onChange={({ start, end }) => setDraft((current) => ({ ...current, startsAt: start, endsAt: end }))}
+                      />
+                    </div>
                     <label>
                       Theme
                       <UnifiedSingleSelect
