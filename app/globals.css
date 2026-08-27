@@ -62040,3 +62040,41 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
     font-size: .66rem;
   }
 }
+
+
+/* v49.20.0 — mobile Leaderboard periods use a full-width button row without the summary panel */
+@media (max-width: 760px) {
+  .user-leaderboard .user-ranking-controls {
+    display: block !important;
+    width: 100%;
+    max-width: none;
+    margin-bottom: 1.35rem;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .user-leaderboard .user-ranking-controls-copy {
+    display: none !important;
+  }
+
+  .user-leaderboard .user-ranking-periods {
+    width: 100% !important;
+    max-width: none;
+    margin: 0;
+    padding: .3rem;
+    border: 1px solid color-mix(in srgb, var(--leaderboard-accent) 35%, var(--theme-accent-l3));
+    border-radius: .9rem;
+    background: var(--theme-accent-l1);
+  }
+
+  .user-leaderboard .user-ranking-periods button {
+    min-width: 0;
+    width: 100%;
+    min-height: 2.9rem;
+    padding-inline: clamp(.25rem, 2vw, .8rem);
+    white-space: nowrap;
+  }
+}

@@ -85,6 +85,9 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(globals, /\.user-leaderboard \.user-ranking-periods button[\s\S]*width: 100%/);
   assert.match(globals, /white-space: nowrap/);
+  assert.match(globals, /user-ranking-controls-copy[\s\S]*display: none !important/);
+  assert.match(globals, /user-ranking-controls[\s\S]*border: 0 !important/);
+  assert.match(globals, /user-ranking-periods[\s\S]*width: 100% !important/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {
