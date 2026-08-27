@@ -4681,6 +4681,14 @@ type FloatingCampaign = {
   accentLinePosition: "top" | "left" | "bottom";
 };
 
+function floatingCampaignCategory(campaign: FloatingCampaign): "info" | "success" | "warning" | "promotional" {
+  const text = `${campaign.eyebrow} ${campaign.title} ${campaign.body} ${campaign.actionLabel}`.toLowerCase();
+  if (/(membership|premium|subscribe|support|plan|offer|promotion|reward)/.test(text)) return "promotional";
+  if (/(leaderboard|ranking|score|upvote|success|welcome)/.test(text)) return "success";
+  if (/(warning|issue|attention|alert|maintenance|outage)/.test(text)) return "warning";
+  return "info";
+}
+
 function renderAnnouncementTitle(title: string, highlightText: string) {
   if (!highlightText || !title.includes(highlightText)) return title;
   const [before, after] = title.split(highlightText, 2);
@@ -4707,6 +4715,7 @@ function FloatingHomeAd({ campaign }: { campaign: FloatingCampaign }) {
     <article
       className="home-announcement-banner"
       data-effect={campaign.effect.toLowerCase()}
+      data-category={floatingCampaignCategory(campaign)}
       data-accent-line={campaign.accentLinePosition}
       style={{
         "--campaign-primary": campaign.primaryColor || "#65B5FF",

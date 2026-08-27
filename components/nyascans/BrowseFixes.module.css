@@ -11,7 +11,8 @@
   --browse-control-border: color-mix(in srgb, var(--theme-primary) 48%, var(--theme-accent-l3));
   --browse-accent: var(--theme-primary);
   --browse-accent-ink: var(--theme-button-accent-alternate);
-  --browse-selected-pink: var(--theme-status-purple);
+  --browse-follow-fill: var(--theme-button-accent);
+  --browse-follow-border: var(--theme-primary-l1);
 }
 
 @media (max-width: 760px) {
@@ -93,9 +94,9 @@
 
   /* Grid follow state is pink only when the component has real follow state. */
   :global(body:has(.catalog-toolbar)) .browseScope :global(.catalog-card-follow.is-following) {
-    border-color: color-mix(in srgb, var(--theme-status-purple) 62%, var(--theme-accent-l4)) !important;
-    color: var(--theme-contrast-l1) !important;
-    background: var(--browse-selected-pink) !important;
+    border-color: var(--browse-follow-border) !important;
+    color: var(--theme-button-accent-alternate) !important;
+    background: var(--browse-follow-fill) !important;
     box-shadow: none !important;
   }
 
@@ -137,9 +138,9 @@
   }
 
   :global(body:has(.catalog-toolbar)) .browseScope :global(.series-list-row .list-follow-button.is-following) {
-    border-color: color-mix(in srgb, var(--theme-status-purple) 62%, var(--theme-accent-l4)) !important;
-    color: var(--theme-contrast-l1) !important;
-    background: var(--browse-selected-pink) !important;
+    border-color: var(--browse-follow-border) !important;
+    color: var(--theme-button-accent-alternate) !important;
+    background: var(--browse-follow-fill) !important;
     box-shadow: none !important;
   }
 

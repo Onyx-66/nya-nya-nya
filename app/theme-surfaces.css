@@ -896,3 +896,166 @@
   box-shadow: none !important;
   color: var(--section-accent) !important;
 }
+
+
+/* v49.17.0 — announcement categories are intentionally independent of user themes. */
+.home-announcement-slider > article[data-type="notice"],
+.home-announcement-slider > article[data-type="info"] {
+  --announcement-tone: #58a6ff !important;
+  border-color: #58a6ff !important;
+  background: #0d1d31 !important;
+  color: #eef6ff !important;
+}
+.home-announcement-slider > article[data-type="update"],
+.home-announcement-slider > article[data-type="success"] {
+  --announcement-tone: #4fd18b !important;
+  border-color: #4fd18b !important;
+  background: #0b261b !important;
+  color: #effff6 !important;
+}
+.home-announcement-slider > article[data-type="issue"],
+.home-announcement-slider > article[data-type="warning"] {
+  --announcement-tone: #f1c75b !important;
+  border-color: #f1c75b !important;
+  background: #30260c !important;
+  color: #fff9e8 !important;
+}
+.home-announcement-slider > article[data-type="support"],
+.home-announcement-slider > article[data-type="alert"],
+.home-announcement-slider > article[data-type="promotional"] {
+  --announcement-tone: #f15b78 !important;
+  border-color: #f15b78 !important;
+  background: #32121d !important;
+  color: #fff1f4 !important;
+}
+.home-announcement-slider > article:is(
+  [data-type="notice"], [data-type="info"], [data-type="update"], [data-type="success"],
+  [data-type="issue"], [data-type="warning"], [data-type="support"], [data-type="alert"], [data-type="promotional"]
+) > div:not(.announcement-slider-arrows) > :is(small, strong, p),
+.home-announcement-slider > article:is(
+  [data-type="notice"], [data-type="info"], [data-type="update"], [data-type="success"],
+  [data-type="issue"], [data-type="warning"], [data-type="support"], [data-type="alert"], [data-type="promotional"]
+) > a {
+  color: inherit !important;
+}
+
+/* Floating membership/leaderboard promotions use the same fixed semantic families. */
+.home-announcement-banner[data-category="info"] {
+  --campaign-primary: #58a6ff !important;
+  --campaign-secondary: #8bc7ff !important;
+  --campaign-background: #0d1d31 !important;
+  --campaign-border: #58a6ff !important;
+}
+.home-announcement-banner[data-category="success"] {
+  --campaign-primary: #4fd18b !important;
+  --campaign-secondary: #9be8bb !important;
+  --campaign-background: #0b261b !important;
+  --campaign-border: #4fd18b !important;
+}
+.home-announcement-banner[data-category="warning"] {
+  --campaign-primary: #f1c75b !important;
+  --campaign-secondary: #ffe79a !important;
+  --campaign-background: #30260c !important;
+  --campaign-border: #f1c75b !important;
+}
+.home-announcement-banner[data-category="promotional"] {
+  --campaign-primary: #f15b78 !important;
+  --campaign-secondary: #ff9bb0 !important;
+  --campaign-background: #32121d !important;
+  --campaign-border: #f15b78 !important;
+}
+.home-announcement-banner[data-category] {
+  border-color: var(--campaign-border) !important;
+  background: var(--campaign-background) !important;
+}
+
+/* New Series keeps brightness/scale feedback, but never paints a shadow on interaction. */
+.home-main .public-new-series .new-series-card:is(:hover, :focus-visible, :active),
+.home-main .public-new-series .new-series-cover:is(:hover, :focus-visible, :active),
+.home-main .public-new-series .new-series-cover img:is(:hover, :focus-visible, :active) {
+  box-shadow: none !important;
+}
+
+
+/* v49.17.0 — announcements intentionally ignore user-theme color tokens. */
+.home-announcement-slider > article:is([data-type="notice"], [data-type="info"]) {
+  --announcement-tone: #58a6ff !important;
+  border-color: #58a6ff !important;
+  background: #0d1d31 !important;
+  color: #eef6ff !important;
+}
+.home-announcement-slider > article:is([data-type="update"], [data-type="success"]) {
+  --announcement-tone: #4fd18b !important;
+  border-color: #4fd18b !important;
+  background: #0b261b !important;
+  color: #effff6 !important;
+}
+.home-announcement-slider > article:is([data-type="issue"], [data-type="warning"]) {
+  --announcement-tone: #f1c75b !important;
+  border-color: #f1c75b !important;
+  background: #30260c !important;
+  color: #fff9e8 !important;
+}
+.home-announcement-slider > article:is([data-type="support"], [data-type="alert"], [data-type="promotional"]) {
+  --announcement-tone: #f15b78 !important;
+  border-color: #f15b78 !important;
+  background: #32121d !important;
+  color: #fff1f4 !important;
+}
+.home-announcement-slider > article:is(
+  [data-type="notice"], [data-type="info"], [data-type="update"], [data-type="success"],
+  [data-type="issue"], [data-type="warning"], [data-type="support"], [data-type="alert"], [data-type="promotional"]
+) > div:not(.announcement-slider-arrows) > :is(small, strong, p),
+.home-announcement-slider > article:is(
+  [data-type="notice"], [data-type="info"], [data-type="update"], [data-type="success"],
+  [data-type="issue"], [data-type="warning"], [data-type="support"], [data-type="alert"], [data-type="promotional"]
+) > a {
+  color: inherit !important;
+}
+
+.home-announcement-banner[data-category="info"] {
+  --campaign-primary: #58a6ff !important;
+  --campaign-secondary: #8bc7ff !important;
+  --campaign-background: #0d1d31 !important;
+  --campaign-border: #58a6ff !important;
+}
+.home-announcement-banner[data-category="success"] {
+  --campaign-primary: #4fd18b !important;
+  --campaign-secondary: #9be8bb !important;
+  --campaign-background: #0b261b !important;
+  --campaign-border: #4fd18b !important;
+}
+.home-announcement-banner[data-category="warning"] {
+  --campaign-primary: #f1c75b !important;
+  --campaign-secondary: #ffe79a !important;
+  --campaign-background: #30260c !important;
+  --campaign-border: #f1c75b !important;
+}
+.home-announcement-banner[data-category="promotional"] {
+  --campaign-primary: #f15b78 !important;
+  --campaign-secondary: #ff9bb0 !important;
+  --campaign-background: #32121d !important;
+  --campaign-border: #f15b78 !important;
+}
+.home-announcement-banner[data-category] {
+  border-color: var(--campaign-border) !important;
+  background: var(--campaign-background) !important;
+}
+
+.home-main .public-new-series .new-series-card:is(:hover, :focus-visible, :active),
+.home-main .public-new-series .new-series-cover:is(:hover, :focus-visible, :active),
+.home-main .public-new-series .new-series-cover img:is(:hover, :focus-visible, :active) {
+  box-shadow: none !important;
+}
+
+.home-announcement-banner[data-category]::after {
+  background: conic-gradient(
+    from var(--home-announcement-angle, 0deg),
+    transparent 0 54%,
+    color-mix(in srgb, var(--campaign-primary) 42%, #ffffff) 64%,
+    var(--campaign-primary) 74%,
+    var(--campaign-secondary) 81%,
+    transparent 89%
+  ) !important;
+  box-shadow: 0 0 1rem color-mix(in srgb, var(--campaign-primary) 24%, transparent) !important;
+}

@@ -6,6 +6,8 @@ import {
   Check,
   ClipboardText,
   DownloadSimple,
+  Eye,
+  FileText,
   FloppyDisk,
   LinkSimple,
   Palette,
@@ -709,7 +711,7 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
                       <option value={preset.id} key={preset.id}>{preset.theme.name}</option>
                     ))}
                   </UnifiedSingleSelect>
-                  <button type="button" onClick={createNew}>Use as new base</button>
+                  <button className="button button-secondary" type="button" onClick={createNew}>Use as new base</button>
                 </span>
               </label>
               <label>
@@ -725,7 +727,7 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
                       <option key={saved.id} value={saved.id}>{saved.theme.name}</option>
                     ))}
                   </UnifiedSingleSelect>
-                  <button type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>Load</button>
+                  <button className="button button-secondary" type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>Load</button>
                 </span>
               </label>
             </div>
@@ -771,19 +773,21 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
             <div className="theme-builder-action-groups">
               <div className="theme-builder-actions theme-builder-primary-actions" aria-label="Theme actions">
                 <button
-                  className="button button-primary"
+                  className="button button-primary theme-builder-save-action"
                   type="button"
                   onClick={() => void saveTheme()}
                   disabled={saving || !controller.hydrated || controller.syncing}
                 >
                   <FloppyDisk size={17} /> {saving ? "Saving…" : "Save theme"}
                 </button>
-                <button className="button button-secondary" type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>
-                  <ArrowClockwise size={17} /> Load theme
-                </button>
-                <button className="button button-secondary" type="button" onClick={createNew}>
-                  <Plus size={17} /> Create new
-                </button>
+                <div className="theme-builder-secondary-actions">
+                  <button className="button button-secondary" type="button" onClick={() => loadSavedTheme()} disabled={!customThemes.length}>
+                    <ArrowClockwise size={17} /> Load theme
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={createNew}>
+                    <Plus size={17} /> Create new
+                  </button>
+                </div>
               </div>
               <section className="theme-builder-export" aria-labelledby="theme-export-title">
                 <header className="theme-builder-export-header">
@@ -792,25 +796,55 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
                     <h3 id="theme-export-title">Share or download</h3>
                   </div>
                 </header>
-                <div className="theme-builder-actions theme-builder-export-actions">
-                  <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("json")}>
-                    <LinkSimple size={17} /> Copy JSON URL
-                  </button>
-                  <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("markdown")}>
-                    <LinkSimple size={17} /> Copy Markdown URL
-                  </button>
-                  <button className="button button-secondary" type="button" onClick={exportTheme}>
-                    <DownloadSimple size={17} /> Current JSON
-                  </button>
-                  <button className="button button-secondary" type="button" onClick={exportMarkdownTheme}>
-                    <DownloadSimple size={17} /> Current MD
-                  </button>
-                  <button className="button button-secondary" type="button" onClick={downloadBlankTemplate}>
-                    <DownloadSimple size={17} /> Blank JSON
-                  </button>
-                  <button className="button button-secondary" type="button" onClick={downloadBlankMarkdownTemplate}>
-                    <DownloadSimple size={17} /> Blank MD
-                  </button>
+                <div className="theme-builder-export-group theme-builder-share-group">
+                  <div className="theme-builder-export-group-heading">
+                    <strong>Share</strong>
+                    <span>Copy a portable URL for either theme format.</span>
+                  </div>
+                  <div className="theme-builder-actions theme-builder-export-actions">
+                    <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("json")}>
+                      <span className="theme-export-file-icon" data-file-type="JSON"><FileText size={16} /><small>JSON</small></span>
+                      Copy URL
+                    </button>
+                    <button className="button button-secondary" type="button" onClick={() => void copyShareUrl("markdown")}>
+                      <span className="theme-export-file-icon" data-file-type="MD"><FileText size={16} /><small>MD</small></span>
+                      Copy URL
+                    </button>
+                  </div>
+                </div>
+                <div className="theme-builder-export-group theme-builder-download-group">
+                  <div className="theme-builder-export-group-heading">
+                    <strong>Download</strong>
+                    <span>Save the current theme or an empty template.</span>
+                  </div>
+                  <div className="theme-builder-download-grid">
+                    <div className="theme-builder-download-format" data-format="JSON">
+                      <small>JSON</small>
+                      <div className="theme-builder-actions theme-builder-export-actions">
+                        <button className="button button-secondary" type="button" onClick={exportTheme}>
+                          <span className="theme-export-file-icon" data-file-type="JSON"><FileText size={16} /><small>JSON</small></span>
+                          Current
+                        </button>
+                        <button className="button button-secondary" type="button" onClick={downloadBlankTemplate}>
+                          <span className="theme-export-file-icon" data-file-type="JSON"><FileText size={16} /><small>JSON</small></span>
+                          Template
+                        </button>
+                      </div>
+                    </div>
+                    <div className="theme-builder-download-format" data-format="MD">
+                      <small>MD</small>
+                      <div className="theme-builder-actions theme-builder-export-actions">
+                        <button className="button button-secondary" type="button" onClick={exportMarkdownTheme}>
+                          <span className="theme-export-file-icon" data-file-type="MD"><FileText size={16} /><small>MD</small></span>
+                          Current
+                        </button>
+                        <button className="button button-secondary" type="button" onClick={downloadBlankMarkdownTemplate}>
+                          <span className="theme-export-file-icon" data-file-type="MD"><FileText size={16} /><small>MD</small></span>
+                          Template
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -875,7 +909,7 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
 
           <section className="theme-builder-card theme-import-card">
             <header>
-              <div><small>Portable themes</small><h2>Import theme</h2></div>
+              <div><small>Portable themes</small><h2>Test theme</h2></div>
               <ClipboardText size={22} />
             </header>
             <p>Paste a shared NyaScans theme URL, exported JSON, or human-readable Markdown. Validation is atomic: incomplete themes are never applied.</p>
@@ -888,10 +922,10 @@ export function ThemeBuilderPage({ controller, notify, embedded = false }: Theme
             />
             <div className="theme-builder-actions">
               <button className="button button-primary" type="button" onClick={() => applyImport(importValue)}>
-                <UploadSimple size={17} /> Import theme
+                <Eye size={17} /> Test theme
               </button>
               <button className="button button-secondary" type="button" onClick={() => fileInput.current?.click()}>
-                <UploadSimple size={17} /> Choose JSON / Markdown file
+                <UploadSimple size={17} /> Upload JSON / Markdown file
               </button>
               <input ref={fileInput} className="sr-only" type="file" accept="application/json,.json,text/markdown,.md" onChange={(event) => void importFile(event)} />
             </div>

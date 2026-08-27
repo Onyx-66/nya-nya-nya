@@ -61520,3 +61520,228 @@ dialog::backdrop,
 .home-main .editors-pick-heading h2 {
   color: var(--theme-text-color) !important;
 }
+
+
+/* v49.17.0 — cross-surface refinement authority. */
+
+/* Top Teams: keep filter and destination actions adjacent on narrow screens. */
+.public-teams .teams-heading-actions {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .55rem;
+}
+.public-teams .teams-heading-actions > .compact-language-menu,
+.public-teams .teams-heading-actions > .latest-all-action {
+  flex: 0 0 auto;
+}
+.public-teams .teams-heading-actions > .compact-language-menu > summary,
+.public-teams .teams-heading-actions > .latest-all-action {
+  min-height: 2.65rem;
+  border-color: color-mix(in srgb, var(--section-accent, var(--theme-primary)) 62%, var(--theme-accent-l3)) !important;
+  color: var(--section-accent, var(--theme-primary)) !important;
+  background: color-mix(in srgb, var(--section-accent, var(--theme-primary)) 10%, var(--theme-accent)) !important;
+}
+.public-teams .teams-heading-actions > .compact-language-menu > summary svg,
+.public-teams .teams-heading-actions > .latest-all-action svg {
+  color: currentColor !important;
+}
+
+/* Top three ranks use small, fixed-color corner medals; rank no longer changes card height. */
+.public-teams .team-rank-medal {
+  position: absolute;
+  z-index: 7;
+  top: .72rem;
+  left: .72rem;
+  display: grid;
+  width: 2.05rem;
+  height: 2.05rem;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 50%;
+  box-shadow: 0 .28rem .8rem rgb(0 0 0 / 24%);
+  pointer-events: none;
+}
+.public-teams .team-rank-medal.rank-1 {
+  color: #4a3200;
+  background: #d4af37;
+}
+.public-teams .team-rank-medal.rank-2 {
+  color: #26313b;
+  background: #c0c0c0;
+}
+.public-teams .team-rank-medal.rank-3 {
+  color: #4b2511;
+  background: #cd7f32;
+}
+.public-teams .team-carousel-card,
+.public-teams .team-carousel-card.is-ranked-1,
+.public-teams .team-carousel-card.is-ranked-2,
+.public-teams .team-carousel-card.is-ranked-3 {
+  min-height: 0 !important;
+  height: 100%;
+  align-self: stretch;
+}
+.public-teams .team-carousel-card > div { min-height: 0; }
+
+/* Theme Builder: shared action treatment for inline controls and mobile grouping. */
+.theme-builder-inline-control > .button {
+  min-height: 2.65rem;
+  padding: 0 1rem;
+  border: 1px solid var(--theme-accent-l4);
+  border-radius: var(--site-button-radius, .75rem);
+  color: var(--theme-text-color);
+  background: var(--theme-accent-l2);
+  font-size: .75rem;
+  font-weight: 750;
+}
+.theme-builder-inline-control > .button:hover,
+.theme-builder-inline-control > .button:focus-visible {
+  border-color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 12%, var(--theme-accent-l2));
+}
+.theme-builder-secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .55rem;
+}
+.theme-builder-secondary-actions > .button { width: 100%; }
+.theme-builder-save-action { width: 100%; }
+.theme-builder-card > header > span {
+  width: max-content;
+  min-width: max-content;
+  max-width: 100%;
+  padding-inline: .72rem;
+  white-space: nowrap;
+}
+.theme-builder-export {
+  overflow: hidden;
+}
+.theme-builder-export-group {
+  display: grid;
+  gap: .65rem;
+  padding: 1rem 1.15rem;
+  border-top: 1px solid var(--theme-accent-l3);
+}
+.theme-builder-export-group-heading {
+  display: grid;
+  gap: .18rem;
+}
+.theme-builder-export-group-heading strong,
+.theme-builder-download-grid > div > small {
+  color: var(--theme-text-color);
+  font-size: .74rem;
+  font-weight: 800;
+}
+.theme-builder-export-group-heading span {
+  color: var(--theme-mid-tone);
+  font-size: .66rem;
+}
+.theme-builder-export-actions {
+  padding: 0;
+}
+.theme-builder-export-actions .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .5rem;
+}
+.theme-export-file-icon {
+  position: relative;
+  display: inline-grid;
+  width: 1.5rem;
+  height: 1.65rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--theme-primary);
+  border-radius: .25rem;
+  color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+}
+.theme-export-file-icon small {
+  position: absolute;
+  right: -.28rem;
+  bottom: -.2rem;
+  padding: .08rem .13rem;
+  border-radius: .16rem;
+  color: var(--theme-button-accent-alternate);
+  background: var(--theme-primary);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: .42rem;
+  font-weight: 850;
+  line-height: 1;
+}
+.theme-builder-download-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+.theme-builder-download-grid > div {
+  display: grid;
+  gap: .45rem;
+}
+.theme-builder-download-grid .theme-builder-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+/* Browse: selected state is a saturated version of the same theme button hue. */
+body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-row .list-follow-button.is-following) {
+  border-color: color-mix(in srgb, var(--theme-button-accent) 86%, var(--theme-primary-l1)) !important;
+  color: var(--theme-button-accent-alternate) !important;
+  background: var(--theme-button-accent) !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 720px) {
+  .home-main .public-teams .section-heading {
+    flex-wrap: wrap !important;
+  }
+  .home-main .public-teams .section-heading .section-heading-main {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  .home-main .public-teams .teams-heading-actions {
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+  }
+  .theme-builder-secondary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .theme-builder-download-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 460px) {
+  .home-main .public-teams .section-heading-main h2 {
+    font-size: clamp(1.2rem, 7vw, 1.65rem);
+  }
+  .home-main .public-teams .teams-heading-actions {
+    gap: .35rem;
+  }
+  .home-main .public-teams .teams-heading-actions > .compact-language-menu > summary,
+  .home-main .public-teams .teams-heading-actions > .latest-all-action {
+    min-height: 2.45rem;
+    padding-inline: .58rem;
+    font-size: .68rem;
+  }
+}
+@media (max-width: 380px) {
+  .home-main .public-teams .section-heading {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .home-main .public-teams .teams-heading-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-teams .team-carousel-card { transition: none; }
+}
