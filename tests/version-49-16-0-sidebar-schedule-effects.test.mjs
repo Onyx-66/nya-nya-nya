@@ -56,4 +56,6 @@ test("Pinned and New Series rails do not paint the requested drop shadows", () =
   assert.match(featureStyles, /\.v481-pinned-slide > \.v481-pin-card \{ border-color:transparent; box-shadow:none; \}/);
   assert.match(globalStyles, /\.home-main \.public-new-series \.new-series-card,[\s\S]*?box-shadow: none !important/);
   assert.match(globalStyles, /\.home-main \.public-new-series \.new-series-cover,[\s\S]*?box-shadow: none !important/);
+  assert.match(globalStyles, /\.card-coverflow__slide > \.v481-pin-card[\s\S]*?box-shadow: none/);
+  assert.match(globalStyles, /\.card-coverflow__slide\[data-coverflow-active="true"\] > \.v481-pin-card[\s\S]*?box-shadow: none/);
 });
