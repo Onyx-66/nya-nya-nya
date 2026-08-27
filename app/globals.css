@@ -62078,3 +62078,43 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
     white-space: nowrap;
   }
 }
+
+
+/* v49.21.0 — desktop Leaderboard metric hierarchy and table alignment */
+@media (min-width: 761px) {
+  .user-leaderboard .user-ranking-place {
+    top: -1.7rem;
+  }
+
+  .user-leaderboard .is-rank-1 .user-ranking-place {
+    top: -2rem;
+  }
+
+  .user-leaderboard .user-ranking-podium-metrics {
+    grid-template-columns: 1fr;
+    gap: .7rem;
+  }
+
+  .user-leaderboard .user-ranking-podium-score {
+    display: grid;
+    width: 100%;
+    justify-items: center;
+  }
+
+  .user-leaderboard .user-ranking-podium-score .user-ranking-metric {
+    width: fit-content;
+    justify-content: center;
+  }
+
+  .user-leaderboard .user-ranking-podium-secondary {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .3rem;
+  }
+
+  .user-leaderboard .user-ranking-list-labels > span:first-child,
+  .user-leaderboard .user-ranking-row-metrics > .user-ranking-metric:first-child {
+    transform: translateX(-.55rem);
+  }
+}

@@ -3,6 +3,7 @@
 
 import {
   ArrowFatUp,
+  BookOpenText,
   ChatCircle,
   Crown,
   Fire,
@@ -123,30 +124,34 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
         <strong className="user-ranking-podium-name">{entry.displayName}</strong>
         <span className="user-ranking-tier">{rankingTier(entry)}</span>
         <div className="user-ranking-podium-metrics">
-          <RankingMetric
-            icon={<Fire weight="fill" aria-hidden="true" />}
-            label="Score"
-            value={number(entry.score)}
-            accent
-          />
-          <RankingMetric
-            icon={<ChatCircle weight="fill" aria-hidden="true" />}
-            label="Comments"
-            value={entry.communityVisible ? number(entry.commentCount) : "Private"}
-            expanded
-          />
-          <RankingMetric
-            icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
-            label="Reacts"
-            value={entry.communityVisible ? number(entry.upvotes) : "Private"}
-            expanded
-          />
-          <RankingMetric
-            icon={<Fire weight="fill" aria-hidden="true" />}
-            label="Chapters"
-            value={number(entry.chaptersRead)}
-            expanded
-          />
+          <div className="user-ranking-podium-score">
+            <RankingMetric
+              icon={<Fire weight="fill" aria-hidden="true" />}
+              label="Score"
+              value={number(entry.score)}
+              accent
+            />
+          </div>
+          <div className="user-ranking-podium-secondary">
+            <RankingMetric
+              icon={<ChatCircle weight="fill" aria-hidden="true" />}
+              label="Comments"
+              value={entry.communityVisible ? number(entry.commentCount) : "Private"}
+              expanded
+            />
+            <RankingMetric
+              icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
+              label="Reacts"
+              value={entry.communityVisible ? number(entry.upvotes) : "Private"}
+              expanded
+            />
+            <RankingMetric
+              icon={<BookOpenText weight="fill" aria-hidden="true" />}
+              label="Chapters"
+              value={number(entry.chaptersRead)}
+              expanded
+            />
+          </div>
         </div>
       </a>
     </li>
@@ -175,17 +180,17 @@ function RankingListRow({ entry, viewer = false }: { entry: LeaderboardEntry; vi
           <RankingMetric
             icon={<ChatCircle weight="fill" aria-hidden="true" />}
             label="Comments"
-            value={entry.communityVisible ? number(entry.commentCount) : "Private"}
+            value={number(entry.commentCount)}
             expanded
           />
           <RankingMetric
             icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
             label="Reacts"
-            value={entry.communityVisible ? number(entry.upvotes) : "Private"}
+            value={number(entry.upvotes)}
             expanded
           />
           <RankingMetric
-            icon={<Fire weight="fill" aria-hidden="true" />}
+            icon={<BookOpenText weight="fill" aria-hidden="true" />}
             label="Chapters"
             value={number(entry.chaptersRead)}
             expanded

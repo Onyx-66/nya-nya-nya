@@ -13,6 +13,7 @@ const browse = read("components/nyascans/BrowseFixes.module.css");
 const popular = read("components/nyascans/HotThisWeek.tsx");
 const popularApi = read("app/api/v1/hot-this-week/route.ts");
 const leaderboard = read("components/nyascans/UserLeaderboardView.tsx");
+const leaderboardApi = read("app/api/v1/leaderboard/route.ts");
 const themeSystem = read("lib/theme-system.ts");
 const siteConfiguration = read("lib/server/site-configuration.ts");
 const promotionsApi = read("app/api/v1/home-promotions/route.ts");
@@ -73,6 +74,13 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(leaderboard, /<h1 id="leaderboard-title">Leaderboard<\/h1>/);
   assert.match(leaderboard, /label="Reacts"/);
   assert.match(leaderboard, /label="Chapters"/);
+  assert.match(leaderboard, /BookOpenText weight="fill" aria-hidden="true"/);
+  assert.match(leaderboard, /user-ranking-podium-score/);
+  assert.match(leaderboard, /user-ranking-podium-secondary/);
+  assert.match(leaderboard, /value=\{number\(entry\.commentCount\)\}/);
+  assert.match(leaderboard, /value=\{number\(entry\.upvotes\)\}/);
+  assert.match(leaderboardApi, /COALESCE\(raw_comments\.commentCount, 0\) AS commentCount/);
+  assert.match(leaderboardApi, /COALESCE\(raw_votes\.upvotes, 0\) AS upvotes/);
   assert.match(themeSystem, /id: "home-leaderboard"/);
   assert.match(themeSystem, /homeLeaderboardAccent/);
   assert.match(siteConfiguration, /normalizeLegacyLeaderboardLabels/);
@@ -88,6 +96,9 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-controls-copy[\s\S]*display: none !important/);
   assert.match(globals, /user-ranking-controls[\s\S]*border: 0 !important/);
   assert.match(globals, /user-ranking-periods[\s\S]*width: 100% !important/);
+  assert.match(globals, /user-ranking-place[\s\S]*top: -1\.7rem/);
+  assert.match(globals, /user-ranking-podium-secondary[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(globals, /user-ranking-row-metrics > \.user-ranking-metric:first-child[\s\S]*transform: translateX\(-\.55rem\)/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {

@@ -159,11 +159,11 @@ export async function GET(request: Request) {
                 up.avatar_key AS avatarKey,
                 up.revision,
                 up.show_comments AS communityVisible,
-                COALESCE(mt.commentCount, 0) AS commentCount,
+                COALESCE(raw_comments.commentCount, 0) AS commentCount,
                 COALESCE(st.shardsCollected, 0) AS shardsCollected,
                 COALESCE(ls.lifetimeShards, 0) AS lifetimeShards,
                 COALESCE(ct.chaptersRead, 0) AS chaptersRead,
-                COALESCE(vt.upvotes, 0) AS upvotes,
+                COALESCE(raw_votes.upvotes, 0) AS upvotes,
                 COALESCE(vt.downvotes, 0) AS downvotes,
                 COALESCE(vt.reputation, 0) AS reputation,
                 COALESCE(st.shardsCollected, 0)
