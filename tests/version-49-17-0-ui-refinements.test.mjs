@@ -81,6 +81,10 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.doesNotMatch(app, /> Ranking<|Users Ranking/);
   assert.match(globals, /\.reader-setting-toggle > input[\s\S]*grid-column: 1/);
   assert.match(globals, /\.library-record-copy h3[\s\S]*text-overflow: ellipsis/);
+  assert.match(globals, /\.user-leaderboard \.user-ranking-periods[\s\S]*display: grid !important/);
+  assert.match(globals, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(globals, /\.user-leaderboard \.user-ranking-periods button[\s\S]*width: 100%/);
+  assert.match(globals, /white-space: nowrap/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {
