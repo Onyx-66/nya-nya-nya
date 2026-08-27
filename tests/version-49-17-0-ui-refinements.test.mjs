@@ -98,6 +98,8 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-periods[\s\S]*width: 100% !important/);
   assert.match(globals, /user-ranking-place[\s\S]*top: -1\.7rem/);
   assert.match(globals, /user-ranking-podium-secondary[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(globals, /user-ranking-list-heading[\s\S]*display: grid[\s\S]*grid-template-columns: 2\.6rem 3\.2rem minmax\(0, 1fr\) minmax\(19rem, 0\.72fr\)/);
+  assert.match(globals, /user-ranking-list-labels[\s\S]*grid-column: 4[\s\S]*justify-items: center/);
   assert.match(globals, /user-ranking-row-metrics > \.user-ranking-metric:first-child[\s\S]*transform: translateX\(-\.55rem\)/);
 });
 

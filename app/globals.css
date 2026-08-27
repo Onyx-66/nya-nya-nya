@@ -62080,7 +62080,7 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 }
 
 
-/* v49.21.0 — desktop Leaderboard metric hierarchy and table alignment */
+/* v49.21.1 — desktop Leaderboard metric hierarchy and table alignment */
 @media (min-width: 761px) {
   .user-leaderboard .user-ranking-place {
     top: -1.7rem;
@@ -62111,6 +62111,28 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
     width: 100%;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: .3rem;
+  }
+
+  .user-leaderboard .user-ranking-list-heading {
+    display: grid;
+    grid-template-columns: 2.6rem 3.2rem minmax(0, 1fr) minmax(19rem, 0.72fr);
+    align-items: center;
+    gap: 0.85rem;
+  }
+
+  .user-leaderboard .user-ranking-list-heading > :first-child {
+    grid-column: 1 / 4;
+    min-width: 0;
+  }
+
+  .user-leaderboard .user-ranking-list-labels {
+    grid-column: 4;
+    width: auto;
+    min-width: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    justify-items: center;
+    text-align: center;
   }
 
   .user-leaderboard .user-ranking-list-labels > span:first-child,
