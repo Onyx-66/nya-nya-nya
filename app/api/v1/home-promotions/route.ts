@@ -4,6 +4,12 @@ import { requestIdFor } from "@/lib/server/admin-utils";
 
 export const dynamic = "force-dynamic";
 
+function canonicalInternalUrl(value: string) {
+  return value === "/rankings" || value.startsWith("/rankings?")
+    ? value.replace(/^\/rankings(?=\/|\?|$)/, "/leaderboard")
+    : value;
+}
+
 export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
@@ -53,13 +59,19 @@ export async function GET(request: Request) {
       secondaryActions: (() => {
         try {
           const parsed = JSON.parse(String(ad.secondaryActionsJson ?? "[]"));
-          return Array.isArray(parsed)
-            ? parsed.filter((action): action is { label: string; url: string } =>
-                Boolean(action && typeof action === "object" && typeof action.label === "string" && typeof action.url === "string"),
-              ).slice(0, 6)
-            : [];
+            return Array.isArray(parsed)
+              ? parsed.filter((action): action is { label: string; url: string } =>
+                  Boolean(action && typeof action === "object" && typeof action.label === "string" && typeof action.url === "string"),
+                ).slice(0, 6).map((action) => ({
+                  ...action,
+                  url: canonicalInternalUrl(action.url),
+                }))
+              : [];
         } catch { return []; }
       })(),
+      destinationUrl: typeof ad.destinationUrl === "string"
+        ? canonicalInternalUrl(ad.destinationUrl)
+        : ad.destinationUrl,
       imageUrl: ad.imageKey
         ? `/api/v1/floating-ad-media?id=${encodeURIComponent(String(ad.id))}&v=${Number(ad.revision)}`
         : ad.fallbackImageUrl || null,

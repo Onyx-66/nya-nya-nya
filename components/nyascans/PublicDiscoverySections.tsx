@@ -164,7 +164,8 @@ function PublishingTeamCard({
       {record.rank <= 3 ? (
         <>
           <span className={`team-rank-medal rank-${record.rank}`} aria-label={`Top team rank ${record.rank}`}>
-            <Medal size={22} weight="fill" />
+            <Medal size={22} weight="fill" aria-hidden="true" />
+            <strong aria-hidden="true">{record.rank}</strong>
           </span>
         </>
       ) : null}

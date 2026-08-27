@@ -37,7 +37,7 @@ test("all Home data sections use the bounded helper and render a terminal branch
   assert.match(feature, /Recent reviews could not be loaded/);
   assert.match(discovery, /No teams publish in this language yet/);
   assert.match(app, /No reader activity yet/);
-  assert.match(popular, /No \{periodLabel\.toLowerCase\(\)\} ranking yet/);
+  assert.match(popular, /No \{periodLabel\.toLowerCase\(\)\} Most Popular titles yet/);
 });
 
 test("dark mode is the first-run default and the dark tokens are near-black", async () => {
@@ -56,7 +56,7 @@ test("logged-out meatball menu exposes public destinations and conditional Store
   const app = await readProjectFile("components/nyascans/NyaScansApp.tsx");
   const menuStart = app.indexOf('aria-label="Open site menu"');
   const menu = app.slice(menuStart, app.indexOf("</div>", menuStart));
-  for (const href of ["/browse", "/latest", "/rankings", "/teams", "/support", "/pinned", "/discounts"]) {
+  for (const href of ["/browse", "/latest", "/leaderboard", "/teams", "/support", "/pinned", "/discounts"]) {
     assert.match(menu, new RegExp(`href=\\"${href}\\"`), `${href} must be in the public menu`);
   }
   assert.match(menu, /lockAndPayVisible/);

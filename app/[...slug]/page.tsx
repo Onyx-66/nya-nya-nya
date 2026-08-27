@@ -137,7 +137,7 @@ export async function generateMetadata({
     latest: "Latest Updates",
     pinned: "Pinned Series",
     discounts: "Discounts",
-    rankings: "Users Ranking",
+    rankings: "Leaderboard",
     teams: "Publishing Teams",
     roulette: "Daily Roulette",
     status: "System Status",

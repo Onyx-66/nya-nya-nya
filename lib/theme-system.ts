@@ -65,6 +65,10 @@ export const homeSectionThemeTokenKeys = [
   "homePublishingTeamsAccent",
   "homeCommunityAccent",
   "homeHotThisWeekAccent",
+  "homeLeaderboardAccent",
+  "homeLeaderboardFirst",
+  "homeLeaderboardSecond",
+  "homeLeaderboardThird",
 ] as const;
 
 export const effectThemeTokenKeys = [
@@ -187,6 +191,10 @@ export const themeTokensSchema = z
     homePublishingTeamsAccent: hexColor,
     homeCommunityAccent: hexColor,
     homeHotThisWeekAccent: hexColor,
+    homeLeaderboardAccent: hexColor,
+    homeLeaderboardFirst: hexColor,
+    homeLeaderboardSecond: hexColor,
+    homeLeaderboardThird: hexColor,
     effectMovingLight: hexColor,
     effectMovingLightSecondary: hexColor,
     effectBadgeGlow: hexColor,
@@ -245,6 +253,10 @@ function extensionDefaults(tokens: LegacyCoreTokens) {
     homePublishingTeamsAccent: tokens.statusPurple,
     homeCommunityAccent: tokens.indicationBlue,
     homeHotThisWeekAccent: tokens.statusRed,
+    homeLeaderboardAccent: tokens.statusBlue,
+    homeLeaderboardFirst: tokens.statusYellow,
+    homeLeaderboardSecond: tokens.statusGrey,
+    homeLeaderboardThird: tokens.dangerL1,
     effectMovingLight: tokens.primary,
     effectMovingLightSecondary: tokens.primaryL2,
     effectBadgeGlow: tokens.statusPurple,
@@ -301,16 +313,18 @@ function upgradeLegacyThemeDocument(value: unknown) {
     return value;
   }
   const tokens = rawTokens as Record<string, unknown>;
-  const tokenNames = Object.keys(tokens);
-  const isExactLegacyTokenSet =
-    tokenNames.length === coreThemeTokenKeys.length &&
-    coreThemeTokenKeys.every((key) => Object.hasOwn(tokens, key));
-  if (!isExactLegacyTokenSet) return value;
+  const hasAllCoreTokens = coreThemeTokenKeys.every((key) => Object.hasOwn(tokens, key));
+  if (!hasAllCoreTokens) return value;
+  const defaults = extensionDefaults(tokens as LegacyCoreTokens);
+  const missingExtensions = Object.fromEntries(
+    Object.entries(defaults).filter(([key]) => !Object.hasOwn(tokens, key)),
+  );
+  if (!Object.keys(missingExtensions).length) return value;
   return {
     ...document,
     tokens: {
       ...tokens,
-      ...extensionDefaults(tokens as LegacyCoreTokens),
+      ...missingExtensions,
     },
   };
 }
@@ -454,6 +468,12 @@ export const themeTokenGroups = [
     tokens: ["homeHotThisWeekAccent"] as const,
   },
   {
+    id: "home-leaderboard",
+    name: "Leaderboard",
+    description: "Leaderboard surface, accent, and podium tier colors.",
+    tokens: ["homeLeaderboardAccent", "homeLeaderboardFirst", "homeLeaderboardSecond", "homeLeaderboardThird"] as const,
+  },
+  {
     id: "browse",
     name: "Browse Filters & Catalog",
     description: "Browse search, filters, grid/list cards, and catalog pagination.",
@@ -544,6 +564,10 @@ export const themeTokenLabels: Record<ThemeTokenKey, string> = {
   homePublishingTeamsAccent: "Publishing Teams Accent",
   homeCommunityAccent: "Recent Comments Accent",
   homeHotThisWeekAccent: "Hot This Week Accent",
+  homeLeaderboardAccent: "Leaderboard Accent",
+  homeLeaderboardFirst: "Leaderboard · 1st place",
+  homeLeaderboardSecond: "Leaderboard · 2nd place",
+  homeLeaderboardThird: "Leaderboard · 3rd place",
   effectMovingLight: "Moving Light",
   effectMovingLightSecondary: "Moving Light (secondary)",
   effectBadgeGlow: "Badge Glow",
@@ -1206,6 +1230,10 @@ const cssTokenNames: Record<ThemeTokenKey, string> = {
   homePublishingTeamsAccent: "--theme-home-publishing-teams-accent",
   homeCommunityAccent: "--theme-home-community-accent",
   homeHotThisWeekAccent: "--theme-home-hot-this-week-accent",
+  homeLeaderboardAccent: "--theme-home-leaderboard-accent",
+  homeLeaderboardFirst: "--theme-home-leaderboard-first",
+  homeLeaderboardSecond: "--theme-home-leaderboard-second",
+  homeLeaderboardThird: "--theme-home-leaderboard-third",
   effectMovingLight: "--theme-effect-moving-light",
   effectMovingLightSecondary: "--theme-effect-moving-light-secondary",
   effectBadgeGlow: "--theme-effect-badge-glow",

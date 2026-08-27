@@ -20,7 +20,7 @@ const [app, badge, features, publicApi, adminApi, adminPanel, schema, migration,
 test("logged-out overflow menu removes only duplicate Browse, Latest Updates, and Store links", () => {
   const menus = [...app.matchAll(/<div className="header-overflow-menu"[\s\S]*?<\/div>/g)].map((match) => match[0]);
   const menu = menus.at(-1) ?? "";
-  assert.match(menu, /href="\/rankings"/);
+  assert.match(menu, /href="\/leaderboard"/);
   assert.match(menu, /href="\/teams"/);
   assert.match(menu, /href="\/support"/);
   assert.match(menu, /href="\/pinned"/);

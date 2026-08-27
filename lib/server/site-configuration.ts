@@ -17,6 +17,31 @@ export type SiteConfigurationDocument = {
 
 const MAX_CONFIGURATION_BYTES = 500_000;
 
+function canonicalInternalUrl(value: string) {
+  return value === "/rankings" || value.startsWith("/rankings?")
+    ? value.replace(/^\/rankings(?=\/|\?|$)/, "/leaderboard")
+    : value;
+}
+
+function normalizeLegacyLeaderboardLabels(settings: SiteConfiguration): SiteConfiguration {
+  return {
+    ...settings,
+    footer: {
+      ...settings.footer,
+      groups: settings.footer.groups.map((group) => ({
+        ...group,
+        id: group.id === "rankings" ? "leaderboard" : group.id,
+        links: group.links.map((link) => ({
+          ...link,
+          id: link.id === "rankings" ? "leaderboard" : link.id,
+          label: link.label === "Users Ranking" ? "Leaderboard" : link.label,
+          url: canonicalInternalUrl(link.url),
+        })),
+      })),
+    },
+  };
+}
+
 function auditSnapshot(settings: SiteConfiguration) {
   return {
     siteName: settings.brand.siteName,
@@ -80,7 +105,7 @@ export async function getSiteConfigurationDocument(): Promise<SiteConfigurationD
   }
   try {
     const raw = JSON.parse(row.settings_json) as unknown;
-    const normalized = parseSiteConfiguration(raw);
+    const normalized = normalizeLegacyLeaderboardLabels(parseSiteConfiguration(raw));
     return {
       settings: normalized,
       revision: Number(row.revision),

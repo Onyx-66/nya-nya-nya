@@ -10,9 +10,16 @@ const globals = read("app/globals.css");
 const surfaces = read("app/theme-surfaces.css");
 const themeBuilder = read("components/nyascans/ThemeBuilderPage.tsx");
 const browse = read("components/nyascans/BrowseFixes.module.css");
+const popular = read("components/nyascans/HotThisWeek.tsx");
+const popularApi = read("app/api/v1/hot-this-week/route.ts");
+const leaderboard = read("components/nyascans/UserLeaderboardView.tsx");
+const themeSystem = read("lib/theme-system.ts");
+const siteConfiguration = read("lib/server/site-configuration.ts");
+const promotionsApi = read("app/api/v1/home-promotions/route.ts");
 
 test("Top Teams uses compact fixed medals and adjacent mobile actions", () => {
   assert.match(teams, /team-rank-medal/);
+  assert.match(teams, /<strong aria-hidden="true">\{record\.rank\}<\/strong>/);
   assert.doesNotMatch(teams, /team-podium-decor/);
   assert.match(globals, /team-rank-medal\.rank-1[\s\S]*#d4af37/i);
   assert.match(globals, /team-rank-medal\.rank-2[\s\S]*#c0c0c0/i);
@@ -49,6 +56,31 @@ test("Theme Builder action and export labels match the requested structure", () 
   assert.match(themeBuilder, /Upload JSON \/ Markdown file/);
   assert.match(globals, /theme-builder-card > header > span[\s\S]*width: max-content/);
   assert.match(globals, /theme-builder-download-grid[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+});
+
+test("Most Popular exposes live catalog totals rather than only period activity counters", () => {
+  assert.match(popularApi, /AS viewCount/);
+  assert.match(popularApi, /AS chapterCount/);
+  assert.match(popularApi, /AS commentTotal/);
+  assert.match(popularApi, /AS followerCount/);
+  assert.match(popular, /value=\{record\.viewCount\} label="Views"/);
+  assert.match(popular, /value=\{record\.chapterCount\} label="Chapters"/);
+  assert.match(popular, /value=\{record\.commentTotal\} label="Comments"/);
+  assert.match(popular, /value=\{record\.followerCount\} label="Followers"/);
+});
+
+test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placement are covered", () => {
+  assert.match(leaderboard, /<h1 id="leaderboard-title">Leaderboard<\/h1>/);
+  assert.match(leaderboard, /label="Reacts"/);
+  assert.match(leaderboard, /label="Chapters"/);
+  assert.match(themeSystem, /id: "home-leaderboard"/);
+  assert.match(themeSystem, /homeLeaderboardAccent/);
+  assert.match(siteConfiguration, /normalizeLegacyLeaderboardLabels/);
+  assert.match(promotionsApi, /canonicalInternalUrl/);
+  assert.match(app, /href="\/leaderboard"/);
+  assert.doesNotMatch(app, /> Ranking<|Users Ranking/);
+  assert.match(globals, /\.reader-setting-toggle > input[\s\S]*grid-column: 1/);
+  assert.match(globals, /\.library-record-copy h3[\s\S]*text-overflow: ellipsis/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {

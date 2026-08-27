@@ -24,6 +24,10 @@ type HotSeriesRow = {
   revision: number;
   ratingTenths: number;
   genres: string;
+  viewCount: number;
+  chapterCount: number;
+  commentTotal: number;
+  followerCount: number;
   uniqueReaders: number;
   chapterStarts: number;
   chapterCompletions: number;
@@ -163,6 +167,58 @@ export async function GET(request: Request) {
                  WHERE sg.series_id = s.id
                    AND g.archived_at IS NULL
               ), '') AS genres,
+              MAX(
+                COALESCE(s.view_count, 0),
+                COALESCE((
+                  SELECT COUNT(*)
+                    FROM analytics_events ae
+                   WHERE ae.series_slug = s.slug
+                     AND ae.event_type IN ('SERIES_VIEW', 'CHAPTER_START', 'CHAPTER_COMPLETE')
+                ), 0)
+              ) AS viewCount,
+              COALESCE((
+                SELECT COUNT(DISTINCT public_chapter.chapter_number)
+                  FROM chapters public_chapter
+                  LEFT JOIN content_visibility_overrides public_chapter_visibility
+                    ON public_chapter_visibility.chapter_id = public_chapter.id
+                 WHERE public_chapter.series_id = s.id
+                   AND public_chapter.state = 'PUBLISHED'
+                   AND public_chapter.visibility = 'PUBLIC'
+                   AND public_chapter.published_at IS NOT NULL
+                   AND datetime(public_chapter.published_at) <= CURRENT_TIMESTAMP
+                   AND ${publicPaidChapterPredicate("public_chapter", "public_chapter_visibility")}
+              ), 0) AS chapterCount,
+              COALESCE((
+                SELECT COUNT(*)
+                  FROM discussion_comments total_comment
+                 WHERE total_comment.series_slug = s.slug
+                   AND total_comment.moderation_status = 'VISIBLE'
+                   AND total_comment.deleted_at IS NULL
+                   AND (
+                     total_comment.chapter_slug IS NULL
+                     OR EXISTS (
+                       SELECT 1
+                         FROM series total_comment_series
+                         JOIN chapters total_comment_chapter
+                           ON total_comment_chapter.series_id = total_comment_series.id
+                         LEFT JOIN content_visibility_overrides total_comment_visibility
+                           ON total_comment_visibility.chapter_id = total_comment_chapter.id
+                        WHERE total_comment_series.slug = total_comment.series_slug
+                          AND total_comment_chapter.slug = total_comment.chapter_slug
+                          AND total_comment_chapter.state = 'PUBLISHED'
+                          AND total_comment_chapter.visibility = 'PUBLIC'
+                          AND total_comment_chapter.published_at IS NOT NULL
+                          AND datetime(total_comment_chapter.published_at) <= CURRENT_TIMESTAMP
+                          AND ${publicPaidSeriesPredicate("total_comment_series")}
+                          AND ${publicPaidChapterPredicate("total_comment_chapter", "total_comment_visibility")}
+                     )
+                   )
+              ), 0) AS commentTotal,
+              COALESCE((
+                SELECT COUNT(*)
+                  FROM follows live_follower
+                 WHERE live_follower.series_id = s.id
+              ), 0) AS followerCount,
               COALESCE(wp.uniqueReaders, 0) AS uniqueReaders,
               COALESCE(wp.chapterStarts, 0) AS chapterStarts,
               COALESCE(wp.chapterCompletions, 0) AS chapterCompletions,
@@ -213,6 +269,10 @@ export async function GET(request: Request) {
             row.revision,
           ),
           genres: row.genres.split("||").filter(Boolean).slice(0, 3),
+          viewCount: Number(row.viewCount ?? 0),
+          chapterCount: Number(row.chapterCount ?? 0),
+          commentTotal: Number(row.commentTotal ?? 0),
+          followerCount: Number(row.followerCount ?? 0),
           uniqueReaders: Number(row.uniqueReaders),
           chapterStarts: Number(row.chapterStarts),
           chapterCompletions: Number(row.chapterCompletions),

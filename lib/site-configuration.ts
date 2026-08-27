@@ -275,7 +275,7 @@ export const defaultSiteConfiguration: SiteConfiguration = {
     groups: [
       { id: "browse", title: "Browse", enabled: true, links: [
         { id: "latest", label: "Latest Updates", url: "/latest", enabled: true, openInNewTab: false },
-        { id: "rankings", label: "Users Ranking", url: "/rankings", enabled: true, openInNewTab: false },
+        { id: "leaderboard", label: "Leaderboard", url: "/leaderboard", enabled: true, openInNewTab: false },
         { id: "completed", label: "Completed", url: "/browse?status=completed", enabled: true, openInNewTab: false },
         { id: "genres", label: "Genres", url: "/browse#genres", enabled: true, openInNewTab: false },
       ] },

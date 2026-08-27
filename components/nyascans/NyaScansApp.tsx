@@ -1701,10 +1701,10 @@ function SiteHeader({
                     </a>
                     <a
                       role="menuitem"
-                      href="/rankings"
+                      href="/leaderboard"
                       onClick={() => setMenuOpen(false)}
                     >
-                      <Trophy size={18} /> Ranking
+                      <Trophy size={18} /> Leaderboard
                     </a>
                     <a
                       role="menuitem"
@@ -1824,8 +1824,8 @@ function SiteHeader({
                       />
                     ) : (
                       <>
-                    <a role="menuitem" href="/rankings" onClick={() => setMenuOpen(false)}>
-                      <Trophy size={18} /> Ranking
+                    <a role="menuitem" href="/leaderboard" onClick={() => setMenuOpen(false)}>
+                      <Trophy size={18} /> Leaderboard
                     </a>
                     <a role="menuitem" href="/teams" onClick={() => setMenuOpen(false)}>
                       <UsersThree size={18} /> Teams
@@ -3337,7 +3337,7 @@ function TrendingShowcase() {
         </div>
         <div className="trending-actions">
           <a className="button button-secondary latest-all-action" href="/leaderboard">
-            Full ranking <ArrowRight size={17} />
+            Leaderboard <ArrowRight size={17} />
           </a>
         </div>
       </div>
@@ -14264,7 +14264,7 @@ function GenericView({
         ? ["Support", "Find an answer or open a tracked support ticket."]
         : view === "rankings"
               ? [
-                  "Users Ranking",
+                  "Leaderboard",
                   "Weekly, monthly, and all-time Top 100 based on collected Shards and community contribution.",
                 ]
               : ["Explore NyaScans", "This product area is connected to the shared catalog and account system."];

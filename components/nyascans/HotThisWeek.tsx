@@ -26,6 +26,10 @@ type HotSeries = {
   coverUrl: string | null;
   rating: number;
   genres: string[];
+  viewCount: number;
+  chapterCount: number;
+  commentTotal: number;
+  followerCount: number;
   uniqueReaders: number;
   chapterStarts: number;
   commentCount: number;
@@ -61,7 +65,7 @@ function HotCover({ record }: { record: HotSeries }) {
 
 function HotMovement({ movement }: { movement: number | null }) {
   if (movement === null) {
-    return <span className="hot-week-movement is-new"><Fire size={13} weight="fill" /> New</span>;
+    return           <span className="hot-week-movement is-new"><Fire size={13} weight="fill" /> New</span>;
   }
   if (movement > 0) {
     return <span className="hot-week-movement is-up"><ArrowUp size={14} weight="bold" /> {movement}</span>;
@@ -107,7 +111,7 @@ export function HotThisWeek() {
         };
         if (!response.ok) {
           throw new Error(
-            payload.error?.message ?? "Weekly activity could not be loaded.",
+            payload.error?.message ?? "Most Popular data could not be loaded.",
           );
         }
 
@@ -145,7 +149,7 @@ export function HotThisWeek() {
           setError(
             homeRequestMessage(
             loadError,
-            "Weekly activity could not be loaded.",
+              "Most Popular data could not be loaded.",
           ),
           );
         }
@@ -192,13 +196,13 @@ export function HotThisWeek() {
       </nav>
 
       {loading ? (
-        <div className="dots-ring-loading hot-week-list hot-week-list-loading" role="status" aria-label="Loading weekly rankings">
+        <div className="dots-ring-loading hot-week-list hot-week-list-loading" role="status" aria-label={`Loading ${periodLabel.toLowerCase()} Most Popular titles`}>
           <DotsRing size="lg" label={null} />
-          <span>Loading weekly rankings…</span>
+          <span>Loading {periodLabel.toLowerCase()} Most Popular titles…</span>
         </div>
       ) : error ? (
         <div className="hot-week-state" role="alert">
-          <strong>Weekly rankings are unavailable</strong>
+          <strong>Most Popular is unavailable</strong>
           <span>{error}</span>
           <button type="button" onClick={() => setRevision((value) => value + 1)}>
             <ArrowClockwise size={16} /> Try again
@@ -229,11 +233,11 @@ export function HotThisWeek() {
                     {record.genres.map((genre) => <small key={genre}>{genre}</small>)}
                   </span>
                 ) : null}
-                <span className="hot-week-metrics" aria-label={`${record.title} ${periodLabel.toLowerCase()} activity`}>
-                  <HotMetric icon={<Eye size={16} />} value={record.uniqueReaders} label={`Distinct readers in the ${periodLabel.toLowerCase()} period`} />
-                  <HotMetric icon={<Books size={16} />} value={record.chapterStarts} label={`Chapter starts in the ${periodLabel.toLowerCase()} period`} />
-                  <HotMetric icon={<ChatCircle size={16} />} value={record.commentCount} label={`Comments in the ${periodLabel.toLowerCase()} period`} />
-                  <HotMetric icon={<Heart size={16} />} value={record.reactionCount} label={`Reactions in the ${periodLabel.toLowerCase()} period`} />
+                <span className="hot-week-metrics" aria-label={`${record.title} current catalog totals`}>
+                  <HotMetric icon={<Eye size={16} />} value={record.viewCount} label="Views" />
+                  <HotMetric icon={<Books size={16} />} value={record.chapterCount} label="Chapters" />
+                  <HotMetric icon={<ChatCircle size={16} />} value={record.commentTotal} label="Comments" />
+                  <HotMetric icon={<Heart size={16} />} value={record.followerCount} label="Followers" />
                 </span>
                 <span className="hot-week-rating" aria-label={`${record.title} rating ${record.rating.toFixed(1)} out of 10`}>
                   <span className="hot-week-stars" aria-hidden="true">
@@ -251,8 +255,8 @@ export function HotThisWeek() {
       ) : (
         <div className="hot-week-state">
           <Fire size={25} />
-          <strong>No {periodLabel.toLowerCase()} ranking yet</strong>
-          <span>Reader activity will build this ranking as chapters are read and discussed.</span>
+            <strong>No {periodLabel.toLowerCase()} Most Popular titles yet</strong>
+            <span>Reader activity will build this list as chapters are read and discussed.</span>
         </div>
       )}
     </section>

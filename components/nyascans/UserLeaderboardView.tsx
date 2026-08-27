@@ -88,14 +88,20 @@ function RankingMetric({
   label,
   value,
   accent = false,
+  expanded = false,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
   accent?: boolean;
+  expanded?: boolean;
 }) {
   return (
-    <span className={`user-ranking-metric${accent ? " is-accent" : ""}`} data-label={label}>
+    <span
+      className={`user-ranking-metric${accent ? " is-accent" : ""}`}
+      data-label={label}
+      data-visibility={expanded ? "expanded" : "all"}
+    >
       {icon}
       <span>
         <strong>{value}</strong>
@@ -127,11 +133,19 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
             icon={<ChatCircle weight="fill" aria-hidden="true" />}
             label="Comments"
             value={entry.communityVisible ? number(entry.commentCount) : "Private"}
+            expanded
           />
           <RankingMetric
             icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
-            label="Upvotes"
+            label="Reacts"
             value={entry.communityVisible ? number(entry.upvotes) : "Private"}
+            expanded
+          />
+          <RankingMetric
+            icon={<Fire weight="fill" aria-hidden="true" />}
+            label="Chapters"
+            value={number(entry.chaptersRead)}
+            expanded
           />
         </div>
       </a>
@@ -158,6 +172,24 @@ function RankingListRow({ entry, viewer = false }: { entry: LeaderboardEntry; vi
             value={number(entry.score)}
             accent
           />
+          <RankingMetric
+            icon={<ChatCircle weight="fill" aria-hidden="true" />}
+            label="Comments"
+            value={entry.communityVisible ? number(entry.commentCount) : "Private"}
+            expanded
+          />
+          <RankingMetric
+            icon={<ArrowFatUp weight="fill" aria-hidden="true" />}
+            label="Reacts"
+            value={entry.communityVisible ? number(entry.upvotes) : "Private"}
+            expanded
+          />
+          <RankingMetric
+            icon={<Fire weight="fill" aria-hidden="true" />}
+            label="Chapters"
+            value={number(entry.chaptersRead)}
+            expanded
+          />
         </div>
       </a>
     </li>
@@ -181,13 +213,13 @@ export function UserLeaderboardView() {
         });
         const payload = (await response.json()) as RankingResponse;
         if (!response.ok || !payload.data) {
-          throw new Error(payload.error?.message ?? "The ranking could not be loaded.");
+          throw new Error(payload.error?.message ?? "The leaderboard could not be loaded.");
         }
         setEntries(payload.data);
         setViewer(payload.viewer ?? null);
       } catch (loadError) {
         if (!controller.signal.aborted) {
-          setError(loadError instanceof Error ? loadError.message : "The ranking could not be loaded.");
+          setError(loadError instanceof Error ? loadError.message : "The leaderboard could not be loaded.");
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -205,13 +237,13 @@ export function UserLeaderboardView() {
   const listEntries = entries.filter((entry) => entry.rank > 3);
 
   return (
-    <section className="user-leaderboard" aria-labelledby="user-ranking-title">
+    <section className="user-leaderboard" aria-labelledby="leaderboard-title">
       <header className="user-ranking-hero">
         <div className="user-ranking-hero-mark" aria-hidden="true">
           <Fire weight="fill" />
         </div>
-        <h1 id="user-ranking-title">Users Ranking</h1>
-        <p>Top 100 users ranked by Score earned through community activity and upvotes on comments.</p>
+        <h1 id="leaderboard-title">Leaderboard</h1>
+        <p>Top 100 users ranked by Score earned through community activity, comments, reacts, and chapters read.</p>
       </header>
 
       <div className="user-ranking-controls">
@@ -219,7 +251,7 @@ export function UserLeaderboardView() {
           <span className="user-ranking-kicker">Community leaderboard</span>
           <strong>{period === "weekly" ? "This week" : period === "monthly" ? "This month" : "All time"}</strong>
         </div>
-        <div className="user-ranking-periods" role="group" aria-label="Ranking period">
+        <div className="user-ranking-periods" role="group" aria-label="Leaderboard period">
           {([
             ["weekly", "Weekly"],
             ["monthly", "Monthly"],
@@ -250,7 +282,7 @@ export function UserLeaderboardView() {
       ) : error ? (
         <div className="user-leaderboard-state" role="alert">
           <Trophy size={24} />
-          <strong>Ranking unavailable</strong>
+          <strong>Leaderboard unavailable</strong>
           <span>{error}</span>
         </div>
       ) : !entries.length ? (
@@ -271,10 +303,13 @@ export function UserLeaderboardView() {
             <div className="user-ranking-list-heading">
               <div>
                 <span className="user-ranking-kicker">The rest of the board</span>
-                <h2 id="user-ranking-list-title">Ranked users</h2>
+                  <h2 id="user-ranking-list-title">Leaderboard entries</h2>
               </div>
               <div className="user-ranking-list-labels" aria-hidden="true">
                 <span>Score</span>
+                <span>Comments</span>
+                <span>Reacts</span>
+                <span>Chapters</span>
               </div>
             </div>
             <ol>

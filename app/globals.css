@@ -61745,3 +61745,247 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 @media (prefers-reduced-motion: reduce) {
   .public-teams .team-carousel-card { transition: none; }
 }
+
+
+/* v49.18.0 — live totals, Leaderboard redesign, and settings consistency. */
+
+/* Reader settings place every checkbox before its copy, including the legacy copy-first markup. */
+.reader-setting-toggle {
+  display: grid !important;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  align-items: start;
+  justify-content: initial;
+  gap: .68rem;
+}
+.reader-setting-toggle > input {
+  grid-column: 1;
+  grid-row: 1;
+  width: 1.1rem !important;
+  height: 1.1rem !important;
+  margin-top: .12rem;
+}
+.reader-setting-toggle > span {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+/* Library grid copy is bounded independently from the cover, so long titles never escape the card. */
+.library-record-copy,
+.library-record-copy > a,
+.library-record-copy h3 {
+  min-width: 0;
+  max-width: 100%;
+}
+.library-record-copy h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The previous decorative podium twinkle is retired; the rank-change transition remains available. */
+.public-teams .team-podium-decor,
+.public-teams .team-podium-decor i,
+.public-teams .team-rank-medal {
+  animation: none !important;
+}
+.public-teams .team-rank-medal {
+  overflow: visible;
+  border-color: color-mix(in srgb, currentColor 48%, var(--theme-accent-l3));
+  background: radial-gradient(circle at 32% 25%, rgb(255 255 255 / 44%), transparent 30%),
+    radial-gradient(circle at 50% 58%, var(--medal-fill) 0 58%, color-mix(in srgb, var(--medal-fill) 72%, #000) 100%);
+}
+.public-teams .team-rank-medal > svg {
+  position: absolute;
+  width: 1.7rem;
+  height: 1.7rem;
+  opacity: .28;
+}
+.public-teams .team-rank-medal > strong {
+  position: relative;
+  z-index: 1;
+  color: var(--medal-ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: .82rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px rgb(255 255 255 / 18%);
+}
+.public-teams .team-rank-medal.rank-1 { --medal-fill: #d4af37; --medal-ink: #4a3200; }
+.public-teams .team-rank-medal.rank-2 { --medal-fill: #c0c0c0; --medal-ink: #26313b; }
+.public-teams .team-rank-medal.rank-3 { --medal-fill: #cd7f32; --medal-ink: #4b2511; }
+
+/* Leaderboard is entirely driven by the dedicated Custom Theme Builder tokens. */
+.user-leaderboard {
+  --leaderboard-accent: var(--theme-home-leaderboard-accent, var(--theme-primary));
+  --leaderboard-first: var(--theme-home-leaderboard-first, var(--theme-status-yellow));
+  --leaderboard-second: var(--theme-home-leaderboard-second, var(--theme-status-grey));
+  --leaderboard-third: var(--theme-home-leaderboard-third, var(--theme-danger-l1));
+  --ranking-gold: var(--leaderboard-first);
+  --ranking-gold-soft: color-mix(in srgb, var(--leaderboard-first) 72%, var(--theme-text-color));
+  --ranking-blue: var(--leaderboard-accent);
+  --ranking-ink: var(--theme-button-accent-alternate);
+  --ranking-panel: var(--theme-accent-l1);
+}
+.user-leaderboard .user-ranking-hero-mark {
+  border-color: color-mix(in srgb, var(--leaderboard-accent) 62%, var(--theme-accent-l3));
+  color: var(--leaderboard-accent);
+  background: color-mix(in srgb, var(--leaderboard-accent) 14%, var(--theme-accent-l1));
+  box-shadow: 0 0 1.8rem color-mix(in srgb, var(--leaderboard-accent) 17%, transparent);
+}
+.user-leaderboard .user-ranking-controls {
+  border-color: color-mix(in srgb, var(--leaderboard-accent) 30%, var(--theme-accent-l3));
+  background: color-mix(in srgb, var(--leaderboard-accent) 5%, var(--theme-accent));
+}
+.user-leaderboard .user-ranking-periods {
+  border-color: color-mix(in srgb, var(--leaderboard-accent) 35%, var(--theme-accent-l3));
+  background: var(--theme-accent-l1);
+}
+.user-leaderboard .user-ranking-periods button[aria-pressed="true"] {
+  color: var(--theme-button-accent-alternate);
+  background: var(--leaderboard-accent);
+  box-shadow: 0 .35rem 1rem color-mix(in srgb, var(--leaderboard-accent) 24%, transparent);
+}
+.user-leaderboard .user-ranking-podium-card {
+  border-color: color-mix(in srgb, var(--leaderboard-accent) 35%, var(--theme-accent-l3));
+  background: linear-gradient(160deg, var(--theme-accent-l2), var(--theme-accent));
+  box-shadow: 0 1.25rem 2.8rem color-mix(in srgb, var(--theme-main-background) 34%, transparent), inset 0 1px color-mix(in srgb, var(--theme-text-color) 10%, transparent);
+}
+.user-leaderboard .user-ranking-podium-card.is-rank-1 {
+  border-color: color-mix(in srgb, var(--leaderboard-first) 62%, var(--theme-accent-l3));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--leaderboard-first) 15%, var(--theme-accent-l2)), var(--theme-accent));
+  box-shadow: 0 1.35rem 3rem color-mix(in srgb, var(--leaderboard-first) 16%, transparent), 0 1.2rem 2.5rem color-mix(in srgb, var(--theme-main-background) 38%, transparent), inset 0 1px color-mix(in srgb, var(--theme-text-color) 12%, transparent);
+}
+.user-leaderboard .user-ranking-place {
+  border-color: color-mix(in srgb, var(--leaderboard-accent) 48%, var(--theme-accent-l3));
+  color: var(--leaderboard-accent);
+  background: color-mix(in srgb, var(--leaderboard-accent) 16%, var(--theme-accent-l2));
+}
+.user-leaderboard .is-rank-1 .user-ranking-place {
+  border-color: color-mix(in srgb, var(--leaderboard-first) 72%, var(--theme-accent-l3));
+  color: var(--leaderboard-first);
+  background: color-mix(in srgb, var(--leaderboard-first) 18%, var(--theme-accent-l2));
+}
+.user-leaderboard .is-rank-2 .user-ranking-place {
+  border-color: color-mix(in srgb, var(--leaderboard-second) 72%, var(--theme-accent-l3));
+  color: var(--leaderboard-second);
+  background: color-mix(in srgb, var(--leaderboard-second) 16%, var(--theme-accent-l2));
+}
+.user-leaderboard .is-rank-3 .user-ranking-place {
+  border-color: color-mix(in srgb, var(--leaderboard-third) 72%, var(--theme-accent-l3));
+  color: var(--leaderboard-third);
+  background: color-mix(in srgb, var(--leaderboard-third) 16%, var(--theme-accent-l2));
+}
+.user-leaderboard .user-ranking-avatar,
+.user-leaderboard .user-ranking-avatar.is-featured {
+  border-color: color-mix(in srgb, var(--leaderboard-accent) 58%, var(--theme-accent-l3));
+  color: var(--leaderboard-accent);
+  background: color-mix(in srgb, var(--leaderboard-accent) 16%, var(--theme-accent-l2));
+}
+.user-leaderboard .user-ranking-avatar.is-featured {
+  border-color: color-mix(in srgb, var(--leaderboard-first) 64%, var(--theme-accent-l3));
+  color: var(--leaderboard-first);
+  background: color-mix(in srgb, var(--leaderboard-first) 12%, var(--theme-accent-l2));
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--leaderboard-first) 12%, transparent), 0 .65rem 1.2rem color-mix(in srgb, var(--theme-main-background) 38%, transparent);
+}
+.user-leaderboard .user-ranking-tier {
+  border-color: color-mix(in srgb, var(--leaderboard-first) 63%, transparent);
+  color: var(--ranking-gold-soft);
+  background: color-mix(in srgb, var(--leaderboard-first) 14%, transparent);
+}
+.user-leaderboard .user-ranking-podium-metrics,
+.user-leaderboard .user-ranking-list,
+.user-leaderboard .user-ranking-list-heading,
+.user-leaderboard .user-ranking-list-row,
+.user-leaderboard .user-ranking-ellipsis {
+  border-color: var(--theme-accent-l3);
+}
+.user-leaderboard .user-ranking-list {
+  background: var(--theme-accent-l1);
+  box-shadow: 0 1.5rem 3rem color-mix(in srgb, var(--theme-main-background) 28%, transparent);
+}
+.user-leaderboard .user-ranking-metric svg,
+.user-leaderboard .user-ranking-metric strong {
+  color: var(--leaderboard-accent);
+}
+.user-leaderboard .user-ranking-metric.is-accent svg,
+.user-leaderboard .user-ranking-metric.is-accent strong {
+  color: var(--leaderboard-first);
+}
+.user-leaderboard .user-ranking-row-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.user-leaderboard .user-ranking-list-labels {
+  width: min(52%, 27rem);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (min-width: 761px) {
+  .user-leaderboard .user-ranking-podium-card {
+    min-height: 21.5rem;
+  }
+  .user-leaderboard .user-ranking-podium-card > a {
+    min-height: 21.5rem !important;
+  }
+  .user-leaderboard .user-ranking-podium-card.is-rank-1,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    min-height: 24rem !important;
+  }
+  .user-leaderboard .user-ranking-row-metrics .user-ranking-metric {
+    justify-content: end;
+  }
+}
+
+@media (max-width: 760px) {
+  .user-leaderboard .user-ranking-podium > ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+    gap: .5rem;
+  }
+  .user-leaderboard .user-ranking-podium-card,
+  .user-leaderboard .user-ranking-podium-card > a {
+    min-height: 18.8rem !important;
+  }
+  .user-leaderboard .user-ranking-podium-card.is-rank-1,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    min-height: 21.8rem !important;
+  }
+  .user-leaderboard .user-ranking-podium-card > a,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    gap: .55rem;
+    padding: 2rem .35rem .65rem !important;
+  }
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    padding-top: 2.25rem !important;
+  }
+  .user-leaderboard .user-ranking-avatar.is-featured {
+    width: 4.15rem;
+    height: 4.15rem;
+  }
+  .user-leaderboard .user-ranking-podium-card:not(.is-rank-1) .user-ranking-avatar.is-featured {
+    width: 3.6rem;
+    height: 3.6rem;
+  }
+  .user-leaderboard .user-ranking-podium-metrics {
+    grid-template-columns: 1fr;
+  }
+  .user-leaderboard .user-ranking-podium-metrics .user-ranking-metric[data-visibility="expanded"] {
+    display: none;
+  }
+  .user-leaderboard .user-ranking-list-labels {
+    display: none;
+  }
+  .user-leaderboard .user-ranking-row-metrics {
+    grid-template-columns: 1fr;
+  }
+  .user-leaderboard .user-ranking-row-metrics .user-ranking-metric[data-visibility="expanded"] {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-teams .team-rank-medal,
+  .user-leaderboard .user-ranking-periods button {
+    transition: none;
+  }
+}

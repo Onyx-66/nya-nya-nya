@@ -417,9 +417,9 @@ exec(`INSERT INTO floating_ads
    starts_at, ends_at, reset_key, revision, created_by_user_id)
  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 1, ?)`,
   "preview-leaderboard-banner", "Reader leaderboard", "Climb the leaderboard", "Climb", "♛",
-  "Earn score from thoughtful comments and streaks — see exactly how your community standing grows.", "View leaderboard",
-  JSON.stringify([{ icon: "★", title: "Score", body: "" }, { icon: "✦", title: "Comments", body: "" }, { icon: "↗", title: "Streaks", body: "" }]),
-  JSON.stringify([{ label: "How scoring works", url: "/rankings" }]), "/rankings", "",
+  "Earn score from thoughtful comments, reacts, and chapters read — see exactly how your community standing grows.", "View leaderboard",
+  JSON.stringify([{ icon: "★", title: "Score", body: "" }, { icon: "✦", title: "Comments", body: "" }, { icon: "↗", title: "Reacts", body: "" }, { icon: "▣", title: "Chapters", body: "" }]),
+  JSON.stringify([{ label: "How scoring works", url: "/leaderboard" }]), "/leaderboard", "",
   "WAVE", 1, "#F7C948", "#FFE08A", "#15120A", "#B88918", "top", date(-1), date(14), "preview-leaderboard-v1", owner.id);
 exec(`INSERT INTO floating_ads
   (id, eyebrow, title, highlight_text, side_icon, body, action_label,
