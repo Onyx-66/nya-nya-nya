@@ -1,107 +1,87 @@
-"use client";
-
-import { CheckCircle, Clock, CloudArrowUp, DotsThree, Info, ShieldCheck, WarningCircle } from "@/components/nyascans/heroicons";
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { Camera, CheckCircle, Clock, CloudArrowUp, DotsThree, ImageSquare, Info, LinkSimple, Plus, ShieldCheck, UsersThree, WarningCircle, X } from "@/components/nyascans/heroicons";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 type ExternalLink = { platform: string; url: string };
 type MemberPreview = { email: string; displayName: string; username: string; avatarUrl?: string | null };
-type TeamCreationRequest = {
-  id: string; name: string; slug: string; description: string; websiteUrl?: string | null; discordUrl?: string | null;
-  externalLinks?: ExternalLink[]; memberEmails?: string[]; logoUrl?: string | null; bannerUrl?: string | null;
-  reason: string; status: "PENDING" | "APPROVED" | "REJECTED"; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null;
-};
-type FormValues = {
-  name: string; description: string; reason: string; logo: File | null; banner: File | null;
-  externalLinks: ExternalLink[]; memberEmails: string[];
-};
+type TeamCreationRequest = { id: string; name: string; slug: string; description: string; externalLinks?: ExternalLink[]; memberEmails?: string[]; logoUrl?: string | null; bannerUrl?: string | null; reason: string; status: "PENDING" | "APPROVED" | "REJECTED"; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null };
+type FormValues = { name: string; description: string; reason: string; logo: File | null; banner: File | null; externalLinks: ExternalLink[]; memberEmails: string[] };
+type CropSource = { kind: "logo" | "banner"; file: File; url: string };
 
 const emptyForm: FormValues = { name: "", description: "", reason: "", logo: null, banner: null, externalLinks: [], memberEmails: [] };
-const platforms = ["Website", "Discord", "YouTube", "TikTok", "Instagram", "Facebook", "Other"];
+const platforms = [
+  { id: "Website", icon: LinkSimple, placeholder: "https://website.com" },
+  { id: "Discord", icon: LinkSimple, placeholder: "https://discord.gg" },
+  { id: "YouTube", icon: LinkSimple, placeholder: "https://youtube.com" },
+  { id: "Telegram", icon: LinkSimple, placeholder: "https://t.me" },
+  { id: "Instagram", icon: LinkSimple, placeholder: "https://instagram.com" },
+  { id: "Facebook", icon: LinkSimple, placeholder: "https://facebook.com" },
+  { id: "TikTok", icon: LinkSimple, placeholder: "https://tiktok.com" },
+  { id: "Reddit", icon: LinkSimple, placeholder: "https://reddit.com/r" },
+  { id: "Other", icon: LinkSimple, placeholder: "https://" },
+];
 
 function statusLabel(status: TeamCreationRequest["status"]) { return status === "PENDING" ? "Awaiting review" : status === "APPROVED" ? "Approved" : "Needs changes"; }
 function imagePreview(file: File | null) { return file ? URL.createObjectURL(file) : null; }
+function fileStem(name: string) { return name.replace(/\.[^.]+$/, ""); }
+
+function CropDialog({ source, onCancel, onSave }: { source: CropSource; onCancel: () => void; onSave: (file: File) => Promise<void> }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [horizontal, setHorizontal] = useState(0);
+  const [vertical, setVertical] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const isLogo = source.kind === "logo";
+  const width = isLogo ? 512 : 1280;
+  const height = isLogo ? 512 : 720;
+  useEffect(() => {
+    const image = new Image(); image.onload = () => { imageRef.current = image; setReady(true); }; image.onerror = () => setError("This image could not be prepared."); image.src = source.url;
+    return () => { image.onload = null; image.onerror = null; };
+  }, [source.url]);
+  useEffect(() => {
+    const canvas = canvasRef.current; const image = imageRef.current;
+    if (!canvas || !image || !ready) return;
+    const context = canvas.getContext("2d"); if (!context) return;
+    const coverScale = Math.max(width / image.naturalWidth, height / image.naturalHeight) * zoom;
+    const drawWidth = image.naturalWidth * coverScale; const drawHeight = image.naturalHeight * coverScale;
+    const maxX = Math.max(0, (drawWidth - width) / 2); const maxY = Math.max(0, (drawHeight - height) / 2);
+    const x = (width - drawWidth) / 2 + (horizontal / 100) * maxX; const y = (height - drawHeight) / 2 + (vertical / 100) * maxY;
+    context.clearRect(0, 0, width, height); context.drawImage(image, x, y, drawWidth, drawHeight);
+  }, [height, horizontal, ready, vertical, width, zoom]);
+  async function save() {
+    const canvas = canvasRef.current; if (!canvas || !ready || busy) return; setBusy(true); setError("");
+    try { const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92)); if (!blob) throw new Error("The crop could not be prepared."); await onSave(new File([blob], `${fileStem(source.file.name)}-${source.kind}-cropped.jpg`, { type: "image/jpeg" })); }
+    catch (cropError) { setError(cropError instanceof Error ? cropError.message : "The crop could not be prepared."); }
+    finally { setBusy(false); }
+  }
+  return <div className="avatar-crop-overlay" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <div className="avatar-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="team-crop-title">
+      <header><div><p className="eyebrow">Team media</p><h3 id="team-crop-title">Crop your {isLogo ? "logo" : "banner"}</h3></div><button type="button" onClick={onCancel} disabled={busy} aria-label="Close crop"><X size={19} /></button></header>
+      <div className={`avatar-crop-preview ${isLogo ? "is-square" : "is-banner"}`}><canvas ref={canvasRef} width={width} height={height} aria-label={`${source.kind} crop preview`} />{!ready && !error ? <span role="status">Preparing preview…</span> : null}</div>
+      <p id="team-crop-description">Position the image inside the required {isLogo ? "square logo" : "16:9 banner"} frame, then confirm the crop.</p>
+      <div className="avatar-crop-controls"><label><span>Zoom</span><input type="range" min="1" max="3" step="0.05" value={zoom} disabled={!ready || busy} onChange={(event) => setZoom(Number(event.target.value))} /></label><label><span>Horizontal position</span><input type="range" min="-100" max="100" value={horizontal} disabled={!ready || busy} onChange={(event) => setHorizontal(Number(event.target.value))} /></label><label><span>Vertical position</span><input type="range" min="-100" max="100" value={vertical} disabled={!ready || busy} onChange={(event) => setVertical(Number(event.target.value))} /></label></div>
+      {error ? <div className="avatar-crop-error" role="alert"><WarningCircle size={17} /> {error}</div> : null}
+      <footer><button className="button button-secondary" type="button" disabled={!ready || busy} onClick={() => { setZoom(1); setHorizontal(0); setVertical(0); }}>Reset</button><button className="button button-primary" type="button" disabled={!ready || busy} onClick={() => void save()}><Camera size={17} /> {busy ? "Saving crop…" : "Crop & use media"}</button></footer>
+    </div>
+  </div>;
+}
 
 export function TeamCreationPanel() {
-  const [form, setForm] = useState<FormValues>(emptyForm);
-  const [requests, setRequests] = useState<TeamCreationRequest[]>([]);
-  const [memberPreviews, setMemberPreviews] = useState<Record<number, MemberPreview | null>>({});
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const logoPreview = useMemo(() => imagePreview(form.logo), [form.logo]);
-  const bannerPreview = useMemo(() => imagePreview(form.banner), [form.banner]);
-
+  const [form, setForm] = useState<FormValues>(emptyForm); const [requests, setRequests] = useState<TeamCreationRequest[]>([]); const [memberPreviews, setMemberPreviews] = useState<Record<number, MemberPreview | null>>({}); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null); const [cropSource, setCropSource] = useState<CropSource | null>(null);
+  const logoPreview = useMemo(() => imagePreview(form.logo), [form.logo]); const bannerPreview = useMemo(() => imagePreview(form.banner), [form.banner]);
   useEffect(() => () => { if (logoPreview) URL.revokeObjectURL(logoPreview); if (bannerPreview) URL.revokeObjectURL(bannerPreview); }, [logoPreview, bannerPreview]);
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/v1/team-creation-requests", { cache: "no-store" });
-      const payload = await response.json() as { data?: { requests?: TeamCreationRequest[] }; error?: { message?: string } };
-      if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "Team requests could not be loaded.");
-      setRequests(payload.data.requests ?? []);
-    } catch (error) { setMessage({ kind: "error", text: error instanceof Error ? error.message : "Team requests could not be loaded." }); }
-    finally { setLoading(false); }
-  }, []);
+  const load = useCallback(async () => { setLoading(true); try { const response = await fetch("/api/v1/team-creation-requests", { cache: "no-store" }); const payload = await response.json() as { data?: { requests?: TeamCreationRequest[] }; error?: { message?: string } }; if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "Team requests could not be loaded."); setRequests(payload.data.requests ?? []); } catch (error) { setMessage({ kind: "error", text: error instanceof Error ? error.message : "Team requests could not be loaded." }); } finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      form.memberEmails.forEach((email, index) => {
-        const normalized = email.trim().toLowerCase();
-        if (!normalized.includes("@")) { setMemberPreviews((current) => ({ ...current, [index]: null })); return; }
-        void fetch(`/api/v1/team-creation-requests?lookupEmail=${encodeURIComponent(normalized)}`, { cache: "no-store" })
-          .then(async (response) => (await response.json()) as { data?: { member?: MemberPreview | null } })
-          .then((payload) => setMemberPreviews((current) => ({ ...current, [index]: payload.data?.member ?? null })))
-          .catch(() => setMemberPreviews((current) => ({ ...current, [index]: null })));
-      });
-    }, 260);
-    return () => window.clearTimeout(timer);
-  }, [form.memberEmails]);
-
+  useEffect(() => { const timer = window.setTimeout(() => { form.memberEmails.forEach((email, index) => { const normalized = email.trim().toLowerCase(); if (!normalized.includes("@")) { setMemberPreviews((current) => ({ ...current, [index]: null })); return; } void fetch(`/api/v1/team-creation-requests?lookupEmail=${encodeURIComponent(normalized)}`, { cache: "no-store" }).then(async (response) => (await response.json()) as { data?: { member?: MemberPreview | null } }).then((payload) => setMemberPreviews((current) => ({ ...current, [index]: payload.data?.member ?? null }))).catch(() => setMemberPreviews((current) => ({ ...current, [index]: null }))); }); }, 260); return () => window.clearTimeout(timer); }, [form.memberEmails]);
   function update(field: keyof FormValues, value: string | File | null) { setForm((current) => ({ ...current, [field]: value })); setMessage(null); }
   function updateLink(index: number, field: keyof ExternalLink, value: string) { setForm((current) => ({ ...current, externalLinks: current.externalLinks.map((link, item) => item === index ? { ...link, [field]: value } : link) })); setMessage(null); }
   function updateMember(index: number, value: string) { setForm((current) => ({ ...current, memberEmails: current.memberEmails.map((email, item) => item === index ? value : email) })); setMessage(null); }
-  function chooseFile(field: "logo" | "banner", event: ChangeEvent<HTMLInputElement>) { update(field, event.target.files?.[0] ?? null); }
+  function chooseFile(kind: "logo" | "banner", event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; const url = URL.createObjectURL(file); setCropSource({ kind, file, url }); event.target.value = ""; }
   function addLink() { setForm((current) => ({ ...current, externalLinks: [...current.externalLinks, { platform: "Website", url: "" }] })); }
   function addMember() { setForm((current) => ({ ...current, memberEmails: [...current.memberEmails, ""] })); }
-  function removeLink(index: number) { setForm((current) => ({ ...current, externalLinks: current.externalLinks.filter((_, item) => item !== index) })); }
-  function removeMember(index: number) { setForm((current) => ({ ...current, memberEmails: current.memberEmails.filter((_, item) => item !== index) })); setMemberPreviews((current) => { const next = { ...current }; delete next[index]; return next; }); }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setMessage(null);
-    try {
-      const body = new FormData();
-      body.set("name", form.name); body.set("description", form.description); body.set("reason", form.reason);
-      body.set("externalLinks", JSON.stringify(form.externalLinks.filter((link) => link.url.trim())));
-      body.set("memberEmails", JSON.stringify(form.memberEmails.filter((email) => email.trim())));
-      if (form.logo) body.set("logo", form.logo); if (form.banner) body.set("banner", form.banner);
-      const response = await fetch("/api/v1/team-creation-requests", { method: "POST", body });
-      const payload = await response.json() as { data?: { requests?: TeamCreationRequest[] }; error?: { message?: string } };
-      if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "The team request could not be submitted.");
-      setRequests(payload.data.requests ?? []); setForm(emptyForm); setMemberPreviews({}); setMessage({ kind: "success", text: "Team request sent. An administrator will review the details." });
-    } catch (error) { setMessage({ kind: "error", text: error instanceof Error ? error.message : "The team request could not be submitted." }); }
-    finally { setBusy(false); }
-  }
-
-  return <section className="upload-team-creation">
-    <header className="upload-section-heading"><div><span><CloudArrowUp size={18} /> Upload Center</span><h2>Create a publishing team</h2><p>Submit your team details for administrator review. Approved teams are activated with you as team leader and uploader.</p></div></header>
-    {message ? <div className={`upload-alert is-${message.kind}`} role="status">{message.kind === "success" ? <CheckCircle size={18} /> : <WarningCircle size={18} />} {message.text}</div> : null}
-    <div className="upload-team-creation-grid">
-      <form className="upload-composer-card upload-team-creation-form" onSubmit={submit}>
-        <div className="upload-team-creation-form-heading"><ShieldCheck size={19} /><div><strong>Team application</strong><small>Use the name readers will recognize.</small></div></div>
-        <label>Team name<input required minLength={2} maxLength={100} value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Example Scans" /></label>
-        <label>Description<textarea required minLength={20} maxLength={2_000} rows={5} value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="Tell reviewers what your team publishes and how it operates." /></label>
-        <div className="upload-team-media-grid">
-          <label className="upload-team-media-field">Team logo <span>(required, square)</span><input required type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("logo", event)} />{logoPreview ? <img className="upload-team-logo-preview" src={logoPreview} alt="Team logo preview" /> : <small>Upload a circular logo.</small>}</label>
-          <label className="upload-team-media-field">Team banner <span>(required, minimum 16:9)</span><input required type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("banner", event)} />{bannerPreview ? <img className="upload-team-banner-preview" src={bannerPreview} alt="Team banner preview" /> : <small>Upload a wide team banner.</small>}</label>
-        </div>
-        <div className="upload-team-dynamic-block"><div className="upload-team-dynamic-heading"><div><strong>External links</strong><small>Select a platform, then add its link.</small></div><button type="button" className="button button-secondary" onClick={addLink}>+ Add link</button></div>{form.externalLinks.map((link, index) => <div className="upload-team-dynamic-row" key={`link-${index}`}><select value={link.platform} onChange={(event) => updateLink(index, "platform", event.target.value)}>{platforms.map((platform) => <option key={platform}>{platform}</option>)}</select><input type="url" value={link.url} onChange={(event) => updateLink(index, "url", event.target.value)} placeholder="https://…" /><button type="button" className="upload-team-remove-button" aria-label="Remove external link" onClick={() => removeLink(index)}>×</button></div>)}</div>
-        <label>Talk about yourself<textarea required minLength={20} maxLength={1_000} rows={4} value={form.reason} onChange={(event) => update("reason", event.target.value)} placeholder="Introduce yourself, your experience, and what you hope to bring to the community." /></label>
-        <div className="upload-team-dynamic-block"><div className="upload-team-dynamic-heading"><div><strong>Add team members <span>(optional)</span></strong><small>Enter one registered platform email per field.</small></div><button type="button" className="button button-secondary" onClick={addMember}>+ Add member</button></div>{form.memberEmails.map((email, index) => <div className="upload-team-member-row" key={`member-${index}`}><input type="email" value={email} onChange={(event) => updateMember(index, event.target.value)} placeholder="teammate@example.com" />{memberPreviews[index] ? <span className="upload-team-member-preview"><img src={memberPreviews[index]?.avatarUrl ?? "/art/mangadex-preview/cover-066.jpg"} alt="" /><span>{memberPreviews[index]?.displayName}</span></span> : null}<button type="button" className="upload-team-remove-button" aria-label="Remove team member" onClick={() => removeMember(index)}>×</button></div>)}</div>
-        <div className="upload-team-creation-note"><Info size={17} /><span>Approval creates a verified team, grants you the global uploader and team-leader roles, and sends listed registered members an invitation to join.</span></div>
-        <button className="button button-primary" type="submit" disabled={busy}>{busy ? <DotsThree size={18} /> : <CheckCircle size={18} />} {busy ? "Sending request…" : "Send for admin review"}</button>
-      </form>
-      <section className="upload-composer-card upload-team-creation-history" aria-labelledby="team-request-history-title"><div className="upload-team-creation-form-heading"><Clock size={19} /><div><strong id="team-request-history-title">Your team requests</strong><small>Track review status and administrator notes.</small></div></div>{loading ? <p className="upload-muted-copy">Loading requests…</p> : requests.length ? <div className="upload-team-request-list">{requests.map((request) => <article key={request.id}><header><strong>{request.name}</strong><span className={`upload-team-request-status is-${request.status.toLowerCase()}`}>{statusLabel(request.status)}</span></header><small>Submitted {new Date(request.createdAt).toLocaleString()}</small>{request.reviewReason ? <p>{request.reviewReason}</p> : request.status === "PENDING" ? <p>Waiting for an administrator to review the team details.</p> : null}</article>)}</div> : <p className="upload-muted-copy">No team requests yet. Submit your first application to begin.</p>}</section>
-    </div>
-  </section>;
+  async function saveCrop(file: File) { if (!cropSource) return; update(cropSource.kind, file); URL.revokeObjectURL(cropSource.url); setCropSource(null); }
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!form.logo || !form.banner) { setMessage({ kind: "error", text: "Team logo and banner are required before sending your request." }); return; } if (!form.externalLinks.some((link) => link.url.trim())) { setMessage({ kind: "error", text: "Add at least one Team Social link before sending your request." }); return; } setBusy(true); setMessage(null); try { const body = new FormData(); body.set("name", form.name); body.set("description", form.description); body.set("reason", form.reason); body.set("externalLinks", JSON.stringify(form.externalLinks.filter((link) => link.url.trim()))); body.set("memberEmails", JSON.stringify(form.memberEmails.filter((email) => email.trim()))); body.set("logo", form.logo); body.set("banner", form.banner); const response = await fetch("/api/v1/team-creation-requests", { method: "POST", body }); const payload = await response.json() as { data?: { requests?: TeamCreationRequest[] }; error?: { message?: string } }; if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "The team request could not be submitted."); setRequests(payload.data.requests ?? []); setForm(emptyForm); setMemberPreviews({}); setMessage({ kind: "success", text: "Create Team request sent successfully. An administrator will review it." }); } catch (error) { setMessage({ kind: "error", text: error instanceof Error ? error.message : "The Create Team request could not be submitted." }); } finally { setBusy(false); } }
+  return <section className="upload-team-creation"><header className="upload-section-heading"><div><span><CloudArrowUp size={18} /> Upload Center</span><h2>Create Team</h2><p>Create a publishing team, add its identity and socials, then send it for administrator review.</p></div></header>{message ? <div className={`upload-alert is-${message.kind}`} role="status">{message.kind === "success" ? <CheckCircle size={18} /> : <WarningCircle size={18} />} {message.text}</div> : null}<div className="upload-team-creation-grid"><form className="upload-composer-card upload-team-creation-form" onSubmit={submit}><div className="upload-team-creation-form-heading"><ShieldCheck size={19} /><div><strong>Team creation</strong><small>Choose the public identity readers will recognize.</small></div></div><label>Team name<input required minLength={2} maxLength={100} value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Example Scans" /></label><label>Description<textarea required minLength={20} maxLength={2_000} rows={5} value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="Tell readers what your team publishes and how it operates." /></label><div className="upload-team-media-grid"><label className="upload-team-media-field">Team logo <span>(required, square)</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("logo", event)} />{logoPreview ? <img className="upload-team-logo-preview" src={logoPreview} alt="Cropped team logo preview" /> : <small><ImageSquare size={16} /> Upload and crop a square logo.</small>}</label><label className="upload-team-media-field">Team banner <span>(required, 16:9 minimum)</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseFile("banner", event)} />{bannerPreview ? <img className="upload-team-banner-preview" src={bannerPreview} alt="Cropped team banner preview" /> : <small><ImageSquare size={16} /> Upload and crop a wide banner.</small>}</label></div><div className="upload-team-dynamic-block"><div className="upload-team-dynamic-heading"><div><strong>Team Socials <span>(at least one)</span></strong><small>Select a platform icon, then add its official link.</small></div><button type="button" className="button button-secondary" onClick={addLink}><Plus size={16} /> Add social</button></div>{form.externalLinks.map((link, index) => { const selected = platforms.find((platform) => platform.id === link.platform) ?? platforms[0]; const PlatformIcon = selected.icon; return <div className="upload-team-dynamic-row" key={`link-${index}`}><details className="upload-team-platform-picker"><summary aria-label={`Select ${selected.id} platform`} title={selected.id}><PlatformIcon size={18} /></summary><div className="upload-team-platform-menu" role="listbox" aria-label="Social platforms">{platforms.map((platform) => { const OptionIcon = platform.icon; return <button key={platform.id} type="button" role="option" aria-label={platform.id} aria-selected={link.platform === platform.id} title={platform.id} onClick={() => updateLink(index, "platform", platform.id)}><OptionIcon size={18} /></button>; })}</div></details><input required type="url" value={link.url} onChange={(event) => updateLink(index, "url", event.target.value)} placeholder={selected.placeholder} /><button type="button" className="upload-team-remove-button" aria-label="Remove social link" onClick={() => setForm((current) => ({ ...current, externalLinks: current.externalLinks.filter((_, item) => item !== index) }))}><X size={16} /></button></div>; })}</div><label>Talk about yourself and your team<textarea required minLength={20} maxLength={1_000} rows={4} value={form.reason} onChange={(event) => update("reason", event.target.value)} placeholder="Introduce yourself, your team, your experience, and what you hope to bring to the community." /></label><div className="upload-team-dynamic-block"><div className="upload-team-dynamic-heading"><div><strong><UsersThree size={17} /> Add members <span>(optional)</span></strong><small>Add one registered platform email per field.</small></div><button type="button" className="button button-secondary" onClick={addMember}><Plus size={16} /> Add member</button></div>{form.memberEmails.map((email, index) => <div className="upload-team-member-row" key={`member-${index}`}><input type="email" value={email} onChange={(event) => updateMember(index, event.target.value)} placeholder="teammate@example.com" />{memberPreviews[index] ? <span className="upload-team-member-preview"><img src={memberPreviews[index]?.avatarUrl ?? "/art/mangadex-preview/cover-066.jpg"} alt="" /><span>{memberPreviews[index]?.displayName}</span></span> : null}<button type="button" className="upload-team-remove-button" aria-label="Remove team member" onClick={() => { setForm((current) => ({ ...current, memberEmails: current.memberEmails.filter((_, item) => item !== index) })); setMemberPreviews((current) => { const next = { ...current }; delete next[index]; return next; }); }}><X size={16} /></button></div>)}</div><div className="upload-team-creation-note"><Info size={17} /><span>Once approved, the team creator receives team-leader and global uploader access. Registered invited members receive a team invitation.</span></div><button className="button button-primary" type="submit" disabled={busy}>{busy ? <DotsThree size={18} /> : <CheckCircle size={18} />} {busy ? "Sending request…" : "Create Team request"}</button></form><section className="upload-composer-card upload-team-creation-history" aria-labelledby="team-request-history-title"><div className="upload-team-creation-form-heading"><Clock size={19} /><div><strong id="team-request-history-title">Your team requests</strong><small>Track review status and administrator notes.</small></div></div>{loading ? <p className="upload-muted-copy">Loading requests…</p> : requests.length ? <div className="upload-team-request-list">{requests.map((request) => <article key={request.id}><header><strong>{request.name}</strong><span className={`upload-team-request-status is-${request.status.toLowerCase()}`}>{statusLabel(request.status)}</span></header><small>Submitted {new Date(request.createdAt).toLocaleString()}</small>{request.reviewReason ? <p>{request.reviewReason}</p> : request.status === "PENDING" ? <p>Waiting for an administrator to review the team details.</p> : null}</article>)}</div> : <p className="upload-muted-copy">No team requests yet. Submit your first application to begin.</p>}</section></div>{cropSource ? <CropDialog source={cropSource} onCancel={() => { URL.revokeObjectURL(cropSource.url); setCropSource(null); }} onSave={saveCrop} /> : null}</section>;
 }

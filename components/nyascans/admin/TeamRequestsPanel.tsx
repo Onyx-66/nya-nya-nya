@@ -55,9 +55,9 @@ export function TeamRequestsPanel() {
   return (
     <AdminPageScaffold
       breadcrumbs={["Teams", "Requests"]}
-      kicker="Verified ownership"
+      kicker="Team administration"
       title="Requests"
-      description="Validate link-control evidence before ownership becomes active, and process the only permitted route for a permanent team-title change."
+      description="Review Create Team requests, team socials, media, and member invitations before activation."
       message={message}
       state={loading ? { kind: "loading", message: "Loading team review queues…" } : { kind: "ready" }}
     >
@@ -91,7 +91,7 @@ export function TeamRequestsPanel() {
           {reviewedCreations.length ? <details className="team-request-history"><summary>Reviewed team-creation requests <span>{reviewedCreations.length}</span><CaretDown /></summary><div>{reviewedCreations.map((request) => <article key={request.id}><strong>{request.name}</strong><span className={`team-request-status is-${request.status.toLowerCase()}`}>{request.status}</span><small>{request.reviewReason || "No review note"}</small></article>)}</div></details> : null}
         </section>
         <section>
-          <header><ShieldCheck /><div><h3>Ownership verification</h3><span>{pendingClaims.length} pending</span></div></header>
+          <header><ShieldCheck /><div><h3>Team ownership verification</h3><span>{pendingClaims.length} pending</span></div></header>
           {pendingClaims.length ? pendingClaims.map((claim) => (
             <details className="team-request-card" key={claim.id}>
               <summary>
@@ -102,10 +102,10 @@ export function TeamRequestsPanel() {
               <div className="team-request-body">
                 <dl>
                   <div><dt>Team</dt><dd><a href={`/team/${claim.teamSlug}`} target="_blank" rel="noreferrer">/{claim.teamSlug}</a></dd></div>
-                  <div><dt>Proof type</dt><dd>{claim.proofType.replaceAll("_", " ")}</dd></div>
+                  <div><dt>Verification method</dt><dd>{claim.proofType.replaceAll("_", " ")}</dd></div>
                   <div><dt>Submitted</dt><dd><Clock /> {requestDate(claim.createdAt)}</dd></div>
                 </dl>
-                <p>{claim.statement}</p>
+                <p><strong>Talk about yourself and your team</strong><br />{claim.statement}</p>
                 <a className="team-request-proof" href={claim.proofValue} target="_blank" rel="noreferrer"><LinkSimple /> Open submitted proof</a>
                 {claim.links.length ? <ul>{claim.links.map((link) => <li key={link.url}><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a><small>{link.linkType}</small></li>)}</ul> : null}
                 <label><span>Decision reason</span><textarea rows={4} value={reasons[claim.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [claim.id]: event.target.value }))} /></label>
@@ -116,7 +116,7 @@ export function TeamRequestsPanel() {
           {reviewedClaims.length ? <details className="team-request-history"><summary>Reviewed ownership claims <span>{reviewedClaims.length}</span><CaretDown /></summary><div>{reviewedClaims.map((claim) => <article key={claim.id}><strong>{claim.teamName}</strong><span className={`team-request-status is-${claim.status.toLowerCase()}`}>{claim.status}</span><small>{claim.reviewReason || "No review note"}</small></article>)}</div></details> : null}
         </section>
         <section>
-          <header><ShieldCheck /><div><h3>Permanent title changes</h3><span>{pendingTitles.length} pending</span></div></header>
+          <header><ShieldCheck /><div><h3>Team Name changes</h3><span>{pendingTitles.length} pending</span></div></header>
           {pendingTitles.length ? pendingTitles.map((request) => (
             <details className="team-request-card" key={request.id}>
               <summary>
@@ -126,7 +126,7 @@ export function TeamRequestsPanel() {
               </summary>
               <div className="team-request-body">
                 <dl>
-                  <div><dt>Requested slug</dt><dd>/{request.requestedSlug}</dd></div>
+                  <div><dt>Team Name</dt><dd>{request.requestedTitle}</dd></div><div><dt>Requested slug</dt><dd>/{request.requestedSlug}</dd></div>
                   <div><dt>Submitted</dt><dd><Clock /> {requestDate(request.createdAt)}</dd></div>
                 </dl>
                 <p>{request.reason}</p>

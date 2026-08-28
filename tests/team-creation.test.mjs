@@ -1,6 +1,6 @@
-import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import assert from "node:assert/strict";
 
 const root = new URL("../", import.meta.url).pathname;
 const requesterApi = readFileSync(`${root}app/api/v1/team-creation-requests/route.ts`, "utf8");
@@ -13,7 +13,7 @@ const detailMigration = readFileSync(`${root}drizzle/0062_team_creation_request_
 const mediaApi = readFileSync(`${root}app/api/v1/team-creation-request-media/route.ts`, "utf8");
 const adminPanel = readFileSync(`${root}components/nyascans/admin/TeamRequestsPanel.tsx`, "utf8");
 
-test("Upload Center team creation follows submit-review-approve workflow", () => {
+test("Create Team follows creation, media, socials, members, review, and approval workflow", () => {
   assert.match(schema, /teamCreationRequests = sqliteTable\(/);
   assert.match(migration, /CREATE TABLE `team_creation_requests`/);
   assert.match(detailMigration, /ADD COLUMN `logo_key`/);
@@ -22,34 +22,39 @@ test("Upload Center team creation follows submit-review-approve workflow", () =>
   assert.match(detailMigration, /member_emails_json/);
   assert.match(requesterApi, /createSchema = z\.object/);
   assert.match(requesterApi, /TEAM_CREATION_REQUEST_EXISTS/);
-  assert.match(requesterApi, /team_creation_requests/);
-  assert.match(requesterApi, /team\.creation\.request/);
   assert.match(requesterApi, /TEAM_LOGO_REQUIRED/);
   assert.match(requesterApi, /TEAM_BANNER_REQUIRED/);
   assert.match(requesterApi, /TEAM_LOGO_SQUARE_REQUIRED/);
   assert.match(requesterApi, /TEAM_BANNER_ASPECT_REQUIRED/);
   assert.match(requesterApi, /externalLinks/);
+  assert.match(requesterApi, /min\(1, "Add at least one Team Social link/);
+  assert.match(requesterApi, /TEAM_NAME_EXISTS/);
+  assert.match(requesterApi, /SELECT id FROM teams WHERE lower\(name\)/);
   assert.match(requesterApi, /memberEmails/);
   assert.match(requesterApi, /lookupEmail/);
   assert.match(requesterApi, /validateImageFile/);
   assert.match(upload, /\["create-team", "Create Team"/);
   assert.match(upload, /selectedMode === "create-team"/);
   assert.match(panel, /\/api\/v1\/team-creation-requests/);
-  assert.match(panel, /Send for admin review/);
-  assert.match(panel, /Talk about yourself/);
+  assert.match(panel, /Create Team request/);
+  assert.match(panel, /Talk about yourself and your team/);
   assert.match(panel, /required, square/);
-  assert.match(panel, /required, minimum 16:9/);
-  assert.match(panel, /Add link/);
+  assert.match(panel, /required, 16:9 minimum/);
+  assert.match(panel, /Add social/);
   assert.match(panel, /YouTube/);
   assert.match(panel, /TikTok/);
   assert.match(panel, /Instagram/);
   assert.match(panel, /Facebook/);
+  assert.match(panel, /Telegram/);
+  assert.match(panel, /Reddit/);
   assert.match(panel, /Add member/);
+  assert.match(panel, /Crop & use media/);
+  assert.match(panel, /upload-alert/);
   assert.match(panel, /lookupEmail/);
-  assert.match(panel, /team leader and uploader/);
+  assert.match(panel, /team-leader and global uploader/);
   assert.match(adminApi, /kind: z\.enum\(\["OWNERSHIP", "TITLE", "CREATION"\]\)/);
   assert.match(adminApi, /payload\.kind === "CREATION"/);
-  assert.match(adminApi, /verification_status\)\s*\n\s*SELECT .*'VERIFIED'/);
+  assert.match(adminApi, /SET verification_status = \'VERIFIED\'/);
   assert.match(adminApi, /membership_role.*'LEADER'/);
   assert.match(adminApi, /SELECT \?, 'TEAM_LEADER'/);
   assert.match(adminApi, /SELECT \?, 'UPLOADER'/);
@@ -60,4 +65,7 @@ test("Upload Center team creation follows submit-review-approve workflow", () =>
   assert.match(mediaApi, /MEDIA_NOT_FOUND/);
   assert.match(adminPanel, /Team logo/);
   assert.match(adminPanel, /Proposed team members/);
+  assert.match(adminPanel, /Team administration/);
+  assert.match(adminPanel, /Team Name changes/);
+  assert.match(adminPanel, /Talk about yourself and your team/);
 });

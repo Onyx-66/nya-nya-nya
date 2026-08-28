@@ -62638,3 +62638,64 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
   .upload-team-member-preview { grid-column: 1 / 2; }
   .upload-team-member-row .upload-team-remove-button { grid-column: 2; grid-row: 1; }
 }
+
+
+/* Create Team refinement: icon-only social picker and crop-aware media controls. */
+.upload-team-platform-picker {
+  position: relative;
+  flex: 0 0 44px;
+  z-index: 3;
+}
+.upload-team-platform-picker > summary {
+  display: grid;
+  width: 44px;
+  min-height: 42px;
+  place-items: center;
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--site-card-radius, var(--radius));
+  background: var(--surface-2, var(--surface));
+  color: var(--accent);
+}
+.upload-team-platform-picker > summary::-webkit-details-marker { display: none; }
+.upload-team-platform-picker[open] > summary,
+.upload-team-platform-picker > summary:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface-2, var(--surface))); }
+.upload-team-platform-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 40px);
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: var(--site-card-radius, var(--radius));
+  background: var(--surface-3, var(--surface));
+  box-shadow: 0 16px 35px color-mix(in srgb, var(--shadow) 70%, transparent);
+}
+.upload-team-platform-menu button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.upload-team-platform-menu button:hover,
+.upload-team-platform-menu button[aria-selected="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
+.upload-team-dynamic-row { position: relative; display: flex; align-items: center; gap: 8px; }
+.upload-team-dynamic-row > input { min-width: 0; flex: 1; }
+.upload-team-media-field small { display: inline-flex; align-items: center; gap: 5px; }
+.upload-team-creation > .upload-alert { position: fixed; top: 86px; right: 22px; z-index: 100; width: min(420px, calc(100vw - 44px)); box-shadow: 0 18px 45px color-mix(in srgb, var(--shadow) 55%, transparent); }
+.avatar-crop-preview.is-banner { width: min(560px, 82vw); aspect-ratio: 16 / 9; border-radius: var(--site-card-radius, var(--radius)); }
+.avatar-crop-preview.is-square { width: min(310px, 78vw); aspect-ratio: 1; border-radius: 50%; }
+.avatar-crop-preview.is-banner canvas { width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 520px) {
+  .upload-team-creation > .upload-alert { top: 70px; right: 10px; width: calc(100vw - 20px); }
+  .upload-team-platform-menu { grid-template-columns: repeat(4, 36px); }
+  .upload-team-platform-menu button { width: 36px; height: 36px; }
+}

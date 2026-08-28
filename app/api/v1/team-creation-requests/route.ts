@@ -16,7 +16,7 @@ const createSchema = z.object({
   description: z.string().trim().min(20).max(2_000),
   websiteUrl: z.string().trim().url().max(600).refine((value) => value.startsWith("https://"), "Website links must use HTTPS.").nullable().optional(),
   discordUrl: z.string().trim().url().max(600).refine((value) => value.startsWith("https://"), "Discord links must use HTTPS.").nullable().optional(),
-  externalLinks: z.array(linkSchema).max(12).default([]),
+  externalLinks: z.array(linkSchema).min(1, "Add at least one Team Social link.").max(12),
   memberEmails: z.array(z.string().trim().email().max(320)).max(25).default([]),
   reason: z.string().trim().min(20).max(1_000),
 });
@@ -132,6 +132,9 @@ export async function POST(request: Request) {
           AND lower(name) = lower(?) LIMIT 1`,
     ).bind(actor.id, payload.name).first<{ id: string }>();
     if (duplicate) throw new ApiError(409, "TEAM_CREATION_REQUEST_EXISTS", "You already have a pending request for a team with this name.");
+    const existingTeam = await db.prepare("SELECT id FROM teams WHERE lower(name) = lower(?) LIMIT 1").bind(payload.name).first<{ id: string }>();
+    const existingRequest = await db.prepare("SELECT id FROM team_creation_requests WHERE lower(name) = lower(?) AND status IN ('PENDING', 'APPROVED') LIMIT 1").bind(payload.name).first<{ id: string }>();
+    if (existingTeam || existingRequest) throw new ApiError(409, "TEAM_NAME_EXISTS", "A team with this name already exists.");
     const id = `team_create_${randomId()}`;
     const slug = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 72) || `team-${randomId().slice(0, 8)}`;
     logoKey = await storeRequestImage(logo, "logo", actor.id, id);
