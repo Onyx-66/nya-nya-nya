@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { requestIdFor } from "@/lib/server/admin-utils";
 import { getActor } from "@/lib/server/policy";
+import { getSiteConfigurationDocument } from "@/lib/server/site-configuration";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,10 @@ function publicEntry(row: LeaderboardRow) {
 export async function GET(request: Request) {
   const requestId = requestIdFor(request);
   try {
+    const siteConfiguration = await getSiteConfigurationDocument();
+    if (!siteConfiguration.settings.leaderboard.isPublic) {
+      throw new ApiError(404, "LEADERBOARD_PRIVATE", "The leaderboard is currently unavailable.");
+    }
     if (!env.DB) {
       throw new ApiError(
         503,

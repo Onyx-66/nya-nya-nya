@@ -21,6 +21,11 @@ const mediaKeySchema = z
   .nullable();
 
 export const pinnedSeriesCarouselStyleSchema = z.enum(["CLASSIC", "CARD_COVER_FLOW"]);
+export const leaderboardSettingsSchema = z.object({
+  isPublic: z.boolean().default(true),
+  guidanceTitle: z.string().trim().min(1).max(120).default("How to raise your score"),
+  guidanceBody: z.string().trim().max(4_000).default("Earn Score by reading chapters, joining discussions, and contributing helpful reactions to the community."),
+});
 export type PinnedSeriesCarouselStyle = z.infer<typeof pinnedSeriesCarouselStyleSchema>;
 
 export const recentReviewsPresentationStyleSchema = z.enum(["CLASSIC_RAIL", "COMPACT_RAIL"]);
@@ -124,6 +129,7 @@ export const siteConfigurationSchema = z
       pinnedSeriesStyle: pinnedSeriesCarouselStyleSchema.default("CLASSIC"),
       recentReviewsStyle: recentReviewsPresentationStyleSchema.default("CLASSIC_RAIL"),
     }),
+    leaderboard: leaderboardSettingsSchema,
     footer: z.object({
       description: z.string().trim().max(400).default(""),
       copyright: z.string().trim().max(240).default(""),
@@ -268,6 +274,11 @@ export const defaultSiteConfiguration: SiteConfiguration = {
     pinnedSeriesStyle: "CLASSIC",
     recentReviewsStyle: "CLASSIC_RAIL",
   },
+  leaderboard: {
+    isPublic: true,
+    guidanceTitle: "How to raise your score",
+    guidanceBody: "Earn Score by reading chapters, joining discussions, and contributing helpful reactions to the community.",
+  },
   footer: {
     description: "A focused home for manga, manhwa, manhua, webtoons, readers, and the teams that make every release possible.",
     copyright: "© 2026 NyaScans. Original platform artwork.",
@@ -363,6 +374,7 @@ export function parseSiteConfiguration(
     ...input,
     brand: { ...defaultSiteConfiguration.brand, ...input.brand },
     homepage: { ...defaultSiteConfiguration.homepage, ...input.homepage },
+    leaderboard: { ...defaultSiteConfiguration.leaderboard, ...input.leaderboard },
     footer: { ...defaultSiteConfiguration.footer, ...input.footer },
     reader: { ...defaultSiteConfiguration.reader, ...input.reader },
     keyboardShortcuts:

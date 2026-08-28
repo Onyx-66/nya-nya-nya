@@ -9,6 +9,7 @@ import { NyaScansApp, type AppView } from "@/components/nyascans/NyaScansApp";
 import { ApiError } from "@/lib/server/api";
 import { getActor } from "@/lib/server/policy";
 import { publicPaidSeriesPredicate } from "@/lib/server/public-content-visibility";
+import { getSiteConfigurationDocument } from "@/lib/server/site-configuration";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,10 @@ export default async function CatchAllPage({
     ))
   ) {
     notFound();
+  }
+  if (resolved.view === "rankings") {
+    const siteConfiguration = await getSiteConfigurationDocument();
+    if (!siteConfiguration.settings.leaderboard.isPublic) notFound();
   }
   const user = await getAuthenticatedUser();
   let actor: Awaited<ReturnType<typeof getActor>> = null;

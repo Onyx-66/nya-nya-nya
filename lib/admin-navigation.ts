@@ -199,6 +199,13 @@ export const ADMIN_NAVIGATION_GROUPS = [
         keywords: ["reactions", "moderation", "community"],
       },
       {
+        slug: "leaderboard-settings",
+        label: "Leaderboard",
+        capability: "community.leaderboard.manage",
+        aliases: ["rankings", "score guide"],
+        keywords: ["score", "ranking", "public", "private", "guidance"],
+      },
+      {
         slug: "support-tickets",
         label: "Support Tickets",
         capability: "admin.support.manage",

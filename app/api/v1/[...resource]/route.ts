@@ -85,6 +85,7 @@ import {
 } from "@/lib/server/theme-catalog";
 import { themeCatalogPolicySchema } from "@/lib/theme-catalog";
 import {
+  leaderboardSettingsSchema,
   siteConfigurationSchema,
   type SiteConfiguration,
 } from "@/lib/site-configuration";
@@ -7504,6 +7505,17 @@ export async function GET(request: Request, context: RouteContext) {
       return json(id, await getDiscussionSettingsDocument());
     }
 
+    if (path === "admin/leaderboard-settings") {
+      const actor = await requireActor();
+      requireAdminCapability(actor, capabilityForAdminPath(path));
+      const document = await getSiteConfigurationDocument();
+      return json(id, {
+        settings: document.settings.leaderboard,
+        revision: document.revision,
+        updatedAt: document.updatedAt,
+      }, { headers: { "cache-control": "private, no-store" } });
+    }
+
     if (path === "openapi") {
       return json(id, {
         openapi: "3.1.0",
@@ -7571,6 +7583,10 @@ export async function GET(request: Request, context: RouteContext) {
           "/admin/discussion-settings": {
             get: { summary: "Read administrator discussion settings" },
             put: { summary: "Save reactions and discussion media policy" },
+          },
+          "/admin/leaderboard-settings": {
+            get: { summary: "Read Leaderboard visibility and score guidance" },
+            put: { summary: "Save Leaderboard visibility and score guidance" },
           },
           "/admin/summary": {
             get: { summary: "Read real platform and publishing counts" },
@@ -8586,6 +8602,7 @@ export async function PUT(request: Request, context: RouteContext) {
       path !== "admin/theme-catalog" &&
       path !== "admin/commercial-settings" &&
       path !== "admin/discussion-settings" &&
+      path !== "admin/leaderboard-settings" &&
       path !== "admin/chapters" &&
       path !== "admin/teams" &&
       path !== "admin/users" &&
@@ -8981,6 +8998,26 @@ export async function PUT(request: Request, context: RouteContext) {
         ),
         { headers: { "cache-control": "private, no-store" } },
       );
+    }
+    if (path === "admin/leaderboard-settings") {
+      const body = await request.json();
+      const wrapped = z.object({
+        settings: leaderboardSettingsSchema,
+        expectedRevision: z.coerce.number().int().min(0),
+      }).parse(body);
+      const current = await getSiteConfigurationDocument();
+      const saved = await saveSiteConfiguration(
+        { ...current.settings, leaderboard: wrapped.settings },
+        actor.id,
+        id,
+        false,
+        wrapped.expectedRevision,
+      );
+      return json(id, {
+        settings: saved.settings.leaderboard,
+        revision: saved.revision,
+        updatedAt: saved.updatedAt,
+      }, { headers: { "cache-control": "private, no-store" } });
     }
 
     if (path === "admin/theme-catalog") {

@@ -11,6 +11,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { mockAvatarUrl } from "@/lib/mock-media";
+import { useSiteConfiguration } from "@/components/nyascans/useSiteConfiguration";
 
 type RankingPeriod = "weekly" | "monthly" | "all";
 
@@ -191,6 +192,7 @@ function RankingListRow({ entry, viewer = false }: { entry: LeaderboardEntry; vi
 }
 
 export function UserLeaderboardView() {
+  const { settings } = useSiteConfiguration();
   const [period, setPeriod] = useState<RankingPeriod>("weekly");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [viewer, setViewer] = useState<LeaderboardEntry | null>(null);
@@ -238,6 +240,12 @@ export function UserLeaderboardView() {
         </div>
         <h1 id="leaderboard-title">Leaderboard</h1>
         <p>Top 100 users ranked by Score earned through community activity, comments, reacts, and chapters read.</p>
+        {settings.leaderboard.guidanceBody ? (
+          <aside className="user-ranking-guidance" aria-label={settings.leaderboard.guidanceTitle}>
+            <strong>{settings.leaderboard.guidanceTitle}</strong>
+            <span>{settings.leaderboard.guidanceBody}</span>
+          </aside>
+        ) : null}
       </header>
 
       <div className="user-ranking-controls">

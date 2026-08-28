@@ -29,6 +29,7 @@ export const ADMIN_PERMISSION_REGISTRY = [
   ["platform.operations.read", "Platform", "Read the operational registry for public systems"],
   ["platform.features.manage", "Platform", "Manage durable platform feature flags"],
   ["community.achievements.manage", "Community", "Manage achievement definitions and awards"],
+  ["community.leaderboard.manage", "Community", "Manage Leaderboard visibility and score guidance"],
   ["commerce.entitlements.read", "Commerce", "Inspect chapter entitlements and gift-card lifecycle"],
   ["notifications.manage", "Platform", "Inspect delivery and send targeted administrator notices"],
   ["security.read", "Security", "Read administrator passkey posture and security audit coverage"],
@@ -79,6 +80,7 @@ export function capabilityForAdminPath(path: string) {
   if (/^(appearance|site-configuration|theme-catalog|site-media)$/u.test(suffix)) return "appearance.manage";
   if (/^commercial-settings$/u.test(suffix)) return "commerce.manage";
   if (/^discussion-settings$/u.test(suffix)) return "comments.moderate.global";
+  if (/^leaderboard-settings$/u.test(suffix)) return "community.leaderboard.manage";
   if (/^reports$/u.test(suffix)) return "reports.manage";
   return "__unmapped_admin_capability__";
 }

@@ -6702,3 +6702,142 @@
 }
 
 /* End mobile sidebar correction. */
+
+
+/* Community → Leaderboard settings. */
+.ops-shell[data-operations-mode="admin"] .leaderboard-settings-panel {
+  max-width: 980px;
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-card {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--site-card-radius, var(--radius));
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-card-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-card-heading h3,
+.ops-shell[data-operations-mode="admin"] .admin-settings-card-heading p {
+  margin: 0;
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-card-heading h3 {
+  margin-top: 5px;
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-card-heading p {
+  max-width: 68ch;
+  margin-top: 7px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-status {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: .72rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+.ops-shell[data-operations-mode="admin"] .admin-settings-status.is-private {
+  color: var(--warning, var(--accent));
+}
+.ops-shell[data-operations-mode="admin"] .admin-segmented-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.ops-shell[data-operations-mode="admin"] .admin-segmented-control button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--site-button-radius, var(--radius-small));
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  color: var(--muted);
+  font-weight: 760;
+  cursor: pointer;
+}
+.ops-shell[data-operations-mode="admin"] .admin-segmented-control button.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--text);
+}
+.ops-shell[data-operations-mode="admin"] .admin-field-label {
+  display: grid;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: .82rem;
+  font-weight: 720;
+}
+.ops-shell[data-operations-mode="admin"] .admin-field-label input,
+.ops-shell[data-operations-mode="admin"] .admin-field-label textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--site-button-radius, var(--radius-small));
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.ops-shell[data-operations-mode="admin"] .admin-field-label input {
+  min-height: 44px;
+  padding: 0 12px;
+}
+.ops-shell[data-operations-mode="admin"] .admin-field-label textarea {
+  min-height: 136px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.55;
+}
+@media (max-width: 700px) {
+  .ops-shell[data-operations-mode="admin"] .appearance-presentation-header,
+  .ops-shell[data-operations-mode="admin"] .admin-settings-card-heading {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+  .ops-shell[data-operations-mode="admin"] .appearance-presentation-header .button {
+    width: 100%;
+  }
+  .ops-shell[data-operations-mode="admin"] .admin-segmented-control {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Public Leaderboard guidance authored in Community → Leaderboard. */
+.user-leaderboard .user-ranking-guidance {
+  display: grid;
+  max-width: 48rem;
+  gap: .25rem;
+  margin: .35rem auto 0;
+  padding: .7rem .9rem;
+  border: 1px solid color-mix(in srgb, var(--theme-home-leaderboard-accent) 28%, var(--line));
+  border-radius: var(--site-card-radius, var(--radius));
+  background: color-mix(in srgb, var(--theme-home-leaderboard-accent) 8%, transparent);
+  color: var(--muted);
+  text-align: center;
+}
+.user-leaderboard .user-ranking-guidance strong {
+  color: var(--text);
+  font-size: .8rem;
+}
+.user-leaderboard .user-ranking-guidance span {
+  font-size: .75rem;
+  line-height: 1.45;
+}
+@media (max-width: 760px) {
+  .user-leaderboard .user-ranking-guidance {
+    margin-inline: .75rem;
+    text-align: left;
+  }
+}

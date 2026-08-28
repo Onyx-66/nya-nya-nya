@@ -137,6 +137,7 @@ import { AppearanceWorkspace } from "@/components/nyascans/admin/AppearanceWorks
 import { BotActivityPanel } from "@/components/nyascans/admin/BotActivityPanel";
 import { ConfirmActionDialog } from "@/components/nyascans/admin/AdminPageScaffold";
 import { IdentifiersPanel } from "@/components/nyascans/admin/IdentifiersPanel";
+import { LeaderboardSettingsPanel } from "@/components/nyascans/admin/LeaderboardSettingsPanel";
 import { RewardSettingsPanel } from "@/components/nyascans/admin/RewardSettingsPanel";
 import {
   defaultReaderSettings,
@@ -12733,6 +12734,7 @@ const ADMIN_NAVIGATION_ICONS: Readonly<Record<string, PhosphorIcon>> = {
   permissions: Key,
   reports: WarningCircle,
   discussions: ChatCircle,
+  "leaderboard-settings": Trophy,
   "support-tickets": Lifebuoy,
   "wallet-balances": Wallet,
   payouts: Coins,
@@ -14012,6 +14014,8 @@ function OperationsView({
           />
         ) : admin && activeNavigationItem?.slug === "identifiers" ? (
           <IdentifiersPanel />
+        ) : admin && activeNavigationItem?.slug === "leaderboard-settings" ? (
+          <LeaderboardSettingsPanel />
         ) : admin && activeNavigationItem?.slug === "bot-activity" ? (
           <BotActivityPanel />
         ) : (
