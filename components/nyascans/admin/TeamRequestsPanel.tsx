@@ -8,6 +8,7 @@ import { AdminEmptyState, AdminPageScaffold } from "@/components/nyascans/admin/
 type RequestData = {
   ownershipClaims: Array<{ id: string; teamId: string; teamName: string; teamSlug: string; claimantName: string; claimantEmail: string; proofType: string; proofValue: string; statement: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null; links: Array<{ label: string; url: string; linkType: string }> }>;
   titleRequests: Array<{ id: string; teamId: string; currentTitle: string; requestedTitle: string; requestedSlug: string; requestedBy: string; requesterEmail: string; reason: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null }>;
+  creationRequests: Array<{ id: string; name: string; slug: string; description: string; websiteUrl?: string | null; discordUrl?: string | null; requestedBy: string; requesterEmail: string; reason: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null }>;
 };
 
 function requestDate(value: string) {
@@ -32,7 +33,7 @@ export function TeamRequestsPanel() {
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
-  async function decide(kind: "OWNERSHIP" | "TITLE", item: { id: string; revision: number }, decision: "APPROVE" | "REJECT") {
+  async function decide(kind: "OWNERSHIP" | "TITLE" | "CREATION", item: { id: string; revision: number }, decision: "APPROVE" | "REJECT") {
     const reason = reasons[item.id]?.trim() ?? "";
     if (reason.length < 10) { setMessage({ kind: "error", text: "Write a precise review reason of at least 10 characters." }); return; }
     setBusy(item.id); setMessage(null);
@@ -40,15 +41,17 @@ export function TeamRequestsPanel() {
       const response = await fetch("/api/v1/admin/team-requests", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind, id: item.id, revision: item.revision, decision, reason }) });
       const payload = await response.json() as { data?: RequestData; error?: { message?: string } };
       if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "The review decision could not be saved.");
-      setData(payload.data); setMessage({ kind: "success", text: `${kind === "OWNERSHIP" ? "Ownership" : "Title"} request ${decision === "APPROVE" ? "approved" : "rejected"}.` });
+      setData(payload.data); setMessage({ kind: "success", text: `${kind === "OWNERSHIP" ? "Ownership" : kind === "CREATION" ? "Team creation" : "Title"} request ${decision === "APPROVE" ? "approved" : "rejected"}.` });
     } catch (error) { setMessage({ kind: "error", text: error instanceof Error ? error.message : "The review decision could not be saved." }); }
     finally { setBusy(""); }
   }
 
   const pendingClaims = data?.ownershipClaims.filter((claim) => claim.status === "PENDING") ?? [];
   const pendingTitles = data?.titleRequests.filter((request) => request.status === "PENDING") ?? [];
+  const pendingCreations = data?.creationRequests.filter((request) => request.status === "PENDING") ?? [];
   const reviewedClaims = data?.ownershipClaims.filter((claim) => claim.status !== "PENDING") ?? [];
   const reviewedTitles = data?.titleRequests.filter((request) => request.status !== "PENDING") ?? [];
+  const reviewedCreations = data?.creationRequests.filter((request) => request.status !== "PENDING") ?? [];
   return (
     <AdminPageScaffold
       breadcrumbs={["Teams", "Requests"]}
@@ -59,6 +62,31 @@ export function TeamRequestsPanel() {
       state={loading ? { kind: "loading", message: "Loading team review queues…" } : { kind: "ready" }}
     >
       <div className="team-request-queues">
+        <section>
+          <header><ShieldCheck /><div><h3>New team creation</h3><span>{pendingCreations.length} pending</span></div></header>
+          {pendingCreations.length ? pendingCreations.map((request) => (
+            <details className="team-request-card" key={request.id}>
+              <summary>
+                <div><strong>{request.name}</strong><span>{request.requestedBy} · {request.requesterEmail}</span></div>
+                <span className="team-request-status is-pending">Pending</span>
+                <CaretDown aria-hidden="true" />
+              </summary>
+              <div className="team-request-body">
+                <dl>
+                  <div><dt>Requested slug</dt><dd>/{request.slug}</dd></div>
+                  <div><dt>Submitted</dt><dd><Clock /> {requestDate(request.createdAt)}</dd></div>
+                  {request.websiteUrl ? <div><dt>Website</dt><dd><a href={request.websiteUrl} target="_blank" rel="noreferrer">Open website</a></dd></div> : null}
+                  {request.discordUrl ? <div><dt>Discord</dt><dd><a href={request.discordUrl} target="_blank" rel="noreferrer">Open Discord</a></dd></div> : null}
+                </dl>
+                <p><strong>Description</strong><br />{request.description}</p>
+                <p><strong>Application reason</strong><br />{request.reason}</p>
+                <label><span>Decision reason</span><textarea rows={4} value={reasons[request.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [request.id]: event.target.value }))} /></label>
+                <footer><button type="button" disabled={busy === request.id} onClick={() => void decide("CREATION", request, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === request.id} onClick={() => void decide("CREATION", request, "APPROVE")}>{busy === request.id ? <DotsRing /> : <Check />} Approve & activate team</button></footer>
+              </div>
+            </details>
+          )) : <AdminEmptyState icon={<ShieldCheck />} title="Team-creation queue is clear" description="No new team is waiting for administrator review." />}
+          {reviewedCreations.length ? <details className="team-request-history"><summary>Reviewed team-creation requests <span>{reviewedCreations.length}</span><CaretDown /></summary><div>{reviewedCreations.map((request) => <article key={request.id}><strong>{request.name}</strong><span className={`team-request-status is-${request.status.toLowerCase()}`}>{request.status}</span><small>{request.reviewReason || "No review note"}</small></article>)}</div></details> : null}
+        </section>
         <section>
           <header><ShieldCheck /><div><h3>Ownership verification</h3><span>{pendingClaims.length} pending</span></div></header>
           {pendingClaims.length ? pendingClaims.map((claim) => (

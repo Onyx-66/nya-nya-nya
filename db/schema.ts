@@ -473,6 +473,34 @@ export const teamMemberships = sqliteTable(
   ],
 );
 
+export const teamCreationRequests = sqliteTable(
+  "team_creation_requests",
+  {
+    id: text("id").primaryKey(),
+    requestedByUserId: text("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull().default(""),
+    websiteUrl: text("website_url"),
+    discordUrl: text("discord_url"),
+    reason: text("reason").notNull().default(""),
+    status: text("status").notNull().default("PENDING"),
+    reviewReason: text("review_reason"),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: text("reviewed_at"),
+    revision: integer("revision").notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("team_creation_requests_status_idx").on(table.status, table.createdAt),
+    index("team_creation_requests_requester_idx").on(table.requestedByUserId, table.createdAt),
+  ],
+);
 export const teamLinks = sqliteTable(
   "team_links",
   {

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, auditStatement, requestIdFor } from "@/lib/server/admin-utils";
 import { requireActor, requireAdminCapability } from "@/lib/server/policy";
+import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
+import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,7 @@ function database() {
 
 async function snapshot() {
   const db = database();
-  const [claims, titles] = await Promise.all([
+  const [claims, titles, creations] = await Promise.all([
     db.prepare(
       `SELECT c.id, c.team_id AS teamId, t.name AS teamName, t.slug AS teamSlug,
               u.display_name AS claimantName, u.email AS claimantEmail,
@@ -36,10 +38,20 @@ async function snapshot() {
          JOIN users u ON u.id = r.requested_by_user_id
         ORDER BY CASE r.status WHEN 'PENDING' THEN 0 ELSE 1 END, datetime(r.created_at) DESC`,
     ).all<Record<string, unknown>>(),
+    db.prepare(
+      `SELECT r.id, r.name, r.slug, r.description,
+              r.website_url AS websiteUrl, r.discord_url AS discordUrl,
+              r.reason, r.status, r.review_reason AS reviewReason,
+              r.revision, r.created_at AS createdAt, r.reviewed_at AS reviewedAt,
+              u.display_name AS requestedBy, u.email AS requesterEmail
+         FROM team_creation_requests r JOIN users u ON u.id = r.requested_by_user_id
+        ORDER BY CASE r.status WHEN 'PENDING' THEN 0 ELSE 1 END, datetime(r.created_at) DESC`,
+    ).all<Record<string, unknown>>(),
   ]);
   return {
     ownershipClaims: claims.results.map((claim) => ({ ...claim, links: (() => { try { return JSON.parse(String(claim.linksJson ?? "[]")); } catch { return []; } })() })),
     titleRequests: titles.results,
+    creationRequests: creations.results,
   };
 }
 
@@ -57,7 +69,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const actor = await requireActor(); requireAdminCapability(actor, "content.team-requests.review");
     const payload = z.object({
-      kind: z.enum(["OWNERSHIP", "TITLE"]),
+      kind: z.enum(["OWNERSHIP", "TITLE", "CREATION"]),
       id: z.string().trim().min(3).max(160),
       revision: z.number().int().min(1),
       decision: z.enum(["APPROVE", "REJECT"]),
@@ -95,6 +107,77 @@ export async function POST(request: Request) {
       ]);
       if (!results[0]?.meta.changes) throw new ApiError(409, "TEAM_CLAIM_CHANGED", "This ownership claim changed during review.");
       if (approved && (!results[1]?.meta.changes || !results[2]?.meta.changes)) throw new ApiError(409, "TEAM_CLAIM_INVARIANT", "Ownership could not be activated because its proof or pending owner changed.");
+    } else if (payload.kind === "CREATION") {
+      const creationRequest = await db.prepare(
+        `SELECT id, requested_by_user_id AS requestedByUserId, name, slug,
+                description, website_url AS websiteUrl, discord_url AS discordUrl
+           FROM team_creation_requests
+          WHERE id = ? AND status = 'PENDING' AND revision = ?`,
+      ).bind(payload.id, payload.revision).first<{ id: string; requestedByUserId: string; name: string; slug: string; description: string; websiteUrl: string | null; discordUrl: string | null }>();
+      if (!creationRequest) throw new ApiError(409, "TEAM_CREATION_REQUEST_CHANGED", "This team-creation request is no longer pending.");
+      const approved = payload.decision === "APPROVE";
+      const decisionRevision = payload.revision + 1;
+      const requestGate = `EXISTS (SELECT 1 FROM team_creation_requests r WHERE r.id = ? AND r.status = ? AND r.revision = ? AND r.reviewed_by_user_id = ?)`;
+      const decision = db.prepare(
+        `UPDATE team_creation_requests
+            SET status = ?, reviewed_by_user_id = ?, review_reason = ?,
+                reviewed_at = CURRENT_TIMESTAMP, revision = revision + 1,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND status = 'PENDING' AND revision = ?`,
+      ).bind(approved ? "APPROVED" : "REJECTED", actor.id, payload.reason, payload.id, payload.revision);
+      const teamId = `team_${randomId()}`;
+      const publicRef = newPublicReference("TEAM");
+      const teamSlug = `${creationRequest.slug}-${randomId().slice(0, 6).toLowerCase()}`;
+      const approvalStatements = approved
+        ? [
+            db.prepare(
+              `INSERT INTO teams (id, public_ref, slug, name, description, created_by_user_id, verification_status)
+               SELECT ?, ?, ?, ?, ?, ?, 'VERIFIED' WHERE ${requestGate}`,
+            ).bind(teamId, publicRef, teamSlug, creationRequest.name, creationRequest.description, creationRequest.requestedByUserId, payload.id, "APPROVED", decisionRevision, actor.id),
+            publicReferenceReservationStatement(db, "TEAM", publicRef, teamId),
+            db.prepare(
+              `INSERT INTO team_memberships (team_id, user_id, membership_role, status, invited_by_user_id, invited_at, responded_at, can_request_series)
+               SELECT ?, ?, 'LEADER', 'ACTIVE', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1 WHERE ${requestGate}`,
+            ).bind(teamId, creationRequest.requestedByUserId, actor.id, payload.id, "APPROVED", decisionRevision, actor.id),
+            db.prepare(
+              `INSERT OR IGNORE INTO user_roles (user_id, role, assigned_by_user_id)
+               SELECT ?, 'TEAM_LEADER', ? WHERE ${requestGate}`,
+            ).bind(creationRequest.requestedByUserId, actor.id, payload.id, "APPROVED", decisionRevision, actor.id),
+            db.prepare(
+              `INSERT OR IGNORE INTO user_roles (user_id, role, assigned_by_user_id)
+               SELECT ?, 'UPLOADER', ? WHERE ${requestGate}`,
+            ).bind(creationRequest.requestedByUserId, actor.id, payload.id, "APPROVED", decisionRevision, actor.id),
+          ]
+        : [];
+      const notification = db.prepare(
+        `INSERT INTO notifications (id, user_id, kind, title, body, dedupe_key, action_url, metadata_json)
+         SELECT ?, ?, 'TEAM_REVIEW', ?, ?, ?, '/dashboard/my-teams', ? WHERE ${requestGate}`,
+      ).bind(
+        `ntf_${randomId()}`,
+        creationRequest.requestedByUserId,
+        approved ? "Team creation approved" : "Team creation rejected",
+        approved ? `Your team “${creationRequest.name}” is now active. You are its team leader and uploader.` : `Your team request “${creationRequest.name}” was not approved.`,
+        `team-creation:${payload.id}:${payload.decision}`,
+        JSON.stringify({ teamId: approved ? teamId : null, decision: payload.decision }),
+        payload.id, approved ? "APPROVED" : "REJECTED", decisionRevision, actor.id,
+      );
+      const results = await db.batch([
+        decision,
+        ...approvalStatements,
+        notification,
+        auditStatement(db, actor, requestId, {
+          action: approved ? "team.creation.approve" : "team.creation.reject",
+          category: "TEAMS_PERMISSIONS",
+          sourceArea: "TEAM_REQUESTS",
+          targetType: "TEAM_CREATION_REQUEST",
+          targetId: payload.id,
+          targetLabel: creationRequest.name,
+          reason: payload.reason,
+        }, "changes() = 1"),
+        db.prepare("UPDATE team_creation_requests SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ? AND revision = ? AND reviewed_by_user_id = ?").bind(payload.id, approved ? "APPROVED" : "REJECTED", decisionRevision, actor.id),
+      ]);
+      if (!results[0]?.meta.changes) throw new ApiError(409, "TEAM_CREATION_REQUEST_CHANGED", "This team-creation request changed during review.");
+      if (approved && results.slice(1, 6).some((result) => !result?.meta.changes)) throw new ApiError(409, "TEAM_CREATION_INVARIANT", "The approved team could not be created with its required leader and uploader roles.");
     } else {
       const titleRequest = await db.prepare("SELECT team_id AS teamId, requested_by_user_id AS requestedByUserId, requested_title AS requestedTitle, requested_slug AS requestedSlug FROM team_title_change_requests WHERE id = ? AND status = 'PENDING' AND revision = ?").bind(payload.id, payload.revision).first<{ teamId: string; requestedByUserId: string; requestedTitle: string; requestedSlug: string }>();
       if (!titleRequest) throw new ApiError(409, "TEAM_TITLE_REQUEST_CHANGED", "This title request is no longer pending.");

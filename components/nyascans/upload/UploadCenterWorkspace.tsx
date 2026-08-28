@@ -54,6 +54,7 @@ import {
   AddSeriesRequestPanel,
   SeriesRequestsPanel,
 } from "@/components/nyascans/upload/SeriesRequestWorkspace";
+import { TeamCreationPanel } from "@/components/nyascans/upload/TeamCreationPanel";
 import {
   AdminCombobox,
   ConfirmActionDialog,
@@ -74,6 +75,7 @@ type UploadMode =
   | "dashboard"
   | "add-series"
   | "series-requests"
+  | "create-team"
   | "series"
   | "single"
   | "multi"
@@ -4159,6 +4161,7 @@ const navItems: Array<[UploadMode, string, typeof Gauge]> = [
   ["dashboard", "Dashboard", Gauge],
   ["add-series", "Create New Series", Plus],
   ["series-requests", "My Series Requests", FileText],
+  ["create-team", "Create Team", ShieldCheck],
   ["series", "Series", Books],
   ["single", "Single Chapter", FileImage],
   ["multi", "Multi-Chapter", FolderOpen],
@@ -4197,6 +4200,9 @@ export function UploadCenterWorkspace({
     if (admin || id === "dashboard") return true;
     if (id === "add-series" || id === "series-requests") {
       return canRequestSeries;
+    }
+    if (id === "create-team") {
+      return canUpload;
     }
     if (id === "rights") {
       return canManageTeam || canUpload || canRequestSeries;
@@ -4243,7 +4249,7 @@ export function UploadCenterWorkspace({
   useEffect(() => {
     if (
       canUpload &&
-      !["add-series", "series-requests", "rights"].includes(selectedMode)
+      !["add-series", "series-requests", "create-team", "rights"].includes(selectedMode)
     ) {
       const timeout = window.setTimeout(() => {
         void load();
@@ -4314,6 +4320,8 @@ export function UploadCenterWorkspace({
           <AddSeriesRequestPanel />
         ) : selectedMode === "series-requests" ? (
           <SeriesRequestsPanel />
+        ) : selectedMode === "create-team" ? (
+          <TeamCreationPanel />
         ) : selectedMode === "rights" ? (
           <RightsPanel />
         ) : selectedMode === "dashboard" && !canUpload ? (

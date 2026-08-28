@@ -20,6 +20,7 @@ export default async function UploadChapterPage({
     "dashboard",
     "add-series",
     "series-requests",
+    "create-team",
     "series",
     "single",
     "multi",
