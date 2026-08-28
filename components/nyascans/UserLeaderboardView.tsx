@@ -114,7 +114,7 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
     <li className={`user-ranking-podium-card is-rank-${entry.rank}`}>
       <a href={profileHref(entry)} aria-label={accessibleEntryLabel(entry)}>
         <span className={`user-ranking-place user-ranking-medal rank-${entry.rank}`} aria-label={`Rank ${entry.rank}`}>
-          <Medal size={34} weight="fill" aria-hidden="true" />
+          <Medal className="user-ranking-award-icon" size={40} aria-hidden="true" />
           <strong aria-hidden="true">{entry.rank}</strong>
         </span>
         <RankingAvatar entry={entry} featured />
@@ -122,6 +122,7 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
         <span className="user-ranking-tier">{rankingTier(entry)}</span>
         <div className="user-ranking-podium-metrics">
           <div className="user-ranking-podium-score">
+            <span className="user-ranking-score-label">Score</span>
             <RankingMetric
               icon={<Fire weight="fill" aria-hidden="true" />}
               label="Score"
@@ -301,12 +302,9 @@ export function UserLeaderboardView() {
               <ol>{podiumEntries.map((entry) => <PodiumCard entry={entry} key={entry.userId} />)}</ol>
             </section>
           ) : null}
-          <section className="user-ranking-list" aria-labelledby="user-ranking-list-title">
+          <section className="user-ranking-list" aria-label="Lower-ranked users">
             <div className="user-ranking-list-heading">
-              <div>
-                <span className="user-ranking-kicker">The rest of the board</span>
-                  <h2 id="user-ranking-list-title">Leaderboard entries</h2>
-              </div>
+              <span className="user-ranking-list-heading-spacer" aria-hidden="true" />
               <div className="user-ranking-list-labels" aria-hidden="true">
                 <span>Score</span>
                 <span>Comments</span>

@@ -76,7 +76,11 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(leaderboard, /label="Chapters"/);
   assert.match(leaderboard, /BookOpenText weight="fill" aria-hidden="true"/);
   assert.match(leaderboard, /user-ranking-medal rank-\$\{entry\.rank\}/);
-  assert.match(leaderboard, /<Medal size=\{34\} weight="fill" aria-hidden="true" \/>/);
+  assert.match(leaderboard, /<Medal className="user-ranking-award-icon" size=\{40\} aria-hidden="true" \/>/);
+  assert.match(leaderboard, /<span className="user-ranking-score-label">Score<\/span>/);
+  assert.doesNotMatch(leaderboard, /<span className="user-ranking-kicker">The rest of the board<\/span>/);
+  assert.doesNotMatch(leaderboard, /<h2 id="user-ranking-list-title">Leaderboard entries<\/h2>/);
+  assert.match(leaderboard, /aria-label="Lower-ranked users"/);
   assert.doesNotMatch(leaderboard, /<small>\{label\}<\/small>/);
   assert.match(leaderboard, /user-ranking-podium-score/);
   assert.match(leaderboard, /user-ranking-podium-secondary/);
@@ -113,6 +117,10 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-podium-card\.is-rank-3[\s\S]*border-color: color-mix\(in srgb, var\(--leaderboard-third\)/);
   assert.match(globals, /user-ranking-list-row \.user-ranking-avatar[\s\S]*aspect-ratio: 1 \/ 1[\s\S]*border-radius: 1rem/);
   assert.match(globals, /user-ranking-list-row \.user-ranking-avatar img[\s\S]*border-radius: \.85rem/);
+  assert.match(globals, /user-ranking-podium-metrics[\s\S]*margin-top: 0/);
+  assert.match(globals, /user-ranking-score-label[\s\S]*text-transform: uppercase/);
+  assert.match(globals, /user-ranking-award-icon[\s\S]*stroke-width: 1\.45/);
+  assert.match(globals, /user-ranking-list-heading[\s\S]*display: none/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {

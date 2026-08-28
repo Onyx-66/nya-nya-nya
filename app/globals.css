@@ -62269,3 +62269,126 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
   border-radius: .85rem;
   object-fit: cover;
 }
+
+
+/* v49.22.2 — final Leaderboard spacing, award badges, and lower-row presentation */
+.user-leaderboard .user-ranking-podium-metrics {
+  margin-top: 0;
+}
+
+.user-leaderboard .user-ranking-podium-score {
+  display: grid;
+  justify-items: center;
+  gap: .16rem;
+  width: 100%;
+}
+
+.user-leaderboard .user-ranking-score-label {
+  color: var(--text-soft);
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal {
+  width: 3.9rem;
+  height: 3.9rem;
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal > svg.user-ranking-award-icon {
+  width: 3.8rem;
+  height: 3.8rem;
+  opacity: 1;
+  stroke-width: 1.45;
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-2,
+.user-leaderboard .user-ranking-podium-card.is-rank-2 > a {
+  border-color: color-mix(in srgb, var(--leaderboard-second) 72%, var(--theme-accent-l3));
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-3,
+.user-leaderboard .user-ranking-podium-card.is-rank-3 > a {
+  border-color: color-mix(in srgb, var(--leaderboard-third) 72%, var(--theme-accent-l3));
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-2 .user-ranking-podium-score .user-ranking-score-label,
+.user-leaderboard .user-ranking-podium-card.is-rank-2 .user-ranking-tier {
+  color: var(--leaderboard-second);
+}
+
+.user-leaderboard .user-ranking-podium-card.is-rank-3 .user-ranking-podium-score .user-ranking-score-label,
+.user-leaderboard .user-ranking-podium-card.is-rank-3 .user-ranking-tier {
+  color: var(--leaderboard-third);
+}
+
+.user-leaderboard .user-ranking-list-heading-spacer {
+  display: block;
+  min-width: 0;
+}
+
+.user-leaderboard .user-ranking-list-heading-spacer + .user-ranking-list-labels {
+  grid-column: 4;
+}
+
+.user-leaderboard .user-ranking-list-row .user-ranking-avatar {
+  width: 3.2rem;
+  height: 3.2rem;
+  aspect-ratio: 1 / 1;
+  border-radius: 1rem;
+}
+
+.user-leaderboard .user-ranking-list-row .user-ranking-avatar img {
+  border-radius: .85rem;
+  object-fit: cover;
+}
+
+@media (min-width: 761px) {
+  .user-leaderboard .user-ranking-podium-card,
+  .user-leaderboard .user-ranking-podium-card > a {
+    min-height: 19rem !important;
+  }
+
+  .user-leaderboard .user-ranking-podium-card.is-rank-1,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    min-height: 21rem !important;
+  }
+
+  .user-leaderboard .user-ranking-podium-metrics {
+    gap: .5rem;
+    padding-top: .55rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .user-leaderboard .user-ranking-podium-card,
+  .user-leaderboard .user-ranking-podium-card > a {
+    min-height: 15.8rem !important;
+  }
+
+  .user-leaderboard .user-ranking-podium-card.is-rank-1,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    min-height: 18.2rem !important;
+  }
+
+  .user-leaderboard .user-ranking-podium-card > a,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    gap: .45rem;
+    padding-bottom: .4rem !important;
+  }
+
+  .user-leaderboard .user-ranking-podium-metrics {
+    gap: .4rem;
+    padding-top: .45rem;
+  }
+
+  .user-leaderboard .user-ranking-score-label {
+    font-size: .55rem;
+  }
+
+  .user-leaderboard .user-ranking-list-heading {
+    display: none;
+  }
+}
