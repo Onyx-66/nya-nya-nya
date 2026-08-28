@@ -62396,4 +62396,31 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
   .user-leaderboard .user-ranking-list-heading {
     display: none;
   }
+
+  /* v49.22.6 — keep lower-row avatar/name spacing at approximately 2mm */
+  .user-leaderboard .user-ranking-list-row > a {
+    grid-template-columns: 2rem 3.2rem minmax(0, 1fr) !important;
+    column-gap: .5rem !important;
+    row-gap: .55rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .user-leaderboard .user-ranking-list-row > a {
+    grid-template-columns: 1.8rem 3.2rem minmax(0, 1fr) minmax(4.8rem, auto) !important;
+  }
+}
+
+/* v49.22.6 — keep top-three rank numbers legible inside the Award outline */
+.user-leaderboard .user-ranking-place.user-ranking-medal > strong {
+  min-width: 1.05rem;
+  padding: .12rem .2rem;
+  border: 1px solid var(--medal-fill, currentColor);
+  border-radius: 999px;
+  color: var(--medal-fill, currentColor) !important;
+  background: color-mix(in srgb, var(--medal-fill, currentColor) 16%, var(--theme-main-background));
+  font-size: 1rem;
+  -webkit-text-stroke: .35px var(--medal-fill, currentColor);
+  text-shadow: 0 0 .22rem var(--theme-main-background), 0 0 .42rem var(--medal-fill, currentColor);
+  box-shadow: 0 0 .3rem color-mix(in srgb, var(--medal-fill, currentColor) 52%, transparent);
 }
