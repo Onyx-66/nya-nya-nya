@@ -15,9 +15,48 @@ function requestDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
+const ACCEPT_REASONS = [
+  "All required team details and media are complete.",
+  "The team identity and socials meet our publishing guidelines.",
+  "The proposed team shows a clear publishing plan.",
+  "The submission passed the administrator review checks.",
+  "The team is approved to begin publishing releases.",
+] as const;
+const REJECT_REASONS = [
+  "Required team details or media are missing.",
+  "The team socials could not be verified.",
+  "The proposed identity conflicts with an existing team.",
+] as const;
+
+type DecisionReasonEditorProps = {
+  id: string;
+  decision: "APPROVE" | "REJECT";
+  mode: string;
+  value: string;
+  onModeChange: (mode: string) => void;
+  onValueChange: (value: string) => void;
+};
+function DecisionReasonEditor({ id, decision, mode, value, onModeChange, onValueChange }: DecisionReasonEditorProps) {
+  const options = decision === "APPROVE" ? ACCEPT_REASONS : REJECT_REASONS;
+  const isOther = mode === "OTHER";
+  return <div className="team-decision-reason-editor">
+    <select aria-label={`${decision === "APPROVE" ? "Accept" : "Reject"} reason preset`} value={isOther ? "OTHER" : value} onChange={(event) => {
+      const next = event.target.value;
+      onModeChange(next === "OTHER" ? "OTHER" : "PRESET");
+      onValueChange(next === "OTHER" ? "" : next);
+    }}>
+      <option value="">Choose a reason…</option>
+      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      <option value="OTHER">Other</option>
+    </select>
+    {isOther ? <textarea id={`decision-reason-${id}`} rows={4} value={value} placeholder="Write your own reason…" onChange={(event) => onValueChange(event.target.value)} /> : null}
+  </div>;
+}
+
 export function TeamRequestsPanel() {
   const [data, setData] = useState<RequestData | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [reasonModes, setReasonModes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -83,7 +122,7 @@ export function TeamRequestsPanel() {
                 <p><strong>Talk about yourself</strong><br />{request.reason}</p>
                 {request.externalLinks?.length ? <div className="team-request-extra-details"><strong>External links</strong><ul>{request.externalLinks.map((link) => <li key={`${link.platform}-${link.url}`}><a href={link.url} target="_blank" rel="noreferrer">{link.platform}</a></li>)}</ul></div> : null}
                 {request.memberEmails?.length ? <div className="team-request-extra-details"><strong>Proposed team members</strong><ul>{request.memberEmails.map((email) => <li key={email}>{email}</li>)}</ul></div> : null}
-                <label><span>Decision reason</span><textarea rows={4} value={reasons[request.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [request.id]: event.target.value }))} /></label>
+                <label><span>Decision reason</span><DecisionReasonEditor id={request.id} decision="REJECT" mode={reasonModes[request.id] ?? ""} value={reasons[request.id] ?? ""} onModeChange={(mode) => setReasonModes((current) => ({ ...current, [request.id]: mode }))} onValueChange={(value) => setReasons((current) => ({ ...current, [request.id]: value }))} /></label>
                 <footer><button type="button" disabled={busy === request.id} onClick={() => void decide("CREATION", request, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === request.id} onClick={() => void decide("CREATION", request, "APPROVE")}>{busy === request.id ? <DotsRing /> : <Check />} Approve & activate team</button></footer>
               </div>
             </details>
@@ -108,7 +147,7 @@ export function TeamRequestsPanel() {
                 <p><strong>Talk about yourself and your team</strong><br />{claim.statement}</p>
                 <a className="team-request-proof" href={claim.proofValue} target="_blank" rel="noreferrer"><LinkSimple /> Open submitted proof</a>
                 {claim.links.length ? <ul>{claim.links.map((link) => <li key={link.url}><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a><small>{link.linkType}</small></li>)}</ul> : null}
-                <label><span>Decision reason</span><textarea rows={4} value={reasons[claim.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [claim.id]: event.target.value }))} /></label>
+                <label><span>Decision reason</span><DecisionReasonEditor id={claim.id} decision="REJECT" mode={reasonModes[claim.id] ?? ""} value={reasons[claim.id] ?? ""} onModeChange={(mode) => setReasonModes((current) => ({ ...current, [claim.id]: mode }))} onValueChange={(value) => setReasons((current) => ({ ...current, [claim.id]: value }))} /></label>
                 <footer><button type="button" disabled={busy === claim.id} onClick={() => void decide("OWNERSHIP", claim, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === claim.id} onClick={() => void decide("OWNERSHIP", claim, "APPROVE")}>{busy === claim.id ? <DotsRing /> : <Check />} Approve ownership</button></footer>
               </div>
             </details>
@@ -130,7 +169,7 @@ export function TeamRequestsPanel() {
                   <div><dt>Submitted</dt><dd><Clock /> {requestDate(request.createdAt)}</dd></div>
                 </dl>
                 <p>{request.reason}</p>
-                <label><span>Decision reason</span><textarea rows={4} value={reasons[request.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [request.id]: event.target.value }))} /></label>
+                <label><span>Decision reason</span><DecisionReasonEditor id={request.id} decision="APPROVE" mode={reasonModes[request.id] ?? ""} value={reasons[request.id] ?? ""} onModeChange={(mode) => setReasonModes((current) => ({ ...current, [request.id]: mode }))} onValueChange={(value) => setReasons((current) => ({ ...current, [request.id]: value }))} /></label>
                 <footer><button type="button" disabled={busy === request.id} onClick={() => void decide("TITLE", request, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === request.id} onClick={() => void decide("TITLE", request, "APPROVE")}>{busy === request.id ? <DotsRing /> : <Check />} Approve title</button></footer>
               </div>
             </details>

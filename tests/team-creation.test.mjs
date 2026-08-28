@@ -38,8 +38,10 @@ test("Create Team follows creation, media, socials, members, review, and approva
   assert.match(panel, /\/api\/v1\/team-creation-requests/);
   assert.match(panel, /Create Team request/);
   assert.match(panel, /Talk about yourself and your team/);
-  assert.match(panel, /required, square/);
-  assert.match(panel, /required, 16:9 minimum/);
+  assert.match(panel, /Team logo/);
+  assert.match(panel, /Team banner/);
+  assert.doesNotMatch(panel, /Team logo \(required, square\)/);
+  assert.doesNotMatch(panel, /Team banner \(required, 16:9 minimum\)/);
   assert.match(panel, /Add social/);
   assert.match(panel, /YouTube/);
   assert.match(panel, /TikTok/);

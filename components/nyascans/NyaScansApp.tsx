@@ -13381,6 +13381,7 @@ function OperationsView({
   const activeNavigationItem = items.find(
     (item) => item.label === activeSection,
   );
+  const drawerMode = admin || activeNavigationItem?.slug === "upload-center";
   const dispatchedSection = admin
     ? (activeNavigationItem?.slug ?? normalizeAdminNavigationKey(activeSection))
     : activeSection;
@@ -13457,7 +13458,7 @@ function OperationsView({
   }, []);
 
   useEffect(() => {
-    if (!admin || !drawerViewport || !mobileNavOpen) return;
+    if (!drawerMode || !drawerViewport || !mobileNavOpen) return;
     const drawer = mobileNavRef.current;
     if (!drawer) return;
     const previousFocus =
@@ -13505,7 +13506,7 @@ function OperationsView({
         restoreAdminFocus(previousFocus, ".ops-admin-mobile-bar button");
       }
     };
-  }, [admin, drawerViewport, mobileNavOpen]);
+  }, [drawerMode, drawerViewport, mobileNavOpen]);
 
   useEffect(() => {
     if (!admin) return;
@@ -13731,12 +13732,12 @@ function OperationsView({
       }`}
       data-operations-mode={mode}
     >
-      {admin ? (
+      {drawerMode ? (
         <header className="ops-admin-mobile-bar">
           <button
             ref={mobileNavTriggerRef}
             type="button"
-            aria-label="Open administration navigation"
+              aria-label={admin ? "Open administration navigation" : "Open Upload Center navigation"}
             aria-expanded={mobileNavOpen}
             aria-controls="operations-navigation-drawer"
             onClick={() => setMobileNavOpen(true)}
@@ -13745,7 +13746,7 @@ function OperationsView({
           </button>
           <span>
             <strong>{activeSection}</strong>
-            <small>Administration</small>
+            <small>{admin ? "Administration" : "Upload Center"}</small>
           </span>
           <button
             type="button"
@@ -13757,7 +13758,7 @@ function OperationsView({
           </button>
         </header>
       ) : null}
-      {admin && mobileNavOpen ? (
+      {drawerMode && mobileNavOpen ? (
         <button
           className="ops-sidebar-backdrop"
           type="button"
@@ -13769,12 +13770,12 @@ function OperationsView({
         ref={mobileNavRef}
         className={`ops-sidebar ${mobileNavOpen ? "is-mobile-open" : ""}`}
         id={admin ? "operations-navigation-drawer" : undefined}
-        role={admin && drawerViewport && mobileNavOpen ? "dialog" : undefined}
-        aria-modal={admin && drawerViewport && mobileNavOpen ? true : undefined}
-        tabIndex={admin && drawerViewport && mobileNavOpen ? -1 : undefined}
-        inert={admin && drawerViewport && !mobileNavOpen ? true : undefined}
+        role={drawerMode && drawerViewport && mobileNavOpen ? "dialog" : undefined}
+        aria-modal={drawerMode && drawerViewport && mobileNavOpen ? true : undefined}
+        tabIndex={drawerMode && drawerViewport && mobileNavOpen ? -1 : undefined}
+        inert={drawerMode && drawerViewport && !mobileNavOpen ? true : undefined}
         aria-hidden={
-          admin && drawerViewport && !mobileNavOpen ? true : undefined
+          drawerMode && drawerViewport && !mobileNavOpen ? true : undefined
         }
         aria-label={admin ? "Administration navigation" : "Workspace navigation"}
       >
@@ -13791,11 +13792,11 @@ function OperationsView({
           >
             <SidebarSimple size={19} />
           </button>
-          {admin ? (
+          {drawerMode ? (
             <button
               className="ops-sidebar-mobile-close"
               type="button"
-              aria-label="Close administration navigation"
+              aria-label={admin ? "Close administration navigation" : "Close Upload Center navigation"}
               onClick={() => setMobileNavOpen(false)}
             >
               <X size={20} aria-hidden="true" />
@@ -14904,6 +14905,20 @@ export function NyaScansApp({
   }
 
   if (view === "dashboard" && actor) {
+    const operations = (
+      <OperationsView
+        mode="dashboard"
+        actor={actor}
+        initialSectionSlug={operationPath?.[0] ?? resourceSlug}
+        initialSubsectionSlug={operationPath?.[1]}
+        initialUploadMode={uploadMode}
+        themeController={themeController}
+        notify={showToast}
+      />
+    );
+    if (resourceSlug === "upload-center") {
+      return <div className="upload-center-standalone">{operations}{commonOverlays}</div>;
+    }
     return (
       <div className="site-shell workspace-site-shell">
         <SiteHeader
@@ -14914,16 +14929,7 @@ export function NyaScansApp({
           onSearch={() => setSearchOpen(true)}
           lockAndPayVisible={lockAndPayVisible}
         />
-                      <OperationsView
-          mode="dashboard"
-          actor={actor}
-          initialSectionSlug={operationPath?.[0] ?? resourceSlug}
-          initialSubsectionSlug={operationPath?.[1]}
-          initialUploadMode={uploadMode}
-          themeController={themeController}
-          notify={showToast}
-        />
-
+        {operations}
         <SiteFooter onOpenShortcuts={() => setShortcutsOpen(true)} />
         <MobileNav view={view} actor={actor} lockAndPayVisible={lockAndPayVisible} />
         {commonOverlays}
