@@ -6841,3 +6841,33 @@
     text-align: left;
   }
 }
+
+.team-request-media-previews {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.team-request-media-previews figure {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+.team-request-media-previews img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  background: var(--admin-bg-surface);
+}
+.team-request-logo-preview { aspect-ratio: 1; border-radius: 50% !important; }
+.team-request-banner-preview { aspect-ratio: 16 / 9; }
+.team-request-media-previews figcaption { color: var(--admin-text-faint); font-size: 11px; }
+.team-request-extra-details { display: grid; gap: 7px; }
+.team-request-extra-details > strong { color: var(--admin-text-muted); font-size: 12px; }
+.team-request-extra-details ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.team-request-extra-details li { padding: 7px 9px; border-radius: 8px; background: var(--admin-bg-card); color: var(--admin-text-muted); overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .team-request-media-previews { grid-template-columns: 92px minmax(0, 1fr); }
+}

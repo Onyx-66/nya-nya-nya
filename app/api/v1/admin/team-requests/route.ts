@@ -8,6 +8,11 @@ import { randomId } from "@/lib/server/random-id";
 
 export const dynamic = "force-dynamic";
 
+function parseJsonArray(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return [];
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+}
+
 function database() {
   if (!env.DB) throw new ApiError(503, "DATABASE_UNAVAILABLE", "Team review queues are unavailable.");
   return env.DB;
@@ -41,6 +46,9 @@ async function snapshot() {
     db.prepare(
       `SELECT r.id, r.name, r.slug, r.description,
               r.website_url AS websiteUrl, r.discord_url AS discordUrl,
+              r.logo_key AS logoKey, r.banner_key AS bannerKey,
+              r.external_links_json AS externalLinksJson,
+              r.member_emails_json AS memberEmailsJson,
               r.reason, r.status, r.review_reason AS reviewReason,
               r.revision, r.created_at AS createdAt, r.reviewed_at AS reviewedAt,
               u.display_name AS requestedBy, u.email AS requesterEmail
@@ -51,7 +59,13 @@ async function snapshot() {
   return {
     ownershipClaims: claims.results.map((claim) => ({ ...claim, links: (() => { try { return JSON.parse(String(claim.linksJson ?? "[]")); } catch { return []; } })() })),
     titleRequests: titles.results,
-    creationRequests: creations.results,
+    creationRequests: creations.results.map((request) => ({
+      ...request,
+      externalLinks: parseJsonArray(request.externalLinksJson),
+      memberEmails: parseJsonArray(request.memberEmailsJson),
+      logoUrl: request.logoKey ? `/api/v1/team-creation-request-media?id=${encodeURIComponent(String(request.id))}&slot=logo` : null,
+      bannerUrl: request.bannerKey ? `/api/v1/team-creation-request-media?id=${encodeURIComponent(String(request.id))}&slot=banner` : null,
+    })),
   };
 }
 
@@ -110,10 +124,12 @@ export async function POST(request: Request) {
     } else if (payload.kind === "CREATION") {
       const creationRequest = await db.prepare(
         `SELECT id, requested_by_user_id AS requestedByUserId, name, slug,
-                description, website_url AS websiteUrl, discord_url AS discordUrl
+                description, website_url AS websiteUrl, discord_url AS discordUrl,
+                logo_key AS logoKey, banner_key AS bannerKey,
+                external_links_json AS externalLinksJson, member_emails_json AS memberEmailsJson
            FROM team_creation_requests
           WHERE id = ? AND status = 'PENDING' AND revision = ?`,
-      ).bind(payload.id, payload.revision).first<{ id: string; requestedByUserId: string; name: string; slug: string; description: string; websiteUrl: string | null; discordUrl: string | null }>();
+      ).bind(payload.id, payload.revision).first<{ id: string; requestedByUserId: string; name: string; slug: string; description: string; websiteUrl: string | null; discordUrl: string | null; logoKey: string | null; bannerKey: string | null; externalLinksJson: string; memberEmailsJson: string }>();
       if (!creationRequest) throw new ApiError(409, "TEAM_CREATION_REQUEST_CHANGED", "This team-creation request is no longer pending.");
       const approved = payload.decision === "APPROVE";
       const decisionRevision = payload.revision + 1;
@@ -131,8 +147,9 @@ export async function POST(request: Request) {
       const approvalStatements = approved
         ? [
             db.prepare(
-              `INSERT INTO teams (id, public_ref, slug, name, description, created_by_user_id, verification_status)
-               SELECT ?, ?, ?, ?, ?, ?, 'VERIFIED' WHERE ${requestGate}`,
+              `INSERT INTO teams (id, public_ref, slug, name, description, logo_key, banner_key, created_by_user_id, verification_status)
+               SELECT ?, ?, ?, ?, ?, logo_key, banner_key, ?, 'VERIFIED'
+                 FROM team_creation_requests WHERE id = ? AND status = 'APPROVED' AND revision = ? AND reviewed_by_user_id = ?`,
             ).bind(teamId, publicRef, teamSlug, creationRequest.name, creationRequest.description, creationRequest.requestedByUserId, payload.id, "APPROVED", decisionRevision, actor.id),
             publicReferenceReservationStatement(db, "TEAM", publicRef, teamId),
             db.prepare(
@@ -147,6 +164,29 @@ export async function POST(request: Request) {
               `INSERT OR IGNORE INTO user_roles (user_id, role, assigned_by_user_id)
                SELECT ?, 'UPLOADER', ? WHERE ${requestGate}`,
             ).bind(creationRequest.requestedByUserId, actor.id, payload.id, "APPROVED", decisionRevision, actor.id),
+            db.prepare(
+              `INSERT INTO team_links (id, team_id, label, url, link_type, sort_order)
+               SELECT 'team_link_' || lower(hex(randomblob(16))), ?, 'Website', website_url, 'WEBSITE', 0
+                 FROM team_creation_requests WHERE id = ? AND status = 'APPROVED' AND website_url IS NOT NULL AND website_url <> '' AND revision = ? AND reviewed_by_user_id = ?`,
+            ).bind(teamId, payload.id, decisionRevision, actor.id),
+            db.prepare(
+              `INSERT INTO team_links (id, team_id, label, url, link_type, sort_order)
+               SELECT 'team_link_' || lower(hex(randomblob(16))), ?, 'Discord', discord_url, 'DISCORD', 1
+                 FROM team_creation_requests WHERE id = ? AND status = 'APPROVED' AND discord_url IS NOT NULL AND discord_url <> '' AND revision = ? AND reviewed_by_user_id = ?`,
+            ).bind(teamId, payload.id, decisionRevision, actor.id),
+            db.prepare(
+              `INSERT INTO team_links (id, team_id, label, url, link_type, sort_order)
+               SELECT 'team_link_' || lower(hex(randomblob(16))), ?, json_extract(value, '$.platform'), json_extract(value, '$.url'), 'EXTERNAL', 10 + CAST(key AS INTEGER)
+                 FROM team_creation_requests, json_each(external_links_json)
+                WHERE team_creation_requests.id = ? AND team_creation_requests.status = 'APPROVED' AND team_creation_requests.revision = ? AND team_creation_requests.reviewed_by_user_id = ?`,
+            ).bind(teamId, payload.id, decisionRevision, actor.id),
+            db.prepare(
+              `INSERT OR IGNORE INTO team_memberships (team_id, user_id, membership_role, status, invited_by_user_id, invited_at, can_request_series)
+               SELECT ?, u.id, 'UPLOADER', 'PENDING', ?, CURRENT_TIMESTAMP, 0
+                 FROM users u JOIN team_creation_requests r ON r.id = ?
+                 JOIN json_each(r.member_emails_json) member ON lower(u.email) = lower(member.value)
+                WHERE r.status = 'APPROVED' AND r.revision = ? AND r.reviewed_by_user_id = ? AND u.id <> ?`,
+            ).bind(teamId, actor.id, payload.id, decisionRevision, actor.id, creationRequest.requestedByUserId),
           ]
         : [];
       const notification = db.prepare(

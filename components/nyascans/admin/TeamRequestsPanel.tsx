@@ -8,7 +8,7 @@ import { AdminEmptyState, AdminPageScaffold } from "@/components/nyascans/admin/
 type RequestData = {
   ownershipClaims: Array<{ id: string; teamId: string; teamName: string; teamSlug: string; claimantName: string; claimantEmail: string; proofType: string; proofValue: string; statement: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null; links: Array<{ label: string; url: string; linkType: string }> }>;
   titleRequests: Array<{ id: string; teamId: string; currentTitle: string; requestedTitle: string; requestedSlug: string; requestedBy: string; requesterEmail: string; reason: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null }>;
-  creationRequests: Array<{ id: string; name: string; slug: string; description: string; websiteUrl?: string | null; discordUrl?: string | null; requestedBy: string; requesterEmail: string; reason: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null }>;
+  creationRequests: Array<{ id: string; name: string; slug: string; description: string; websiteUrl?: string | null; discordUrl?: string | null; logoUrl?: string | null; bannerUrl?: string | null; externalLinks?: Array<{ platform: string; url: string }>; memberEmails?: string[]; requestedBy: string; requesterEmail: string; reason: string; status: string; reviewReason?: string | null; revision: number; createdAt: string; reviewedAt?: string | null }>;
 };
 
 function requestDate(value: string) {
@@ -78,8 +78,11 @@ export function TeamRequestsPanel() {
                   {request.websiteUrl ? <div><dt>Website</dt><dd><a href={request.websiteUrl} target="_blank" rel="noreferrer">Open website</a></dd></div> : null}
                   {request.discordUrl ? <div><dt>Discord</dt><dd><a href={request.discordUrl} target="_blank" rel="noreferrer">Open Discord</a></dd></div> : null}
                 </dl>
+                {(request.logoUrl || request.bannerUrl) ? <div className="team-request-media-previews">{request.logoUrl ? <figure><img className="team-request-logo-preview" src={request.logoUrl} alt={`${request.name} logo`} /><figcaption>Team logo</figcaption></figure> : null}{request.bannerUrl ? <figure><img className="team-request-banner-preview" src={request.bannerUrl} alt={`${request.name} banner`} /><figcaption>Team banner</figcaption></figure> : null}</div> : null}
                 <p><strong>Description</strong><br />{request.description}</p>
-                <p><strong>Application reason</strong><br />{request.reason}</p>
+                <p><strong>Talk about yourself</strong><br />{request.reason}</p>
+                {request.externalLinks?.length ? <div className="team-request-extra-details"><strong>External links</strong><ul>{request.externalLinks.map((link) => <li key={`${link.platform}-${link.url}`}><a href={link.url} target="_blank" rel="noreferrer">{link.platform}</a></li>)}</ul></div> : null}
+                {request.memberEmails?.length ? <div className="team-request-extra-details"><strong>Proposed team members</strong><ul>{request.memberEmails.map((email) => <li key={email}>{email}</li>)}</ul></div> : null}
                 <label><span>Decision reason</span><textarea rows={4} value={reasons[request.id] ?? ""} onChange={(event) => setReasons((current) => ({ ...current, [request.id]: event.target.value }))} /></label>
                 <footer><button type="button" disabled={busy === request.id} onClick={() => void decide("CREATION", request, "REJECT")}><X /> Reject</button><button className="button button-primary" type="button" disabled={busy === request.id} onClick={() => void decide("CREATION", request, "APPROVE")}>{busy === request.id ? <DotsRing /> : <Check />} Approve & activate team</button></footer>
               </div>
