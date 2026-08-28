@@ -13,6 +13,7 @@ const browse = read("components/nyascans/BrowseFixes.module.css");
 const popular = read("components/nyascans/HotThisWeek.tsx");
 const popularApi = read("app/api/v1/hot-this-week/route.ts");
 const leaderboard = read("components/nyascans/UserLeaderboardView.tsx");
+const heroicons = read("components/nyascans/heroicons.tsx");
 const leaderboardApi = read("app/api/v1/leaderboard/route.ts");
 const themeSystem = read("lib/theme-system.ts");
 const siteConfiguration = read("lib/server/site-configuration.ts");
@@ -76,11 +77,14 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(leaderboard, /label="Chapters"/);
   assert.match(leaderboard, /BookOpenText weight="fill" aria-hidden="true"/);
   assert.match(leaderboard, /user-ranking-medal rank-\$\{entry\.rank\}/);
-  assert.match(leaderboard, /<Medal className="user-ranking-award-icon" size=\{40\} aria-hidden="true" \/>/);
+  assert.match(leaderboard, /<Award className="user-ranking-award-icon" size=\{40\} aria-hidden="true" \/>/);
+  assert.match(heroicons, /export const Award: Icon = function AwardIcon/);
+  assert.match(heroicons, /M 12\.8573 16\.1773/);
   assert.match(leaderboard, /<span className="user-ranking-score-label">Score<\/span>/);
   assert.doesNotMatch(leaderboard, /<span className="user-ranking-kicker">The rest of the board<\/span>/);
   assert.doesNotMatch(leaderboard, /<h2 id="user-ranking-list-title">Leaderboard entries<\/h2>/);
   assert.match(leaderboard, /aria-label="Lower-ranked users"/);
+  assert.match(leaderboard, /user-ranking-list-heading-spacer/);
   assert.doesNotMatch(leaderboard, /<small>\{label\}<\/small>/);
   assert.match(leaderboard, /user-ranking-podium-score/);
   assert.match(leaderboard, /user-ranking-podium-secondary/);
@@ -120,7 +124,11 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-podium-metrics[\s\S]*margin-top: 0/);
   assert.match(globals, /user-ranking-score-label[\s\S]*text-transform: uppercase/);
   assert.match(globals, /user-ranking-award-icon[\s\S]*stroke-width: 1\.45/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-2[\s\S]*var\(--leaderboard-second\)/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-3[\s\S]*var\(--leaderboard-third\)/);
   assert.match(globals, /user-ranking-list-heading[\s\S]*display: none/);
+  assert.match(globals, /user-ranking-podium-card[\s\S]*min-height: 15\.8rem/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-1[\s\S]*min-height: 18\.2rem/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {

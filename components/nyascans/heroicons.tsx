@@ -113,6 +113,24 @@ export const ListChecks = bridge(outline("ClipboardDocumentCheckIcon"), solid("C
 export const LockKey = bridge(outline("LockClosedIcon"), solid("LockClosedIcon"));
 export const LockSimple = bridge(outline("LockClosedIcon"), solid("LockClosedIcon"));
 export const MagnifyingGlass = bridge(outline("MagnifyingGlassIcon"), solid("MagnifyingGlassIcon"));
+export const Award: Icon = function AwardIcon({ size = 24, weight: _weight, color, mirrored = false, style, ...props }: IconProps) {
+  const transform = mirrored ? "scaleX(-1)" : undefined;
+  return (
+    <svg
+      {...props}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      color={color}
+      style={{ ...style, transform }}
+    >
+      <path d="M 12.8573 16.1773 L 13.8933 15.308 C 14.1333 15.1066 14.4373 14.996 14.7506 14.996 H 16.1026 C 16.7493 14.996 17.304 14.532 17.416 13.8946 L 17.6506 12.5626 C 17.7053 12.2533 17.8666 11.9746 18.1066 11.7733 L 19.1426 10.904 C 19.6386 10.488 19.764 9.776 19.44 9.216 L 18.764 8.044 C 18.6066 7.772 18.5506 7.4546 18.6053 7.1453 L 18.84 5.8133 C 18.952 5.176 18.5906 4.5507 17.9826 4.3293 L 16.712 3.8667 C 16.4173 3.76 16.1706 3.552 16.0133 3.28 L 15.3373 2.108 C 15.0133 1.548 14.3346 1.3 13.7266 1.5213 L 12.456 1.984 C 12.1613 2.0907 11.8386 2.0907 11.544 1.984 L 10.2733 1.5213 C 9.6653 1.3 8.9866 1.5467 8.6626 2.108 L 7.9866 3.28 C 7.8293 3.552 7.5826 3.7587 7.288 3.8667 L 6.0173 4.3293 C 5.4093 4.5507 5.048 5.176 5.16 5.8133 L 5.3946 7.1453 C 5.4493 7.4546 5.3933 7.772 5.236 8.044 L 4.56 9.216 C 4.236 9.776 4.3613 10.488 4.8573 10.904 L 5.8933 11.7733 C 6.1333 11.9746 6.2947 12.2546 6.3493 12.5626 L 6.584 13.8946 C 6.696 14.532 7.2506 14.996 7.8973 14.996 H 9.2493 C 9.5626 14.996 9.8666 15.1066 10.1066 15.308 L 11.1426 16.1773 C 11.6386 16.5933 12.3613 16.5933 12.8573 16.1773 Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 16.3333 18.9908 V 22.9999 L 12 19.6666 L 7.6666 22.9999 V 18.9908" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 12 11.632 C 13.4733 11.632 14.6666 10.4381 14.6666 8.9653 C 14.6666 7.4925 13.4733 6.2987 12 6.2987 C 10.5266 6.2987 9.3333 7.4925 9.3333 8.9653 C 9.3333 10.4381 10.5266 11.632 12 11.632 Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
 export const Medal = bridge(outline("TrophyIcon"), solid("TrophyIcon"));
 export const Megaphone = bridge(outline("MegaphoneIcon"), solid("MegaphoneIcon"));
 export const MegaphoneSimple = bridge(outline("MegaphoneIcon"), solid("MegaphoneIcon"));

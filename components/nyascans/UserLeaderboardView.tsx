@@ -3,10 +3,10 @@
 
 import {
   ArrowFatUp,
+  Award,
   BookOpenText,
   ChatCircle,
   Fire,
-  Medal,
   Trophy,
 } from "@/components/nyascans/heroicons";
 import { useEffect, useState, type ReactNode } from "react";
@@ -114,7 +114,7 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
     <li className={`user-ranking-podium-card is-rank-${entry.rank}`}>
       <a href={profileHref(entry)} aria-label={accessibleEntryLabel(entry)}>
         <span className={`user-ranking-place user-ranking-medal rank-${entry.rank}`} aria-label={`Rank ${entry.rank}`}>
-          <Medal className="user-ranking-award-icon" size={40} aria-hidden="true" />
+          <Award className="user-ranking-award-icon" size={40} aria-hidden="true" />
           <strong aria-hidden="true">{entry.rank}</strong>
         </span>
         <RankingAvatar entry={entry} featured />
