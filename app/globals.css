@@ -62348,12 +62348,17 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 @media (min-width: 761px) {
   .user-leaderboard .user-ranking-podium-card,
   .user-leaderboard .user-ranking-podium-card > a {
-    min-height: 19rem !important;
+    min-height: 18.5rem !important;
   }
 
   .user-leaderboard .user-ranking-podium-card.is-rank-1,
   .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
-    min-height: 21rem !important;
+    min-height: 19.5rem !important;
+  }
+
+  .user-leaderboard .user-ranking-podium-card > a,
+  .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
+    padding-bottom: .65rem !important;
   }
 
   .user-leaderboard .user-ranking-podium-metrics {
@@ -62365,18 +62370,18 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 @media (max-width: 760px) {
   .user-leaderboard .user-ranking-podium-card,
   .user-leaderboard .user-ranking-podium-card > a {
-    min-height: 15.8rem !important;
+    min-height: 11.75rem !important;
   }
 
   .user-leaderboard .user-ranking-podium-card.is-rank-1,
   .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
-    min-height: 18.2rem !important;
+    min-height: 13rem !important;
   }
 
   .user-leaderboard .user-ranking-podium-card > a,
   .user-leaderboard .user-ranking-podium-card.is-rank-1 > a {
     gap: .45rem;
-    padding-bottom: .4rem !important;
+    padding-bottom: 0 !important;
   }
 
   .user-leaderboard .user-ranking-podium-metrics {

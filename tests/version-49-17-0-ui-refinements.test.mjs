@@ -129,8 +129,14 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-podium-card\.is-rank-2[\s\S]*var\(--leaderboard-second\)/);
   assert.match(globals, /user-ranking-podium-card\.is-rank-3[\s\S]*var\(--leaderboard-third\)/);
   assert.match(globals, /user-ranking-list-heading[\s\S]*display: none/);
-  assert.match(globals, /user-ranking-podium-card[\s\S]*min-height: 15\.8rem/);
-  assert.match(globals, /user-ranking-podium-card\.is-rank-1[\s\S]*min-height: 18\.2rem/);
+  assert.match(globals, /@media \(min-width: 761px\)[\s\S]*user-ranking-podium-card[\s\S]*min-height: 18\.5rem/);
+  assert.match(globals, /@media \(min-width: 761px\)[\s\S]*user-ranking-podium-card\.is-rank-1[\s\S]*min-height: 19\.5rem/);
+  assert.match(globals, /@media \(min-width: 761px\)[\s\S]*user-ranking-podium-card > a[\s\S]*padding-bottom: \.65rem !important/);
+  assert.match(globals, /@media \(max-width: 760px\)[\s\S]*user-ranking-podium-card[\s\S]*min-height: 11\.75rem/);
+  assert.match(globals, /@media \(max-width: 760px\)[\s\S]*user-ranking-podium-card\.is-rank-1[\s\S]*min-height: 13rem/);
+  assert.match(globals, /@media \(max-width: 760px\)[\s\S]*user-ranking-podium-card > a[\s\S]*padding-bottom: 0 !important/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-1,[\s\S]*min-height: 13rem !important/);
+  assert.match(globals, /user-ranking-podium-card\.is-rank-1,[\s\S]*min-height: 19\.5rem !important/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {
