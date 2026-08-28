@@ -62424,3 +62424,42 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
   text-shadow: 0 0 .22rem var(--theme-main-background), 0 0 .42rem var(--medal-fill, currentColor);
   box-shadow: 0 0 .3rem color-mix(in srgb, var(--medal-fill, currentColor) 52%, transparent);
 }
+
+/* v49.22.7 — Most Popular-style circular rank badges replace the Award icon */
+.user-leaderboard .user-ranking-place.user-ranking-medal {
+  display: grid;
+  width: 3.2rem;
+  height: 3.2rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--medal-fill, var(--accent)) 62%, var(--line));
+  border-radius: 50%;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--medal-fill, var(--accent)) 24%, var(--theme-accent-l2)), color-mix(in srgb, var(--medal-fill, var(--accent)) 10%, var(--theme-accent)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--theme-contrast-l1) 20%, transparent), 0 .45rem 1rem color-mix(in srgb, var(--theme-main-background) 16%, transparent);
+  color: var(--theme-contrast-l1);
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal > svg {
+  display: none;
+}
+
+.user-leaderboard .user-ranking-place.user-ranking-medal > strong {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--theme-contrast-l1) !important;
+  font-size: 1.2rem;
+  line-height: 1;
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--theme-main-background) 42%, transparent);
+  -webkit-text-stroke: 0;
+}
+
+@media (max-width: 760px) {
+  .user-leaderboard .user-ranking-place.user-ranking-medal {
+    width: 3rem;
+    height: 3rem;
+  }
+}

@@ -77,9 +77,8 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(leaderboard, /label="Chapters"/);
   assert.match(leaderboard, /BookOpenText weight="fill" aria-hidden="true"/);
   assert.match(leaderboard, /user-ranking-medal rank-\$\{entry\.rank\}/);
-  assert.match(leaderboard, /<Award className="user-ranking-award-icon" size=\{40\} aria-hidden="true" \/>/);
-  assert.match(heroicons, /export const Award: Icon = function AwardIcon/);
-  assert.match(heroicons, /M 12\.8573 16\.1773/);
+  assert.doesNotMatch(leaderboard, /<Award className="user-ranking-award-icon"/);
+  assert.doesNotMatch(leaderboard, /user-ranking-award-icon/);
   assert.match(leaderboard, /<span className="user-ranking-score-label">Score<\/span>/);
   assert.doesNotMatch(leaderboard, /<span className="user-ranking-kicker">The rest of the board<\/span>/);
   assert.doesNotMatch(leaderboard, /<h2 id="user-ranking-list-title">Leaderboard entries<\/h2>/);
@@ -115,7 +114,7 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-list-labels[\s\S]*grid-column: 4[\s\S]*justify-items: center/);
   assert.match(globals, /user-ranking-row-metrics > \.user-ranking-metric:first-child[\s\S]*transform: translateX\(-\.55rem\)/);
   assert.match(globals, /user-ranking-metric[\s\S]*display: inline-flex/);
-  assert.match(globals, /user-ranking-place\.user-ranking-medal[\s\S]*border: 0/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal[\s\S]*border-radius: 50%/);
   assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-1[\s\S]*--medal-fill: var\(--leaderboard-first\)/);
   assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-2[\s\S]*--medal-fill: var\(--leaderboard-second\)/);
   assert.match(globals, /user-ranking-place\.user-ranking-medal\.rank-3[\s\S]*--medal-fill: var\(--leaderboard-third\)/);
@@ -125,7 +124,7 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-list-row \.user-ranking-avatar img[\s\S]*border-radius: \.85rem/);
   assert.match(globals, /user-ranking-podium-metrics[\s\S]*margin-top: 0/);
   assert.match(globals, /user-ranking-score-label[\s\S]*text-transform: uppercase/);
-  assert.match(globals, /user-ranking-award-icon[\s\S]*stroke-width: 1\.45/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal > strong[\s\S]*color: var\(--theme-contrast-l1\) !important/);
   assert.match(globals, /user-ranking-podium-card\.is-rank-2[\s\S]*var\(--leaderboard-second\)/);
   assert.match(globals, /user-ranking-podium-card\.is-rank-3[\s\S]*var\(--leaderboard-third\)/);
   assert.match(globals, /user-ranking-list-heading[\s\S]*display: none/);
@@ -139,7 +138,7 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.match(globals, /user-ranking-podium-card\.is-rank-1,[\s\S]*min-height: 19\.5rem !important/);
   assert.match(globals, /@media \(max-width: 760px\)[\s\S]*user-ranking-list-row > a[\s\S]*grid-template-columns: 2rem 3\.2rem minmax\(0, 1fr\) !important/);
   assert.match(globals, /@media \(max-width: 760px\)[\s\S]*user-ranking-list-row > a[\s\S]*column-gap: \.5rem !important/);
-  assert.match(globals, /user-ranking-place\.user-ranking-medal > strong[\s\S]*color: var\(--medal-fill, currentColor\) !important/);
+  assert.match(globals, /user-ranking-place\.user-ranking-medal > strong[\s\S]*color: var\(--theme-contrast-l1\) !important/);
 });
 
 test("Browse Following uses the same theme button hue as Follow", () => {
