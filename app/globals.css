@@ -62271,7 +62271,7 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 }
 
 
-/* v49.22.3 — final Leaderboard award icon and mobile reference presentation */
+/* v49.22.4 — final Leaderboard award icon, mobile reference, and avatar fallback */
 .user-leaderboard .user-ranking-podium-metrics {
   margin-top: 0;
 }

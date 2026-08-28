@@ -84,6 +84,8 @@ test("Leaderboard rename, responsive metrics, theme tokens, and checkbox placeme
   assert.doesNotMatch(leaderboard, /<span className="user-ranking-kicker">The rest of the board<\/span>/);
   assert.doesNotMatch(leaderboard, /<h2 id="user-ranking-list-title">Leaderboard entries<\/h2>/);
   assert.match(leaderboard, /aria-label="Lower-ranked users"/);
+  assert.match(leaderboard, /import \{ mockAvatarUrl \} from "@\/lib\/mock-media"/);
+  assert.match(leaderboard, /const avatarUrl = entry\.avatarUrl \?\? mockAvatarUrl\(entry\.username\)/);
   assert.match(leaderboard, /user-ranking-list-heading-spacer/);
   assert.doesNotMatch(leaderboard, /<small>\{label\}<\/small>/);
   assert.match(leaderboard, /user-ranking-podium-score/);

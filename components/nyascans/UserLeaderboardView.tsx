@@ -11,6 +11,7 @@ import {
 } from "@/components/nyascans/heroicons";
 import { useEffect, useState, type ReactNode } from "react";
 import { DotsRing } from "@/components/nyascans/DotsRing";
+import { mockAvatarUrl } from "@/lib/mock-media";
 
 type RankingPeriod = "weekly" | "monthly" | "all";
 
@@ -67,18 +68,10 @@ function accessibleEntryLabel(entry: LeaderboardEntry) {
 }
 
 function RankingAvatar({ entry, featured = false }: { entry: LeaderboardEntry; featured?: boolean }) {
+  const avatarUrl = entry.avatarUrl ?? mockAvatarUrl(entry.username);
   return (
     <span className={`user-ranking-avatar${featured ? " is-featured" : ""}`}>
-      {entry.avatarUrl ? (
-        <img src={entry.avatarUrl} alt="" loading={featured ? "eager" : "lazy"} />
-      ) : (
-        entry.displayName
-          .split(/\s+/)
-          .map((part) => part[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase()
-      )}
+      <img src={avatarUrl} alt="" loading={featured ? "eager" : "lazy"} />
     </span>
   );
 }
