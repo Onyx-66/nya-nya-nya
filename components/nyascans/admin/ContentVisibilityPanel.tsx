@@ -231,15 +231,15 @@ export function ContentVisibilityPanel(_props: {
           ]),
         ),
       );
-      setDisabled(!next.readiness.enabled);
+      setDisabled(false);
       setMessage(null);
     } catch (reason) {
       if (controller.signal.aborted) return;
       const error = reason as Error & { code?: string };
       if (error.code === "CONTENT_VISIBILITY_DISABLED") {
-        setDisabled(true);
+        setDisabled(false);
         setPayload(null);
-        setMessage(null);
+        setMessage({ kind: "error", text: "Paid-system controls are unavailable because the database is not initialized." });
       } else {
         setMessage({
           kind: "error",

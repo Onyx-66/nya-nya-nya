@@ -45,7 +45,7 @@ export async function listContentVisibility(
   db: D1Database,
   query: ContentVisibilityQuery,
 ) {
-  const states = await requireVisibilityEnabled(db);
+  const states = await getFeatureStates(db);
   const offset = (query.page - 1) * query.limit;
   const search = escapeLike(query.q.trim());
   const accessClause =
@@ -179,7 +179,6 @@ export async function saveContentVisibilityDefaults(
     autoFreeAfterDays: number | null;
   },
 ) {
-  await requireVisibilityEnabled(db);
   const nextRevision = input.expectedRevision + 1;
   const schedule = input.autoFreeAfterDays == null
     ? db.prepare("SELECT 1 WHERE changes() = 1")
@@ -254,7 +253,7 @@ export async function setContentVisibilityOverride(
     reason: string;
   },
 ) {
-  const states = await requireVisibilityEnabled(db);
+  const states = await getFeatureStates(db);
   if (input.accessType === "PREMIUM" && !states.memberships.effective) {
     throw new ApiError(
       409,
@@ -358,7 +357,6 @@ export async function clearContentVisibilityOverride(
     reason: string;
   },
 ) {
-  await requireVisibilityEnabled(db);
   const nextRevision = input.expectedChapterRevision + 1;
   const chapterIdSql = escapedSql(input.chapterId);
   const results = await db.batch([
