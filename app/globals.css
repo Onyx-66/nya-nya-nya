@@ -62740,3 +62740,16 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 .team-decision-reason-editor textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .upload-team-remove-button { display: grid; place-items: center; align-content: center; justify-content: center; }
 @media (prefers-reduced-motion: reduce) { .team-decision-reason-editor select, .team-decision-reason-editor textarea { transition: none; } }
+
+.series-paid-policy-card { margin-top: 1.25rem; }
+.series-paid-policy-toolbar { display:flex; align-items:center; gap:.55rem; max-width:28rem; margin:1rem 0; padding:.7rem .85rem; border:1px solid color-mix(in srgb, var(--theme-accent-l3) 70%, transparent); border-radius:.8rem; background:color-mix(in srgb, var(--theme-accent-l1) 82%, transparent); }
+.series-paid-policy-toolbar input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:inherit; }
+.series-paid-policy-list { display:grid; gap:.45rem; max-height:18rem; overflow:auto; }
+.series-paid-policy-list button { display:flex; justify-content:space-between; gap:1rem; text-align:left; padding:.75rem .9rem; border:1px solid color-mix(in srgb, var(--theme-accent-l3) 55%, transparent); border-radius:.7rem; background:transparent; color:inherit; cursor:pointer; }
+.series-paid-policy-list button.is-selected { border-color:var(--theme-primary); background:color-mix(in srgb, var(--theme-primary) 12%, transparent); }
+.series-paid-policy-list small { opacity:.72; white-space:nowrap; }
+.series-paid-policy-editor { display:grid; gap:.8rem; margin-top:1rem; padding:1rem; border-radius:.8rem; background:color-mix(in srgb, var(--theme-accent-l1) 72%, transparent); }
+.series-paid-policy-editor label { display:grid; gap:.35rem; }
+.series-paid-policy-editor input { width:100%; }
+.series-paid-policy-editor p { display:flex; align-items:center; gap:.4rem; margin:0; color:var(--theme-status-green); }
+@media (max-width: 700px) { .series-paid-policy-list button { display:grid; gap:.25rem; } .series-paid-policy-list small { white-space:normal; } }

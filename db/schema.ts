@@ -3334,6 +3334,7 @@ export const contentVisibilitySettings = sqliteTable(
   "content_visibility_settings",
   {
     id: text("id").primaryKey(),
+    mode: text("mode").notNull().default("NORMAL"),
     defaultAccessType: text("default_access_type").notNull().default("FREE"),
     defaultPriceOnyx: integer("default_price_onyx").notNull().default(0),
     autoFreeAfterDays: integer("auto_free_after_days"),
@@ -3350,6 +3351,10 @@ export const contentVisibilitySettings = sqliteTable(
       sql`${table.id} = 'active'`,
     ),
     check(
+      "content_visibility_settings_mode_check",
+      sql`${table.mode} IN ('NORMAL', 'LAST_PAID')`,
+    ),
+    check(
       "content_visibility_settings_access_check",
       sql`${table.defaultAccessType} IN ('FREE', 'PAID')`,
     ),
@@ -3364,6 +3369,32 @@ export const contentVisibilitySettings = sqliteTable(
   ],
 );
 
+export const seriesPaidPolicies = sqliteTable(
+  "series_paid_policies",
+  {
+    seriesId: text("series_id")
+      .primaryKey()
+      .references(() => series.id, { onDelete: "cascade" }),
+    paidChapterCount: integer("paid_chapter_count").notNull().default(0),
+    priceOnyx: integer("price_onyx").notNull().default(50),
+    autoFreeAfterDays: integer("auto_free_after_days"),
+    revision: integer("revision").notNull().default(1),
+    updatedByUserId: text("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("series_paid_policies_updated_idx").on(table.updatedAt),
+    check("series_paid_policies_count_check", sql`${table.paidChapterCount} >= 0`),
+    check("series_paid_policies_price_check", sql`${table.priceOnyx} > 0`),
+    check(
+      "series_paid_policies_auto_free_check",
+      sql`${table.autoFreeAfterDays} IS NULL OR ${table.autoFreeAfterDays} BETWEEN 1 AND 3650`,
+    ),
+  ],
+);
 export const contentVisibilityOverrides = sqliteTable(
   "content_visibility_overrides",
   {

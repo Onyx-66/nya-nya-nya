@@ -4,6 +4,7 @@ import { auditStatement } from "@/lib/server/admin-utils";
 import { getFeatureStates } from "@/lib/server/feature-flags";
 import type { Actor } from "@/lib/server/policy";
 import { effectiveChapterAccessSql } from "@/lib/server/public-content-visibility";
+import { syncLastPaidForSeries } from "@/lib/server/series-paid-policies";
 
 export type ContentVisibilityQuery = {
   q: string;
@@ -60,12 +61,14 @@ export async function listContentVisibility(
   const bindings = [query.q.trim(), search, search, search, ...accessBindings];
   const [settings, summary, count, rows] = await Promise.all([
     db.prepare(
-      `SELECT default_access_type AS defaultAccessType,
+      `SELECT mode,
+              default_access_type AS defaultAccessType,
               default_price_onyx AS defaultPriceOnyx,
               auto_free_after_days AS autoFreeAfterDays,
               revision, updated_at AS updatedAt
          FROM content_visibility_settings WHERE id = 'active' LIMIT 1`,
     ).first<{
+      mode: "NORMAL" | "LAST_PAID";
       defaultAccessType: "FREE" | "PAID";
       defaultPriceOnyx: number;
       autoFreeAfterDays: number | null;
@@ -133,6 +136,7 @@ export async function listContentVisibility(
       },
       rules: {
         ...settings,
+        mode: settings.mode === "LAST_PAID" ? "LAST_PAID" : "NORMAL",
         defaultPriceOnyx: Number(settings.defaultPriceOnyx),
         autoFreeAfterDays:
           settings.autoFreeAfterDays == null ? null : Number(settings.autoFreeAfterDays),
@@ -169,6 +173,7 @@ export async function saveContentVisibilityDefaults(
   requestId: string,
   input: {
     expectedRevision: number;
+    mode: "NORMAL" | "LAST_PAID";
     defaultAccessType: "FREE" | "PAID";
     defaultPriceOnyx: number;
     autoFreeAfterDays: number | null;
@@ -197,11 +202,12 @@ export async function saveContentVisibilityDefaults(
   const results = await db.batch([
     db.prepare(
       `UPDATE content_visibility_settings
-          SET default_access_type = ?, default_price_onyx = ?,
+          SET mode = ?, default_access_type = ?, default_price_onyx = ?,
               auto_free_after_days = ?, revision = revision + 1,
               updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = 'active' AND revision = ?`,
     ).bind(
+      input.mode,
       input.defaultAccessType,
       input.defaultPriceOnyx,
       input.autoFreeAfterDays,
@@ -227,6 +233,10 @@ export async function saveContentVisibilityDefaults(
   ]);
   if (!results[0]?.meta.changes) {
     throw new ApiError(409, "CONTENT_VISIBILITY_STALE", "Content Visibility rules changed. Reload and retry.");
+  }
+  if (input.mode === "LAST_PAID") {
+    const seriesRows = await db.prepare("SELECT id FROM series WHERE archived_at IS NULL").all<{ id: string }>();
+    for (const row of seriesRows.results) await syncLastPaidForSeries(db, row.id, input.autoFreeAfterDays ?? 7);
   }
   return { ok: true, revision: nextRevision };
 }

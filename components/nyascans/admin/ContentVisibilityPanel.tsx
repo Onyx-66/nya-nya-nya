@@ -11,6 +11,7 @@ import {
 } from "@/components/nyascans/heroicons";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { SeriesPaidPolicyPanel } from "@/components/nyascans/admin/SeriesPaidPolicyPanel";
 import {
   AdminPageScaffold,
   AdminSectionCard,
@@ -22,6 +23,7 @@ import {
 type AccessType = "FREE" | "PAID" | "PREMIUM";
 
 type VisibilityRules = {
+  mode: "NORMAL" | "LAST_PAID";
   defaultAccessType: "FREE" | "PAID";
   defaultPriceOnyx: number;
   autoFreeAfterDays: number | null;
@@ -153,7 +155,8 @@ export function ContentVisibilityPanel(_props: {
   const rulesDirty = Boolean(
     payload &&
       rulesDraft &&
-      (rulesDraft.defaultAccessType !== payload.rules.defaultAccessType ||
+      (rulesDraft.mode !== payload.rules.mode ||
+        rulesDraft.defaultAccessType !== payload.rules.defaultAccessType ||
         rulesDraft.defaultPriceOnyx !== payload.rules.defaultPriceOnyx ||
         rulesDraft.autoFreeAfterDays !== payload.rules.autoFreeAfterDays),
   );
@@ -328,6 +331,7 @@ export function ContentVisibilityPanel(_props: {
       {
         action: "SAVE_DEFAULTS",
         expectedRevision: payload.rules.revision,
+        mode: rulesDraft.mode,
         defaultAccessType: rulesDraft.defaultAccessType,
         defaultPriceOnyx: rulesDraft.defaultPriceOnyx,
         autoFreeAfterDays: rulesDraft.autoFreeAfterDays,
@@ -529,10 +533,20 @@ export function ContentVisibilityPanel(_props: {
           <form className="settings-section-grid" onSubmit={saveDefaults}>
             <div className="control-section-heading">
               <div>
-                <span>Default policy</span>
-                <h3>New chapter access and automatic release</h3>
+                <span>Paid system style</span>
+                <h3>Choose how paid chapters are assigned</h3>
               </div>
             </div>
+            <label>
+              <span>Paid system style</span>
+              <UnifiedSingleSelect
+                value={rulesDraft.mode}
+                onChange={(event) => setRulesDraft({ ...rulesDraft, mode: event.target.value as "NORMAL" | "LAST_PAID" })}
+              >
+                <option value="NORMAL">Normal — choose each chapter manually</option>
+                <option value="LAST_PAID">Last Paid — lock the latest chapters automatically</option>
+              </UnifiedSingleSelect>
+            </label>
             <label>
               <span>Default access</span>
               <UnifiedSingleSelect
@@ -583,7 +597,7 @@ export function ContentVisibilityPanel(_props: {
               />
             </label>
             <div className="admin-sticky-actions store-admin-wide">
-              <small>Changes apply to the default policy; chapter exceptions remain intact.</small>
+              <small>{rulesDraft.mode === "LAST_PAID" ? "Last Paid uses one fallback paid chapter at 50 Paws until a series policy is configured. Series settings are managed below." : "Normal mode leaves chapter paid/free choices fully manual."}</small>
               <button
                 className="button button-primary"
                 type="submit"
@@ -593,6 +607,8 @@ export function ContentVisibilityPanel(_props: {
               </button>
             </div>
           </form>
+
+          <SeriesPaidPolicyPanel />
 
           <div className="control-section-heading">
             <div>

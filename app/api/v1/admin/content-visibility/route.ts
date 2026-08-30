@@ -23,6 +23,7 @@ const defaultsSchema = z
   .object({
     action: z.literal("SAVE_DEFAULTS"),
     expectedRevision: z.number().int().min(1),
+    mode: z.enum(["NORMAL", "LAST_PAID"]),
     defaultAccessType: z.enum(["FREE", "PAID"]),
     defaultPriceOnyx: z.number().int().min(0).max(1_000_000),
     autoFreeAfterDays: z.number().int().min(1).max(3650).nullable(),
