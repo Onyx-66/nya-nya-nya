@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/server/api";
 import { auditStatement } from "@/lib/server/admin-utils";
 import type { Actor } from "@/lib/server/policy";
+import { seriesMediaUrl } from "@/lib/server/series-media-url";
 
 export type SeriesPaidPolicyInput = {
   seriesId: string;
@@ -13,23 +14,27 @@ export type SeriesPaidPolicyInput = {
 export async function listSeriesPaidPolicies(db: D1Database, query = "") {
   const like = `%${query.trim().replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
   const rows = await db.prepare(`
-    SELECT s.id AS seriesId, s.title AS seriesTitle,
+    SELECT s.id AS seriesId, s.title AS seriesTitle, s.cover_key AS coverKey, s.revision AS seriesRevision,
            COUNT(CASE WHEN c.state IN ('READY_FOR_REVIEW','PUBLISHED') THEN 1 END) AS chapterCount,
            COALESCE(p.paid_chapter_count, 0) AS paidChapterCount,
            COALESCE(p.price_onyx, 50) AS priceOnyx,
            p.auto_free_after_days AS autoFreeAfterDays,
+           CASE WHEN p.series_id IS NULL THEN 0 ELSE 1 END AS configuredFlag,
            COALESCE(p.revision, 0) AS revision
       FROM series s
       LEFT JOIN chapters c ON c.series_id = s.id
       LEFT JOIN series_paid_policies p ON p.series_id = s.id
      WHERE s.title LIKE ? ESCAPE '\\' COLLATE NOCASE
-     GROUP BY s.id, s.title, p.paid_chapter_count, p.price_onyx, p.auto_free_after_days, p.revision
+     GROUP BY s.id, s.title, s.cover_key, s.revision, p.paid_chapter_count, p.price_onyx, p.auto_free_after_days, p.revision
      ORDER BY s.title COLLATE NOCASE
      LIMIT 100
   `).bind(like).all<Record<string, unknown>>();
   return rows.results.map((row) => ({
     seriesId: String(row.seriesId),
     seriesTitle: String(row.seriesTitle),
+    coverUrl: row.coverKey ? seriesMediaUrl(String(row.seriesId), "cover", Number(row.seriesRevision ?? 0)) : null,
+    configured: Number(row.configuredFlag ?? 0) === 1,
+
     chapterCount: Number(row.chapterCount ?? 0),
     paidChapterCount: Number(row.paidChapterCount ?? 0),
     priceOnyx: Number(row.priceOnyx ?? 50),
