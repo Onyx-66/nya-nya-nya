@@ -1,4 +1,5 @@
 "use client";
+import { PawIcon, ShardIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-html-link-for-pages */
 /* eslint-disable @next/next/no-img-element */
@@ -711,7 +712,7 @@ export function RouletteView({
                       <small>
                         {reward.type === "ONYX"
                           ? <RouletteCoinMark coin={data.coin} size={14} />
-                          : data.settings?.shardIcon ?? "✦"}
+                          : <ShardIcon size={14} aria-hidden="true" />}
                       </small>
                     </>
                   )}

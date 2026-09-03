@@ -13423,7 +13423,7 @@ export async function POST(request: Request, context: RouteContext) {
         throw new ApiError(
           409,
           "MEMBERSHIP_REQUIRED",
-          "This chapter is included with an active membership and cannot be purchased with Onyx.",
+          "This chapter is included with an active membership and cannot be purchased with Paws.",
         );
       }
       if (access.accessType !== "PAID" || access.priceOnyx <= 0) {

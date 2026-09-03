@@ -1,4 +1,5 @@
 "use client";
+import { PawIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { PremiumDateRangePicker } from "@/components/nyascans/PremiumDateRangePicker";
@@ -467,7 +468,7 @@ export function CommercialSettingsPanel({
             [
               ["coinName", "Singular name", "Paw Coin"],
               ["coinPlural", "Plural name", "Paw Coins"],
-              ["coinIcon", "Fallback icon", "🐾"],
+              ["coinIcon", "Fallback icon", "Paw SVG"],
             ] as const
           ).map(([key, label, placeholder]) => (
             <label key={key}>
@@ -554,7 +555,7 @@ export function CommercialSettingsPanel({
                 unoptimized
               />
             ) : (
-              <span>{economy.coinIcon}</span>
+              <PawIcon size={42} aria-hidden="true" />
             )}
           </div>
           <div>

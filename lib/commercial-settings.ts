@@ -180,7 +180,7 @@ export const defaultCommercialSettings: CommercialSettings = {
   economy: {
     coinName: "Paw Coin",
     coinPlural: "Paw Coins",
-    coinIcon: "🐾",
+    coinIcon: "Paw SVG",
     coinIconKey: null,
     coinIconRevision: 1,
     premiumEconomyPublic: true,
@@ -313,7 +313,7 @@ export function parseCommercialSettings(value: unknown): CommercialSettings {
   const legacyCoinPlural = /^onyx coins?$/i.test(
     parsed.data.economy.coinPlural,
   );
-  const legacyIcon = parsed.data.economy.coinIcon === "◆";
+  const legacyIcon = parsed.data.economy.coinIcon === "◆" || /^(?:🐾|✦|💎|💰)$/u.test(parsed.data.economy.coinIcon);
   const coinName = legacyCoinName
     ? defaultCommercialSettings.economy.coinName
     : parsed.data.economy.coinName;

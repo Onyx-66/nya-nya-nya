@@ -78,7 +78,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: "/art/hero-onyx-archive.png",
           width: 1600,
           height: 1000,
-          alt: "An archivist holds a luminous onyx shard above a rain-lit city.",
+          alt: "An archivist holds a luminous Nya shard above a rain-lit city.",
         },
       ],
     },

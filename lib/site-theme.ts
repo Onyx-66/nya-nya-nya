@@ -21,7 +21,7 @@ const paletteSchema = z.object({
 export const templateStyleOptions = [
   {
     value: "ONYX_EDITORIAL",
-    label: "Onyx editorial",
+    label: "Nya editorial",
     detail: "Cinematic hero, calm spacing, and premium editorial shelves.",
   },
   {
@@ -87,7 +87,7 @@ export const featuredSliderStyleOptions = [
   },
   {
     value: "ONYX_DECK",
-    label: "Onyx focus deck",
+    label: "Nya focus deck",
     detail: "The current layered five-cover NyaScans composition.",
   },
 ] as const;

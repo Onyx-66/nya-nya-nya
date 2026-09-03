@@ -1,4 +1,5 @@
 "use client";
+import { PawIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { latestPageItems } from "./latest-pagination";
 
@@ -473,7 +474,7 @@ function ConfiguredCoinMark({
           alt=""
         />
       ) : (
-        <span>{settings.economy.coinIcon}</span>
+        <PawIcon size="1em" aria-hidden="true" />
       )}
     </span>
   );

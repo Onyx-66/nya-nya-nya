@@ -504,7 +504,7 @@ function normalizeLegacyRewardPool(
           label:
             typeof (entry as Record<string, unknown>).label === "string"
               ? String((entry as Record<string, unknown>).label).replace(
-                  /\bOnyx Coins?\b/gi,
+                  /\b(?:Onyx|Paw) Coins?\b/gi,
                   "Paw Coins",
                 )
               : (entry as Record<string, unknown>).label,

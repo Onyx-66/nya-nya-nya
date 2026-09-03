@@ -1,4 +1,5 @@
 "use client";
+import { PawIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
@@ -3127,7 +3128,7 @@ function UploadComposer({
                         alt=""
                       />
                     ) : (
-                      <span>{commercial.economy.coinIcon}</span>
+                      <PawIcon size="1em" aria-hidden="true" />
                     )}
                   </span>
                   <span>
