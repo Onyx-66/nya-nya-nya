@@ -1,48 +1,49 @@
 @import "tailwindcss";
 
-/* Shared site-wide loading visual: every visual loader resolves to DotsRing. */
-.dots-ring {
-  --dots-ring-size: 2rem;
+/* Shared site-wide loading visual: every visual loader resolves to the dual-ring loader. */
+.loader {
+  --loader-size: 2rem;
+  --loader-color-1: var(--theme-text-color);
+  --loader-color-2: var(--theme-effect-moving-light);
   position: relative;
   display: inline-block;
-  width: var(--dots-ring-size);
-  height: var(--dots-ring-size);
-  flex: 0 0 var(--dots-ring-size);
-  color: var(--theme-effect-moving-light);
+  width: var(--loader-size);
+  height: var(--loader-size);
+  flex: 0 0 var(--loader-size);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border-top: max(2px, calc(var(--loader-size) * .0833)) solid var(--loader-color-1);
+  border-right: max(2px, calc(var(--loader-size) * .0833)) solid transparent;
+  color: var(--loader-color-1);
   vertical-align: middle;
+  animation: rotation 1s linear infinite;
 }
-
-.dots-ring--inline { --dots-ring-size: 1rem; }
-.dots-ring--sm { --dots-ring-size: 1.35rem; }
-.dots-ring--md { --dots-ring-size: 2rem; }
-.dots-ring--lg { --dots-ring-size: 2.65rem; }
-.dots-ring--xl { --dots-ring-size: 3.5rem; }
-.dots-ring--custom { --dots-ring-size: 2rem; }
-
-.dots-ring__orbit {
+.loader::after {
+  content: "";
   position: absolute;
-  inset: 11%;
-  display: block;
-  border: max(1px, calc(var(--dots-ring-size) * .07)) solid color-mix(in srgb, var(--theme-effect-moving-light) 24%, transparent);
+  inset: 0;
+  box-sizing: border-box;
+  width: var(--loader-size);
+  height: var(--loader-size);
   border-radius: 50%;
+  border-left: max(2px, calc(var(--loader-size) * .0833)) solid var(--loader-color-2);
+  border-bottom: max(2px, calc(var(--loader-size) * .0833)) solid transparent;
+  animation: rotation .5s linear infinite reverse;
 }
-
-.dots-ring__dot {
-  position: absolute;
-  display: block;
-  width: max(3px, calc(var(--dots-ring-size) * .19));
-  height: max(3px, calc(var(--dots-ring-size) * .19));
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 calc(var(--dots-ring-size) * .32) color-mix(in srgb, var(--theme-effect-icon-glow) 70%, transparent);
+.dots-ring { --loader-size: 2rem; }
+.dots-ring--inline { --loader-size: 1rem; }
+.dots-ring--sm { --loader-size: 1.35rem; }
+.dots-ring--md { --loader-size: 2rem; }
+.dots-ring--lg { --loader-size: 2.65rem; }
+.dots-ring--xl { --loader-size: 3.5rem; }
+.dots-ring--custom { --loader-size: 2rem; }
+@keyframes rotation {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
-
-.dots-ring__dot--one { top: calc(var(--dots-ring-size) * -.095); left: 50%; transform: translateX(-50%); }
-.dots-ring__dot--two { right: calc(var(--dots-ring-size) * .02); bottom: calc(var(--dots-ring-size) * .08); }
-.dots-ring__dot--three { bottom: calc(var(--dots-ring-size) * .08); left: calc(var(--dots-ring-size) * .02); }
-
 @media (prefers-reduced-motion: reduce) {
-  .dots-ring__orbit { border-color: color-mix(in srgb, var(--theme-effect-moving-light) 52%, transparent); }
+  .loader,
+  .loader::after { animation-duration: 1.5s; }
 }
 
 .dots-ring-loading {
