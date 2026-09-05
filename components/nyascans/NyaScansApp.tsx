@@ -2246,6 +2246,8 @@ function SeriesReviews({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
+  const [reviewMode, setReviewMode] = useState<"composer" | "carousel">("carousel");
+  const [reviewIndex, setReviewIndex] = useState(0);
 
   useEffect(() => {
     const openFromHash = () => {
@@ -2282,6 +2284,7 @@ function SeriesReviews({
         );
       }
       setReviews(payload.data ?? []);
+      setReviewIndex(0);
       setSummary(payload.aggregate ?? emptySummary);
       const own = payload.viewerReview ?? null;
       setViewerReview(own);
@@ -2381,164 +2384,77 @@ function SeriesReviews({
     <section className="series-reviews" id="reviews" aria-labelledby="reviews-title">
       <div className="review-heading">
         <div>
-          <p className="eyebrow">Reader ratings</p>
           <h2 id="reviews-title">Ratings & Reviews</h2>
         </div>
-        <button
-          className="review-collapse-toggle"
-          type="button"
-          aria-controls="reviews-content"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          <span>{expanded ? "Collapse" : "Expand"}</span>
-          <CaretDown size={18} aria-hidden="true" />
-        </button>
-      </div>
-      <div
-        className="review-collapsible"
-        id="reviews-content"
-        hidden={!expanded}
-      >
-        <div className="review-toolbar">
-          <label>
-          <span className="sr-only">Sort reviews</span>
-          <UnifiedSingleSelect
-            aria-label="Sort reviews"
-            value={sort}
-            onChange={(event) =>
-              setSort(
-                event.target.value as "newest" | "oldest" | "highest",
-              )
-            }
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="highest">Highest rated</option>
-          </UnifiedSingleSelect>
+        <div className="review-heading-actions" role="group" aria-label="Review controls">
+          <button className="button button-secondary review-mode-button" type="button" onClick={() => { setExpanded(true); setReviewMode("composer"); }}>
+            <Star size={16} /> Write review
+          </button>
+          <button className="button button-secondary review-mode-button" type="button" onClick={() => { setExpanded(true); setReviewMode("carousel"); }}>
+            <Books size={16} /> Read reviews
+          </button>
+          <label className="review-sort-control">
+            <span className="sr-only">Sort reviews</span>
+            <UnifiedSingleSelect aria-label="Sort reviews" value={sort} onChange={(event) => setSort(event.target.value as "newest" | "oldest" | "highest")}>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="highest">Highest rated</option>
+            </UnifiedSingleSelect>
           </label>
+          <button className="review-collapse-toggle" type="button" aria-controls="reviews-content" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
+            <span>{expanded ? "Collapse" : "Expand"}</span>
+            <CaretDown size={18} aria-hidden="true" />
+          </button>
         </div>
+      </div>
+      <div className="review-collapsible" id="reviews-content" hidden={!expanded}>
         <div className="review-summary-grid">
-        <div className="review-score">
-          <strong>{summary.average.toFixed(1)}</strong>
-          <ReviewStars value={summary.average} />
-          <span>
-            {summary.total.toLocaleString("en-US")} rating
-            {summary.total === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="review-distribution">
-          {[5, 4, 3, 2, 1].map((value) => {
-            const count =
-              summary.distribution[value as 1 | 2 | 3 | 4 | 5] ?? 0;
-            const percentage = summary.total
-              ? Math.round((count / summary.total) * 100)
-              : 0;
-            return (
-              <div key={value}>
-                <span>{value}</span>
-                <Star size={13} weight="fill" />
-                <i>
-                  <b style={{ width: `${percentage}%` }} />
-                </i>
-                <small>{count}</small>
-              </div>
-            );
-          })}
-        </div>
-        <form className="review-composer" onSubmit={saveReview}>
-          <div>
-            <strong>
-              {viewerReview ? "Update your review" : "Rate this series"}
-            </strong>
-            <ReviewStars
-              value={rating}
-              interactive
-              onChange={setRating}
-            />
+          <div className="review-score">
+            <strong>{summary.average.toFixed(1)}</strong>
+            <ReviewStars value={summary.average} />
+            <span>{summary.total.toLocaleString("en-US")} rating{summary.total === 1 ? "" : "s"}</span>
           </div>
-          <textarea
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            maxLength={4000}
-            rows={4}
-            placeholder="Share what worked for you. A written review is optional."
-          />
-          <div>
-            <label>
-              <input
-                type="checkbox"
-                checked={spoiler}
-                onChange={(event) => setSpoiler(event.target.checked)}
-              />
-              Contains spoilers
-            </label>
-            {viewerReview ? (
-              <button type="button" onClick={removeReview} disabled={busy}>
-                <Trash size={16} /> Delete
-              </button>
-            ) : null}
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={busy}
-            >
-              {busy
-                ? "Saving..."
-                : viewerReview
-                  ? "Save review"
-                  : "Publish review"}
-            </button>
+          <div className="review-distribution">
+            {[5, 4, 3, 2, 1].map((value) => {
+              const count = summary.distribution[value as 1 | 2 | 3 | 4 | 5] ?? 0;
+              const percentage = summary.total ? Math.round((count / summary.total) * 100) : 0;
+              return <div key={value}><span>{value}</span><Star size={13} weight="fill" /><i><b style={{ width: `${percentage}%` }} /></i><small>{count}</small></div>;
+            })}
           </div>
-        </form>
         </div>
-        <div className="review-list" aria-live="polite">
-        {loading ? (
-          <div className="review-empty">Loading reader reviews...</div>
-        ) : reviews.length ? (
-          reviews.map((review) => (
-            <article key={review.id}>
-              <header>
-                <span>
-                  {review.displayName.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <strong>{review.displayName}</strong>
-                  <small>
-                    {new Intl.DateTimeFormat("en", {
-                      dateStyle: "medium",
-                    }).format(new Date(review.createdAt))}
-                  </small>
-                </div>
-                <ReviewStars value={review.rating} />
-              </header>
-              {review.body ? (
-                review.spoiler ? (
-                  <details>
-                    <summary>Spoiler review. Reveal</summary>
-                    <p>{review.body}</p>
-                  </details>
-                ) : (
-                  <p>{review.body}</p>
-                )
-              ) : (
-                <p className="review-rating-only">Rating only</p>
-              )}
-            </article>
-          ))
+        {reviewMode === "composer" ? (
+          <form className="review-composer" onSubmit={saveReview}>
+            <div><strong>{viewerReview ? "Update your review" : "Rate this series"}</strong><ReviewStars value={rating} interactive onChange={setRating} /></div>
+            <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} rows={5} placeholder="Share what worked for you. A written review is optional." />
+            <div>
+              <label><input type="checkbox" checked={spoiler} onChange={(event) => setSpoiler(event.target.checked)} /> Contains spoilers</label>
+              {viewerReview ? <button type="button" onClick={removeReview} disabled={busy}><Trash size={16} /> Delete</button> : null}
+              <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Saving..." : viewerReview ? "Save review" : "Publish review"}</button>
+            </div>
+          </form>
         ) : (
-          <div className="review-empty">
-            <Star size={24} />
-            <strong>No ratings yet</strong>
-            <span>Be the first reader to rate this series.</span>
+          <div className="review-carousel" aria-roledescription="carousel" aria-label="Series reviews">
+            {loading ? <div className="review-empty">Loading reader reviews...</div> : reviews.length ? (
+              <>
+                <div className="review-carousel-card" role="group" aria-roledescription="slide" aria-label={`${reviewIndex + 1} of ${reviews.length}`}>
+                  {(() => { const review = reviews[Math.min(reviewIndex, reviews.length - 1)]!; return <>
+                    <header><span>{review.displayName.slice(0, 1).toUpperCase()}</span><div><strong>{review.displayName}</strong><small>{new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(review.createdAt))}</small></div><ReviewStars value={review.rating} /></header>
+                    {review.body ? (review.spoiler ? <details><summary>Spoiler review. Reveal</summary><p>{review.body}</p></details> : <p>{review.body}</p>) : <p className="review-rating-only">Rating only</p>}
+                  </>; })()}
+                </div>
+                <div className="review-carousel-controls">
+                  <button type="button" aria-label="Previous review" disabled={reviewIndex === 0} onClick={() => setReviewIndex((value) => Math.max(0, value - 1))}><CaretLeft size={18} /></button>
+                  <span>{reviewIndex + 1} / {reviews.length}</span>
+                  <button type="button" aria-label="Next review" disabled={reviewIndex >= reviews.length - 1} onClick={() => setReviewIndex((value) => Math.min(reviews.length - 1, value + 1))}><CaretRight size={18} /></button>
+                </div>
+              </>
+            ) : <div className="review-empty"><Star size={24} /><strong>No ratings yet</strong><span>Be the first reader to rate this series.</span></div>}
           </div>
         )}
-        </div>
       </div>
     </section>
   );
 }
-
 function SectionHeading({
   title,
   body,

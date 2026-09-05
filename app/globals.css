@@ -62807,3 +62807,43 @@ input[type="checkbox"]:not([role="switch"]) {
 input[type="checkbox"]:not([role="switch"])::before { content: ""; display: block; width: .9rem; height: .9rem; margin: .1rem; border-radius: 50%; background: var(--theme-mid-tone); transition: transform .18s ease, background .18s ease; }
 input[type="checkbox"]:not([role="switch"]):checked { border-color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 28%, var(--theme-accent-l2)); }
 input[type="checkbox"]:not([role="switch"]):checked::before { transform: translateX(1rem); background: var(--theme-primary); }
+
+/* Series Reviews v49.22.21 — aligned actions, responsive composer, and full-content carousel. */
+.series-reviews .review-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.series-reviews .review-heading h2 { margin: 0; }
+.review-heading-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .55rem; }
+.review-heading-actions .review-mode-button,
+.review-heading-actions .review-collapse-toggle,
+.review-sort-control select { min-height: 2.45rem; }
+.review-heading-actions .review-mode-button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; white-space: nowrap; }
+.review-sort-control { display: inline-flex; min-width: 8.5rem; }
+.review-sort-control select { width: 100%; }
+.review-composer { display: grid; gap: .9rem; margin-top: 1rem; padding: clamp(.85rem, 2vw, 1.2rem); border: 1px solid color-mix(in srgb, var(--theme-primary) 28%, var(--line)); border-radius: var(--site-card-radius, var(--radius)); background: color-mix(in srgb, var(--surface-2) 80%, transparent); }
+.review-composer > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.review-composer textarea { width: 100%; min-height: 8rem; resize: vertical; }
+.review-composer > div:last-child { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .6rem; }
+.review-composer > div:last-child label { display: inline-flex; align-items: center; gap: .45rem; margin-right: auto; }
+.review-carousel { display: grid; gap: .75rem; margin-top: 1rem; }
+.review-carousel-card { min-height: 10rem; padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid color-mix(in srgb, var(--theme-primary) 30%, var(--line)); border-radius: var(--site-card-radius, var(--radius)); background: color-mix(in srgb, var(--surface-2) 86%, transparent); animation: review-carousel-in .22s ease both; }
+.review-carousel-card header { display: flex; align-items: center; gap: .7rem; margin-bottom: .9rem; }
+.review-carousel-card header > span { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: 50%; color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 16%, var(--surface)); font-weight: 800; }
+.review-carousel-card header > div { display: grid; min-width: 0; gap: .15rem; margin-right: auto; }
+.review-carousel-card header small { color: var(--muted); font-size: .75rem; }
+.review-carousel-card > p { margin: 0; color: var(--text); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-carousel-controls { display: flex; align-items: center; justify-content: center; gap: .75rem; color: var(--muted); }
+.review-carousel-controls button { display: grid; width: 2.3rem; height: 2.3rem; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--theme-primary); background: var(--surface); cursor: pointer; transition: transform .18s ease, opacity .18s ease, background .18s ease; }
+.review-carousel-controls button:hover:not(:disabled), .review-carousel-controls button:focus-visible { transform: translateY(-1px); background: color-mix(in srgb, var(--theme-primary) 12%, var(--surface)); }
+.review-carousel-controls button:disabled { cursor: default; opacity: .4; }
+@keyframes review-carousel-in { from { opacity: .35; transform: translateX(.4rem); } to { opacity: 1; transform: translateX(0); } }
+@media (max-width: 760px) {
+  .series-reviews .review-heading { align-items: stretch; flex-direction: column; }
+  .review-heading-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; }
+  .review-heading-actions .review-mode-button, .review-heading-actions .review-collapse-toggle, .review-sort-control { width: 100%; }
+  .review-sort-control { grid-column: 1 / -1; }
+  .review-composer > div:first-child { align-items: flex-start; flex-direction: column; }
+  .review-composer > div:last-child { align-items: stretch; flex-direction: column; }
+  .review-composer > div:last-child label { margin-right: 0; }
+  .review-composer button { width: 100%; justify-content: center; }
+  .review-carousel-card { min-height: 12rem; }
+}
+@media (prefers-reduced-motion: reduce) { .review-carousel-card, .review-carousel-controls button { animation: none; transition: none; } }
