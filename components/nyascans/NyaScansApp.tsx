@@ -5809,7 +5809,7 @@ function BrowseView({
               disabled={!activeFilterCount}
               onClick={clearFilters}
             >
-              <X size={14} aria-hidden="true" /> Clear filters
+              Clear filters
             </button>
           </footer>
         </aside>
@@ -10100,7 +10100,12 @@ function ReaderView({
         readerSettings.readingDirection === "rtl"
           ? "ArrowRight"
           : "ArrowLeft";
-      if (event.key === forwardKey || event.key === "PageDown") {
+      const volumeForward = event.key === "AudioVolumeUp";
+      const volumeBackward = event.key === "AudioVolumeDown";
+      if (readerSettings.volumeNavigation && (volumeForward || volumeBackward)) {
+        event.preventDefault();
+        movePage(volumeForward ? 1 : -1);
+      } else if (event.key === forwardKey || event.key === "PageDown") {
         event.preventDefault();
         movePage(1);
       } else if (event.key === backwardKey || event.key === "PageUp") {
@@ -10763,7 +10768,7 @@ function ReaderView({
               });
             }}
             wakeLockSupported={wakeLockSupported}
-            volumeNavigationSupported={false}
+            volumeNavigationSupported={true}
           />
         </aside>
       ) : null}
@@ -12526,7 +12531,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                 );
               }}
               wakeLockSupported={typeof navigator !== "undefined" && "wakeLock" in navigator}
-              volumeNavigationSupported={false}
+              volumeNavigationSupported={true}
             />
             <div className="form-grid">
               {(["manga", "vertical"] as const).map((kind) => (
@@ -12646,7 +12651,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
           </form>
         ) : (
           <div className="preferences-workspace">
-            <ProfileSettingsWorkspace mode="privacy" onSaved={showToast} />
+            <ProfileSettingsWorkspace mode="privacy" onSaved={showToast} hideActions />
             <form className="settings-form">
               <div className="reader-defaults-intro">
                 <strong>Personalization and cookies</strong>
@@ -12692,7 +12697,7 @@ function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (te
                 )
               }
             >
-              {settingsBusy ? "Saving…" : "Save privacy choices"}
+              {settingsBusy ? "Saving…" : "Save preferences"}
               </button>
             </form>
           </div>

@@ -110,7 +110,6 @@ export function AccountSecurityWorkspace() {
         <div>
           <p className="eyebrow">Account protection</p>
           <h2>Secure your account with a passkey.</h2>
-          <p>Passkeys are optional for normal site login. Accounts with admin-console permissions must register at least one passkey before opening the admin console; registration is a one-time setup requirement, not a repeated challenge.</p>
         </div>
         <span className="account-security-intro-icon"><ShieldCheck size={32} weight="fill" /></span>
       </div>
@@ -123,12 +122,11 @@ export function AccountSecurityWorkspace() {
           <div className="security-method-heading"><span className="security-method-icon is-purple"><Fingerprint size={23} weight="fill" /></span><div><p className="eyebrow">Passwordless protection</p><h3 id="security-passkeys-title">Passkeys</h3></div></div>
           <span className={`security-status-badge ${status?.passkeyCount ? "is-enabled" : "is-disabled"}`}>{loading ? "Checking…" : status?.passkeyCount ? `${status.passkeyCount} registered` : "Not registered"}</span>
         </div>
-        <p className="security-method-copy">Use Face ID, Touch ID, Windows Hello, or a hardware security key. Existing password login remains unchanged, while a registered passkey also unlocks the admin-console enrollment gate.</p>
+        <p className="security-method-copy">Secure your account with a passkey.</p>
         <div className="passkey-add-row"><input value={deviceName} onChange={(event) => setDeviceName(event.target.value)} maxLength={80} placeholder="Device name (optional)" /><button className="button button-primary" type="button" onClick={() => void addPasskey()} disabled={Boolean(busy)}>{busy === "passkey-add" ? <DotsRing size={18} /> : <Fingerprint size={18} />} Add passkey</button></div>
         <div className="passkey-list">{status?.passkeys.length ? status.passkeys.map((passkey) => <article className="passkey-row" key={passkey.id}><span className="passkey-row-icon"><Fingerprint size={22} /></span><div className="passkey-row-copy"><strong>{passkey.deviceName}</strong><small>Added {formatDate(passkey.createdAt)} · Last used {formatDate(passkey.lastUsedAt)}{passkey.backedUp ? " · Synced" : ""}</small></div><button className="icon-button danger" type="button" aria-label={`Remove ${passkey.deviceName}`} title="Remove passkey" onClick={() => void removePasskey(passkey.id)} disabled={busy === `passkey-remove-${passkey.id}`}><Trash size={18} /></button></article>) : <div className="security-empty-state"><Fingerprint size={24} /><span>No passkeys registered yet.</span></div>}</div>
       </section>
 
-      <section className="account-security-note"><Clock size={19} /><p><strong>Normal login is unchanged.</strong> No user faces an additional challenge during regular sign-in. Admin-console access is authorized by the existing role/capability checks plus the server-side passkey enrollment check.</p></section>
     </div>
   );
 }

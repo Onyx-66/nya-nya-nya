@@ -514,9 +514,11 @@ function profileUpdatePayload(profile: OwnProfile) {
 export function ProfileSettingsWorkspace({
   onSaved,
   mode = "profile",
+  hideActions = false,
 }: {
   onSaved?: (message: string) => void;
   mode?: "profile" | "privacy";
+  hideActions?: boolean;
 }) {
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [initial, setInitial] = useState("");
@@ -1241,7 +1243,7 @@ export function ProfileSettingsWorkspace({
           ))}
         </div>
       </section>
-      <footer className="profile-settings-actions">
+      {!hideActions ? <footer className="profile-settings-actions">
         <span>
           {dirty ? (
             <>
@@ -1261,7 +1263,7 @@ export function ProfileSettingsWorkspace({
           <FloppyDisk size={17} />
           {saving ? "Saving…" : mode === "profile" ? "Save profile" : "Save visibility"}
         </button>
-      </footer>
+      </footer> : null}
       {avatarCropSource ? (
         <AvatarCropDialog
           source={avatarCropSource}

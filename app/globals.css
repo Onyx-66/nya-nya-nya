@@ -31183,28 +31183,15 @@ button:disabled,
   cursor: pointer;
 }
 
-.continue-reading-loading > span {
-  display: grid;
+.continue-reading-loading {
+  display: flex;
   min-height: 104px;
-  grid-template-columns: 58px minmax(0, 1fr);
-  grid-template-rows: repeat(3, 12px);
-  align-content: center;
-  gap: 9px 13px;
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: center;
+  gap: .7rem;
+  padding: 1rem;
 }
-
-.continue-reading-loading i {
-  grid-row: 1 / -1;
-  width: 58px;
-  aspect-ratio: 2 / 3;
-  border-radius: 9px;
-}
-
-
-
 .continue-reading-section.is-shelf .continue-reading-list {
   display: grid;
   grid-auto-columns: minmax(166px, 198px);
@@ -62788,3 +62775,35 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 .series-policy-radio-group label.is-selected { border-color:var(--theme-primary); background:color-mix(in srgb,var(--theme-primary) 10%,transparent); color:var(--theme-text-color); }
 .series-policy-radio-group label span { grid-column:2; font-size:.75rem; }
 @media (max-width:800px) { .paid-mode-toggle,.paid-mode-details--normal,.paid-mode-default-grid,.series-policy-windows,.series-paid-policy-custom-grid,.series-policy-radio-group { grid-template-columns:1fr; } }
+
+/* Browse filters: selected checks stay inline and popovers clear surrounding section borders. */
+.catalog-filter-panel,
+.catalog-filter-panel > aside,
+.profile-favorites-editor,
+.profile-favorites-editor details { overflow: visible; }
+.catalog-facet-menu,
+.minimum-chapters-field { position: relative; z-index: 20; }
+.catalog-facet-menu[open],
+.minimum-chapters-field[open] { z-index: 80; }
+.catalog-facet-menu[open] > div,
+.minimum-chapters-field[open] > .minimum-chapters-popover { position: relative; z-index: 81; }
+.catalog-option-button { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
+.catalog-option-button > span:first-child { min-width: 0; text-align: left; }
+.catalog-choice-box { flex: 0 0 auto; }
+
+/* Theme-aware checkbox switches for remaining preference/filter controls. */
+input[type="checkbox"]:not([role="switch"]) {
+  appearance: none;
+  width: 2.25rem;
+  height: 1.25rem;
+  margin: 0;
+  border: 1px solid var(--theme-accent-l4);
+  border-radius: 999px;
+  background: var(--theme-accent-l2);
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+input[type="checkbox"]:not([role="switch"])::before { content: ""; display: block; width: .9rem; height: .9rem; margin: .1rem; border-radius: 50%; background: var(--theme-mid-tone); transition: transform .18s ease, background .18s ease; }
+input[type="checkbox"]:not([role="switch"]):checked { border-color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 28%, var(--theme-accent-l2)); }
+input[type="checkbox"]:not([role="switch"]):checked::before { transform: translateX(1rem); background: var(--theme-primary); }
