@@ -4844,7 +4844,6 @@ function CompactOptionMenu({
     >
       <summary aria-label={`${label}: ${currentLabel}`}>
         <span className="catalog-filter-summary">
-          <Plus size={13} aria-hidden="true" />
           <span className="catalog-filter-summary-label">{label}</span>
           {count ? <b className="catalog-filter-active-count">{count}</b> : null}
         </span>
@@ -4941,7 +4940,6 @@ function CatalogFacetMenu({
     >
       <summary aria-label={`${label}: ${selectedLabels.join(", ") || label}`}>
         <span className="catalog-filter-summary">
-          <Plus size={13} aria-hidden="true" />
           <span className="catalog-filter-summary-label">{label}</span>
           {selectedValues.length ? <b className="catalog-filter-active-count">{selectedValues.length}</b> : null}
         </span>
@@ -5018,7 +5016,6 @@ function MinimumChaptersMenu({
     >
       <summary aria-label={`Minimum Chapters${value ? `: ${value}` : ""}`}>
         <span className="catalog-filter-summary">
-          <Plus size={13} aria-hidden="true" />
           <span className="catalog-filter-summary-label">Minimum Chapters</span>
           {value ? <b className="catalog-filter-active-count">1</b> : null}
         </span>
@@ -5602,13 +5599,12 @@ function BrowseView({
             }}
           />
           <span className="catalog-filter-summary">
-            <Plus size={13} aria-hidden="true" />
             <span className="catalog-filter-summary-label">Hide Bookmarked</span>
             {hideFollowed ? <b className="catalog-filter-active-count">1</b> : null}
           </span>
         </label>
         <button className="browse-clear-filters" type="button" disabled={!activeFilterCount} onClick={clearFilters}>
-          <X size={14} aria-hidden="true" /> Clear Filters
+          Clear Filters
         </button>
       </div>
 

@@ -272,6 +272,7 @@ export function EnhancedDiscussionSection({
     name: string;
     depth: number;
   } | null>(null);
+  const [commentComposerOpen, setCommentComposerOpen] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([]);
   const [curatedGifs, setCuratedGifs] = useState<CuratedGif[]>([]);
   const [selectedGifIds, setSelectedGifIds] = useState<string[]>([]);
@@ -836,6 +837,7 @@ export function EnhancedDiscussionSection({
       setBody("");
       setSpoiler(false);
       setReplyTo(null);
+      if (!postedReply) setCommentComposerOpen(false);
       setPendingMedia([]);
       setSelectedGifIds([]);
       setGifPickerOpen(false);
@@ -1533,7 +1535,11 @@ export function EnhancedDiscussionSection({
             >
               <X size={17} />
             </button>
-          ) : null}
+          ) : (
+            <button className="composer-close" type="button" aria-label="Close comment composer" onClick={() => setCommentComposerOpen(false)}>
+              <X size={17} />
+            </button>
+          )}
         </div>
         <label className="comment-field">
           <span className="sr-only">{inline ? "Reply" : "Comment"}</span>
@@ -2219,7 +2225,12 @@ export function EnhancedDiscussionSection({
         </div>
       </header>
 
-      {actor && !replyTo ? renderComposer() : null}
+      {actor && !replyTo && !commentComposerOpen ? (
+        <button className="button button-primary comment-write-trigger" type="button" onClick={() => { setCommentComposerOpen(true); window.requestAnimationFrame(() => composerRef.current?.focus()); }}>
+          <PencilSimple size={17} /> Write a comment
+        </button>
+      ) : null}
+      {actor && !replyTo && commentComposerOpen ? renderComposer() : null}
       {!actor ? (
         <div className="comment-signin">
           <ChatCircle size={27} />
