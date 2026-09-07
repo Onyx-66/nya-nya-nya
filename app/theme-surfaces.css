@@ -530,6 +530,23 @@
   box-shadow: 0 0 .85rem color-mix(in srgb, var(--section-accent) 22%, transparent) !important;
 }
 
+/* Use the same centered icon geometry for both pinned carousel presentations. */
+.home-main .v481-pinned-section :is(.v481-pinned-arrow, .card-coverflow__arrow) {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 0;
+  line-height: 0;
+}
+
+.home-main .v481-pinned-section :is(.v481-pinned-arrow, .card-coverflow__arrow) > svg {
+  display: block;
+  width: 21px;
+  height: 21px;
+  margin: 0;
+  grid-area: 1 / 1;
+}
+
 .home-main :is(
   .featured-slider-arrows button,
   .v481-pinned-section .v481-pinned-arrow,

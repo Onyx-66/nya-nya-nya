@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { CaretLeft, CaretRight } from "@/components/nyascans/heroicons";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 type CardCoverFlowProps<T> = {
@@ -95,7 +96,7 @@ export function CardCoverFlow<T>({
           onClick={() => move(-1)}
           disabled={count < 2}
         >
-          <span aria-hidden="true">‹</span>
+          <CaretLeft size={21} aria-hidden="true" />
         </button>
         <div className="card-coverflow__track" tabIndex={0} aria-live="polite">
           <AnimatePresence initial={false}>
@@ -141,7 +142,7 @@ export function CardCoverFlow<T>({
           onClick={() => move(1)}
           disabled={count < 2}
         >
-          <span aria-hidden="true">›</span>
+          <CaretRight size={21} aria-hidden="true" />
         </button>
       </div>
       {count > 1 ? (

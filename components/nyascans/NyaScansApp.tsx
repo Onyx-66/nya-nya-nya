@@ -5576,10 +5576,22 @@ function BrowseView({
           onChange={(value) => navigate({ creator: value, page: 1 })}
           placeholder="Search artist, author, publisher..."
         />
-        <MinimumChaptersMenu
-          value={minimumChapters}
-          onApply={(value) => navigate({ minimumChapters: value, page: 1 }, true)}
-        />
+        <label className="browse-minimum-chapters">
+          <span>Minimum chapters</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
+            value={minimumChapters}
+            onChange={(event) => navigate({
+              minimumChapters: event.target.value.replace(/[^0-9]/g, "").slice(0, 4),
+              page: 1,
+            }, true)}
+            placeholder="Any"
+            aria-label="Minimum chapters"
+          />
+        </label>
         <label className={`hide-followed-field${hideFollowed ? " has-active" : ""}`.trim()}>
           <input
             type="checkbox"
@@ -5593,7 +5605,7 @@ function BrowseView({
             }}
           />
           <span className="catalog-filter-summary">
-            <span className="catalog-filter-summary-label">Hide Bookmarked</span>
+            <span className="catalog-filter-summary-label">Hide Bookmarks</span>
             {hideFollowed ? <b className="catalog-filter-active-count">1</b> : null}
           </span>
         </label>
