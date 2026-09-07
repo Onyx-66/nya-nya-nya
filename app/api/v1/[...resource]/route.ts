@@ -2363,6 +2363,15 @@ export async function GET(request: Request, context: RouteContext) {
         .optional()
         .catch(undefined)
         .parse(url.searchParams.get("minChapters") ?? undefined);
+      const maximumChapters = z
+        .coerce
+        .number()
+        .int()
+        .min(0)
+        .max(10000)
+        .optional()
+        .catch(undefined)
+        .parse(url.searchParams.get("maxChapters") ?? undefined);
       const hideFollowed = ["1", "true"].includes(
         (url.searchParams.get("hideFollowed") ?? "").toLowerCase(),
       );
@@ -2450,8 +2459,8 @@ export async function GET(request: Request, context: RouteContext) {
         )`);
         bindings.push(...creatorPatterns, ...creatorPatterns);
       }
-      if (minimumChapters && minimumChapters > 0) {
-        clauses.push(`(
+      if (minimumChapters !== undefined || maximumChapters !== undefined) {
+        const chapterCountExpression = `(
           SELECT COUNT(DISTINCT CASE
             WHEN mc_filter.id IS NULL THEN NULL
             WHEN NOT (${publicPaidChapterPredicate("mc_filter", "mc_visibility")}) THEN NULL
@@ -2465,8 +2474,15 @@ export async function GET(request: Request, context: RouteContext) {
              AND mc_filter.state = 'PUBLISHED'
              AND mc_filter.visibility = 'PUBLIC'
              AND datetime(mc_filter.published_at) <= datetime('now')
-        ) >= ?`);
-        bindings.push(minimumChapters);
+        )`;
+        if (minimumChapters !== undefined && minimumChapters > 0) {
+          clauses.push(`${chapterCountExpression} >= ?`);
+          bindings.push(minimumChapters);
+        }
+        if (maximumChapters !== undefined) {
+          clauses.push(`${chapterCountExpression} <= ?`);
+          bindings.push(maximumChapters);
+        }
       }
       if (hideFollowed) {
         const actor = await getActor().catch(() => null);

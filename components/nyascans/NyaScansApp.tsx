@@ -15,6 +15,7 @@ import {
   ArrowsOut,
   Bell,
   Books,
+  BookOpenText,
   CaretDown,
   CaretLeft,
   CaretRight,
@@ -4980,82 +4981,66 @@ function CatalogFacetMenu({
   );
 }
 
-function MinimumChaptersMenu({
-  value,
-  onApply,
-  className = "",
+function ChaptersMenu({
+  minimum, maximum, onApply,
 }: {
-  value: string;
-  onApply: (value: string) => void;
-  className?: string;
+  minimum: string;
+  maximum: string;
+  onApply: (minimum: string, maximum: string) => void;
 }) {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
-  const [draft, setDraft] = useState(value);
-
+  const [draft, setDraft] = useState({ minimum, maximum });
+  const applyRef = useRef(onApply);
+  applyRef.current = onApply;
+  const invalid = draft.maximum !== "" && Number(draft.minimum || 0) > Number(draft.maximum);
+  useEffect(() => { setDraft({ minimum, maximum }); }, [minimum, maximum]);
   useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  function updateDraft(next: string) {
-    setDraft(next.replace(/[^0-9]/g, "").slice(0, 4));
-  }
-
-  function apply() {
-    onApply(draft && Number(draft) > 0 ? draft : "");
-    if (detailsRef.current) detailsRef.current.open = false;
-  }
-
-  return (
-    <details
-      ref={detailsRef}
-      className={`minimum-chapters-field ${value ? "has-active" : ""} ${className}`.trim()}
-      onToggle={(event) => {
-        if (event.currentTarget.open) {
-          setDraft(value);
-          closeOtherBrowseFilterDetails(event.currentTarget);
-        }
-      }}
-    >
-      <summary aria-label={`Minimum Chapters${value ? `: ${value}` : ""}`}>
-        <span className="catalog-filter-summary">
-          <span className="catalog-filter-summary-label">Minimum Chapters</span>
-          {value ? <b className="catalog-filter-active-count">1</b> : null}
-        </span>
-        <CaretDown className="catalog-filter-chevron" size={13} aria-hidden="true" />
-      </summary>
-      <div className="minimum-chapters-popover">
-        <p>At least how many published chapters?</p>
-        <div className="minimum-chapters-editor">
-          <button
-            type="button"
-            aria-label="Decrease minimum chapters"
-            onClick={() => updateDraft(String(Math.max(0, Number(draft || 0) - 1)))}
-          >
-            <ArrowDown size={15} aria-hidden="true" />
-          </button>
-          <input
-            inputMode="numeric"
-            min="0"
-            max="10000"
-            pattern="[0-9]*"
-            value={draft}
-            onChange={(event) => updateDraft(event.target.value)}
-            placeholder="e.g. 20"
-            aria-label="Minimum chapters"
-          />
-          <button
-            type="button"
-            aria-label="Increase minimum chapters"
-            onClick={() => updateDraft(String(Math.min(10000, Number(draft || 0) + 1)))}
-          >
-            <ArrowUp size={15} aria-hidden="true" />
-          </button>
-        </div>
-        <small>Example: 20 chapters or more.</small>
-        <button className="minimum-chapters-apply" type="button" onClick={apply}>Apply</button>
+    if (invalid || (draft.minimum === minimum && draft.maximum === maximum)) return;
+    const timer = window.setTimeout(() => applyRef.current(draft.minimum, draft.maximum), 350);
+    return () => window.clearTimeout(timer);
+  }, [draft, invalid, minimum, maximum]);
+  const active = Number(minimum) > 0 || maximum !== "";
+  const presets = [
+    { label: "1–50", minimum: "1", maximum: "50" },
+    { label: "50–100", minimum: "50", maximum: "100" },
+    { label: "100–200", minimum: "100", maximum: "200" },
+    { label: "200+", minimum: "200", maximum: "" },
+    { label: "500+", minimum: "500", maximum: "" },
+  ];
+  return <details ref={detailsRef} className={`chapters-range-field${active ? " has-active" : ""}`}
+    onToggle={(event) => { if (event.currentTarget.open) closeOtherBrowseFilterDetails(event.currentTarget); }}
+    onKeyDown={(event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        if (detailsRef.current) { detailsRef.current.open = false; detailsRef.current.querySelector("summary")?.focus(); }
+      }
+      if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+        event.preventDefault();
+        if (!invalid) onApply(draft.minimum, draft.maximum);
+      }
+    }}>
+    <summary aria-label={`Chapters${active ? `: ${minimum || "0"} to ${maximum || "any"}` : ""}`}>
+      <span className="chapters-range-label"><BookOpenText size={19} aria-hidden="true" /><span>Chapters</span></span>
+      <CaretDown size={15} aria-hidden="true" />
+    </summary>
+    <div className="chapters-range-popover" role="group" aria-label="Chapter Count">
+      <h3>Chapter Count</h3>
+      <div className="chapters-range-inputs">
+        <label><span>MIN</span><input type="number" inputMode="numeric" min="0" max="10000" step="1"
+          value={draft.minimum} placeholder="0" aria-label="Minimum chapters" aria-invalid={invalid}
+          onChange={(event) => { const value = event.target.value; if (value === "" || /^\d+$/.test(value) && Number(value) <= 10000) setDraft((current) => ({ ...current, minimum: value })); }} /></label>
+        <span className="chapters-range-dash" aria-hidden="true">—</span>
+        <label><span>MAX</span><input type="number" inputMode="numeric" min="0" max="10000" step="1"
+          value={draft.maximum} placeholder="Any" aria-label="Maximum chapters" aria-invalid={invalid}
+          onChange={(event) => { const value = event.target.value; if (value === "" || /^\d+$/.test(value) && Number(value) <= 10000) setDraft((current) => ({ ...current, maximum: value })); }} /></label>
       </div>
-    </details>
-  );
+      {invalid ? <p className="chapters-range-error" role="alert">MAX must be at least MIN.</p> : null}
+      <span className="chapters-range-quick-label">QUICK SELECT</span>
+      <div className="chapters-range-presets">{presets.map((preset) => <button key={preset.label} type="button"
+        aria-pressed={draft.minimum === preset.minimum && draft.maximum === preset.maximum}
+        onClick={() => { setDraft({ minimum: preset.minimum, maximum: preset.maximum }); onApply(preset.minimum, preset.maximum); }}>{preset.label}</button>)}</div>
+    </div>
+  </details>;
 }
 
 function CatalogFollowButton({
@@ -5154,7 +5139,7 @@ function BrowseView({
   const [genre, setGenre] = useState("");
   const [creator, setCreator] = useState("");
   const [minimumChapters, setMinimumChapters] = useState("");
-  const [minimumDraft, setMinimumDraft] = useState("");
+  const [maximumChapters, setMaximumChapters] = useState("");
   const [hideFollowed, setHideFollowed] = useState(false);
   const [genreSearch, setGenreSearch] = useState("");
   const [creatorSearch, setCreatorSearch] = useState("");
@@ -5192,6 +5177,7 @@ function BrowseView({
       const nextGenre = params.get("genre") ?? "";
       const nextCreator = params.get("creator") ?? "";
       const nextMinimumChapters = params.get("minChapters") ?? "";
+      const nextMaximumChapters = params.get("maxChapters") ?? "";
       const nextHideFollowed = ["1", "true"].includes(
         (params.get("hideFollowed") ?? "").toLowerCase(),
       );
@@ -5217,7 +5203,7 @@ function BrowseView({
       setGenre(nextGenre);
       setCreator(nextCreator);
       setMinimumChapters(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
-      setMinimumDraft(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
+      setMaximumChapters(/^\d+$/.test(nextMaximumChapters) ? nextMaximumChapters : "");
       setHideFollowed(nextHideFollowed);
       setSort(
         ["latest", "added", "viewed", "followed", "rated", "title"].includes(
@@ -5244,6 +5230,7 @@ function BrowseView({
           Boolean(nextGenre) ||
           Boolean(nextCreator) ||
           Boolean(nextMinimumChapters) ||
+          Boolean(nextMaximumChapters) ||
           nextHideFollowed,
       );
     }
@@ -5257,10 +5244,6 @@ function BrowseView({
       window.removeEventListener("popstate", applyLocation);
     };
   }, []);
-
-  useEffect(() => {
-    setMinimumDraft(minimumChapters);
-  }, [minimumChapters]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -5283,6 +5266,7 @@ function BrowseView({
       if (minimumChapters && Number(minimumChapters) > 0) {
         params.set("minChapters", minimumChapters);
       }
+      if (maximumChapters !== "") params.set("maxChapters", maximumChapters);
       if (hideFollowed && actor) params.set("hideFollowed", "1");
       try {
         const response = await fetch(`/api/v1/catalog?${params.toString()}`, {
@@ -5337,6 +5321,7 @@ function BrowseView({
     hideFollowed,
     hydrated,
     minimumChapters,
+    maximumChapters,
     page,
     pageSize,
     query,
@@ -5355,6 +5340,7 @@ function BrowseView({
       genre: string;
       creator: string;
       minimumChapters: string;
+      maximumChapters: string;
       hideFollowed: boolean;
       sort: string;
       sortDirection: "asc" | "desc";
@@ -5371,6 +5357,7 @@ function BrowseView({
       genre,
       creator,
       minimumChapters,
+      maximumChapters,
       hideFollowed,
       sort,
       sortDirection,
@@ -5392,6 +5379,7 @@ function BrowseView({
     if (next.minimumChapters && Number(next.minimumChapters) > 0) {
       params.set("minChapters", next.minimumChapters);
     }
+    if (next.maximumChapters !== "") params.set("maxChapters", next.maximumChapters);
     if (next.hideFollowed && actor) params.set("hideFollowed", "1");
     if (next.sort !== "latest") params.set("sort", next.sort);
     const defaultDirection = next.sort === "title" ? "asc" : "desc";
@@ -5407,6 +5395,7 @@ function BrowseView({
     setGenre(next.genre);
     setCreator(next.creator);
     setMinimumChapters(next.minimumChapters);
+    setMaximumChapters(next.maximumChapters);
     setHideFollowed(next.hideFollowed);
     setSort(next.sort);
     setSortDirection(next.sortDirection);
@@ -5433,7 +5422,7 @@ function BrowseView({
     status !== "All",
     Boolean(genre),
     Boolean(creator),
-    Boolean(minimumChapters && Number(minimumChapters) > 0),
+    Boolean(minimumChapters && Number(minimumChapters) > 0) || maximumChapters !== "",
     hideFollowed,
     Boolean(sortActiveCount),
     pageSize !== DEFAULT_CATALOG_PAGE_SIZE,
@@ -5447,6 +5436,7 @@ function BrowseView({
       genre: "",
       creator: "",
       minimumChapters: "",
+      maximumChapters: "",
       hideFollowed: false,
       sort: "latest",
       sortDirection: "desc",
@@ -5584,9 +5574,10 @@ function BrowseView({
           onChange={(value) => navigate({ creator: value, page: 1 })}
           placeholder="Search artist, author, publisher..."
         />
-        <MinimumChaptersMenu
-          value={minimumChapters}
-          onApply={(value) => navigate({ minimumChapters: value, page: 1 }, true)}
+        <ChaptersMenu
+          minimum={minimumChapters}
+          maximum={maximumChapters}
+          onApply={(minimumChapters, maximumChapters) => navigate({ minimumChapters, maximumChapters, page: 1 }, true)}
         />
         <label className={`hide-followed-field${hideFollowed ? " has-active" : ""}`.trim()}>
           <input
@@ -5697,9 +5688,10 @@ function BrowseView({
               onChange={(value) => navigate({ creator: value, page: 1 })}
               placeholder="Search artist, author, publisher..."
             />
-            <MinimumChaptersMenu
-              value={minimumChapters}
-              onApply={(value) => navigate({ minimumChapters: value, page: 1 }, true)}
+            <ChaptersMenu
+              minimum={minimumChapters}
+              maximum={maximumChapters}
+              onApply={(minimumChapters, maximumChapters) => navigate({ minimumChapters, maximumChapters, page: 1 }, true)}
             />
             <label className="hide-followed-field">
               <input

@@ -1,0 +1,76 @@
+/* Chapter count range: compact inputs and the reference quick-select layout. */
+body:has(.catalog-toolbar) .catalog-filter-panel .chapters-range-field {
+  position: relative;
+  min-width: 0;
+  border-color: var(--line);
+  border-radius: .5rem;
+  background: var(--surface-2);
+}
+body:has(.catalog-toolbar) .catalog-filter-panel .chapters-range-field[open] { z-index: 120; }
+body:has(.catalog-toolbar) .catalog-filter-panel .chapters-range-field > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 400;
+  list-style: none;
+  cursor: pointer;
+}
+.chapters-range-field > summary::-webkit-details-marker { display: none; }
+.chapters-range-label { display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap; }
+.chapters-range-field.has-active > summary { color: var(--accent) !important; }
+body:has(.catalog-toolbar) .catalog-filter-panel .chapters-range-field > .chapters-range-popover {
+  position: absolute;
+  inset: calc(100% + .35rem) 0 auto auto;
+  display: grid;
+  align-content: start;
+  gap: 0;
+  width: 325px;
+  min-width: 0;
+  max-width: calc(100vw - 2rem);
+  max-height: none;
+  box-sizing: border-box;
+  padding: 1rem .875rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+  overflow: visible;
+}
+.chapters-range-popover h3 { margin: 0 0 1rem; font-size: 1.125rem; line-height: 1.3; font-weight: 650; }
+.chapters-range-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 1.5rem minmax(0, 1fr); align-items: end; gap: .45rem; }
+body:has(.catalog-toolbar) .chapters-range-inputs > label { display: grid; min-width: 0; gap: .4rem; margin: 0; padding: 0; border: 0; background: transparent; }
+.chapters-range-inputs label > span, .chapters-range-quick-label { color: var(--muted); font-size: .8125rem; line-height: 1.3; font-weight: 400; }
+body:has(.catalog-toolbar) .chapters-range-inputs input {
+  width: 100%; min-width: 0; height: 40px; min-height: 40px; box-sizing: border-box;
+  margin: 0; padding: .4rem .875rem; border: 1px solid var(--line); border-radius: .5rem;
+  color: var(--text); background: transparent; font: inherit; font-size: 1rem;
+}
+.chapters-range-inputs input::placeholder { color: var(--muted); opacity: 1; }
+body:has(.catalog-toolbar) .chapters-range-inputs input:focus { border-color: var(--accent); outline: 1px solid var(--accent); outline-offset: 0; box-shadow: none; }
+.chapters-range-dash { align-self: end; padding-bottom: .65rem; text-align: center; color: var(--muted); }
+.chapters-range-quick-label { display: block; margin: 1rem 0 .5rem; }
+.chapters-range-presets { display: flex; flex-wrap: wrap; gap: .4rem; }
+body:has(.catalog-toolbar) .chapters-range-presets > button {
+  flex: 0 0 auto; width: auto; min-height: 30px; padding: .3rem .65rem;
+  border: 1px solid transparent; border-radius: 999px; color: var(--muted);
+  background: var(--surface-2); font-size: .875rem; line-height: 1.2; font-weight: 500; cursor: pointer;
+}
+body:has(.catalog-toolbar) .chapters-range-presets > button:is(:hover, :focus-visible, [aria-pressed="true"]) {
+  color: var(--text); border-color: var(--accent); outline: none;
+}
+.chapters-range-error { margin: .6rem 0 0; color: var(--danger); font-size: .875rem; }
+@media (min-width: 761px) {
+  body:has(.catalog-toolbar) .browse-desktop-filter-bar > .chapters-range-field { flex: 0 0 10.375rem; }
+}
+@media (max-width: 760px) {
+  body:has(.catalog-toolbar) .catalog-filter-panel .chapters-range-field > .chapters-range-popover {
+    position: static; width: 100%; max-width: none; padding: 1rem .875rem;
+  }
+  body:has(.catalog-toolbar) .chapters-range-presets > button { min-height: 40px; }
+}
