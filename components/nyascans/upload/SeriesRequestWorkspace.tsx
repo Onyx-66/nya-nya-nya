@@ -1,4 +1,5 @@
 "use client";
+import { LanguageSelect } from "@/components/nyascans/LanguageSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
@@ -1157,13 +1158,13 @@ export function AddSeriesRequestPanel() {
             </label>
             <label>
               <span>Original language</span>
-              <input
+              <LanguageSelect
                 value={form.languageCode}
-                required
-                onChange={(event) =>
+                ariaLabel="Original language"
+                onChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    languageCode: event.target.value.toLowerCase(),
+                    languageCode: value,
                   }))
                 }
               />

@@ -1,5 +1,6 @@
 "use client";
 import { PawIcon } from "@/components/nyascans/EconomyTokenIcon";
+import { LanguageSelect } from "@/components/nyascans/LanguageSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
@@ -127,6 +128,7 @@ type UploadOptions = {
   }>;
   limits: typeof UPLOAD_LIMITS;
   visibilityDefaults: UploadVisibilityDefaults;
+  workspaceSettings?: { defaultTeamId: string | null; defaultLanguage: string };
   admin: boolean;
   uploaderReview: {
     status: "UNAPPROVED" | "APPROVED" | "UNDER_SCOPE" | "REJECTED";
@@ -198,6 +200,7 @@ type UploadJob = {
   totalBytes: number;
   pageCount: number;
   chapterCount?: number;
+  firstChapterId?: string | null;
   lastErrorCode: string | null;
   lastErrorMessage: string | null;
   revision: number;
@@ -234,26 +237,6 @@ type Credits = {
   proofreader: string;
   qualityControl: string;
 };
-
-const uploadLanguages = [
-  ["en", "🇬🇧", "English"],
-  ["ar", "🇸🇦", "Arabic"],
-  ["fr", "🇫🇷", "French"],
-  ["es", "🇪🇸", "Spanish"],
-  ["pt", "🇵🇹", "Portuguese"],
-  ["pt-br", "🇧🇷", "Brazilian Portuguese"],
-  ["id", "🇮🇩", "Indonesian"],
-  ["ko", "🇰🇷", "Korean"],
-  ["ja", "🇯🇵", "Japanese"],
-  ["zh", "🇨🇳", "Chinese"],
-] as const;
-
-const uploadLanguageComboboxOptions: readonly AdminComboboxOption[] =
-  uploadLanguages.map(([code, flag, name]) => ({
-    value: code,
-    label: `${flag} ${name}`,
-    description: code.toUpperCase(),
-  }));
 
 type ComposerItem = {
   clientKey: string;
@@ -695,12 +678,12 @@ function JobList({
             >
               Resume <ArrowRight size={16} />
             </a>
-          ) : job.items?.[0]?.chapterId ? (
+          ) : (job.firstChapterId || job.items?.[0]?.chapterId) ? (
             <a
               className="button button-secondary"
               href={chapterManagementRoute(
                 job.seriesId,
-                job.items[0].chapterId,
+                (job.firstChapterId || job.items?.[0]?.chapterId)!,
               )}
             >
               Manage
@@ -890,15 +873,13 @@ function ChapterMetadataFields({
       </label>
       <div className="upload-combobox-field">
         <span>Language</span>
-        <AdminCombobox
+        <LanguageSelect
           disabled={disabled}
           value={item.language}
-          options={uploadLanguageComboboxOptions}
           onChange={(value) =>
             onChange({ ...item, language: value.toLowerCase() })
           }
           ariaLabel="Chapter language"
-          placeholder="Search languages…"
         />
       </div>
       {!singleMode ? <label>
@@ -1467,6 +1448,7 @@ function UploadComposer({
   );
   const initialTeam =
     (requestedTeamIsValid ? requestedTeam : null) ??
+    options.workspaceSettings?.defaultTeamId ??
     (kind === "SINGLE"
       ? options.series.find((entry) => entry.id === initialSeries)?.teamId ??
         options.teams[0]?.id
@@ -1490,7 +1472,7 @@ function UploadComposer({
       : ingestMethod;
   const [googleDriveUrl, setGoogleDriveUrl] = useState("");
   const [items, setItems] = useState<ComposerItem[]>(() => [
-    newComposerItem("1", "Chapter 1", options.visibilityDefaults),
+    { ...newComposerItem("1", "Chapter 1", options.visibilityDefaults), language: options.workspaceSettings?.defaultLanguage || "en" },
   ]);
   const [localPages, setLocalPages] = useState<LocalPage[]>([]);
   const [batchPaidEnabled, setBatchPaidEnabled] = useState(false);
@@ -2083,6 +2065,7 @@ function UploadComposer({
               metadata.sourceLabel,
               options.visibilityDefaults,
             ),
+            language: existingItems[0]?.language || options.workspaceSettings?.defaultLanguage || "en",
             volume: metadata.volume,
             title: metadata.title,
             visibility: batchVisibility,
@@ -2269,6 +2252,7 @@ function UploadComposer({
       setItems([
         {
           ...newComposerItem("1", "Chapter 1", options.visibilityDefaults),
+          language: items[0]?.language || options.workspaceSettings?.defaultLanguage || "en",
           visibility: batchVisibility,
         },
       ]);
@@ -4189,9 +4173,9 @@ export function UploadCenterWorkspace({
   canManageTeam: boolean;
 }) {
   const requestedMode = (
-    initialMode === "SINGLE"
+    !initialSection && initialMode === "SINGLE"
       ? "single"
-      : initialMode === "BATCH"
+      : !initialSection && initialMode === "BATCH"
         ? "multi"
         : navItems.some(([id]) => id === initialSection)
           ? initialSection
@@ -4222,7 +4206,7 @@ export function UploadCenterWorkspace({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  async function load(page = list.pagination.page) {
     setLoading(true);
     setError("");
     try {
@@ -4231,7 +4215,7 @@ export function UploadCenterWorkspace({
           await fetch("/api/v1/upload-jobs?view=options", { cache: "no-store" }),
         ),
         readJson<UploadListResponse>(
-          await fetch("/api/v1/upload-jobs?pageSize=50", { cache: "no-store" }),
+          await fetch(`/api/v1/upload-jobs?view=${selectedMode}&page=${page}&pageSize=20`, { cache: "no-store" }),
         ),
       ]);
       setOptions(optionPayload);
@@ -4253,29 +4237,14 @@ export function UploadCenterWorkspace({
       !["add-series", "series-requests", "create-team", "rights"].includes(selectedMode)
     ) {
       const timeout = window.setTimeout(() => {
-        void load();
+        void load(1);
       }, 0);
       return () => window.clearTimeout(timeout);
     }
     return undefined;
   }, [canUpload, selectedMode]);
 
-  const visibleJobs =
-    selectedMode === "drafts"
-      ? list.data.filter((job) =>
-          ["DRAFT", "UPLOADING", "READY", "FAILED"].includes(job.status),
-        )
-      : selectedMode === "review-status"
-        ? list.data.filter((job) =>
-            ["PENDING_REVIEW", "REJECTED", "PUBLISHED", "SCHEDULED"].includes(
-              job.status,
-            ),
-          )
-        : list.data.filter((job) =>
-            ["PUBLISHED", "SCHEDULED", "PENDING_REVIEW", "REJECTED", "CANCELLED"].includes(
-              job.status,
-            ),
-          );
+  const visibleJobs = list.data;
 
   return (
     <section
@@ -4327,9 +4296,9 @@ export function UploadCenterWorkspace({
           ) : selectedMode === "series" ? (
             <SeriesAccessPanel options={options} />
           ) : selectedMode === "single" ? (
-            <UploadComposer kind="SINGLE" options={options} />
+            <UploadComposer key="single" kind="SINGLE" options={options} />
           ) : selectedMode === "multi" ? (
-            <UploadComposer kind="BATCH" options={options} />
+            <UploadComposer key="multi" kind="BATCH" options={options} />
           ) : selectedMode === "rules" ? (
             <UploadRules options={options} />
           ) : (
@@ -4368,6 +4337,15 @@ export function UploadCenterWorkspace({
                 emptyBody="Records appear here after a real upload action."
                 onRefresh={() => void load()}
               />
+              {list.pagination.pageCount > 1 ? (
+                <nav className="upload-record-pagination" aria-label="Upload records pages">
+                  <button className="button button-secondary" type="button" disabled={loading || list.pagination.page <= 1}
+                    onClick={() => void load(list.pagination.page - 1)}>Previous</button>
+                  <span>Page {list.pagination.page} of {list.pagination.pageCount}</span>
+                  <button className="button button-secondary" type="button" disabled={loading || list.pagination.page >= list.pagination.pageCount}
+                    onClick={() => void load(list.pagination.page + 1)}>Next</button>
+                </nav>
+              ) : null}
             </section>
           )
         ) : null}

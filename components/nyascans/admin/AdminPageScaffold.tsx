@@ -213,6 +213,7 @@ export function AdminCombobox({
   placeholder = "Search options…",
   emptyLabel,
   disabled = false,
+  renderOptionLabel,
 }: {
   value: string;
   options: readonly AdminComboboxOption[];
@@ -221,6 +222,7 @@ export function AdminCombobox({
   placeholder?: string;
   emptyLabel?: string;
   disabled?: boolean;
+  renderOptionLabel?: (option: AdminComboboxOption) => ReactNode;
 }) {
   const listboxId = useId();
   const selected = options.find((option) => option.value === value) ?? null;
@@ -332,7 +334,7 @@ export function AdminCombobox({
                 onPointerMove={() => setActiveIndex(index)}
                 onClick={() => choose(option.value ? option : null)}
               >
-                <strong>{option.label}</strong>
+                <strong>{renderOptionLabel ? renderOptionLabel(option) : option.label}</strong>
                 <small>{option.description ?? option.value}</small>
               </button>
             ))

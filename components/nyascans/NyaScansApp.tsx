@@ -1,4 +1,5 @@
 "use client";
+import { resolveWorkspaceLocation } from "@/lib/workspace-navigation";
 import { PawIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { latestPageItems } from "./latest-pagination";
@@ -13140,36 +13141,37 @@ function OperationsView({
         {
           id: "general",
           label: "General",
-          items: [workspaceNavigationItem("Dashboard", SquaresFour, { targetSection: "Workspace" })],
+          items: [workspaceNavigationItem("Dashboard", SquaresFour, { targetSection: "Upload center", targetSubsection: "dashboard" })],
         },
         {
           id: "content",
           label: "Content",
           items: [
             workspaceNavigationItem("Series", Books, { targetSection: "Series" }),
-            workspaceNavigationItem("Create new serie", Plus, { targetSection: "Series", targetSubsection: "new" }),
-            workspaceNavigationItem("My series Requests", FileText, { targetSection: "Chapters", targetSubsection: "series-requests" }),
-            workspaceNavigationItem("Single Chapter", FileText, { targetSection: "Chapters", targetSubsection: "single" }),
-            workspaceNavigationItem("Multi Chapters", Books, { targetSection: "Chapters", targetSubsection: "multi" }),
-            workspaceNavigationItem("Drafts", FileText, { targetSection: "Chapters", targetSubsection: "drafts" }),
+            workspaceNavigationItem("Create new series", Plus, { targetSection: "Upload center", targetSubsection: "add-series" }),
+            workspaceNavigationItem("My series Requests", FileText, { targetSection: "Upload center", targetSubsection: "series-requests" }),
+            workspaceNavigationItem("Single Chapter", FileText, { targetSection: "Upload center", targetSubsection: "single" }),
+            workspaceNavigationItem("Multi Chapters", Books, { targetSection: "Upload center", targetSubsection: "multi" }),
+            workspaceNavigationItem("Drafts", FileText, { targetSection: "Upload center", targetSubsection: "drafts" }),
           ],
         },
         {
           id: "teams",
           label: "Teams",
           items: [
-            workspaceNavigationItem("My teams", UsersThree, { href: "/teams" }),
-            workspaceNavigationItem("Create team", Plus, { targetSection: "Chapters", targetSubsection: "create-team" }),
+            workspaceNavigationItem("My teams", UsersThree),
+            workspaceNavigationItem("Create team", Plus, { targetSection: "Upload center", targetSubsection: "create-team" }),
           ],
         },
         {
           id: "other",
           label: "Other",
           items: [
-            workspaceNavigationItem("Review Status", CheckCircle, { targetSection: "Chapters", targetSubsection: "review-status" }),
-            workspaceNavigationItem("Upload History", ClockCounterClockwise, { targetSection: "Chapters", targetSubsection: "history" }),
-            workspaceNavigationItem("Upload Rules", Info, { targetSection: "Chapters", targetSubsection: "rules" }),
-            workspaceNavigationItem("Rights", ShieldCheck, { targetSection: "Rights" }),
+            workspaceNavigationItem("Review Status", CheckCircle, { targetSection: "Upload center", targetSubsection: "review-status" }),
+            workspaceNavigationItem("Upload History", ClockCounterClockwise, { targetSection: "Upload center", targetSubsection: "history" }),
+            workspaceNavigationItem("Upload Rules", Info, { targetSection: "Upload center", targetSubsection: "rules" }),
+            workspaceNavigationItem("Rights", ShieldCheck, { targetSection: "Upload center", targetSubsection: "rights" }),
+            workspaceNavigationItem("Settings", GearSix),
           ],
         },
         {
@@ -13243,19 +13245,12 @@ function OperationsView({
   const sectionFromSlug = (() => {
     const normalized = normalizeAdminNavigationKey(initialSectionSlug);
     if (admin) return initialAdminLocation?.section ?? defaultSection;
-    return (
-      items.find(
-        (item) =>
-          item.slug === normalized ||
-          item.aliases.some(
-            (alias) => normalizeAdminNavigationKey(alias) === normalized,
-          ),
-      )?.label ?? defaultSection
-    );
+    return resolveWorkspaceLocation(items, initialSectionSlug, initialSubsectionSlug,
+      actor.role === "MODERATOR" ? defaultSection : "Dashboard").section;
   })();
   const [activeSection, setActiveSection] = useState(String(sectionFromSlug));
   const [activeSubsection, setActiveSubsection] = useState(
-    initialAdminLocation?.subsection ?? initialSubsectionSlug ?? "",
+    initialAdminLocation?.subsection ?? resolveWorkspaceLocation(items, initialSectionSlug, initialSubsectionSlug).subsection,
   );
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(groups.map((group) => group.id)),
@@ -13318,7 +13313,7 @@ function OperationsView({
   const activeNavigationItem = items.find(
     (item) => item.label === activeSection,
   );
-  const drawerMode = admin || activeNavigationItem?.slug === "upload-center";
+  const drawerMode = admin || actor.role !== "MODERATOR";
   const dispatchedSection = admin
     ? (activeNavigationItem?.slug ?? normalizeAdminNavigationKey(activeSection))
     : (activeNavigationItem?.targetSection ?? activeSection);
@@ -13517,6 +13512,7 @@ function OperationsView({
   useEffect(() => {
     function syncSectionFromLocation() {
       const pathParts = window.location.pathname
+        .replace(/^\/upload-chapter(?=\/|$)/, "/dashboard/upload-center")
         .slice(sectionBase.length)
         .replace(/^\/+/, "")
         .split("/")
@@ -13529,17 +13525,10 @@ function OperationsView({
             defaultSection,
           )
         : null;
-      const next = adminLocation?.section ??
-        items.find(
-          (item) =>
-            item.slug === pathParts[0] ||
-            item.aliases.some(
-              (alias) =>
-                normalizeAdminNavigationKey(alias) === pathParts[0],
-            ),
-        )?.label ?? defaultSection;
-      const nextSubsection =
-        adminLocation?.subsection ?? normalizeAdminNavigationKey(pathParts[1]);
+      const workspaceLocation = resolveWorkspaceLocation(items, pathParts[0], pathParts[1],
+        actor.role === "MODERATOR" ? defaultSection : "Dashboard");
+      const next = adminLocation?.section ?? workspaceLocation.section;
+      const nextSubsection = adminLocation?.subsection ?? workspaceLocation.subsection;
       if (
         dirtyState.dirty &&
         (String(next) !== activeSection ||
@@ -13573,7 +13562,8 @@ function OperationsView({
   ]);
 
   function commitSection(section: string, subsection?: string) {
-    const resolvedSection = resolveSectionLabel(section);
+    const resolvedSection = admin ? resolveSectionLabel(section) :
+      resolveWorkspaceLocation(items, section, subsection, section).section;
     const destination = admin
       ? findAdminNavigationDestination(resolvedSection)
       : undefined;
@@ -13601,7 +13591,8 @@ function OperationsView({
     subsection?: string,
     confirmedDiscard = false,
   ) {
-    const resolvedSection = resolveSectionLabel(section);
+    const resolvedSection = admin ? resolveSectionLabel(section) :
+      resolveWorkspaceLocation(items, section, subsection, section).section;
     const destination = admin
       ? findAdminNavigationDestination(resolvedSection)
       : undefined;
@@ -13666,7 +13657,7 @@ function OperationsView({
     <main
       ref={operationsShellRef}
       className={`ops-shell ${effectiveSidebarCollapsed ? "is-sidebar-collapsed" : ""} ${
-        activeNavigationItem?.slug === "upload-center" ||
+        (!admin && actor.role !== "MODERATOR") || activeNavigationItem?.slug === "upload-center" ||
         (dispatchedSection === "chapters" &&
           LEGACY_UPLOAD_SUBSECTIONS.has(activeSubsection))
           ? "is-upload-center"
@@ -13690,14 +13681,14 @@ function OperationsView({
             <strong>{activeSection}</strong>
             <small>{admin ? "Administration" : "Upload Center"}</small>
           </span>
-          <button
+          {admin ? <button
             type="button"
             aria-label="Open admin command palette"
             aria-keyshortcuts="Control+K Meta+K"
             onClick={() => setAdminCommandOpen(true)}
           >
             <MagnifyingGlass size={20} aria-hidden="true" />
-          </button>
+          </button> : <a href="/" aria-label="Return to reader"><House size={20} /></a>}
         </header>
       ) : null}
       {drawerMode && mobileNavOpen ? (
@@ -13711,7 +13702,7 @@ function OperationsView({
       <aside
         ref={mobileNavRef}
         className={`ops-sidebar ${mobileNavOpen ? "is-mobile-open" : ""}`}
-        id={admin ? "operations-navigation-drawer" : undefined}
+        id={drawerMode ? "operations-navigation-drawer" : undefined}
         role={drawerMode && drawerViewport && mobileNavOpen ? "dialog" : undefined}
         aria-modal={drawerMode && drawerViewport && mobileNavOpen ? true : undefined}
         tabIndex={drawerMode && drawerViewport && mobileNavOpen ? -1 : undefined}
@@ -13810,9 +13801,9 @@ function OperationsView({
                           className={item.children?.length ? "ops-nav-parent" : undefined}
                           href={item.href ?? sectionHref(item.label)}
                           title={effectiveSidebarCollapsed ? item.label : undefined}
-                          aria-current={!item.href && activeSection === item.label && !activeSubsection ? "page" : undefined}
+                          aria-current={!item.href && activeSection === item.label && (!activeSubsection || item.targetSubsection === activeSubsection) ? "page" : undefined}
                           onClick={(event) => {
-                            if (item.href) return;
+                            if (item.href || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
                             event.preventDefault();
                             openSection(item.label, item.targetSubsection);
                           }}
@@ -13848,7 +13839,7 @@ function OperationsView({
                   className="ops-active-pinned"
                   href={sectionHref(activeSection)}
                   aria-current="page"
-                  onClick={(event) => event.preventDefault()}
+                  onClick={(event) => { event.preventDefault(); openSection(activeSection, activeSubsection); }}
                 >
                   {(() => {
                     const ActiveIcon =
@@ -13984,6 +13975,7 @@ function OperationsView({
             }
           >
             <OperationsControlPanel
+              key={`${dispatchedSection}:${activeSubsection}`}
               admin={admin}
               section={dispatchedSection}
               subsection={activeSubsection}
@@ -14002,7 +13994,7 @@ function OperationsView({
               )}
               canManageTeam={Boolean(admin || actor.canManageTeam)}
               onNavigate={openSection}
-              initialUploadMode={initialUploadMode}
+              initialUploadMode={activeSubsection ? undefined : initialUploadMode}
             />
           </Suspense>
         )}
@@ -14870,7 +14862,7 @@ export function NyaScansApp({
         notify={showToast}
       />
     );
-    if (resourceSlug === "upload-center") {
+    if (resourceSlug === "upload-center" || actor.role !== "MODERATOR") {
       return <div className="upload-center-standalone">{operations}{commonOverlays}</div>;
     }
     return (

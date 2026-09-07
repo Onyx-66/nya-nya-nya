@@ -1,4 +1,5 @@
 "use client";
+import { LanguageSelect } from "@/components/nyascans/LanguageSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
@@ -501,12 +502,11 @@ export function ChapterManagementWorkspace({
             </label>
             <label>
               <span>Language</span>
-              <input
+              <LanguageSelect
                 value={form.language}
-                pattern="[a-z]{2,3}(-[a-z0-9]{2,8})?"
-                required
-                onChange={(event) =>
-                  updateForm("language", event.target.value.toLowerCase())
+                ariaLabel="Chapter language"
+                onChange={(value) =>
+                  updateForm("language", value)
                 }
               />
             </label>

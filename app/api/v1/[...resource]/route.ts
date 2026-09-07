@@ -4921,7 +4921,7 @@ export async function GET(request: Request, context: RouteContext) {
             defaultTeamId:
               typeof workspace.defaultTeamId === "string"
                 ? workspace.defaultTeamId
-                : teams.results[0]?.id ?? null,
+                : null,
             defaultLanguage:
               typeof workspace.defaultLanguage === "string"
                 ? workspace.defaultLanguage

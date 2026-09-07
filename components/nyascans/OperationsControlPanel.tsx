@@ -1,4 +1,5 @@
 "use client";
+import { LanguageSelect } from "@/components/nyascans/LanguageSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { PremiumDateTimePicker } from "@/components/nyascans/PremiumDateTimePicker";
@@ -4180,14 +4181,13 @@ function ChapterAccessPanel() {
                   </label>
                   <label>
                     <span>Language</span>
-                    <input
+                    <LanguageSelect
                       value={form.language}
-                      maxLength={20}
-                      required
-                      onChange={(event) =>
+                      ariaLabel="Chapter language"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          language: event.target.value.toLowerCase(),
+                          language: value,
                         }))
                       }
                     />
@@ -5622,6 +5622,7 @@ function WorkspacePanel({
     uploadNotifications: true,
   });
   const [saving, setSaving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState("");
   const [commentSeries, setCommentSeries] = useState("");
   const [commentPage, setCommentPage] = useState(1);
   const [commentBusy, setCommentBusy] = useState<string | null>(null);
@@ -5712,6 +5713,7 @@ function WorkspacePanel({
     event.preventDefault();
     setSaving(true);
     setError("");
+    setSettingsMessage("");
     try {
       const response = await fetch("/api/v1/workspace/settings", {
         method: "PUT",
@@ -5729,6 +5731,7 @@ function WorkspacePanel({
           result.error?.message ?? "Workspace settings were not saved.",
         );
       }
+      setSettingsMessage("Workspace settings saved.");
       setRevision((value) => value + 1);
     } catch (saveError) {
       setError(
@@ -5833,7 +5836,7 @@ function WorkspacePanel({
   };
   const title = {
     Workspace: "Publishing workspace",
-    Series: "Create New Series",
+    Series: "Series",
     Comments: "Release discussions",
     Analytics: "Release analytics",
     Rights: "Rights status",
@@ -5856,6 +5859,7 @@ function WorkspacePanel({
 
   return (
     <section className="control-panel">
+      {settingsMessage ? <p className="upload-alert" role="status">{settingsMessage}</p> : null}
       {!embedded ? (
         <PanelHeader
           icon={<ShieldCheck size={18} />}
@@ -6428,13 +6432,13 @@ function WorkspacePanel({
           </label>
           <label>
             Default release language
-            <input
+            <LanguageSelect
               value={settings.defaultLanguage}
-              pattern="[a-z]{2,3}(?:-[a-z0-9]{2,8})?"
-              onChange={(event) =>
+              ariaLabel="Default release language"
+              onChange={(value) =>
                 setSettings((current) => ({
                   ...current,
-                  defaultLanguage: event.target.value.toLowerCase(),
+                  defaultLanguage: value,
                 }))
               }
             />
@@ -6575,6 +6579,10 @@ export function OperationsControlPanel({
     return <ReviewQueue admin={admin} />;
   }
   if (!admin && sectionKey === "my-teams") return <TeamCommunityPanel />;
+  if (!admin && (sectionKey === "chapters" || (sectionKey === "series" && subsection === "new"))) {
+    return <UploadCenterWorkspace admin={false} initialSection={sectionKey === "series" ? "add-series" : subsection || "dashboard"}
+      canUpload={canUpload} canRequestSeries={canRequestSeries} canManageTeam={canManageTeam} />;
+  }
   if (!admin) {
     return (
       <WorkspacePanel

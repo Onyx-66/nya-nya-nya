@@ -62691,6 +62691,40 @@ body:has(.catalog-toolbar) :is(.catalog-card-follow.is-following, .series-list-r
 /* Standalone Upload Center shell: no public-site chrome, full viewport, shared operations sidebar. */
 .upload-center-standalone { min-height: 100dvh; background: var(--bg); }
 .upload-center-standalone .ops-shell { width: 100%; min-height: 100dvh; margin: 0; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; }
+.upload-center-standalone :is(.ops-main, .control-panel, .upload-center-main, .upload-composer-card, .upload-form-grid > *, .workspace-settings-form > *) { min-width: 0; }
+.upload-center-standalone :is(.upload-center-main, .upload-composer-card, .workspace-settings-form) { overflow: visible; }
+.upload-center-standalone :is(.admin-combobox, .unified-single-select) { width: 100%; min-width: 0; }
+.upload-center-standalone .admin-combobox-list { max-width: 100%; max-height: min(240px, 40dvh); overflow-y: auto; overscroll-behavior: contain; z-index: 50; }
+.upload-center-standalone :is(.admin-combobox-list button, .upload-job-list strong, .workspace-series-table strong, .request-record-list strong) { overflow-wrap: anywhere; }
+.upload-record-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .75rem; margin-top: 1rem; }
+.language-select { position: relative; width: 100%; min-width: 0; }
+.language-select-trigger { display: flex; align-items: center; gap: .65rem; width: 100%; min-height: 44px; padding: .8rem; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--surface); text-align: left; font: inherit; cursor: pointer; }
+.language-select-trigger > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.language-select-trigger > svg { flex-shrink: 0; color: var(--accent); }
+.language-select-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.language-select-trigger:disabled { opacity: .6; cursor: not-allowed; }
+.language-select-panel { position: absolute; inset: calc(100% + .35rem) 0 auto; z-index: 60; padding: .5rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / 25%); }
+.language-select-panel .admin-combobox-list { position: static; max-height: min(240px, 40dvh); margin-top: .35rem; overflow-y: auto; border: 0; box-shadow: none; }
+.language-select-option { display: flex; align-items: center; gap: .65rem; width: 100%; }
+.language-select-option > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.language-select-option > svg { flex-shrink: 0; color: var(--accent); }
+.language-select-panel button[aria-selected="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+@media (max-width: 1023px) {
+  .upload-center-standalone .ops-sidebar { max-width: calc(100vw - 24px); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .upload-center-standalone .ops-grouped-nav { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .upload-center-standalone .ops-admin-mobile-bar { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
+  .upload-center-standalone .ops-admin-mobile-bar > span { min-width: 0; overflow-wrap: anywhere; }
+  .upload-center-standalone .ops-admin-mobile-bar :is(button, a) { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+}
+@media (max-width: 600px) {
+  .upload-center-standalone :is(.workspace-settings-form, .upload-form-grid, .upload-batch-fields, .request-media-grid) { grid-template-columns: minmax(0, 1fr); }
+  .upload-center-standalone :is(.control-panel, .upload-center-main) { padding: .75rem; }
+  .upload-center-standalone :is(input, textarea, .admin-combobox input) { max-width: 100%; font-size: 1rem; }
+  .upload-center-standalone :is(.button, .admin-combobox-list button, .ops-nav-group-items > a) { min-height: 44px; }
+  .upload-center-standalone .workspace-series-request-entry { flex-direction: column; align-items: stretch; }
+  .upload-center-standalone .workspace-series-table > article { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+  .upload-center-standalone .workspace-series-table article > a { grid-column: 1; }
+}
 .upload-center-standalone .ops-main { min-height: 100dvh; }
 .upload-center-standalone .upload-team-remove-button,
 .upload-center-standalone .upload-team-platform-picker summary { display: grid; place-items: center; line-height: 1; }

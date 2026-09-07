@@ -495,7 +495,7 @@ async function jobDetail(db: D1Database, actor: Actor, jobId: string) {
 async function uploadOptions(db: D1Database, actor: Actor) {
   const admin = isUploadAdmin(actor);
   const owner = actor.roles.includes("OWNER");
-  const [seriesResult, teamsResult, visibilityDefaults] = await Promise.all([
+  const [seriesResult, teamsResult, visibilityDefaults, preferences] = await Promise.all([
     db
       .prepare(
         `SELECT s.id,
@@ -552,7 +552,16 @@ async function uploadOptions(db: D1Database, actor: Actor) {
         bannerUrl: string | null;
       }>(),
     readVisibilityDefaults(db),
+    db.prepare(`SELECT content_language AS contentLanguage, settings_json AS settingsJson
+      FROM user_preferences WHERE user_id = ? LIMIT 1`).bind(actor.id)
+      .first<{ contentLanguage: string; settingsJson: string }>(),
   ]);
+  const settings = parseJson<{ workspace?: { defaultTeamId?: string; defaultLanguage?: string } }>(preferences?.settingsJson ?? "{}", {});
+  const workspaceSettings = {
+    defaultTeamId: teamsResult.results.some((team) => team.id === settings?.workspace?.defaultTeamId)
+      ? settings.workspace!.defaultTeamId : null,
+    defaultLanguage: settings?.workspace?.defaultLanguage || preferences?.contentLanguage || "en",
+  };
   const canPublishByRole =
     admin ||
     canAny(
@@ -590,6 +599,7 @@ async function uploadOptions(db: D1Database, actor: Actor) {
     methods: UPLOAD_METHODS,
     limits: UPLOAD_LIMITS,
     visibilityDefaults,
+    workspaceSettings,
     admin,
   };
 }
@@ -681,7 +691,13 @@ export async function GET(request: Request) {
     const teamPredicate = query.teamId ? "uj.team_id = ?" : "1 = 1";
     const teamBindings = query.teamId ? [query.teamId] : [];
     const offset = (query.page - 1) * query.pageSize;
+    const recordGroups: Record<string, string> = {
+      drafts: "uj.status IN ('DRAFT', 'UPLOADING', 'VALIDATING', 'READY', 'PUBLISHING', 'FAILED')",
+      "review-status": "uj.status IN ('PENDING_REVIEW', 'REJECTED', 'PUBLISHED', 'SCHEDULED')",
+      history: "uj.status IN ('PUBLISHED', 'SCHEDULED', 'PENDING_REVIEW', 'REJECTED', 'CANCELLED')",
+    };
     const where = `${visibility.sql}
+      AND ${recordGroups[view] ?? "1 = 1"}
       AND ${statusPredicate(query.status)}
       AND ${teamPredicate}`;
     const bindings = [
@@ -710,7 +726,8 @@ export async function GET(request: Request) {
                 t.id AS teamId,
                 t.name AS teamName,
                 u.display_name AS uploaderName,
-                COUNT(uji.id) AS chapterCount
+                COUNT(uji.id) AS chapterCount,
+                MIN(uji.chapter_id) AS firstChapterId
            FROM upload_jobs uj
            JOIN series s ON s.id = uj.series_id
            JOIN users u ON u.id = uj.user_id

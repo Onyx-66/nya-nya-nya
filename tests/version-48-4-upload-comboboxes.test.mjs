@@ -28,9 +28,10 @@ test("series requests use the shared searchable picker for eligible submitting t
 });
 
 test("single and batch uploads share searchable series and language pickers", async () => {
-  const [workspace, css] = await Promise.all([
+  const [workspace, css, languageSelect] = await Promise.all([
     read("components/nyascans/upload/UploadCenterWorkspace.tsx"),
     read("app/globals.css"),
+    read("components/nyascans/LanguageSelect.tsx"),
   ]);
 
   assert.equal(
@@ -42,14 +43,10 @@ test("single and batch uploads share searchable series and language pickers", as
     2,
   );
   assert.match(workspace, /if \(!seriesId\) throw new Error\("Choose a public series\."\)/u);
-  assert.match(
-    workspace,
-    /ariaLabel="Chapter language"[\s\S]*?placeholder="Search languages…"/u,
-  );
-  assert.match(
-    workspace,
-    /uploadLanguages\.map\(\(\[code, flag, name\]\) => \(\{[\s\S]*?value: code,[\s\S]*?label: `\$\{flag\} \$\{name\}`/u,
-  );
+  assert.match(workspace, /<LanguageSelect[\s\S]*?ariaLabel="Chapter language"/u);
+  assert.match(languageSelect, /<AdminCombobox/u);
+  assert.match(languageSelect, /placeholder="Search languages…"/u);
+  assert.match(languageSelect, /"ja"[\s\S]*"ko"/u);
   assert.doesNotMatch(
     workspace,
     /<span>Language<\/span>[\s\S]{0,120}<select/u,
