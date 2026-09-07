@@ -1,7 +1,12 @@
-import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ApiError } from "@/lib/server/api";
-import type { ChapterAccessDecision } from "@/lib/server/chapter-access";
+import type { ChapterAccessDecision } from "@/lib/server/chapter-access-types";
+import {
+  configuredAdUnlockEnvironment,
+  getAdUnlockReadiness,
+  parsedAdProviderUrl,
+  type AdUnlockReadiness,
+} from "@/lib/server/ad-unlock-readiness";
 import type { Actor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 
@@ -31,12 +36,6 @@ export type AdUnlockChallengeStatus =
   | "CLAIMED"
   | "EXPIRED";
 
-type AdUnlockEnvironment = {
-  AD_REWARD_PROVIDER_URL?: string;
-  AD_REWARD_WEBHOOK_SECRET?: string;
-  AD_UNLOCK_HOURS?: string;
-};
-
 type ChallengeRow = {
   id: string;
   userId: string;
@@ -55,12 +54,7 @@ type ChallengeRow = {
   premiumAccess: number;
 };
 
-export type AdUnlockReadiness = {
-  ready: boolean;
-  reason: string | null;
-  providerOrigin: string | null;
-  unlockHours: number | null;
-};
+export type { AdUnlockReadiness } from "@/lib/server/ad-unlock-readiness";
 
 type AdUnlockConfiguration = AdUnlockReadiness & {
   providerUrl: URL;
@@ -68,77 +62,8 @@ type AdUnlockConfiguration = AdUnlockReadiness & {
   unlockHours: number;
 };
 
-function configuredEnvironment() {
-  return env as unknown as AdUnlockEnvironment;
-}
-
 function sqliteTimestamp(value: Date) {
   return value.toISOString().slice(0, 19).replace("T", " ");
-}
-
-function parsedProviderUrl(value: string | undefined) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (
-      url.protocol !== "https:" ||
-      !url.hostname ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    ) {
-      return null;
-    }
-    return url;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Public, secret-free readiness used by the feature-flag dependency graph.
- * Configuration remains fail-closed until all three values are valid.
- */
-export function getAdUnlockReadiness(): AdUnlockReadiness {
-  const configured = configuredEnvironment();
-  const providerUrl = parsedProviderUrl(configured.AD_REWARD_PROVIDER_URL?.trim());
-  if (!providerUrl) {
-    return {
-      ready: false,
-      reason: "AD_REWARD_PROVIDER_URL_INVALID",
-      providerOrigin: null,
-      unlockHours: null,
-    };
-  }
-  const webhookSecret = configured.AD_REWARD_WEBHOOK_SECRET ?? "";
-  if (webhookSecret.length < 32) {
-    return {
-      ready: false,
-      reason: "AD_REWARD_WEBHOOK_SECRET_INVALID",
-      providerOrigin: providerUrl.origin,
-      unlockHours: null,
-    };
-  }
-  const unlockHours = Number(configured.AD_UNLOCK_HOURS);
-  if (
-    !Number.isInteger(unlockHours) ||
-    unlockHours < 1 ||
-    unlockHours > 168
-  ) {
-    return {
-      ready: false,
-      reason: "AD_UNLOCK_HOURS_INVALID",
-      providerOrigin: providerUrl.origin,
-      unlockHours: null,
-    };
-  }
-  return {
-    ready: true,
-    reason: null,
-    providerOrigin: providerUrl.origin,
-    unlockHours,
-  };
 }
 
 function requireAdUnlockConfiguration(): AdUnlockConfiguration {
@@ -152,8 +77,8 @@ function requireAdUnlockConfiguration(): AdUnlockConfiguration {
       { reason: readiness.reason },
     );
   }
-  const configured = configuredEnvironment();
-  const providerUrl = parsedProviderUrl(configured.AD_REWARD_PROVIDER_URL?.trim());
+  const configured = configuredAdUnlockEnvironment();
+  const providerUrl = parsedAdProviderUrl(configured.AD_REWARD_PROVIDER_URL?.trim());
   const webhookSecret = configured.AD_REWARD_WEBHOOK_SECRET ?? "";
   if (!providerUrl || webhookSecret.length < 32) {
     throw new ApiError(

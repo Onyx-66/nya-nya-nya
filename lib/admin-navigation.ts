@@ -1,4 +1,4 @@
-import type { AdminCapability } from "@/lib/admin-permissions";
+import type { AdminCapability } from "@/lib/admin-capability";
 
 export type AdminNavigationChild = Readonly<{
   slug: string;

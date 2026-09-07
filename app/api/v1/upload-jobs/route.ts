@@ -9,10 +9,7 @@ import {
   requestIdFor,
 } from "@/lib/server/admin-utils";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import {
-  getCommercialSettingsDocument,
-  requirePaidEconomyPublicDocument,
-} from "@/lib/server/commercial-settings";
+import { requirePaidEconomyPublicDocument } from "@/lib/server/commercial-settings";
 import {
   assertUploadRateLimit,
   chapterSlug,

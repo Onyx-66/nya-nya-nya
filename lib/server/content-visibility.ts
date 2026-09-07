@@ -21,21 +21,6 @@ function escapedSql(value: string) {
   return value.replaceAll("'", "''");
 }
 
-async function requireVisibilityEnabled(db: D1Database) {
-  const states = await getFeatureStates(db);
-  if (
-    !states.premium_unlocks.effective ||
-    !states.payments.effective
-  ) {
-    throw new ApiError(
-      404,
-      "CONTENT_VISIBILITY_DISABLED",
-      "Content Visibility is hidden while paid chapter access is disabled.",
-    );
-  }
-  return states;
-}
-
 const effectiveAccessSql = effectiveChapterAccessSql(
   "c",
   "visibility_override",

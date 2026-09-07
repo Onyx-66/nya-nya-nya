@@ -1,5 +1,5 @@
 "use client";
-import { PawIcon, ShardIcon } from "@/components/nyascans/EconomyTokenIcon";
+import { ShardIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 /* eslint-disable @next/next/no-html-link-for-pages */
 /* eslint-disable @next/next/no-img-element */

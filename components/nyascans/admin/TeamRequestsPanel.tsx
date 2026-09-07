@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- review media is authenticated and not available to the public image optimizer */
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { CaretDown, Check, Clock, LinkSimple, ShieldCheck, X } from "@/components/nyascans/heroicons";

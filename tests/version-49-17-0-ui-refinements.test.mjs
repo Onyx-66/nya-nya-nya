@@ -13,7 +13,6 @@ const browse = read("components/nyascans/BrowseFixes.module.css");
 const popular = read("components/nyascans/HotThisWeek.tsx");
 const popularApi = read("app/api/v1/hot-this-week/route.ts");
 const leaderboard = read("components/nyascans/UserLeaderboardView.tsx");
-const heroicons = read("components/nyascans/heroicons.tsx");
 const leaderboardApi = read("app/api/v1/leaderboard/route.ts");
 const themeSystem = read("lib/theme-system.ts");
 const siteConfiguration = read("lib/server/site-configuration.ts");

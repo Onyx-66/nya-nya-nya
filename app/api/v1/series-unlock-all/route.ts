@@ -4,7 +4,6 @@ import { ApiError, errorResponse, json } from "@/lib/server/api";
 import { assertSameOrigin, requestIdFor } from "@/lib/server/admin-utils";
 import {
   assertPaidEconomyRevisionFresh,
-  getCommercialSettingsDocument,
   paidEconomyRevisionGuardSql,
   requirePaidEconomyPublicDocument,
 } from "@/lib/server/commercial-settings";

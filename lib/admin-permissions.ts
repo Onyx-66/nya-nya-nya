@@ -50,7 +50,7 @@ export const ADMIN_PERMISSION_REGISTRY = [
   ["comments.moderate.own", "Teams", "Moderate own-team comments"],
 ] as const;
 
-export type AdminCapability = (typeof ADMIN_PERMISSION_REGISTRY)[number][0];
+export type { AdminCapability } from "@/lib/admin-capability";
 
 export const NON_DELEGABLE_CAPABILITIES = new Set<string>([
   "admin.audit.read",

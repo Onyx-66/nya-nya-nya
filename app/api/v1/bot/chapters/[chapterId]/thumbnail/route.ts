@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { errorResponse, ApiError } from "@/lib/server/api";
-import { auditStatement, validateImageFile } from "@/lib/server/admin-utils";
+import { auditStatement, deleteMediaObject, validateImageFile } from "@/lib/server/admin-utils";
 import { botContext, botDatabase, botJson, botRequestId } from "@/lib/server/bot-api";
 import { resolvePublicReferenceOrNull } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
@@ -8,8 +8,12 @@ import { randomId } from "@/lib/server/random-id";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request, context: { params: Promise<{ chapterId: string }> }) {
+  let uploadedKey: string | null = null;
+  let updateCommitted = false;
+  let requestId = botRequestId(request);
   try {
     const auth = await botContext(request, "bot:chapter:thumbnail");
+    requestId = auth.requestId;
     if (!env.BUCKET) throw new ApiError(503, "MEDIA_UNAVAILABLE", "Chapter thumbnail storage is unavailable.");
     const { chapterId } = await context.params;
     const resolved = await resolvePublicReferenceOrNull(botDatabase(), "CHAPTER", chapterId);
@@ -25,10 +29,31 @@ export async function POST(request: Request, context: { params: Promise<{ chapte
     const image = await validateImageFile(file, { label: "chapter thumbnail", maxBytes: 8_000_000, minWidth: 240, minHeight: 240, maxWidth: 8_000, maxHeight: 8_000, allowAnimation: false, allowedTypes: new Set(["image/jpeg", "image/png", "image/webp"]) });
     const key = `private/chapter-thumbnails/${chapter.id}/${randomId()}.webp`;
     await env.BUCKET.put(key, image.bytes, { httpMetadata: { contentType: image.contentType }, customMetadata: { actorId: auth.actor.id, chapterId: chapter.id, source: "BOT_API" } });
-    await botDatabase().batch([
-      botDatabase().prepare("UPDATE chapters SET thumbnail_key = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND revision = ?").bind(key, chapter.id, chapter.revision),
-      auditStatement(botDatabase(), auth.actor, auth.requestId, { action: "bot.chapter.thumbnail", category: "UPLOADS_IMPORTS", sourceArea: "BOT_API", targetType: "CHAPTER", targetId: chapterId, targetLabel: chapter.title, metadata: { contentType: image.contentType, width: image.dimensions.width, height: image.dimensions.height } }),
-    ]);
+    uploadedKey = key;
+    const updated = await botDatabase().prepare("UPDATE chapters SET thumbnail_key = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND revision = ?").bind(key, chapter.id, chapter.revision).run();
+    if (Number(updated.meta.changes ?? 0) !== 1) {
+      throw new ApiError(409, "CHAPTER_THUMBNAIL_STALE", "The chapter changed while its thumbnail was uploading. Reload and try again.");
+    }
+    updateCommitted = true;
+    await auditStatement(botDatabase(), auth.actor, auth.requestId, { action: "bot.chapter.thumbnail", category: "UPLOADS_IMPORTS", sourceArea: "BOT_API", targetType: "CHAPTER", targetId: chapterId, targetLabel: chapter.title, metadata: { contentType: image.contentType, width: image.dimensions.width, height: image.dimensions.height } }).run();
+    if (chapter.thumbnailKey && chapter.thumbnailKey !== key) {
+      await deleteMediaObject(botDatabase(), env.BUCKET, chapter.thumbnailKey, {
+        mediaKind: "CHAPTER_THUMBNAIL",
+        targetType: "CHAPTER",
+        targetId: chapterId,
+        reason: "Removed a superseded Bot chapter thumbnail",
+      });
+    }
     return botJson(auth, { data: { chapterId, thumbnailUpdated: true } });
-  } catch (error) { return errorResponse(botRequestId(request), error); }
+  } catch (error) {
+    if (!updateCommitted && uploadedKey && env.DB && env.BUCKET) {
+      await deleteMediaObject(env.DB, env.BUCKET, uploadedKey, {
+        mediaKind: "CHAPTER_THUMBNAIL",
+        targetType: "CHAPTER",
+        targetId: requestId,
+        reason: "Rolled back an incomplete Bot chapter thumbnail update",
+      });
+    }
+    return errorResponse(requestId, error);
+  }
 }

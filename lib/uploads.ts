@@ -95,11 +95,6 @@ export function pathLeaf(value: string) {
   return value.replaceAll("\\", "/").split("/").at(-1) ?? value;
 }
 
-export function pathParent(value: string) {
-  const segments = value.replaceAll("\\", "/").split("/").filter(Boolean);
-  return segments.length > 1 ? segments.at(-2)! : "Chapter";
-}
-
 export type DetectedBatchChapter = {
   sourceLabel: string;
   volume: string;

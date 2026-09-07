@@ -63,7 +63,6 @@ import {
   Star,
   Storefront,
   Tag,
-  TagSimple,
   ThumbsUp,
   Trash,
   Trophy,
@@ -1113,12 +1112,16 @@ function SiteHeader({
   const [notificationsActionError, setNotificationsActionError] = useState("");
   const [notificationBusy, setNotificationBusy] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(
-    () => actor?.avatarUrl ?? null,
-  );
-  useEffect(() => {
-    setProfileAvatarUrl(actor?.avatarUrl ?? null);
-  }, [actor?.avatarUrl]);
+  const [profileAvatarState, setProfileAvatarState] = useState<{
+    actorEmail: string;
+    url: string | null;
+  } | null>(null);
+  const profileAvatarUrl = profileAvatarState && profileAvatarState.actorEmail === actor?.email
+    ? profileAvatarState.url
+    : actor?.avatarUrl ?? null;
+  const setProfileAvatarUrl = useCallback((url: string | null) => {
+    if (actor) setProfileAvatarState({ actorEmail: actor.email, url });
+  }, [actor]);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -1258,7 +1261,7 @@ function SiteHeader({
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [actor]);
+  }, [actor, setProfileAvatarUrl]);
 
   function focusMenuItem(position: "first" | "last") {
     window.requestAnimationFrame(() => {
@@ -3180,8 +3183,6 @@ function TrendingShowcase() {
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setLoadError("");
     void fetchWithHomeTimeout("/api/v1/catalog?page=1&pageSize=12&sort=viewed", {
       signal: controller.signal,
       cache: "no-store",
@@ -3270,7 +3271,11 @@ function TrendingShowcase() {
           <div className="catalog-error" role="alert">
             <WarningCircle size={24} />
             <span>{loadError}</span>
-            <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button>
+            <button type="button" onClick={() => {
+              setLoading(true);
+              setLoadError("");
+              setRevision((value) => value + 1);
+            }}>Try again</button>
           </div>
         ) : ordered.length ? (
         <div className="home-scroll-row" data-cover-anchor="true">
@@ -4070,8 +4075,6 @@ function EditorsPickSection({
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
     void (async () => {
       try {
         const response = await fetchWithHomeTimeout("/api/v1/editor-picks", {
@@ -4152,7 +4155,11 @@ function EditorsPickSection({
           {loading ? <DotsRing size="lg" label={null} /> : null}
           <strong>{loading ? "Loading Editor's Pick" : error ? "Editor's Pick unavailable" : "No Editor's Pick assigned yet"}</strong>
           <span>{loading ? "Finding a standout series for you." : error || "An editor can feature a standout series here when one is assigned."}</span>
-          {!loading && error ? <button type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button> : null}
+          {!loading && error ? <button type="button" onClick={() => {
+            setLoading(true);
+            setError("");
+            setRevision((value) => value + 1);
+          }}>Try again</button> : null}
         </div>
       </section>
     );
@@ -4952,7 +4959,7 @@ function CatalogFacetMenu({
           <span className="sr-only">Search {label.toLowerCase()}</span>
           <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={placeholder} />
         </label>
-        <button className="catalog-option-button catalog-filter-all" type="button" role="checkbox" aria-checked={!selectedValues.length} aria-selected={!selectedValues.length} onClick={() => onChange("")}>
+        <button className="catalog-option-button catalog-filter-all" type="button" role="checkbox" aria-checked={!selectedValues.length} onClick={() => onChange("")}>
           <span>All {label.toLowerCase()}</span>
           <span className="catalog-choice-box is-checkbox" aria-hidden="true">{!selectedValues.length ? <Check size={12} weight="bold" /> : null}</span>
         </button>
@@ -4963,7 +4970,6 @@ function CatalogFacetMenu({
               className={`catalog-option-button ${selectedOption ? "is-selected" : ""}`.trim()}
               type="button"
               role="checkbox"
-              aria-selected={selectedOption}
               aria-checked={selectedOption}
               key={`${option.kind ?? "option"}-${option.value}`}
               onClick={() => onChange(selectedOption ? selectedValues.filter((entry) => entry !== option.value).join(",") : [...selectedValues, option.value].join(","))}
@@ -4990,10 +4996,6 @@ function MinimumChaptersMenu({
 }) {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
 
   function updateDraft(next: string) {
     setDraft(next.replace(/[^0-9]/g, "").slice(0, 4));
@@ -5072,10 +5074,7 @@ function CatalogFollowButton({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!actor) {
-      setFollowing(false);
-      return;
-    }
+    if (!actor) return;
     const controller = new AbortController();
     void fetch(`/api/v1/series-follow?slug=${encodeURIComponent(item.slug)}`, {
       signal: controller.signal,
@@ -5093,6 +5092,7 @@ function CatalogFollowButton({
     return () => controller.abort();
   }, [actor, item.slug]);
 
+  const visibleFollowing = Boolean(actor && following);
   const isListMode = className.split(/\s+/).includes("list-follow-button");
 
   async function toggleFollow() {
@@ -5104,7 +5104,7 @@ function CatalogFollowButton({
     setBusy(true);
     try {
       const response = await fetch("/api/v1/series-follow", {
-        method: following ? "DELETE" : "POST",
+        method: visibleFollowing ? "DELETE" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ slug: item.slug }),
       });
@@ -5126,15 +5126,15 @@ function CatalogFollowButton({
 
   return (
     <button
-      className={`catalog-card-follow ${className}${following ? " is-following" : ""}`.trim()}
+      className={`catalog-card-follow ${className}${visibleFollowing ? " is-following" : ""}`.trim()}
       type="button"
-      aria-label={following ? `Unfollow ${item.title}` : `Follow ${item.title}`}
-      aria-pressed={following}
+      aria-label={visibleFollowing ? `Unfollow ${item.title}` : `Follow ${item.title}`}
+      aria-pressed={visibleFollowing}
       disabled={busy}
       onClick={() => void toggleFollow()}
     >
-      <Heart size={18} weight={following ? "fill" : "regular"} />
-      {isListMode ? null : busy ? "Saving…" : following ? "Following" : "Follow"}
+      <Heart size={18} weight={visibleFollowing ? "fill" : "regular"} />
+      {isListMode ? null : busy ? "Saving…" : visibleFollowing ? "Following" : "Follow"}
     </button>
   );
 }
@@ -5153,7 +5153,6 @@ function BrowseView({
   const [genre, setGenre] = useState("");
   const [creator, setCreator] = useState("");
   const [minimumChapters, setMinimumChapters] = useState("");
-  const [minimumDraft, setMinimumDraft] = useState("");
   const [hideFollowed, setHideFollowed] = useState(false);
   const [genreSearch, setGenreSearch] = useState("");
   const [creatorSearch, setCreatorSearch] = useState("");
@@ -5216,7 +5215,6 @@ function BrowseView({
       setGenre(nextGenre);
       setCreator(nextCreator);
       setMinimumChapters(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
-      setMinimumDraft(/^\d+$/.test(nextMinimumChapters) ? nextMinimumChapters : "");
       setHideFollowed(nextHideFollowed);
       setSort(
         ["latest", "added", "viewed", "followed", "rated", "title"].includes(
@@ -5256,10 +5254,6 @@ function BrowseView({
       window.removeEventListener("popstate", applyLocation);
     };
   }, []);
-
-  useEffect(() => {
-    setMinimumDraft(minimumChapters);
-  }, [minimumChapters]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -5583,10 +5577,22 @@ function BrowseView({
           onChange={(value) => navigate({ creator: value, page: 1 })}
           placeholder="Search artist, author, publisher..."
         />
-        <MinimumChaptersMenu
-          value={minimumChapters}
-          onApply={(value) => navigate({ minimumChapters: value, page: 1 }, true)}
-        />
+        <label className="browse-minimum-chapters">
+          <span>Minimum chapters</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
+            value={minimumChapters}
+            onChange={(event) => navigate({
+              minimumChapters: event.target.value.replace(/[^0-9]/g, "").slice(0, 4),
+              page: 1,
+            }, true)}
+            placeholder="Any"
+            aria-label="Minimum chapters"
+          />
+        </label>
         <label className={`hide-followed-field${hideFollowed ? " has-active" : ""}`.trim()}>
           <input
             type="checkbox"
@@ -5600,7 +5606,7 @@ function BrowseView({
             }}
           />
           <span className="catalog-filter-summary">
-            <span className="catalog-filter-summary-label">Hide Bookmarked</span>
+            <span className="catalog-filter-summary-label">Hide Bookmarks</span>
             {hideFollowed ? <b className="catalog-filter-active-count">1</b> : null}
           </span>
         </label>
@@ -6974,605 +6980,6 @@ function StoreView({
       ) : null}
 
     </main>
-  );
-}
-
-type DiscussionComment = {
-  id: string;
-  parentId: string | null;
-  body: string;
-  spoiler: number | boolean;
-  moderationStatus: "VISIBLE" | "DELETED";
-  createdAt: string;
-  updatedAt: string;
-  displayName: string;
-  role: string;
-  reactionCount: number;
-  reactedByViewer: number | boolean;
-  ownedByViewer: number | boolean;
-};
-
-function discussionRoleLabel(role: string) {
-  return {
-    ADMINISTRATOR: "Admin",
-    TEAM_LEADER: "Team leader",
-    UPLOADER: "Uploader",
-    USER: "Reader",
-  }[role] ?? "Reader";
-}
-
-function discussionDate(value: string) {
-  const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
-  if (Number.isNaN(date.getTime())) return "Recently";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-  }).format(date);
-}
-
-export function LegacyDiscussionSection({
-  actor,
-  seriesSlug,
-  chapterSlug = null,
-  showToast,
-}: {
-  actor: Actor | null;
-  seriesSlug: string;
-  chapterSlug?: string | null;
-  showToast: (text: string) => void;
-}) {
-  const [comments, setComments] = useState<DiscussionComment[]>([]);
-  const [count, setCount] = useState(0);
-  const [sort, setSort] = useState<"top" | "newest">("top");
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [body, setBody] = useState("");
-  const [spoiler, setSpoiler] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(
-    null,
-  );
-  const [revealedSpoilers, setRevealedSpoilers] = useState<Set<string>>(
-    new Set(),
-  );
-  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(
-    new Set(),
-  );
-  const [reportingId, setReportingId] = useState<string | null>(null);
-  const [reportReason, setReportReason] = useState("Spoilers without a warning");
-  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
-  const scopeLabel = chapterSlug ? "Chapter comments" : "Discussion";
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadComments() {
-      setLoading(true);
-      setLoadError("");
-      const query = new URLSearchParams({ series: seriesSlug, sort });
-      if (chapterSlug) query.set("chapter", chapterSlug);
-      try {
-        const response = await fetch(
-          `/api/v1/discussion-comments?${query.toString()}`,
-          { signal: controller.signal },
-        );
-        const payload = (await response.json()) as {
-          data?: DiscussionComment[];
-          count?: number;
-          error?: { message?: string };
-        };
-        if (!response.ok) {
-          throw new Error(
-            payload.error?.message ?? "Comments could not be loaded.",
-          );
-        }
-        setComments(payload.data ?? []);
-        setCount(Number(payload.count ?? 0));
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Comments could not be loaded.",
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-    void loadComments();
-    return () => controller.abort();
-  }, [chapterSlug, refreshKey, seriesSlug, sort]);
-
-  const rootComments = comments.filter((comment) => !comment.parentId);
-  const repliesByParent = useMemo(() => {
-    const grouped = new Map<string, DiscussionComment[]>();
-    for (const comment of comments) {
-      if (!comment.parentId) continue;
-      grouped.set(comment.parentId, [
-        ...(grouped.get(comment.parentId) ?? []),
-        comment,
-      ]);
-    }
-    return grouped;
-  }, [comments]);
-
-  function signInToComment() {
-    const returnTo = chapterSlug
-      ? `/title/${seriesSlug}/chapter/${chapterSlug}#comments`
-      : `/title/${seriesSlug}#comments`;
-    window.location.assign(authEntryPath("login", returnTo));
-  }
-
-  function startReply(comment: DiscussionComment) {
-    if (!actor) {
-      signInToComment();
-      return;
-    }
-    setReplyTo({ id: comment.id, name: comment.displayName });
-    window.requestAnimationFrame(() => composerRef.current?.focus());
-  }
-
-  async function submitComment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!actor) {
-      signInToComment();
-      return;
-    }
-    const nextBody = body.trim();
-    if (nextBody.length < 2) {
-      showToast("Write at least two characters.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/v1/discussion-comments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          seriesSlug,
-          chapterSlug,
-          parentId: replyTo?.id ?? null,
-          body: nextBody,
-          spoiler,
-        }),
-      });
-      const payload = (await response.json()) as {
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Comment could not be posted.");
-      }
-      setBody("");
-      setSpoiler(false);
-      setReplyTo(null);
-      setRefreshKey((value) => value + 1);
-      showToast(replyTo ? "Reply posted." : "Comment posted.");
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Comment could not be posted.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function toggleReaction(comment: DiscussionComment) {
-    if (!actor) {
-      signInToComment();
-      return;
-    }
-    const wasReacted = Boolean(comment.reactedByViewer);
-    setComments((current) =>
-      current.map((entry) =>
-        entry.id === comment.id
-          ? {
-              ...entry,
-              reactedByViewer: !wasReacted,
-              reactionCount: Math.max(
-                0,
-                Number(entry.reactionCount) + (wasReacted ? -1 : 1),
-              ),
-            }
-          : entry,
-      ),
-    );
-    try {
-      const response = await fetch("/api/v1/discussion-reactions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ commentId: comment.id }),
-      });
-      const payload = (await response.json()) as {
-        reacted?: boolean;
-        reactionCount?: number;
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Reaction could not be saved.");
-      }
-      setComments((current) =>
-        current.map((entry) =>
-          entry.id === comment.id
-            ? {
-                ...entry,
-                reactedByViewer: Boolean(payload.reacted),
-                reactionCount: Number(payload.reactionCount ?? 0),
-              }
-            : entry,
-        ),
-      );
-    } catch (error) {
-      setComments((current) =>
-        current.map((entry) =>
-          entry.id === comment.id
-            ? {
-                ...entry,
-                reactedByViewer: wasReacted,
-                reactionCount: Number(comment.reactionCount),
-              }
-            : entry,
-        ),
-      );
-      showToast(
-        error instanceof Error ? error.message : "Reaction could not be saved.",
-      );
-    }
-  }
-
-  async function reportComment(commentId: string) {
-    if (!actor) {
-      signInToComment();
-      return;
-    }
-    try {
-      const response = await fetch("/api/v1/reports", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          targetType: "COMMENT",
-          targetId: commentId,
-          category: reportReason,
-          detail: `Reader report from the ${chapterSlug ? "chapter" : "series"} discussion: ${reportReason}.`,
-        }),
-      });
-      const payload = (await response.json()) as {
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Report could not be sent.");
-      }
-      setReportedIds((current) => new Set(current).add(commentId));
-      setReportingId(null);
-      showToast("Report sent for moderator review.");
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Report could not be sent.",
-      );
-    }
-  }
-
-  async function removeComment(commentId: string) {
-    try {
-      const response = await fetch(
-        `/api/v1/discussion-comments?id=${encodeURIComponent(commentId)}`,
-        { method: "DELETE" },
-      );
-      const payload = (await response.json()) as {
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Comment could not be removed.");
-      }
-      setDeletingId(null);
-      setRefreshKey((value) => value + 1);
-      showToast("Comment removed.");
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Comment could not be removed.",
-      );
-    }
-  }
-
-  function renderComment(comment: DiscussionComment, isReply = false) {
-    const removed = comment.moderationStatus === "DELETED";
-    const hiddenSpoiler =
-      Boolean(comment.spoiler) && !revealedSpoilers.has(comment.id);
-    const replies = isReply ? [] : repliesByParent.get(comment.id) ?? [];
-    const repliesExpanded = expandedReplies.has(comment.id);
-    const visibleReplies = repliesExpanded ? replies : replies.slice(0, 1);
-
-    return (
-      <article
-        className={`comment-item ${isReply ? "comment-item-reply" : ""}`}
-        key={comment.id}
-      >
-        <div className="comment-avatar" aria-hidden="true">
-          {comment.displayName.slice(0, 2).toUpperCase()}
-        </div>
-        <div className="comment-content">
-          <header className="comment-meta">
-            <div>
-              <strong>{comment.displayName}</strong>
-              <span className={`comment-role comment-role-${comment.role.toLowerCase()}`}>
-                {discussionRoleLabel(comment.role)}
-              </span>
-            </div>
-            <time dateTime={comment.createdAt}>
-              {discussionDate(comment.createdAt)}
-            </time>
-          </header>
-
-          {removed ? (
-            <p className="comment-removed">Comment removed by its author.</p>
-          ) : hiddenSpoiler ? (
-            <button
-              className="spoiler-cover"
-              type="button"
-              onClick={() =>
-                setRevealedSpoilers((current) =>
-                  new Set(current).add(comment.id),
-                )
-              }
-            >
-              <Eye size={17} />
-              Spoiler hidden. Tap to reveal.
-            </button>
-          ) : (
-            <p className="comment-body">{comment.body}</p>
-          )}
-
-          {!removed ? (
-            <div className="comment-actions">
-              <button
-                type="button"
-                aria-pressed={Boolean(comment.reactedByViewer)}
-                onClick={() => void toggleReaction(comment)}
-              >
-                <Heart
-                  size={16}
-                  weight={comment.reactedByViewer ? "fill" : "regular"}
-                />
-                Like
-                {Number(comment.reactionCount) > 0
-                  ? ` ${Number(comment.reactionCount)}`
-                  : ""}
-              </button>
-              {!isReply ? (
-                <button type="button" onClick={() => startReply(comment)}>
-                  <ChatCircle size={16} />
-                  Reply
-                </button>
-              ) : null}
-              {reportedIds.has(comment.id) ? (
-                <span>Reported</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setReportingId((current) =>
-                      current === comment.id ? null : comment.id,
-                    )
-                  }
-                >
-                  <WarningCircle size={16} />
-                  Report
-                </button>
-              )}
-              {Boolean(comment.ownedByViewer) ||
-              actor && ["OWNER", "ADMINISTRATOR", "MODERATOR"].includes(actor.role) ? (
-                <button
-                  className="comment-delete"
-                  type="button"
-                  onClick={() =>
-                    setDeletingId((current) =>
-                      current === comment.id ? null : comment.id,
-                    )
-                  }
-                >
-                  <Trash size={16} />
-                  Remove
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {reportingId === comment.id ? (
-            <div className="comment-inline-action">
-              <label>
-                <span>Reason</span>
-                <UnifiedSingleSelect
-                  value={reportReason}
-                  onChange={(event) => setReportReason(event.target.value)}
-                >
-                  <option>Spoilers without a warning</option>
-                  <option>Harassment or hate</option>
-                  <option>Spam or promotion</option>
-                  <option>Illegal content</option>
-                </UnifiedSingleSelect>
-              </label>
-              <button
-                type="button"
-                onClick={() => void reportComment(comment.id)}
-              >
-                Send report
-              </button>
-              <button type="button" onClick={() => setReportingId(null)}>
-                Cancel
-              </button>
-            </div>
-          ) : null}
-
-          {deletingId === comment.id ? (
-            <div className="comment-inline-action comment-remove-confirm">
-              <span>Remove this comment?</span>
-              <button
-                type="button"
-                onClick={() => void removeComment(comment.id)}
-              >
-                Remove
-              </button>
-              <button type="button" onClick={() => setDeletingId(null)}>
-                Keep it
-              </button>
-            </div>
-          ) : null}
-
-          {visibleReplies.length > 0 ? (
-            <div className="comment-replies">
-              {visibleReplies.map((reply) => renderComment(reply, true))}
-            </div>
-          ) : null}
-          {replies.length > 1 && !repliesExpanded ? (
-            <button
-              className="show-replies"
-              type="button"
-              onClick={() =>
-                setExpandedReplies((current) =>
-                  new Set(current).add(comment.id),
-                )
-              }
-            >
-              Show {replies.length - 1} more{" "}
-              {replies.length - 1 === 1 ? "reply" : "replies"}
-            </button>
-          ) : null}
-        </div>
-      </article>
-    );
-  }
-
-  return (
-    <section
-      className={`series-comments ${chapterSlug ? "chapter-comments" : ""}`}
-      id="comments"
-      aria-labelledby="comments-title"
-    >
-      <header className="comments-header">
-        <div>
-          <p className="eyebrow">{count} comments</p>
-          <h2 id="comments-title">{scopeLabel}</h2>
-          <span>Talk about the story. Mark spoilers before posting.</span>
-        </div>
-        <div className="comment-sort" aria-label="Sort comments">
-          <button
-            type="button"
-            aria-pressed={sort === "top"}
-            onClick={() => setSort("top")}
-          >
-            Top
-          </button>
-          <button
-            type="button"
-            aria-pressed={sort === "newest"}
-            onClick={() => setSort("newest")}
-          >
-            Newest
-          </button>
-        </div>
-      </header>
-
-      {actor ? (
-        <form className="comment-composer" onSubmit={submitComment}>
-          <div className="comment-composer-heading">
-            <div className="comment-avatar" aria-hidden="true">
-              {actor.displayName.slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <strong>Join the discussion</strong>
-              <span>Posting as {actor.displayName}</span>
-            </div>
-          </div>
-          {replyTo ? (
-            <div className="replying-to">
-              Replying to {replyTo.name}
-              <button type="button" onClick={() => setReplyTo(null)}>
-                Cancel reply
-              </button>
-            </div>
-          ) : null}
-          <label className="comment-field">
-            <span className="sr-only">Comment</span>
-            <textarea
-              ref={composerRef}
-              value={body}
-              maxLength={1500}
-              onChange={(event) => setBody(event.target.value)}
-              placeholder={
-                replyTo
-                  ? `Reply to ${replyTo.name}`
-                  : chapterSlug
-                    ? "What did you think of this chapter?"
-                    : "Share a theory, reaction, or recommendation"
-              }
-            />
-          </label>
-          <div className="comment-composer-actions">
-            <label>
-              <input
-                type="checkbox"
-                checked={spoiler}
-                onChange={(event) => setSpoiler(event.target.checked)}
-              />
-              Contains spoilers
-            </label>
-            <span>{body.length} / 1500</span>
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={submitting || body.trim().length < 2}
-            >
-              {submitting ? "Posting..." : replyTo ? "Post reply" : "Post comment"}
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="comment-signin">
-          <ChatCircle size={27} />
-          <div>
-            <strong>Sign in to join the discussion</strong>
-            <span>Your reading identity stays attached to your comments.</span>
-          </div>
-          <button
-            className="button button-primary"
-            type="button"
-            onClick={signInToComment}
-          >
-            Sign in
-          </button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="dots-ring-loading comment-loading" role="status" aria-label="Loading comments">
-          <DotsRing size="lg" label={null} />
-          <span>Loading comments…</span>
-        </div>
-      ) : loadError ? (
-        <div className="comment-error" role="alert">
-          <WarningCircle size={21} />
-          <div>
-            <strong>Comments are temporarily unavailable</strong>
-            <span>{loadError}</span>
-          </div>
-          <button type="button" onClick={() => setRefreshKey((value) => value + 1)}>
-            Try again
-          </button>
-        </div>
-      ) : rootComments.length > 0 ? (
-        <div className="comment-list">{rootComments.map((comment) => renderComment(comment))}</div>
-      ) : (
-        <div className="comment-empty">
-          <ChatCircle size={30} />
-          <strong>Start the discussion</strong>
-          <span>Be the first reader to leave a comment on this story.</span>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -12122,7 +11529,7 @@ function AuthEntryView({
 }
 
 function AccountView({ actor, showToast }: { actor: Actor | null; showToast: (text: string) => void }) {
-  const { settings: commercial, runtimeFeatures } = useCommercialSettings();
+  const { runtimeFeatures } = useCommercialSettings();
   const premiumEconomyPublic = runtimeFeatures.paidSystem;
   const [section, setSection] = useState("Profile");
   const [accountSettings, setAccountSettings] = useState({

@@ -200,7 +200,7 @@ export function PickerCalendarGrid({
               isEnd ? "is-range-end" : "",
             ].filter(Boolean).join(" ")}
             aria-label={cell.date.toLocaleDateString("en-US", { dateStyle: "full" })}
-            aria-pressed={sameDay(cell.date, selected) || isStart || isEnd}
+            aria-selected={sameDay(cell.date, selected) || isStart || isEnd}
             onClick={() => onSelect(cell.date)}
           >
             <span>{cell.day}</span>

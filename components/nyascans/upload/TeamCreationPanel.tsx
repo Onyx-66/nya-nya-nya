@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- crop previews use short-lived blob URLs that Next Image cannot optimize */
 import { Camera, ChatCircle, CheckCircle, Clock, CloudArrowUp, DotsThree, ImageSquare, Info, LinkSimple, PaperPlaneTilt, Play, Plus, Pulse, ShieldCheck, Smiley, UsersThree, WarningCircle, X } from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
@@ -73,7 +74,10 @@ export function TeamCreationPanel() {
   const logoPreview = useMemo(() => imagePreview(form.logo), [form.logo]); const bannerPreview = useMemo(() => imagePreview(form.banner), [form.banner]);
   useEffect(() => () => { if (logoPreview) URL.revokeObjectURL(logoPreview); if (bannerPreview) URL.revokeObjectURL(bannerPreview); }, [logoPreview, bannerPreview]);
   const load = useCallback(async () => { setLoading(true); try { const response = await fetch("/api/v1/team-creation-requests", { cache: "no-store" }); const payload = await response.json() as { data?: { requests?: TeamCreationRequest[] }; error?: { message?: string; fields?: Array<{ path?: string; message?: string }> } }; if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "Team requests could not be loaded."); setRequests(payload.data.requests ?? []); } catch (error) { setMessage({ kind: "error", text: error instanceof Error ? error.message : "Team requests could not be loaded." }); } finally { setLoading(false); } }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   useEffect(() => { const timer = window.setTimeout(() => { form.memberEmails.forEach((email, index) => { const normalized = email.trim().toLowerCase(); if (!normalized.includes("@")) { setMemberPreviews((current) => ({ ...current, [index]: null })); return; } void fetch(`/api/v1/team-creation-requests?lookupEmail=${encodeURIComponent(normalized)}`, { cache: "no-store" }).then(async (response) => (await response.json()) as { data?: { member?: MemberPreview | null } }).then((payload) => setMemberPreviews((current) => ({ ...current, [index]: payload.data?.member ?? null }))).catch(() => setMemberPreviews((current) => ({ ...current, [index]: null }))); }); }, 260); return () => window.clearTimeout(timer); }, [form.memberEmails]);
   function update(field: keyof FormValues, value: string | File | null) { setForm((current) => ({ ...current, [field]: value })); setInvalidFields((current) => current.filter((item) => item != field)); setMessage(null); }
   function updateLink(index: number, field: keyof ExternalLink, value: string) { setForm((current) => ({ ...current, externalLinks: current.externalLinks.map((link, item) => item === index ? { ...link, [field]: value } : link) })); setMessage(null); }

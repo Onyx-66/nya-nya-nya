@@ -1,0 +1,46 @@
+name: Release gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Secret scan
+        run: npm run security:secrets
+      - name: Version consistency
+        run: npm run version:check
+      - name: Migration consistency
+        run: npm run db:check
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint -- --max-warnings=0
+      - name: Current contract tests
+        run: npm run test:current
+      - name: Fresh migration and snapshot parity
+        run: npm run test:migration-snapshot
+      - name: Production build
+        run: npm run build
+      - name: Validate Cloudflare artifact
+        run: npm run validate:artifact
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high

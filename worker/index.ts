@@ -20,7 +20,18 @@ interface ExecutionContext {
 }
 
 function secureResponse(request: Request, response: Response) {
-  const headers = new Headers(response.headers);
+  const nonceBytes = crypto.getRandomValues(new Uint8Array(18));
+  const nonce = btoa(String.fromCharCode(...nonceBytes));
+  const securedResponse = response.headers.get("content-type")?.includes("text/html")
+    ? new HTMLRewriter()
+        .on("script", {
+          element(element) {
+            element.setAttribute("nonce", nonce);
+          },
+        })
+        .transform(response)
+    : response;
+  const headers = new Headers(securedResponse.headers);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
   headers.set("x-frame-options", "DENY");
@@ -41,7 +52,7 @@ function secureResponse(request: Request, response: Response) {
       "img-src 'self' data: blob:",
       "media-src 'self' blob:",
       "object-src 'none'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      `script-src 'self' 'nonce-${nonce}'`,
       "style-src 'self' 'unsafe-inline'",
       "worker-src 'self' blob:",
     ].join("; "),
@@ -52,9 +63,9 @@ function secureResponse(request: Request, response: Response) {
       "max-age=31536000; includeSubDomains",
     );
   }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
+  return new Response(securedResponse.body, {
+    status: securedResponse.status,
+    statusText: securedResponse.statusText,
     headers,
   });
 }

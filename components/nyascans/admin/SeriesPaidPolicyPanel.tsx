@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- authenticated R2 media URLs bypass the public image optimizer */
 import { MagnifyingGlass, CheckCircle, Clock, LockKey } from "@/components/nyascans/heroicons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -12,7 +13,10 @@ export function SeriesPaidPolicyPanel({ mode, defaultAutoFreeAfterDays, defaultP
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => { const response = await fetch(`/api/v1/admin/series-paid-policies?q=${encodeURIComponent(query)}`, { cache: "no-store" }); const payload = await response.json() as { data?: { policies?: Policy[] } }; if (response.ok) setPolicies(payload.data?.policies ?? []); }, [query]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const defaults = useMemo(() => policies.filter((item) => !item.configured), [policies]);
   const configured = useMemo(() => policies.filter((item) => item.configured), [policies]);
   function selectPolicy(policy: Policy) { setSelected({ ...policy }); setChoice(policy.configured ? "CUSTOM" : "DEFAULT"); setMessage(""); }

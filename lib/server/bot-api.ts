@@ -219,7 +219,7 @@ export async function fetchExternalSource(raw: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(url, { redirect: "error", signal: controller.signal, headers: { accept: "image/jpeg,image/png,image/webp,application/json" } });
+    const response = await fetch(url, { redirect: "error", signal: controller.signal, headers: { accept: "image/jpeg,image/png,image/webp,application/zip,application/x-cbz,application/json" } });
     if (!response.ok) throw new ApiError(422, "SOURCE_FETCH_FAILED", `The external source returned HTTP ${response.status}.`);
     const contentLength = Number(response.headers.get("content-length") ?? 0);
     if (contentLength > 250 * 1024 * 1024) throw new ApiError(413, "SOURCE_TOO_LARGE", "The external source exceeds the upload size limit.");

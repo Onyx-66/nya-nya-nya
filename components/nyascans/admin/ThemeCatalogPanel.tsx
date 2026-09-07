@@ -72,7 +72,8 @@ export function ThemeCatalogPanel() {
   }
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
