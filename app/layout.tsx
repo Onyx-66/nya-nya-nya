@@ -22,6 +22,7 @@ import "./theme-surfaces.css";
 import "./dropdown-surfaces.css";
 import "./upload-center.css";
 import "./browse-chapters.css";
+import "./browse-filters.css";
 
 const cachedThemeVariableNames = [
   ...themeTokenKeys.map(cssVariableForToken),

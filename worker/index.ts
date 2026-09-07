@@ -1,3 +1,4 @@
+import { ensurePreviewFixtures } from "../lib/server/preview-fixtures";
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
@@ -5,6 +6,9 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  BUCKET: R2Bucket;
+  NYASCANS_PREVIEW_FIXTURES?: string;
+  NYASCANS_ADMIN_EMAILS?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -67,6 +71,7 @@ function secureResponse(request: Request, response: Response) {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    await ensurePreviewFixtures(env);
     const url = new URL(request.url);
 
     if (url.pathname === "/_vinext/image") {

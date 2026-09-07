@@ -95,6 +95,7 @@ import {
   type ReactNode,
 } from "react";
 import browseFixes from "./BrowseFixes.module.css";
+import { BrowseFilterControls } from "./BrowseFilterControls";
 import { AccountSecurityWorkspace } from "@/components/nyascans/AccountSecurityWorkspace";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
 import { EnhancedDiscussionSection } from "@/components/nyascans/EnhancedDiscussionSection";
@@ -4729,6 +4730,7 @@ type CatalogFacetOption = {
   count?: number;
 };
 type CatalogFacets = {
+  tags: CatalogFacetOption[];
   genres: CatalogFacetOption[];
   creators: CatalogFacetOption[];
 };
@@ -5137,13 +5139,16 @@ function BrowseView({
   const [access, setAccess] = useState("All");
   const [status, setStatus] = useState("All");
   const [genre, setGenre] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [tag, setTag] = useState("");
+  const [onSale, setOnSale] = useState(false);
   const [creator, setCreator] = useState("");
   const [minimumChapters, setMinimumChapters] = useState("");
   const [maximumChapters, setMaximumChapters] = useState("");
   const [hideFollowed, setHideFollowed] = useState(false);
   const [genreSearch, setGenreSearch] = useState("");
   const [creatorSearch, setCreatorSearch] = useState("");
-  const [facets, setFacets] = useState<CatalogFacets>({ genres: [], creators: [] });
+  const [facets, setFacets] = useState<CatalogFacets>({ genres: [], tags: [], creators: [] });
   const [mode, setMode] = useState<"grid" | "list">("grid");
   const [sort, setSort] = useState("latest");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -5167,7 +5172,7 @@ function BrowseView({
   useEffect(() => {
     function applyLocation() {
       const params = new URLSearchParams(window.location.search);
-      const nextType = params.get("type")?.toUpperCase() ?? "ALL";
+      const nextType = (params.get("type") ?? "").toUpperCase().split(",").filter((item) => ["MANGA", "MANHWA", "MANHUA"].includes(item)).join(",") || "ALL";
       const nextAccess = params.get("access")?.toUpperCase() ?? "ALL";
       const nextStatus = (params.get("status") ?? "")
         .split(",")
@@ -5189,11 +5194,10 @@ function BrowseView({
       const nextPage = Number(params.get("page") ?? 1);
       const nextPageSize = Number(params.get("pageSize") ?? DEFAULT_CATALOG_PAGE_SIZE);
       setQuery(params.get("q") ?? "");
-      setType(
-        ["MANHWA", "MANGA", "MANHUA"].includes(nextType)
-          ? nextType
-          : "All",
-      );
+      setType(nextType === "ALL" ? "All" : nextType);
+      setOrigin((params.get("origin") ?? "").toUpperCase().split(",").filter((item) => ["JP", "KR", "CN", "OTHER"].includes(item)).join(","));
+      setTag(params.get("tag") ?? "");
+      setOnSale(params.get("onSale") === "1");
       setAccess(
         ["FREE", "PAID"].includes(nextAccess)
           ? nextAccess
@@ -5227,7 +5231,7 @@ function BrowseView({
         nextStatus !== "ALL" ||
           nextType !== "ALL" ||
           nextAccess !== "ALL" ||
-          Boolean(nextGenre) ||
+          Boolean(nextGenre) || Boolean(params.get("origin")) || Boolean(params.get("tag")) || params.get("onSale") === "1" ||
           Boolean(nextCreator) ||
           Boolean(nextMinimumChapters) ||
           Boolean(nextMaximumChapters) ||
@@ -5262,6 +5266,9 @@ function BrowseView({
       if (access !== "All") params.set("access", access);
       if (status !== "All") params.set("status", status);
       if (genre) params.set("genre", genre);
+      if (origin) params.set("origin", origin);
+      if (tag) params.set("tag", tag);
+      if (onSale) params.set("onSale", "1");
       if (creator) params.set("creator", creator);
       if (minimumChapters && Number(minimumChapters) > 0) {
         params.set("minChapters", minimumChapters);
@@ -5318,6 +5325,9 @@ function BrowseView({
     catalogRevision,
     creator,
     genre,
+    origin,
+    tag,
+    onSale,
     hideFollowed,
     hydrated,
     minimumChapters,
@@ -5338,6 +5348,9 @@ function BrowseView({
       access: string;
       status: string;
       genre: string;
+      origin: string;
+      tag: string;
+      onSale: boolean;
       creator: string;
       minimumChapters: string;
       maximumChapters: string;
@@ -5355,6 +5368,9 @@ function BrowseView({
       access,
       status,
       genre,
+      origin,
+      tag,
+      onSale,
       creator,
       minimumChapters,
       maximumChapters,
@@ -5375,6 +5391,9 @@ function BrowseView({
       params.set("status", next.status.toLowerCase());
     }
     if (next.genre) params.set("genre", next.genre);
+    if (next.origin) params.set("origin", next.origin);
+    if (next.tag) params.set("tag", next.tag);
+    if (next.onSale) params.set("onSale", "1");
     if (next.creator) params.set("creator", next.creator);
     if (next.minimumChapters && Number(next.minimumChapters) > 0) {
       params.set("minChapters", next.minimumChapters);
@@ -5393,6 +5412,9 @@ function BrowseView({
     setAccess(next.access);
     setStatus(next.status);
     setGenre(next.genre);
+    setOrigin(next.origin);
+    setTag(next.tag);
+    setOnSale(next.onSale);
     setCreator(next.creator);
     setMinimumChapters(next.minimumChapters);
     setMaximumChapters(next.maximumChapters);
@@ -5421,6 +5443,9 @@ function BrowseView({
     access !== "All",
     status !== "All",
     Boolean(genre),
+    Boolean(origin),
+    Boolean(tag),
+    onSale,
     Boolean(creator),
     Boolean(minimumChapters && Number(minimumChapters) > 0) || maximumChapters !== "",
     hideFollowed,
@@ -5434,6 +5459,9 @@ function BrowseView({
       access: "All",
       status: "All",
       genre: "",
+      origin: "",
+      tag: "",
+      onSale: false,
       creator: "",
       minimumChapters: "",
       maximumChapters: "",
@@ -5450,7 +5478,7 @@ function BrowseView({
   };
 
   return (
-    <main className={`page-main page-wrap ${browseFixes.browseScope}`}>
+    <main className={`page-main page-wrap browse-layout ${browseFixes.browseScope}`}>
       <section className="browse-intro">
         <div className="browse-intro-heading">
           <div className="browse-title-group">
@@ -5495,6 +5523,8 @@ function BrowseView({
 
           />
         </div>
+        <div className="browse-toolbar-chapters"><ChaptersMenu minimum={minimumChapters} maximum={maximumChapters}
+          onApply={(minimumChapters, maximumChapters) => navigate({ minimumChapters, maximumChapters, page: 1 }, true)} /></div>
         <button
           className="filter-button"
           type="button"
@@ -5512,94 +5542,11 @@ function BrowseView({
         </button>
       </section>
 
-      <div className="browse-desktop-filter-bar catalog-filter-panel" aria-label="Browse filters">
-        <CompactOptionMenu
-          label="Latest Update"
-          value={sort}
-          activeCount={sortActiveCount}
-          sortDirection={sortDirection}
-          onDirectionChange={(value) => navigate({ sortDirection: value, page: 1 })}
-          options={[
-            { value: "latest", label: "Latest update" },
-            { value: "added", label: "Recently added" },
-            { value: "viewed", label: "Most viewed" },
-            { value: "followed", label: "Most followed" },
-            { value: "rated", label: "Highest rated" },
-            { value: "title", label: "Alphabetical" },
-          ]}
-          onChange={(value) => navigate({ sort: value, page: 1 })}
-        />
-        <CompactOptionMenu
-          label="Status"
-          value={status}
-          activeCount={status === "All" ? 0 : 1}
-          options={[
-            { value: "All", label: "All statuses" },
-            { value: "ONGOING", label: "Ongoing" },
-            { value: "COMPLETED", label: "Completed" },
-            { value: "HIATUS", label: "Hiatus" },
-            { value: "PAUSED", label: "Paused" },
-            { value: "CANCELLED", label: "Cancelled" },
-            { value: "UPCOMING", label: "Upcoming" },
-          ]}
-          onChange={(value) => navigate({ status: value, page: 1 })}
-        />
-        <CompactOptionMenu
-          label="Type"
-          value={type}
-          activeCount={type === "All" ? 0 : 1}
-          options={[
-            { value: "All", label: "All types" },
-            { value: "MANHWA", label: "Manhwa" },
-            { value: "MANGA", label: "Manga" },
-            { value: "MANHUA", label: "Manhua" },
-          ]}
-          onChange={(value) => navigate({ type: value, page: 1 })}
-        />
-        <CatalogFacetMenu
-          label="Genres"
-          value={genre}
-          options={facets.genres}
-          search={genreSearch}
-          onSearchChange={setGenreSearch}
-          onChange={(value) => navigate({ genre: value, page: 1 })}
-          placeholder="Search genres..."
-        />
-        <CatalogFacetMenu
-          label="Creator"
-          value={creator}
-          options={facets.creators}
-          search={creatorSearch}
-          onSearchChange={setCreatorSearch}
-          onChange={(value) => navigate({ creator: value, page: 1 })}
-          placeholder="Search artist, author, publisher..."
-        />
-        <ChaptersMenu
-          minimum={minimumChapters}
-          maximum={maximumChapters}
-          onApply={(minimumChapters, maximumChapters) => navigate({ minimumChapters, maximumChapters, page: 1 }, true)}
-        />
-        <label className={`hide-followed-field${hideFollowed ? " has-active" : ""}`.trim()}>
-          <input
-            type="checkbox"
-            checked={hideFollowed}
-            onChange={(event) => {
-              if (event.target.checked && !actor) {
-                window.location.href = authEntryPath("login", "/browse");
-                return;
-              }
-              navigate({ hideFollowed: event.target.checked, page: 1 });
-            }}
-          />
-          <span className="catalog-filter-summary">
-            <span className="catalog-filter-summary-label">Hide Bookmarked</span>
-            {hideFollowed ? <b className="catalog-filter-active-count">1</b> : null}
-          </span>
-        </label>
-        <button className="browse-clear-filters" type="button" disabled={!activeFilterCount} onClick={clearFilters}>
-          Clear Filters
-        </button>
-      </div>
+      <BrowseFilterControls values={{ status, type, origin, genre, tag, creator, sort, sortDirection, onSale, hideFollowed }}
+        genres={facets.genres} tags={facets.tags ?? []} creators={facets.creators}
+        onChange={(updates) => navigate({ ...updates, page: 1 }, true)}
+        onHideBookmarks={() => { if (!actor && !hideFollowed) { window.location.href = authEntryPath("login", "/browse"); return; } navigate({ hideFollowed: !hideFollowed, page: 1 }); }}
+        onClear={clearFilters} canClear={Boolean(activeFilterCount || query)} />
 
       {moreOpen ? (
         <aside
@@ -5620,104 +5567,15 @@ function BrowseView({
               <X size={22} />
             </button>
           </header>
-          <div className="catalog-filter-grid">
-            <CompactOptionMenu
-              label="Latest Update"
-              value={sort}
-              options={[
-                { value: "latest", label: "Latest update" },
-                { value: "added", label: "Recently added" },
-                { value: "viewed", label: "Most viewed" },
-                { value: "followed", label: "Most followed" },
-                { value: "rated", label: "Highest rated" },
-                { value: "title", label: "Alphabetical" },
-              ]}
-              onChange={(value) => navigate({ sort: value, page: 1 })}
-            />
-            <CompactOptionMenu
-              label="Type"
-              value={type}
-              options={[
-                { value: "All", label: "All types" },
-                { value: "MANHWA", label: "Manhwa" },
-                { value: "MANGA", label: "Manga" },
-                { value: "MANHUA", label: "Manhua" },
-              ]}
-              onChange={(value) => navigate({ type: value, page: 1 })}
-            />
-            <CompactOptionMenu
-              label="Access"
-              value={access}
-              options={[
-                { value: "All", label: "All access" },
-                { value: "FREE", label: "Free" },
-                { value: "PAID", label: "Paid" },
-              ]}
-              onChange={(value) => navigate({ access: value, page: 1 })}
-            />
-            <CompactOptionMenu
-              label="Status"
-              value={status}
-              activeCount={status === "All" ? 0 : 1}
-              options={[
-                { value: "All", label: "All statuses" },
-                { value: "ONGOING", label: "Ongoing" },
-                { value: "COMPLETED", label: "Completed" },
-                { value: "HIATUS", label: "Hiatus" },
-                { value: "PAUSED", label: "Paused" },
-                { value: "CANCELLED", label: "Cancelled" },
-                { value: "UPCOMING", label: "Upcoming" },
-              ]}
-              onChange={(value) => navigate({ status: value, page: 1 })}
-            />
-            <CatalogFacetMenu
-              label="Genres"
-              value={genre}
-              options={facets.genres}
-              search={genreSearch}
-              onSearchChange={setGenreSearch}
-              onChange={(value) => navigate({ genre: value, page: 1 })}
-              placeholder="Search genres..."
-            />
-            <CatalogFacetMenu
-              label="Creator"
-              value={creator}
-              options={facets.creators}
-              search={creatorSearch}
-              onSearchChange={setCreatorSearch}
-              onChange={(value) => navigate({ creator: value, page: 1 })}
-              placeholder="Search artist, author, publisher..."
-            />
-            <ChaptersMenu
-              minimum={minimumChapters}
-              maximum={maximumChapters}
-              onApply={(minimumChapters, maximumChapters) => navigate({ minimumChapters, maximumChapters, page: 1 }, true)}
-            />
-            <label className="hide-followed-field">
-              <input
-                type="checkbox"
-                checked={hideFollowed}
-                onChange={(event) => {
-                  if (event.target.checked && !actor) {
-                    window.location.href = authEntryPath("login", "/browse");
-                    return;
-                  }
-                  navigate({ hideFollowed: event.target.checked, page: 1 });
-                }}
-              />
-              <span>Hide Bookmarked</span>
-            </label>
-          </div>
-          <footer className="catalog-filter-footer">
-            <button
-              className="mobile-filter-clear"
-              type="button"
-              disabled={!activeFilterCount}
-              onClick={clearFilters}
-            >
-              Clear filters
-            </button>
-          </footer>
+          <BrowseFilterControls mobile values={{ status, type, origin, genre, tag, creator, sort, sortDirection, onSale, hideFollowed }}
+        genres={facets.genres} tags={facets.tags ?? []} creators={facets.creators}
+        onChange={(updates) => navigate({ ...updates, page: 1 }, true)}
+        onHideBookmarks={() => { if (!actor && !hideFollowed) { window.location.href = authEntryPath("login", "/browse"); return; } navigate({ hideFollowed: !hideFollowed, page: 1 }); }}
+        onClear={clearFilters} canClear={Boolean(activeFilterCount || query)}>
+            <ChaptersMenu minimum={minimumChapters} maximum={maximumChapters}
+              onApply={(minimumChapters, maximumChapters) => navigate({ minimumChapters, maximumChapters, page: 1 }, true)} />
+            <CompactOptionMenu label="Access" value={access} options={[{value:"All",label:"All access"},{value:"FREE",label:"Free"},{value:"PAID",label:"Paid"}]} onChange={(access) => navigate({access, page: 1})} />
+          </BrowseFilterControls>
         </aside>
       ) : null}
 

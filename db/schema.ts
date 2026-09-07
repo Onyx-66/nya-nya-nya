@@ -4635,3 +4635,15 @@ export const featureFlags = sqliteTable("feature_flags", {
   description: text("description").notNull().default(""),
   updatedAt,
 });
+
+export const tags = sqliteTable("tags", {
+  id: text("id").primaryKey(), slug: text("slug").notNull().unique(), name: text("name").notNull(),
+  archivedAt: text("archived_at"), createdAt,
+});
+export const seriesTags = sqliteTable("series_tags", {
+  seriesId: text("series_id").notNull().references(() => series.id, { onDelete: "cascade" }),
+  tagId: text("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.seriesId, table.tagId] }), index("series_tags_tag_idx").on(table.tagId, table.seriesId)]);
+export const previewFixtureRuns = sqliteTable("preview_fixture_runs", {
+  id: text("id").primaryKey(), completedAt: text("completed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

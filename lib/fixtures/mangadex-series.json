@@ -1,0 +1,750 @@
+[
+  {
+    "id": "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0",
+    "title": "Only I Level up",
+    "language": "ko",
+    "country": "KR",
+    "status": "COMPLETED",
+    "year": 2018,
+    "cover": "/art/mangadex-sample/32d76d19-8a05-4db0-9fc2-e0b0648fe9d0.jpg",
+    "sourceUrl": "https://mangadex.org/title/32d76d19-8a05-4db0-9fc2-e0b0648fe9d0",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama",
+      "Fantasy"
+    ],
+    "tags": [
+      "Award Winning",
+      "Monsters",
+      "Long Strip",
+      "Magic",
+      "Web Comic",
+      "Supernatural",
+      "Adaptation",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "5671fb47-ebdd-450f-9d7d-347353a926ae",
+        "name": "h-goon (현군)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "820b13ef-dc7d-42b1-999a-65393b8b4040",
+        "name": "Chugong (추공)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "f7a59e4f-2b0c-45dc-b30e-949c8c3f0ad2",
+        "name": "Gi So-Ryeong (기소령)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "50200613-ef62-4ec8-b879-6d9ecd022e66",
+        "name": "REDICE Studio (레드아이스 스튜디오)",
+        "role": "ARTIST"
+      },
+      {
+        "id": "86f43f7f-7f32-4ecb-8dd9-7cd2ae16932b",
+        "name": "Jang Sung-Rak (장성락)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+    "title": "To Be a Power in the Shadows!",
+    "language": "ja",
+    "country": "JP",
+    "status": "ONGOING",
+    "year": 2018,
+    "cover": "/art/mangadex-sample/77bee52c-d2d6-44ad-a33a-1734c1fe696a.jpg",
+    "sourceUrl": "https://mangadex.org/title/77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+    "genres": [
+      "Action",
+      "Comedy",
+      "Isekai",
+      "Drama",
+      "Fantasy"
+    ],
+    "tags": [
+      "Reincarnation",
+      "Demons",
+      "Martial Arts",
+      "Magic",
+      "Harem",
+      "School Life",
+      "Adaptation"
+    ],
+    "creators": [
+      {
+        "id": "a1746c35-50ed-4e6f-94c1-092b07440d59",
+        "name": "Sakano Anri",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "c6c278e1-268b-4b7b-84ec-3289bd0c08f0",
+        "name": "Aizawa Daisuke",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "a1746c35-50ed-4e6f-94c1-092b07440d59",
+        "name": "Sakano Anri",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "e78a489b-6632-4d61-b00b-5206f5b8b22b",
+    "title": "In Regards to My Reincarnation as a Slime",
+    "language": "ja",
+    "country": "JP",
+    "status": "ONGOING",
+    "year": 2015,
+    "cover": "/art/mangadex-sample/e78a489b-6632-4d61-b00b-5206f5b8b22b.jpg",
+    "sourceUrl": "https://mangadex.org/title/e78a489b-6632-4d61-b00b-5206f5b8b22b",
+    "genres": [
+      "Action",
+      "Comedy",
+      "Isekai",
+      "Fantasy"
+    ],
+    "tags": [
+      "Reincarnation",
+      "Monsters",
+      "Demons",
+      "Samurai",
+      "Adaptation"
+    ],
+    "creators": [
+      {
+        "id": "dbf8af05-7173-49f3-bf60-f4ea3f586486",
+        "name": "Fuse",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "560748c6-fbe7-49f5-8258-7b3292942101",
+        "name": "Kawakami Taiki",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "b0b721ff-c388-4486-aa0f-c2b0bb321512",
+    "title": "Frieren: Remnants Of The Departed",
+    "language": "ja",
+    "country": "JP",
+    "status": "HIATUS",
+    "year": 2020,
+    "cover": "/art/mangadex-sample/b0b721ff-c388-4486-aa0f-c2b0bb321512.jpg",
+    "sourceUrl": "https://mangadex.org/title/b0b721ff-c388-4486-aa0f-c2b0bb321512",
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Award Winning",
+      "Monsters",
+      "Demons",
+      "Magic"
+    ],
+    "creators": [
+      {
+        "id": "b3136811-9761-4606-93cf-583a00dde5e9",
+        "name": "Yamada Kanehito",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "ff98c5c0-daca-4c97-8c3d-1e2b98d04d9b",
+        "name": "Abe Tsukasa",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "a96676e5-8ae2-425e-b549-7f15dd34a6d8",
+    "title": "Miss Komi Is Bad at Communication.",
+    "language": "ja",
+    "country": "JP",
+    "status": "COMPLETED",
+    "year": 2016,
+    "cover": "/art/mangadex-sample/a96676e5-8ae2-425e-b549-7f15dd34a6d8.jpg",
+    "sourceUrl": "https://mangadex.org/title/a96676e5-8ae2-425e-b549-7f15dd34a6d8",
+    "genres": [
+      "Romance",
+      "Comedy",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Award Winning",
+      "School Life"
+    ],
+    "creators": [
+      {
+        "id": "4218b1ee-cde4-44dc-84c7-d9a794a7e56d",
+        "name": "Oda Tomohito",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "4218b1ee-cde4-44dc-84c7-d9a794a7e56d",
+        "name": "Oda Tomohito",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "eb2d1a45-d4e7-4e32-a171-b5b029c5b0cb",
+    "title": "So I’m a Spider, So What?",
+    "language": "ja",
+    "country": "JP",
+    "status": "ONGOING",
+    "year": 2015,
+    "cover": "/art/mangadex-sample/eb2d1a45-d4e7-4e32-a171-b5b029c5b0cb.jpg",
+    "sourceUrl": "https://mangadex.org/title/eb2d1a45-d4e7-4e32-a171-b5b029c5b0cb",
+    "genres": [
+      "Action",
+      "Comedy",
+      "Adventure",
+      "Isekai",
+      "Drama",
+      "Fantasy"
+    ],
+    "tags": [
+      "Reincarnation",
+      "Monsters",
+      "Demons",
+      "Survival",
+      "Magic",
+      "Monster Girls",
+      "Adaptation"
+    ],
+    "creators": [
+      {
+        "id": "7be584f3-1c1a-48ce-9205-4e5c7edc3fad",
+        "name": "Baba Okina",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "d03125ac-d835-4567-a2b9-78b35ad94466",
+        "name": "Kakashi Asahiro",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "9d3d3403-1a87-4737-9803-bc3d99db1424",
+    "title": "The Green Yuri",
+    "language": "ja",
+    "country": "JP",
+    "status": "ONGOING",
+    "year": 2022,
+    "cover": "/art/mangadex-sample/9d3d3403-1a87-4737-9803-bc3d99db1424.jpg",
+    "sourceUrl": "https://mangadex.org/title/9d3d3403-1a87-4737-9803-bc3d99db1424",
+    "genres": [
+      "Romance",
+      "Girls' Love",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Award Winning",
+      "School Life",
+      "Web Comic",
+      "Music",
+      "Gyaru"
+    ],
+    "creators": [
+      {
+        "id": "12f9c76e-036f-4622-95aa-88aa54b3433a",
+        "name": "Arai Sumiko",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "12f9c76e-036f-4622-95aa-88aa54b3433a",
+        "name": "Arai Sumiko",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "d7037b2a-874a-4360-8a7b-07f2899152fd",
+    "title": "Welcome to Demon School! Iruma-kun",
+    "language": "ja",
+    "country": "JP",
+    "status": "ONGOING",
+    "year": 2017,
+    "cover": "/art/mangadex-sample/d7037b2a-874a-4360-8a7b-07f2899152fd.jpg",
+    "sourceUrl": "https://mangadex.org/title/d7037b2a-874a-4360-8a7b-07f2899152fd",
+    "genres": [
+      "Action",
+      "Romance",
+      "Comedy",
+      "Isekai",
+      "Fantasy"
+    ],
+    "tags": [
+      "Monsters",
+      "Demons",
+      "Crossdressing",
+      "Magic",
+      "School Life"
+    ],
+    "creators": [
+      {
+        "id": "32a18c9c-4b1f-4485-a674-9657cf7d2b4d",
+        "name": "Nishi Osamu ",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "32a18c9c-4b1f-4485-a674-9657cf7d2b4d",
+        "name": "Nishi Osamu ",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "9a414441-bbad-43f1-a3a7-dc262ca790a3",
+    "title": "ORV",
+    "language": "ko",
+    "country": "KR",
+    "status": "ONGOING",
+    "year": 2020,
+    "cover": "/art/mangadex-sample/9a414441-bbad-43f1-a3a7-dc262ca790a3.jpg",
+    "sourceUrl": "https://mangadex.org/title/9a414441-bbad-43f1-a3a7-dc262ca790a3",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
+    "tags": [
+      "Award Winning",
+      "Reincarnation",
+      "Monsters",
+      "Long Strip",
+      "Survival",
+      "Post-Apocalyptic",
+      "Magic",
+      "Web Comic",
+      "Supernatural",
+      "Adaptation",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "385c7225-4a07-4f78-bb5e-8f79fb802bbd",
+        "name": "sing N song (싱숑)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "b117b481-a835-4a00-80e4-865d1b21717c",
+        "name": "UMI",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "48bc1ea4-50b5-48ca-bc34-b6c3f216f22a",
+        "name": "Sleepy-C (슬리피-C)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "6a468761-5bd6-4de0-a0cb-47cb456ac2e0",
+    "title": "A Returner's Magic Should Be Special",
+    "language": "ko",
+    "country": "KR",
+    "status": "COMPLETED",
+    "year": 2018,
+    "cover": "/art/mangadex-sample/6a468761-5bd6-4de0-a0cb-47cb456ac2e0.jpg",
+    "sourceUrl": "https://mangadex.org/title/6a468761-5bd6-4de0-a0cb-47cb456ac2e0",
+    "genres": [
+      "Action",
+      "Comedy",
+      "Adventure",
+      "Fantasy",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Time Travel",
+      "Long Strip",
+      "Martial Arts",
+      "Magic",
+      "School Life",
+      "Web Comic",
+      "Adaptation",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "699ad622-e14c-4df8-82e1-58fab47c9e71",
+        "name": "Usonan (유소난)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "d884940f-d07c-4bd2-82ca-ee4e2963b6c4",
+        "name": "Wookjakga (욱작가)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "85b51b37-0ce6-4144-a19b-6b064bc2c2ae",
+    "title": "Beware the Villainess!",
+    "language": "ko",
+    "country": "KR",
+    "status": "COMPLETED",
+    "year": 2020,
+    "cover": "/art/mangadex-sample/85b51b37-0ce6-4144-a19b-6b064bc2c2ae.jpg",
+    "sourceUrl": "https://mangadex.org/title/85b51b37-0ce6-4144-a19b-6b064bc2c2ae",
+    "genres": [
+      "Action",
+      "Romance",
+      "Comedy",
+      "Isekai",
+      "Drama",
+      "Fantasy"
+    ],
+    "tags": [
+      "Reincarnation",
+      "Demons",
+      "Long Strip",
+      "Magic",
+      "Villainess",
+      "Adaptation",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "95e60b07-5a29-4bbf-b855-256a93571853",
+        "name": "Berry (열매)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "a927897a-045d-469a-946b-abfcf6ee7208",
+        "name": "Soda Ice (뽕따맛스크류바)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "930bfd09-f8b4-4f84-804e-4694f8f787e1",
+        "name": "Blue Canna (푸른칸나)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "829fc3a7-d4f4-42e9-9032-0917083f9e0d",
+    "title": "Nan Hao & Shang Feng the Odd Couple",
+    "language": "zh",
+    "country": "CN",
+    "status": "ONGOING",
+    "year": 2019,
+    "cover": "/art/mangadex-sample/829fc3a7-d4f4-42e9-9032-0917083f9e0d.jpg",
+    "sourceUrl": "https://mangadex.org/title/829fc3a7-d4f4-42e9-9032-0917083f9e0d",
+    "genres": [
+      "Comedy",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Award Winning",
+      "Long Strip",
+      "School Life",
+      "Web Comic",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "0b2ecf12-bab5-4efa-b5af-8b7bdb78d601",
+        "name": "Brownie (布朗尼)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "0b2ecf12-bab5-4efa-b5af-8b7bdb78d601",
+        "name": "Brownie (布朗尼)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "812f9696-048f-496d-9ed4-84c99345d1fb",
+    "title": "TDG",
+    "language": "zh",
+    "country": "CN",
+    "status": "ONGOING",
+    "year": 2015,
+    "cover": "/art/mangadex-sample/812f9696-048f-496d-9ed4-84c99345d1fb.jpg",
+    "sourceUrl": "https://mangadex.org/title/812f9696-048f-496d-9ed4-84c99345d1fb",
+    "genres": [
+      "Action",
+      "Romance",
+      "Adventure",
+      "Wuxia"
+    ],
+    "tags": [
+      "Time Travel",
+      "Martial Arts",
+      "Harem",
+      "Web Comic",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "96feffac-5739-462d-8360-1988de0cdf28",
+        "name": "Mad Snail",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "3a62c3f8-f96a-4241-8af1-81735f49e007",
+        "name": "Jiang Ruotai",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "3f1453fb-9dac-4aca-a2ea-69613856c952",
+    "title": "SQ: Begin W/Your Name!",
+    "language": "zh",
+    "country": "CN",
+    "status": "ONGOING",
+    "year": 2014,
+    "cover": "/art/mangadex-sample/3f1453fb-9dac-4aca-a2ea-69613856c952.jpg",
+    "sourceUrl": "https://mangadex.org/title/3f1453fb-9dac-4aca-a2ea-69613856c952",
+    "genres": [
+      "Romance",
+      "Comedy",
+      "Girls' Love",
+      "Drama",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Long Strip",
+      "School Life",
+      "Web Comic",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "2311bfe4-a3a8-4d35-ab9e-65cff6a33fa9",
+        "name": "Tan Jiu (坛九)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "2311bfe4-a3a8-4d35-ab9e-65cff6a33fa9",
+        "name": "Tan Jiu (坛九)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "17a56d33-9443-433a-9e0d-70459893ed8f",
+    "title": "My Wife Is From a Thousand Years Ago",
+    "language": "zh",
+    "country": "CN",
+    "status": "COMPLETED",
+    "year": 2022,
+    "cover": "/art/mangadex-sample/17a56d33-9443-433a-9e0d-70459893ed8f.jpg",
+    "sourceUrl": "https://mangadex.org/title/17a56d33-9443-433a-9e0d-70459893ed8f",
+    "genres": [
+      "Romance",
+      "Comedy",
+      "Drama",
+      "Fantasy",
+      "Slice of Life"
+    ],
+    "tags": [
+      "Time Travel",
+      "Long Strip",
+      "Martial Arts",
+      "Web Comic",
+      "Supernatural",
+      "Adaptation",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "63200b97-bbf8-4dab-8522-a158fec3afad",
+        "name": "Yuewen Manhua (阅文漫画)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "89e915bc-f19a-4cf9-beb0-85c49d0bf169",
+        "name": "Flowers Haven't Bloomed (花还没开)",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "77fd15d2-08f0-41d0-9ac1-e021783a3ef0",
+        "name": "Painting Culture (之画文化)",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "4ada20eb-085a-491a-8c49-477ab42014d7",
+    "title": "The Beginning After the End",
+    "language": "en",
+    "country": "US",
+    "status": "ONGOING",
+    "year": 2018,
+    "cover": "/art/mangadex-sample/4ada20eb-085a-491a-8c49-477ab42014d7.jpg",
+    "sourceUrl": "https://mangadex.org/title/4ada20eb-085a-491a-8c49-477ab42014d7",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Isekai",
+      "Fantasy",
+      "Tragedy"
+    ],
+    "tags": [
+      "Reincarnation",
+      "Monsters",
+      "Demons",
+      "Long Strip",
+      "Magic",
+      "School Life",
+      "Web Comic",
+      "Adaptation",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "4785e565-01e5-497c-9c60-6bfb7b429253",
+        "name": "TurtleMe",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "55be27df-c66c-4f5e-a460-e5501ac6a997",
+        "name": "YOYO",
+        "role": "ARTIST"
+      },
+      {
+        "id": "84e1b9a6-80cf-4b6a-acf9-36c596aef189",
+        "name": "Wudijiurenwang",
+        "role": "ARTIST"
+      },
+      {
+        "id": "dcd588d8-a9d7-4e74-a066-4246d95deb03",
+        "name": "Fuyuki23",
+        "role": "ARTIST"
+      },
+      {
+        "id": "eeef1916-e280-45d8-850f-e59b17b49182",
+        "name": "333335",
+        "role": "ARTIST"
+      },
+      {
+        "id": "f016dcdc-6b7c-498f-a798-4782e9a81210",
+        "name": "Eginhardt",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "b3a6a252-3093-4daa-b723-9f160e29d6bb",
+    "title": "My Adopted Daughter is an Eldritch Horror?!",
+    "language": "en",
+    "country": "US",
+    "status": "HIATUS",
+    "year": 2025,
+    "cover": "/art/mangadex-sample/b3a6a252-3093-4daa-b723-9f160e29d6bb.jpg",
+    "sourceUrl": "https://mangadex.org/title/b3a6a252-3093-4daa-b723-9f160e29d6bb",
+    "genres": [
+      "Action",
+      "Comedy",
+      "Fantasy",
+      "Slice of Life",
+      "Tragedy"
+    ],
+    "tags": [
+      "Monsters",
+      "Self-Published",
+      "Monster Girls",
+      "Web Comic"
+    ],
+    "creators": [
+      {
+        "id": "dbcab4d3-68ce-40a6-95d7-75b3ef852a37",
+        "name": "Crystal Blitz",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "ded84096-614e-43c6-b2c8-78f524a85546",
+        "name": "ChasiibleS",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "49c7b586-b0a3-4776-b3f5-3bdc62d82161",
+    "title": "Dog Nigga",
+    "language": "en",
+    "country": "US",
+    "status": "ONGOING",
+    "year": 2020,
+    "cover": "/art/mangadex-sample/49c7b586-b0a3-4776-b3f5-3bdc62d82161.jpg",
+    "sourceUrl": "https://mangadex.org/title/49c7b586-b0a3-4776-b3f5-3bdc62d82161",
+    "genres": [
+      "Action",
+      "Psychological",
+      "Comedy",
+      "Crime",
+      "Superhero",
+      "Adventure"
+    ],
+    "tags": [
+      "Monsters",
+      "Demons",
+      "Animals",
+      "Ninja",
+      "Martial Arts",
+      "Samurai",
+      "Self-Published",
+      "Military",
+      "Delinquents",
+      "Police"
+    ],
+    "creators": [
+      {
+        "id": "e978ae6b-a20f-4b65-8222-89114ab45349",
+        "name": "DH Animations",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "dc96e9c6-361f-4751-8da3-12b0e1596e95",
+        "name": "SerbianHero",
+        "role": "ARTIST"
+      }
+    ]
+  },
+  {
+    "id": "69edf637-4258-4540-9fd2-6fa6e53ca68c",
+    "title": "Stalker x Stalker",
+    "language": "en",
+    "country": "US",
+    "status": "ONGOING",
+    "year": null,
+    "cover": "/art/mangadex-sample/69edf637-4258-4540-9fd2-6fa6e53ca68c.jpg",
+    "sourceUrl": "https://mangadex.org/title/69edf637-4258-4540-9fd2-6fa6e53ca68c",
+    "genres": [
+      "Romance",
+      "Comedy"
+    ],
+    "tags": [
+      "Long Strip",
+      "Self-Published",
+      "Web Comic",
+      "Full Color"
+    ],
+    "creators": [
+      {
+        "id": "2a04bd24-da9a-42b0-a927-817b1c3825ef",
+        "name": "Merryweather",
+        "role": "AUTHOR"
+      },
+      {
+        "id": "4e1acf5f-5853-4987-83d4-581fb0fa6def",
+        "name": "Princess Hinghoi",
+        "role": "ARTIST"
+      }
+    ]
+  }
+]

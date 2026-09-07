@@ -1,3 +1,4 @@
+import { extraCatalogFilters } from "@/lib/server/catalog-extra-filters";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { demoSeries } from "@/lib/catalog";
@@ -2332,11 +2333,8 @@ export async function GET(request: Request, context: RouteContext) {
           ["ONGOING", "COMPLETED", "HIATUS", "PAUSED", "CANCELLED", "UPCOMING"].includes(value as never),
         )
         .slice(0, 6);
-      const type = z
-        .enum(["MANHWA", "MANGA", "MANHUA"])
-        .optional()
-        .catch(undefined)
-        .parse(url.searchParams.get("type")?.toUpperCase());
+      const types = (url.searchParams.get("type") ?? "").toUpperCase().split(",")
+        .filter((value) => ["MANGA", "MANHWA", "MANHUA"].includes(value)).slice(0, 3);
       const access = z
         .enum(["FREE", "PAID"])
         .optional()
@@ -2415,10 +2413,13 @@ export async function GET(request: Request, context: RouteContext) {
         clauses.push(`s.status IN (${statusValues.map(() => "?").join(", ")})`);
         bindings.push(...statusValues);
       }
-      if (type) {
-        clauses.push("s.type = ?");
-        bindings.push(type);
+      if (types.length) {
+        clauses.push(`s.type IN (${types.map(() => "?").join(",")})`);
+        bindings.push(...types);
       }
+      const extraFilters = extraCatalogFilters(url.searchParams);
+      clauses.push(...extraFilters.clauses);
+      bindings.push(...extraFilters.bindings);
       if (access) {
         clauses.push("s.access_type = ?");
         bindings.push(access);
@@ -2578,7 +2579,7 @@ export async function GET(request: Request, context: RouteContext) {
           .first<{ count: number }>(),
       ]);
       const total = Number(totalRow?.count ?? 0);
-      const [genreRows, creatorRows, publisherRows] = await Promise.all([
+      const [genreRows, creatorRows, publisherRows, tagRows] = await Promise.all([
         env.DB.prepare(
           `SELECT g.slug AS value,
                   g.name AS label,
@@ -2619,8 +2620,14 @@ export async function GET(request: Request, context: RouteContext) {
             ORDER BY p.name COLLATE NOCASE ASC
             LIMIT 80`,
         ).all(),
+        env.DB.prepare(`SELECT t.slug AS value, t.name AS label, COUNT(DISTINCT st.series_id) AS count
+          FROM tags t LEFT JOIN series_tags st ON st.tag_id = t.id
+          LEFT JOIN series tag_series ON tag_series.id = st.series_id
+          WHERE t.archived_at IS NULL AND (tag_series.id IS NULL OR (${publicSeriesPredicate("tag_series")}))
+          GROUP BY t.id ORDER BY t.name COLLATE NOCASE LIMIT 500`).all(),
       ]);
       const facets = {
+        tags: tagRows.results,
         genres: (genreRows.results as Array<Record<string, unknown>>).map((row) => ({
           value: String(row.value ?? ""),
           label: String(row.label ?? row.value ?? ""),
