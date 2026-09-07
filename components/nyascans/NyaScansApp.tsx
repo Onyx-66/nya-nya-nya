@@ -40,6 +40,7 @@ import {
   Heart,
   House,
   Image as ImageIcon,
+  Info,
   Key,
   List,
   Lifebuoy,
@@ -12626,6 +12627,10 @@ type OperationsNavigationItem = {
   aliases: readonly string[];
   keywords: readonly string[];
   children?: readonly AdminNavigationChild[];
+  targetSection?: string;
+  targetSubsection?: string;
+  href?: string;
+  kind?: "navigation" | "logout";
 };
 
 type OperationsNavigationGroup = {
@@ -12784,6 +12789,7 @@ function resolveAdminLocation(
 function workspaceNavigationItem(
   label: string,
   icon: PhosphorIcon,
+  options: Pick<OperationsNavigationItem, "targetSection" | "targetSubsection" | "href" | "kind"> = {},
 ): OperationsNavigationItem {
   return {
     slug: label.toLowerCase().replaceAll(" ", "-"),
@@ -12791,6 +12797,8 @@ function workspaceNavigationItem(
     icon,
     aliases: [],
     keywords: [],
+    kind: "navigation",
+    ...options,
   };
 }
 
@@ -13128,38 +13136,49 @@ function OperationsView({
       ];
     }
     if (!admin) {
-      const canUpload = Boolean(
-        actor.canUpload ??
-          ["TEAM_LEADER", "UPLOADER"].includes(actor.role),
-      );
       return [
         {
-          id: "publishing",
-          label: "Publishing",
+          id: "general",
+          label: "General",
+          items: [workspaceNavigationItem("Dashboard", SquaresFour, { targetSection: "Workspace" })],
+        },
+        {
+          id: "content",
+          label: "Content",
           items: [
-            workspaceNavigationItem("Workspace", SquaresFour),
-            workspaceNavigationItem("My teams", UsersThree),
-            workspaceNavigationItem("Upload center", CloudArrowUp),
-            ...(canUpload
-              ? [
-                  workspaceNavigationItem("Series", Books),
-                  workspaceNavigationItem("Review queue", FileText),
-                ]
-              : []),
+            workspaceNavigationItem("Series", Books, { targetSection: "Series" }),
+            workspaceNavigationItem("Create new serie", Plus, { targetSection: "Series", targetSubsection: "new" }),
+            workspaceNavigationItem("My series Requests", FileText, { targetSection: "Chapters", targetSubsection: "series-requests" }),
+            workspaceNavigationItem("Single Chapter", FileText, { targetSection: "Chapters", targetSubsection: "single" }),
+            workspaceNavigationItem("Multi Chapters", Books, { targetSection: "Chapters", targetSubsection: "multi" }),
+            workspaceNavigationItem("Drafts", FileText, { targetSection: "Chapters", targetSubsection: "drafts" }),
           ],
         },
         {
-          id: "community",
-          label: "Community & insight",
+          id: "teams",
+          label: "Teams",
           items: [
-            ...(actor.role === "TEAM_LEADER"
-              ? [
-                  workspaceNavigationItem("Comments", ChatCircle),
-                  workspaceNavigationItem("Analytics", ChartLineUp),
-                ]
-              : []),
-            workspaceNavigationItem("Rights", ShieldCheck),
-            workspaceNavigationItem("Settings", GearSix),
+            workspaceNavigationItem("My teams", UsersThree, { href: "/teams" }),
+            workspaceNavigationItem("Create team", Plus, { targetSection: "Chapters", targetSubsection: "create-team" }),
+          ],
+        },
+        {
+          id: "other",
+          label: "Other",
+          items: [
+            workspaceNavigationItem("Review Status", CheckCircle, { targetSection: "Chapters", targetSubsection: "review-status" }),
+            workspaceNavigationItem("Upload History", ClockCounterClockwise, { targetSection: "Chapters", targetSubsection: "history" }),
+            workspaceNavigationItem("Upload Rules", Info, { targetSection: "Chapters", targetSubsection: "rules" }),
+            workspaceNavigationItem("Rights", ShieldCheck, { targetSection: "Rights" }),
+          ],
+        },
+        {
+          id: "account",
+          label: "Account",
+          items: [
+            workspaceNavigationItem("Reader Side", House, { href: "/" }),
+            workspaceNavigationItem("Profile", UserCircle, { href: "/account" }),
+            workspaceNavigationItem("Logout", SignOut, { kind: "logout" }),
           ],
         },
       ];
@@ -13302,7 +13321,7 @@ function OperationsView({
   const drawerMode = admin || activeNavigationItem?.slug === "upload-center";
   const dispatchedSection = admin
     ? (activeNavigationItem?.slug ?? normalizeAdminNavigationKey(activeSection))
-    : activeSection;
+    : (activeNavigationItem?.targetSection ?? activeSection);
 
   const sectionHref = useCallback(
     (section: string, subsection?: string) => {
@@ -13315,10 +13334,15 @@ function OperationsView({
           candidate.slug ===
             (destination?.item.slug ?? normalizeAdminNavigationKey(section)),
       );
-      const slug = item?.slug ?? normalizeAdminNavigationKey(section);
-      const canonicalSubsection = canonicalAdminSubsection(item, subsection);
+      const slug = item?.targetSection
+        ? normalizeAdminNavigationKey(item.targetSection)
+        : item?.slug ?? normalizeAdminNavigationKey(section);
+      const canonicalSubsection = item?.targetSubsection
+        ? item.targetSubsection
+        : canonicalAdminSubsection(item, subsection);
+      if (!admin && item?.href) return item.href;
       const base =
-        section === defaultSection && !subsection
+        section === defaultSection && !subsection && !item?.targetSection
           ? sectionBase
           : `${sectionBase}/${slug}`;
       return canonicalSubsection ? `${base}/${canonicalSubsection}` : base;
@@ -13560,7 +13584,7 @@ function OperationsView({
     );
     const resolvedSubsection = admin
       ? canonicalAdminSubsection(item, subsection)
-      : (subsection ?? "");
+      : (item?.targetSubsection ?? subsection ?? "");
     setActiveSection(resolvedSection);
     setActiveSubsection(resolvedSubsection);
     setMobileNavOpen(false);
@@ -13588,7 +13612,7 @@ function OperationsView({
     );
     const resolvedSubsection = admin
       ? canonicalAdminSubsection(item, subsection)
-      : (subsection ?? "");
+      : (item?.targetSubsection ?? subsection ?? "");
     if (
       dirtyState.dirty &&
       !confirmedDiscard &&
@@ -13772,19 +13796,31 @@ function OperationsView({
                   const Icon = item.icon;
                   return (
                     <Fragment key={item.slug}>
-                      <a
-                        className={item.children?.length ? "ops-nav-parent" : undefined}
-                        href={sectionHref(item.label)}
-                        title={effectiveSidebarCollapsed ? item.label : undefined}
-                        aria-current={activeSection === item.label && !activeSubsection ? "page" : undefined}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          openSection(item.label);
-                        }}
-                      >
-                        <Icon size={20} />
-                        <span className="ops-nav-label">{item.label}</span>
-                      </a>
+                      {item.kind === "logout" ? (
+                        <LogoutAction
+                          className="ops-nav-link"
+                          returnTo="/"
+                          onStart={() => setMobileNavOpen(false)}
+                        >
+                          <Icon size={20} />
+                          <span className="ops-nav-label">{item.label}</span>
+                        </LogoutAction>
+                      ) : (
+                        <a
+                          className={item.children?.length ? "ops-nav-parent" : undefined}
+                          href={item.href ?? sectionHref(item.label)}
+                          title={effectiveSidebarCollapsed ? item.label : undefined}
+                          aria-current={!item.href && activeSection === item.label && !activeSubsection ? "page" : undefined}
+                          onClick={(event) => {
+                            if (item.href) return;
+                            event.preventDefault();
+                            openSection(item.label, item.targetSubsection);
+                          }}
+                        >
+                          <Icon size={20} />
+                          <span className="ops-nav-label">{item.label}</span>
+                        </a>
+                      )}
                       {item.children?.map((child) => (
                         <a
                           className="ops-nav-child"
@@ -13826,7 +13862,7 @@ function OperationsView({
             </section>
           ))}
         </nav>
-        <details className="ops-account-menu">
+        {admin ? <details className="ops-account-menu">
           <summary aria-label={`Open account menu for ${actor.displayName}`}>
             <span className="ops-account-avatar">
               {actor.avatarUrl ? (
@@ -13863,7 +13899,7 @@ function OperationsView({
               <span>Logout</span>
             </LogoutAction>
           </div>
-        </details>
+        </details> : null}
       </aside>
       <section className="ops-main">
         {!admin ? <label className="ops-mobile-section">

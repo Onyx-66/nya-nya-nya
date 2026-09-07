@@ -6654,6 +6654,7 @@ export function OperationsControlPanel({
       "review-status",
       "rights",
       "rules",
+      "create-team",
     ].includes(subsection ?? "")
   ) {
     return (

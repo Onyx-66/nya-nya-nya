@@ -4287,29 +4287,9 @@ export function UploadCenterWorkspace({
           <CloudArrowUp size={23} />
           <span>
             <strong>Upload Center</strong>
-            <small>Team publishing workspace</small>
           </span>
         </div>
       </header>
-      <nav
-        className="admin-subnav"
-        aria-label="Upload Center sections"
-        role="tablist"
-      >
-        {availableNavItems.map(([id, label, Icon]) => (
-          <button
-            type="button"
-            role="tab"
-            key={id}
-            aria-selected={selectedMode === id}
-            onClick={() => {
-              window.location.href = routeFor(id);
-            }}
-          >
-            <Icon size={18} /><span>{label}</span>
-          </button>
-        ))}
-      </nav>
       <main className="upload-center-main">
         {error ? (
           <div className="upload-alert is-error" role="alert">
