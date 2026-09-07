@@ -1,4 +1,5 @@
 "use client";
+import { UploadAnalyticsDashboard } from "./UploadAnalyticsDashboard";
 import { PawIcon } from "@/components/nyascans/EconomyTokenIcon";
 import { LanguageSelect } from "@/components/nyascans/LanguageSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
@@ -696,103 +697,6 @@ function JobList({
         </article>
       ))}
     </div>
-  );
-}
-
-function UploadDashboard({
-  jobs,
-  summary,
-  canUpload,
-  canRequestSeries,
-}: {
-  jobs: UploadJob[];
-  summary: Record<string, number>;
-  canUpload: boolean;
-  canRequestSeries: boolean;
-}) {
-  const attention = jobs.filter((job) =>
-    ["FAILED", "REJECTED"].includes(job.status),
-  );
-  return (
-    <section>
-      <header className="upload-section-heading">
-        <div>
-          <span>Publishing operations</span>
-          <h2>Upload Center dashboard</h2>
-          <p>Real drafts, review states, failures, and releases for your current scope.</p>
-        </div>
-      </header>
-      {canUpload ? (
-        <div className="upload-metric-grid">
-          {([
-            ["Drafts", summary.DRAFT ?? 0, FileText],
-            ["Ready", summary.READY ?? 0, CheckCircle],
-            ["Pending review", summary.PENDING_REVIEW ?? 0, Clock],
-            ["Published", summary.PUBLISHED ?? 0, CloudArrowUp],
-          ] as Array<[string, number, PhosphorIcon]>).map(([label, value, Icon]) => (
-            <article key={String(label)}>
-              <Icon size={22} />
-              <span>{String(label)}</span>
-              <strong>{Number(value).toLocaleString()}</strong>
-            </article>
-          ))}
-        </div>
-      ) : null}
-      <div className="upload-primary-actions">
-        {canRequestSeries ? (
-          <a href={routeFor("add-series")}>
-            <Plus size={20} /> <strong>Create new series</strong>
-            <span>Save a draft, then submit it for administrator approval.</span>
-          </a>
-        ) : null}
-        {canUpload ? (
-          <>
-            <a href={routeFor("single")}>
-              <FileImage size={20} /> <strong>Upload one chapter</strong>
-              <span>Validate and preview an ordered release.</span>
-            </a>
-            <a href={routeFor("multi")}>
-              <FolderOpen size={20} /> <strong>Upload a batch</strong>
-              <span>
-                Review up to {UPLOAD_LIMITS.maxChaptersPerJob} chapter folders
-                before publishing.
-              </span>
-            </a>
-          </>
-        ) : null}
-      </div>
-      {canUpload && attention.length ? (
-        <section className="upload-attention">
-          <div className="upload-section-heading">
-            <div>
-              <span>Action required</span>
-              <h3>Failed or returned uploads</h3>
-            </div>
-          </div>
-          <JobList
-            jobs={attention}
-            emptyTitle=""
-            emptyBody=""
-            onRefresh={() => window.location.reload()}
-          />
-        </section>
-      ) : null}
-      {canUpload ? <section>
-        <div className="upload-section-heading">
-          <div>
-            <span>Latest activity</span>
-            <h3>Recent uploads</h3>
-          </div>
-          <a href={routeFor("history")}>View all <ArrowRight size={16} /></a>
-        </div>
-        <JobList
-          jobs={jobs.slice(0, 6)}
-          emptyTitle="No upload activity yet"
-          emptyBody="Choose any public series and one of your verified publishing teams."
-          onRefresh={() => window.location.reload()}
-        />
-      </section> : null}
-    </section>
   );
 }
 
@@ -4234,7 +4138,7 @@ export function UploadCenterWorkspace({
   useEffect(() => {
     if (
       canUpload &&
-      !["add-series", "series-requests", "create-team", "rights"].includes(selectedMode)
+      !["dashboard", "add-series", "series-requests", "create-team", "rights"].includes(selectedMode)
     ) {
       const timeout = window.setTimeout(() => {
         void load(1);
@@ -4274,26 +4178,14 @@ export function UploadCenterWorkspace({
           <TeamCreationPanel />
         ) : selectedMode === "rights" ? (
           <RightsPanel />
-        ) : selectedMode === "dashboard" && !canUpload ? (
-          <UploadDashboard
-            jobs={[]}
-            summary={{}}
-            canUpload={false}
-            canRequestSeries={canRequestSeries}
-          />
+        ) : selectedMode === "dashboard" ? (
+          <UploadAnalyticsDashboard canUpload={canUpload} canRequestSeries={canRequestSeries} />
         ) : loading && !options ? (
           <div className="upload-loading">
             <DotsRing size={24} /> Loading publishing workspace…
           </div>
         ) : options ? (
-          selectedMode === "dashboard" ? (
-            <UploadDashboard
-              jobs={list.data}
-              summary={list.summary}
-              canUpload={canUpload}
-              canRequestSeries={canRequestSeries}
-            />
-          ) : selectedMode === "series" ? (
+          selectedMode === "series" ? (
             <SeriesAccessPanel options={options} />
           ) : selectedMode === "single" ? (
             <UploadComposer key="single" kind="SINGLE" options={options} />

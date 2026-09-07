@@ -26,6 +26,7 @@ export const countryOptions = [
   ["MA", "Morocco"],
   ["MX", "Mexico"],
   ["MY", "Malaysia"],
+  ["MIDDLE_EAST", "Middle East"],
   ["PH", "Philippines"],
   ["PL", "Poland"],
   ["PT", "Portugal"],

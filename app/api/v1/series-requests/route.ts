@@ -105,6 +105,7 @@ export async function GET(request: Request) {
       ...(await listTeamSeriesRequests(db, actor, query)),
       capabilities: {
         teams: await eligibleTeams(actor),
+        genres: (await db.prepare("SELECT id, name FROM genres WHERE archived_at IS NULL ORDER BY name COLLATE NOCASE").all()).results,
         metadataImport: {
           mangaDex: true,
           mangaUpdates: false,

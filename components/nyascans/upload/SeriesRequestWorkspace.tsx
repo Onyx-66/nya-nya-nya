@@ -1,4 +1,7 @@
 "use client";
+import { CountryOriginSelect, GenreMultiSelect } from "./SeriesMetadataSelects";
+import { SeriesArtworkCrop } from "./SeriesArtworkCrop";
+import { createPortal } from "react-dom";
 import { LanguageSelect } from "@/components/nyascans/LanguageSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
@@ -542,6 +545,20 @@ export function AddSeriesRequestPanel() {
   const [requestRecord, setRequestRecord] = useState<RequestRecord | null>(null);
   const [cover, setCover] = useState<File | null>(null);
   const [banner, setBanner] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState("");
+  const [bannerPreview, setBannerPreview] = useState("");
+  const [crop, setCrop] = useState<{ file: File; slot: "cover" | "banner" } | null>(null);
+  const [genreOptions, setGenreOptions] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    const url = cover ? URL.createObjectURL(cover) : "";
+    setCoverPreview(url);
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [cover]);
+  useEffect(() => {
+    const url = banner ? URL.createObjectURL(banner) : "";
+    setBannerPreview(url);
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [banner]);
   const [busy, setBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importSource, setImportSource] = useState<"MANGADEX" | "MANGAUPDATES">("MANGADEX");
@@ -577,7 +594,7 @@ export function AddSeriesRequestPanel() {
       .then((response) =>
         readJson<{
           data: RequestRecord[] | RequestRecord;
-          capabilities: { teams: TeamOption[] };
+          capabilities: { teams: TeamOption[]; genres?: Array<{ id: string; name: string }> };
         }>(response),
       )
       .then((payload) => {
@@ -591,6 +608,7 @@ export function AddSeriesRequestPanel() {
               capabilities?: { teams?: TeamOption[] };
             }
           ).capabilities?.teams ?? [];
+        setGenreOptions(payload.capabilities?.genres ?? []);
         setTeams(availableTeams);
         setTeamsLoaded(true);
         if (availableTeams.length) {
@@ -621,10 +639,11 @@ export function AddSeriesRequestPanel() {
     void fetch("/api/v1/series-requests?limit=1", { cache: "no-store" })
       .then((response) =>
         readJson<{
-          capabilities: { teams: TeamOption[] };
+          capabilities: { teams: TeamOption[]; genres?: Array<{ id: string; name: string }> };
         }>(response),
       )
       .then((payload) => {
+        setGenreOptions(payload.capabilities.genres ?? []);
         setTeams(payload.capabilities.teams ?? []);
         setTeamsLoaded(true);
       })
@@ -654,7 +673,9 @@ export function AddSeriesRequestPanel() {
         body,
       }),
     );
-    return { ...request, revision: payload.data.revision };
+    return { ...request, revision: payload.data.revision,
+      [slot === "cover" ? "coverUrl" : "bannerUrl"]: `/api/v1/series-request-media?id=${encodeURIComponent(request.id)}&slot=${slot}&v=${payload.data.revision}`,
+    };
   }
 
   async function previewExternalMetadata() {
@@ -852,8 +873,18 @@ export function AddSeriesRequestPanel() {
         );
         saved = updated.data;
       }
-      if (cover) saved = await uploadMedia(saved, "cover", cover);
-      if (banner) saved = await uploadMedia(saved, "banner", banner);
+      setRequestRecord(saved);
+      window.history.replaceState({}, "", `/upload-chapter/add-series?id=${encodeURIComponent(saved.id)}`);
+      if (cover) {
+        saved = await uploadMedia(saved, "cover", cover);
+        setRequestRecord(saved);
+        setCover(null);
+      }
+      if (banner) {
+        saved = await uploadMedia(saved, "banner", banner);
+        setRequestRecord(saved);
+        setBanner(null);
+      }
       if (intent === "SUBMIT") {
         const submitted = await readJson<{ data: RequestRecord }>(
           await fetch("/api/v1/series-requests", {
@@ -936,6 +967,8 @@ export function AddSeriesRequestPanel() {
 
   return (
     <section className="upload-request-panel">
+      {crop ? createPortal(<SeriesArtworkCrop file={crop.file} slot={crop.slot} onCancel={() => setCrop(null)}
+        onSave={(file) => { if (crop.slot === "cover") setCover(file); else setBanner(file); setCrop(null); }} />, document.body) : null}
       <header className="upload-section-heading">
         <div>
           <span>Administrator-reviewed catalogue entry</span>
@@ -982,7 +1015,7 @@ export function AddSeriesRequestPanel() {
         />
         <fieldset disabled={!editable || busy}>
           <legend>Title and team</legend>
-          <div className="upload-form-grid">
+          <div className="upload-form-grid series-title-team-grid">
             <div className="upload-combobox-field">
               <span>Submitting team</span>
               <AdminCombobox
@@ -1130,32 +1163,16 @@ export function AddSeriesRequestPanel() {
                 }
               />
             </label>
-            <label>
+            <div className="upload-combobox-field">
               <span>Genres</span>
-              <input
-                value={form.genres}
-                required
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, genres: event.target.value }))
-                }
-                placeholder="Action, Fantasy"
-              />
-            </label>
-            <label>
+              <GenreMultiSelect values={splitValues(form.genres)} options={genreOptions}
+                onChange={(values) => setForm((current) => ({ ...current, genres: values.join(", ") }))} />
+            </div>
+            <div className="upload-combobox-field">
               <span>Country of origin</span>
-              <input
-                value={form.countryCode}
-                minLength={2}
-                maxLength={2}
-                required
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    countryCode: event.target.value.toUpperCase(),
-                  }))
-                }
-              />
-            </label>
+              <CountryOriginSelect value={form.countryCode}
+                onChange={(countryCode) => setForm((current) => ({ ...current, countryCode }))} />
+            </div>
             <label>
               <span>Original language</span>
               <LanguageSelect
@@ -1200,12 +1217,12 @@ export function AddSeriesRequestPanel() {
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => setCover(event.target.files?.[0] ?? null)}
+                onChange={(event) => { const file = event.target.files?.[0]; if (file) setCrop({ file, slot: "cover" }); event.target.value = ""; }}
               />
-              {requestRecord?.coverUrl ? (
+              {coverPreview || requestRecord?.coverUrl ? (
                 <img
-                  src={`/api/v1/series-request-media?id=${encodeURIComponent(requestRecord.id)}&slot=cover&v=${requestRecord.revision}`}
-                  alt="Current request cover"
+                  src={coverPreview || requestRecord?.coverUrl || ""}
+                  className="series-cover-preview" alt="Selected series cover"
                 />
               ) : null}
             </label>
@@ -1213,13 +1230,14 @@ export function AddSeriesRequestPanel() {
               <ImageIcon size={22} />
               <span>
                 <strong>Banner · optional</strong>
-                <small>Wide JPEG, PNG, or WebP.</small>
+                <small>Choose an image, then crop your banner.</small>
               </span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => setBanner(event.target.files?.[0] ?? null)}
+                onChange={(event) => { const file = event.target.files?.[0]; if (file) setCrop({ file, slot: "banner" }); event.target.value = ""; }}
               />
+              {bannerPreview || requestRecord?.bannerUrl ? <img className="series-banner-preview" src={bannerPreview || requestRecord?.bannerUrl || ""} alt="Selected series banner" /> : null}
             </label>
           </div>
         </fieldset>

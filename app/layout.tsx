@@ -20,6 +20,7 @@ import "./globals.css";
 import "./admin.css";
 import "./theme-surfaces.css";
 import "./dropdown-surfaces.css";
+import "./upload-center.css";
 
 const cachedThemeVariableNames = [
   ...themeTokenKeys.map(cssVariableForToken),
