@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { ApiError } from "@/lib/server/api";
-import { getAdUnlockReadiness } from "@/lib/server/ad-unlocks";
+import { getAdUnlockReadiness } from "@/lib/server/ad-unlock-readiness";
 import { getCommercialSettingsDocument } from "@/lib/server/commercial-settings";
 import { getStripeReadiness } from "@/lib/server/payments/config";
 import { getTeamPayoutReadiness } from "@/lib/server/payments/team-payouts";
@@ -12,9 +12,11 @@ export const FEATURE_KEYS = [
   "memberships",
   "ad_supported_unlocks",
   "team_payouts",
-  "mature_content",
-  "public_comments",
 ] as const;
+
+// The historical `mature_content` and `public_comments` rows remain in D1 for
+// audit continuity, but they are intentionally absent from the active control
+// registry. Those behaviors are governed by preferences and discussion policy.
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type FeatureState = {
@@ -135,17 +137,6 @@ export async function requireFeature(key: FeatureKey, db?: D1Database) {
     );
   }
   return state;
-}
-
-/**
- * The global Paid System switch is deliberately separate from Stripe
- * readiness. When administrators turn the switch off, every paid surface is
- * unavailable immediately; when it is on, checkout still has to pass the
- * provider-specific `payments.effective` check before a charge can start.
- */
-export async function paidSystemIsEnabled(db?: D1Database) {
-  const states = await getFeatureStates(db);
-  return states.payments.enabled && states.premium_unlocks.effective;
 }
 
 export async function requirePaidSystem(db?: D1Database, status = 503) {

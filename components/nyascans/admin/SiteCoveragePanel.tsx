@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
@@ -344,7 +345,7 @@ export function SiteCoveragePanel({
 
       {tab === "security" && data.permissions.securityRead ? <>
         <section className="governance-section"><header><ShieldCheck /><div><h3>Administrator passkeys</h3><p>Registered authenticators are listed without credential material. A passkey is a one-time enrollment requirement for admin-console access; normal site login is unchanged.</p></div></header><div className="governance-record-list">{data.passkeys.map((passkey) => <article key={passkey.id}><div><strong>{passkey.deviceName}</strong><span>{passkey.userName} · {passkey.email}</span><small>{passkey.deviceType}{passkey.backedUp ? " · Synced" : ""} · Added {humanDate(passkey.createdAt)} · Last used {humanDate(passkey.lastUsedAt)}</small></div><Reference id={passkey.id} /></article>)}</div></section>
-        <section className="governance-section"><header><WarningCircle /><div><h3>Security audit trail</h3><p>Immutable administrator authentication, authorization, and security events remain available through the dedicated Audit Log.</p></div></header><div className="governance-record-list"><article><div><strong>Audit Log</strong><span>Passkey enrollment and admin access decisions</span><small>Use the owner-only Audit Log for event-level investigation and request references.</small></div><a className="button button-secondary" href="/onyx/admin/access/audit-log">Open Audit Log</a></article></div></section>
+        <section className="governance-section"><header><WarningCircle /><div><h3>Security audit trail</h3><p>Immutable administrator authentication, authorization, and security events remain available through the dedicated Audit Log.</p></div></header><div className="governance-record-list"><article><div><strong>Audit Log</strong><span>Passkey enrollment and admin access decisions</span><small>Use the owner-only Audit Log for event-level investigation and request references.</small></div><Link className="button button-secondary" href="/onyx/admin/access/audit-log">Open Audit Log</Link></article></div></section>
       </> : null}
       <div className="admin-pagination" aria-label="Platform registry pages">
         <span>Page {data.pagination.page}{appliedQuery ? ` · Filter: ${appliedQuery}` : ""}</span>

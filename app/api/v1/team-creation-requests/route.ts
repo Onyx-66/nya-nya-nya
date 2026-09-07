@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApiError, errorResponse, json } from "@/lib/server/api";
-import { assertSameOrigin, auditStatement, requestIdFor, sha256Hex, validateImageFile } from "@/lib/server/admin-utils";
+import { assertSameOrigin, auditStatement, deleteMediaObject, requestIdFor, sha256Hex, validateImageFile } from "@/lib/server/admin-utils";
 import { requireActor } from "@/lib/server/policy";
 import { randomId } from "@/lib/server/random-id";
 import { env } from "cloudflare:workers";
@@ -107,6 +107,8 @@ export async function POST(request: Request) {
   const requestId = requestIdFor(request);
   let logoKey: string | null = null;
   let bannerKey: string | null = null;
+  let teamRequestId = requestId;
+  let mediaCommitted = false;
   try {
     assertSameOrigin(request);
     const actor = await requireActor();
@@ -136,6 +138,7 @@ export async function POST(request: Request) {
     const existingRequest = await db.prepare("SELECT id FROM team_creation_requests WHERE lower(name) = lower(?) AND status IN ('PENDING', 'APPROVED') LIMIT 1").bind(payload.name).first<{ id: string }>();
     if (existingTeam || existingRequest) throw new ApiError(409, "TEAM_NAME_EXISTS", "A team with this name already exists.");
     const id = `team_create_${randomId()}`;
+    teamRequestId = id;
     const slug = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 72) || `team-${randomId().slice(0, 8)}`;
     logoKey = await storeRequestImage(logo, "logo", actor.id, id);
     bannerKey = await storeRequestImage(banner, "banner", actor.id, id);
@@ -157,6 +160,19 @@ export async function POST(request: Request) {
         metadata: { externalLinkCount: payload.externalLinks.length, memberCount: payload.memberEmails.length, hasLogo: true, hasBanner: true },
       }),
     ]);
+    mediaCommitted = true;
     return json(requestId, { data: await snapshot(actor.id) }, { status: 201, headers: { "cache-control": "private, no-store" } });
-  } catch (error) { return errorResponse(requestId, error); }
+  } catch (error) {
+    if (!mediaCommitted && env.DB && env.BUCKET) {
+      await Promise.allSettled([logoKey, bannerKey].filter((key): key is string => Boolean(key)).map((objectKey) =>
+        deleteMediaObject(env.DB!, env.BUCKET!, objectKey, {
+          mediaKind: "TEAM_CREATION_MEDIA",
+          targetType: "TEAM_CREATION_REQUEST",
+          targetId: teamRequestId,
+          reason: "Rolled back an incomplete team creation request",
+        }),
+      ));
+    }
+    return errorResponse(requestId, error);
+  }
 }

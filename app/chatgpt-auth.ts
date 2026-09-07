@@ -1,5 +1,4 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { getPasswordSessionIdentity, type SessionAuthMethod } from "@/lib/server/local-auth";
 
 export type ChatGPTUser = {
@@ -53,20 +52,6 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> 
   return getPasswordSessionIdentity(new Headers(await headers()));
 }
 
-export async function requireChatGPTUser(
-  returnTo: string,
-): Promise<ChatGPTUser> {
-  const user = await getChatGPTUser();
-  if (user) return user;
-
-  redirect(chatGPTSignInPath(returnTo));
-}
-
-export function chatGPTSignInPath(returnTo: string): string {
-  const safeReturnTo = safeAuthReturnPath(returnTo);
-  return `${SIGN_IN_PATH}?return_to=${encodeURIComponent(safeReturnTo)}`;
-}
-
 export function chatGPTSignOutPath(returnTo = "/"): string {
   const safeReturnTo = safeAuthReturnPath(returnTo);
   return `${SIGN_OUT_PATH}?return_to=${encodeURIComponent(safeReturnTo)}`;
@@ -74,10 +59,6 @@ export function chatGPTSignOutPath(returnTo = "/"): string {
 
 export function loginPath(returnTo = "/"): string {
   return `/login?returnTo=${encodeURIComponent(safeAuthReturnPath(returnTo))}`;
-}
-
-export function signupPath(returnTo = "/"): string {
-  return `/signup?returnTo=${encodeURIComponent(safeAuthReturnPath(returnTo))}`;
 }
 
 export function safeAuthReturnPath(value: string): string {

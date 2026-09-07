@@ -45,13 +45,6 @@ export function PremiumDateRangePicker({
   const [menu, setMenu] = useState<"month" | "year" | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      setDraftStart(start ? parsePickerDate(start) : null);
-      setDraftEnd(end ? parsePickerDate(end) : null);
-    }
-  }, [open, start, end]);
-
-  useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
@@ -140,7 +133,16 @@ export function PremiumDateRangePicker({
         <button type="button" onClick={clear} disabled={disabled}><Eraser size={16} />Clear</button>
         <button type="button" className="button button-primary" onClick={apply} disabled={disabled || (!draftStart && !draftEnd)}><Check size={17} />Apply Range</button>
       </div>
-      <button type="button" className="premium-picker-trigger premium-range-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
+      <button type="button" className="premium-picker-trigger premium-range-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => {
+        if (!open) {
+          const nextStart = start ? parsePickerDate(start) : null;
+          const nextEnd = end ? parsePickerDate(end) : null;
+          setDraftStart(nextStart);
+          setDraftEnd(nextEnd);
+          if (nextStart) setViewMonth(new Date(nextStart.getFullYear(), nextStart.getMonth(), 1));
+        }
+        setOpen((current) => !current);
+      }}>
         <span className="premium-picker-trigger-label">{label}</span>
         <span className="premium-range-trigger-value"><CalendarBlank size={18} />{displayRangeValue(start, shownStart)}<span aria-hidden="true">→</span>{displayRangeValue(end, shownEnd)}</span>
         <span className="premium-range-duration">{daysBetween(start ? parsePickerDate(start) : null, end ? parsePickerDate(end) : null)} Days</span>

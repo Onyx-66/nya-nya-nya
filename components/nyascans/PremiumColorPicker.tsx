@@ -117,13 +117,6 @@ export function PremiumColorPicker({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const normalized = normalizeHex(value);
-    if (!normalized) return;
-    setDraft(normalized);
-    setAlpha(alphaFromHex(normalized));
-  }, [value]);
-
-  useEffect(() => {
     if (!open) return;
     function close(event: PointerEvent) {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
@@ -197,7 +190,14 @@ export function PremiumColorPicker({
 
   return (
     <div ref={rootRef} className={`premium-color-picker ${className}`.trim()}>
-      <button type="button" className="premium-color-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen(true)}>
+      <button type="button" className="premium-color-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => {
+        const normalized = normalizeHex(value);
+        if (normalized) {
+          setDraft(normalized);
+          setAlpha(alphaFromHex(normalized));
+        }
+        setOpen(true);
+      }}>
         <span className="premium-color-trigger-swatch" style={{ backgroundColor: output }} aria-hidden="true" />
         <span><strong>{label}</strong><code>{output}</code></span>
         <Palette size={18} aria-hidden="true" />
@@ -215,7 +215,7 @@ export function PremiumColorPicker({
           ) : null}
           {tab === "spectrum" ? (
             <div className="premium-color-spectrum-area">
-              <div ref={fieldRef} className="premium-color-spectrum" style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))` }} onPointerDown={updateSpectrum} onPointerMove={(event) => { if (event.buttons) updateSpectrum(event); }} role="slider" aria-label="Saturation and brightness" aria-valuetext={draft} tabIndex={0}>
+              <div ref={fieldRef} className="premium-color-spectrum" style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))` }} onPointerDown={updateSpectrum} onPointerMove={(event) => { if (event.buttons) updateSpectrum(event); }} role="slider" aria-label="Saturation and brightness" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(hsv.v * 100)} aria-valuetext={`${Math.round(hsv.s * 100)}% saturation, ${Math.round(hsv.v * 100)}% brightness, ${draft}`} tabIndex={0}>
                 <span style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%` }} />
               </div>
               <div className="premium-color-hue" onPointerDown={updateHue} onPointerMove={(event) => { if (event.buttons) updateHue(event); }} role="slider" aria-label="Hue" aria-valuenow={Math.round(hsv.h)} aria-valuemin={0} aria-valuemax={360} tabIndex={0}><span style={{ left: `${(hsv.h / 360) * 100}%` }} /></div>

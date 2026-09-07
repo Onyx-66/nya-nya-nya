@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
-import { unzipSync } from "fflate";
 import { errorResponse, ApiError } from "@/lib/server/api";
+import { extractBoundedImageArchive } from "@/lib/server/bounded-image-archive";
+import { deleteMediaObject } from "@/lib/server/admin-utils";
 import { validateChapterPage, privatePageObjectKey } from "@/lib/server/upload-jobs";
 import { newPublicReference } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
@@ -48,19 +49,9 @@ async function parseRequest(request: Request) {
 
 async function archivePages(archive: File) {
   const bytes = new Uint8Array(await archive.arrayBuffer());
-  if (bytes.byteLength > 250 * 1024 * 1024) throw new ApiError(413, "SOURCE_TOO_LARGE", "The attached archive exceeds the upload size limit.");
-  let entries: Record<string, Uint8Array>;
-  try { entries = unzipSync(bytes); } catch { throw new ApiError(422, "SOURCE_ARCHIVE_INVALID", "The attached ZIP/CBZ source could not be safely extracted."); }
-  const pageEntries = Object.entries(entries).filter(([name, value]) => value.byteLength > 0 && /\.(?:jpe?g|png|webp)$/iu.test(name)).sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }));
-  if (!pageEntries.length) throw new ApiError(422, "SOURCE_ARCHIVE_EMPTY", "The attached ZIP/CBZ source contains no supported image pages.");
-  if (pageEntries.length > 500) throw new ApiError(422, "SOURCE_ARCHIVE_FILE_LIMIT", "The attached ZIP/CBZ source contains more than 500 image pages.");
-  const totalBytes = pageEntries.reduce((sum, [, value]) => sum + value.byteLength, 0);
-  if (totalBytes > 250 * 1024 * 1024 || totalBytes > Math.max(bytes.byteLength * 30, 10 * 1024 * 1024)) throw new ApiError(413, "SOURCE_ARCHIVE_RATIO_LIMIT", "The attached ZIP/CBZ compression ratio or extracted size exceeds the safe limit.");
-  return pageEntries.map(([name, value], index) => {
-    const normalized = name.replaceAll("\\\\", "/");
-    if (normalized.startsWith("/") || normalized.split("/").includes("..") || normalized.split("/").some((part) => part.startsWith("."))) throw new ApiError(422, "SOURCE_ARCHIVE_PATH_INVALID", "The attached ZIP/CBZ source contains an unsafe page path.");
-    const type = /\.png$/iu.test(normalized) ? "image/png" : /\.webp$/iu.test(normalized) ? "image/webp" : "image/jpeg";
-    return { file: new File([value.slice().buffer as ArrayBuffer], normalized.split("/").at(-1) || `page-${index + 1}`, { type }), sourcePath: `${archive.name}#${normalized}` };
+  return extractBoundedImageArchive(bytes).map((entry) => {
+    const type = /\.png$/iu.test(entry.normalizedPath) ? "image/png" : /\.webp$/iu.test(entry.normalizedPath) ? "image/webp" : "image/jpeg";
+    return { file: new File([entry.bytes.slice().buffer as ArrayBuffer], entry.filename, { type }), sourcePath: `${archive.name}#${entry.normalizedPath}` };
   });
 }
 
@@ -72,20 +63,9 @@ async function externalPages(sourceUrl: string) {
   const lowerUrl = source.url.toLowerCase();
   const isZip = source.contentType === "application/zip" || source.contentType === "application/x-cbz" || lowerUrl.endsWith(".zip") || lowerUrl.endsWith(".cbz");
   if (isZip) {
-    let entries: Record<string, Uint8Array>;
-    try { entries = unzipSync(source.bytes); } catch { throw new ApiError(422, "SOURCE_ARCHIVE_INVALID", "The ZIP/CBZ source could not be safely extracted."); }
-    const pageEntries = Object.entries(entries)
-      .filter(([name, bytes]) => bytes.byteLength > 0 && /\.(?:jpe?g|png|webp)$/iu.test(name))
-      .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }));
-    if (!pageEntries.length) throw new ApiError(422, "SOURCE_ARCHIVE_EMPTY", "The ZIP/CBZ source contains no supported image pages.");
-    if (pageEntries.length > 500) throw new ApiError(422, "SOURCE_ARCHIVE_FILE_LIMIT", "The ZIP/CBZ source contains more than 500 image pages.");
-    const totalBytes = pageEntries.reduce((sum, [, bytes]) => sum + bytes.byteLength, 0);
-    if (totalBytes > 250 * 1024 * 1024 || totalBytes > Math.max(source.bytes.byteLength * 30, 10 * 1024 * 1024)) throw new ApiError(413, "SOURCE_ARCHIVE_RATIO_LIMIT", "The ZIP/CBZ compression ratio or extracted size exceeds the safe limit.");
-    return pageEntries.map(([name, bytes], index) => {
-      const normalized = name.replaceAll("\\\\", "/");
-      if (normalized.startsWith("/") || normalized.split("/").includes("..") || normalized.split("/").some((part) => part.startsWith("."))) throw new ApiError(422, "SOURCE_ARCHIVE_PATH_INVALID", "The ZIP/CBZ source contains an unsafe page path.");
-      const type = /\.png$/iu.test(normalized) ? "image/png" : /\.webp$/iu.test(normalized) ? "image/webp" : "image/jpeg";
-      return { file: new File([bytes.slice().buffer as ArrayBuffer], normalized.split("/").at(-1) || `page-${index + 1}`, { type }), sourcePath: `${source.url}#${normalized}` };
+    return extractBoundedImageArchive(source.bytes).map((entry) => {
+      const type = /\.png$/iu.test(entry.normalizedPath) ? "image/png" : /\.webp$/iu.test(entry.normalizedPath) ? "image/webp" : "image/jpeg";
+      return { file: new File([entry.bytes.slice().buffer as ArrayBuffer], entry.filename, { type }), sourcePath: `${source.url}#${entry.normalizedPath}` };
     });
   }
   if (source.contentType.includes("rar") || lowerUrl.endsWith(".rar")) throw new ApiError(422, "SOURCE_RAR_UNSUPPORTED", "RAR sources are rejected because this deployment has no audited RAR extraction worker.");
@@ -106,6 +86,8 @@ export async function POST(request: Request) {
   let context: Awaited<ReturnType<typeof botContext>> | null = null;
   const endpoint = "POST /api/v1/bot/chapters";
   let idempotencyKey = "";
+  const writtenObjectKeys: string[] = [];
+  let mediaCommitted = false;
   try {
     context = await botContext(request, "bot:chapter:create");
     const parsed = await parseRequest(request);
@@ -135,6 +117,7 @@ export async function POST(request: Request) {
       if (totalBytes > 250 * 1024 * 1024) throw new ApiError(413, "CHAPTER_TOO_LARGE", "A Bot chapter may contain at most 250 MB of page data.");
       const objectKey = privatePageObjectKey(context.actor.id, jobId, itemId, randomId());
       await env.BUCKET.put(objectKey, item.bytes, { httpMetadata: { contentType: item.contentType }, customMetadata: { actorId: context.actor.id, uploadJobId: jobId, uploadJobItemId: itemId, source: "BOT_API" } });
+      writtenObjectKeys.push(objectKey);
       validated.push({ objectKey, filename: item.filename, sourcePath: item.normalizedPath, contentType: item.contentType, byteSize: item.bytes.byteLength, pageIndex: index, sha256: item.sha256, width: item.dimensions.width, height: item.dimensions.height, validationJson: JSON.stringify({ dimensions: item.dimensions, source: "BOT_API" }), bytes: item.bytes });
     }
     const operationId = `bot_op_${randomId()}`;
@@ -149,9 +132,20 @@ export async function POST(request: Request) {
     ];
     for (const page of validated) statements.push(db.prepare(`INSERT INTO upload_sessions (id, user_id, team_id, upload_job_id, upload_job_item_id, object_key, filename, source_path, content_type, byte_size, page_index, sha256, width, height, expires_at, status, validation_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+14 days'), 'READY', ?)`).bind(`bot_session_${randomId()}`, context.actor.id, team.id, jobId, itemId, page.objectKey, page.filename, page.sourcePath, page.contentType, page.byteSize, page.pageIndex, page.sha256, page.width, page.height, page.validationJson));
     await db.batch(statements);
+    mediaCommitted = true;
     await botIdempotencyFinish(context, endpoint, idempotencyKey, response, [chapterRef, operationId, jobId]);
     return botJson(context, response, { status: 201 });
   } catch (error) {
+    if (!mediaCommitted && context && env.BUCKET && env.DB) {
+      await Promise.allSettled(writtenObjectKeys.map((objectKey) =>
+        deleteMediaObject(env.DB!, env.BUCKET!, objectKey, {
+          mediaKind: "BOT_CHAPTER_PAGE",
+          targetType: "BOT_CHAPTER_UPLOAD",
+          targetId: idempotencyKey || context!.requestId,
+          reason: "Rolled back an incomplete Bot chapter upload",
+        }),
+      ));
+    }
     if (context && idempotencyKey) await botIdempotencyFail(context, endpoint, idempotencyKey, error);
     if (context) await botFailureAudit(context, endpoint, error);
     return errorResponse(botRequestId(request), error);

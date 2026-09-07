@@ -1,6 +1,5 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
-
+import Link from "next/link";
 import {
   ArrowRight,
   Books,
@@ -146,8 +145,6 @@ function usePinnedSeries(initialRecords?: PinnedSeriesRecord[]) {
 
   useEffect(() => {
     if (initialRecords !== undefined) return;
-    setLoading(true);
-    setError("");
     const controller = new AbortController();
     void (async () => {
       try {
@@ -176,7 +173,11 @@ function usePinnedSeries(initialRecords?: PinnedSeriesRecord[]) {
     records: initialRecords ?? fetchedRecords,
     loading: initialRecords === undefined && loading,
     error: initialRecords === undefined ? error : "",
-    retry: () => setRevision((value) => value + 1),
+    retry: () => {
+      setLoading(true);
+      setError("");
+      setRevision((value) => value + 1);
+    },
   };
 }
 
@@ -390,12 +391,6 @@ export function PinnedSeriesSection({
     }
     setActiveIndex(nextIndex);
   }, [featuredRecords.length]);
-
-  useEffect(() => {
-    if (featuredRecords.length && activeIndex >= featuredRecords.length) {
-      setActiveIndex(0);
-    }
-  }, [activeIndex, featuredRecords.length]);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -700,7 +695,7 @@ function DiscountSpotlight({
           <a className="v481-spotlight-primary" href={record.href}>Unlock now</a>
           <a className="v481-spotlight-secondary" href={record.href}>Save for later</a>
         </div>
-        <a className="v481-spotlight-all" href="/discounts">See all deals</a>
+        <Link className="v481-spotlight-all" href="/discounts">See all deals</Link>
       </div>
     </article>
   );
@@ -748,7 +743,7 @@ function DiscountTicket({
   }
 }
 
-function DiscountLoading({ count: _count = 4 }: { count?: number }) {
+function DiscountLoading() {
   return (
     <div className="dots-ring-loading v481-discount-rail is-loading" role="status" aria-label="Loading discounts">
       <DotsRing size="xl" label={null} />
@@ -842,8 +837,6 @@ export function RecentReviewsSection() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
     void fetchWithHomeTimeout("/api/v1/recent-reviews?limit=6", { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json()) as PublicDataResponse<RecentReviewRecord>;
@@ -899,7 +892,11 @@ export function RecentReviewsSection() {
               <Star size={26} />
               <strong>Recent reviews could not be loaded</strong>
               <span>{error}</span>
-              <button type="button" onClick={() => setRevision((value) => value + 1)}>
+              <button type="button" onClick={() => {
+                setLoading(true);
+                setError("");
+                setRevision((value) => value + 1);
+              }}>
                 Try again
               </button>
             </div>
@@ -981,7 +978,7 @@ export function DiscountsDirectory({
         </label>
       </header>
       {loading ? (
-        <DiscountLoading count={8} />
+        <DiscountLoading />
       ) : error ? (
         <div className="public-discovery-error" role="alert">{error}</div>
       ) : visibleRecords.length ? (

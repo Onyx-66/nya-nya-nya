@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { normalizedLookupKey } from "@/lib/admin-metadata";
 import { ApiError, errorResponse } from "@/lib/server/api";
-import { validateImageFile, safeFilename, sha256Hex } from "@/lib/server/admin-utils";
+import { deleteMediaObject, validateImageFile, safeFilename, sha256Hex } from "@/lib/server/admin-utils";
 import { newPublicReference, publicReferenceReservationStatement } from "@/lib/server/public-identifiers";
 import { randomId } from "@/lib/server/random-id";
 import { findNormalizedEquivalent } from "@/lib/server/taxonomy-equivalence";
@@ -30,8 +30,6 @@ const seriesSchema = z.object({
   externalSources: z.array(z.object({ provider: z.enum(["MANGADEX", "MANGAUPDATES"]), url: z.string().url().max(600) })).max(2).default([]),
   coverUrl: z.string().url().max(600).nullable().default(null),
 });
-
-type SeriesPayload = z.infer<typeof seriesSchema>;
 
 async function parseRequest(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
@@ -87,6 +85,8 @@ export async function POST(request: Request) {
   let context: Awaited<ReturnType<typeof botContext>> | null = null;
   const endpoint = "POST /api/v1/bot/series";
   let idempotencyKey = "";
+  let uploadedCoverKey: string | null = null;
+  let mediaCommitted = false;
   try {
     context = await botContext(request, "bot:series:create");
     const actorId = context.actor.id;
@@ -127,6 +127,7 @@ export async function POST(request: Request) {
       const extension = cover.contentType === "image/jpeg" ? "jpg" : cover.contentType === "image/png" ? "png" : "webp";
       coverKey = `private/series-covers/${seriesId}/${randomId()}.${extension}`;
       await env.BUCKET.put(coverKey, cover.bytes, { httpMetadata: { contentType: cover.contentType }, customMetadata: { actorId: context.actor.id, seriesId, source: "BOT_API" } });
+      uploadedCoverKey = coverKey;
     }
     const response = { data: { id: publicRef, publicRef, slug: parsed.payload.slug, title: parsed.payload.title, teamId: team.publicRef, state: "DRAFT", reviewRequired: true, coverAttached: Boolean(coverKey) } };
     await botDatabase().batch([
@@ -139,9 +140,18 @@ export async function POST(request: Request) {
       ...parsed.payload.externalSources.map((source) => botDatabase().prepare("INSERT INTO series_external_sources (id, series_id, source, external_id, source_url, last_imported_by_user_id) VALUES (?, ?, ?, ?, ?, ?)").bind(randomId(), seriesId, source.provider, source.url, source.url, actorId)),
       botAudit(context, { action: "bot.series.create", targetType: "SERIES", targetId: publicRef, targetLabel: parsed.payload.title, metadata: { teamId: team.publicRef, slug: parsed.payload.slug, coverSha256: cover?.sha256 ?? null, creatorCount: creatorRefs.length, genreCount: parsed.payload.genreNames.length, publisherId, alternativeTitleCount: parsed.payload.alternativeTitles.length } }),
     ]);
+    mediaCommitted = true;
     await botIdempotencyFinish(context, endpoint, idempotencyKey, response, [publicRef]);
     return botJson(context, response, { status: 201 });
   } catch (error) {
+    if (!mediaCommitted && uploadedCoverKey && env.BUCKET && env.DB) {
+      await deleteMediaObject(env.DB, env.BUCKET, uploadedCoverKey, {
+        mediaKind: "SERIES_COVER",
+        targetType: "BOT_SERIES",
+        targetId: idempotencyKey || context?.requestId || "unknown",
+        reason: "Rolled back an incomplete Bot series creation",
+      });
+    }
     if (context && idempotencyKey) await botIdempotencyFail(context, endpoint, idempotencyKey, error);
     if (context) await botFailureAudit(context, endpoint, error);
     return errorResponse(botRequestId(request), error);

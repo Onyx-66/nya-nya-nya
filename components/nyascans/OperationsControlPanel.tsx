@@ -333,18 +333,6 @@ type AdminUser = {
   }>;
 };
 
-type AuditRecord = {
-  id: string;
-  action: string;
-  targetType: string;
-  targetId: string;
-  reason: string | null;
-  requestId: string;
-  createdAt: string;
-  actorName: string | null;
-  actorEmail: string | null;
-};
-
 type ApiFailure = {
   error?: { message?: string };
 };
@@ -5479,99 +5467,6 @@ function ActivityLogWorkspace({
         )}
       </div>
     </AdminPageScaffold>
-  );
-}
-
-// Kept for compatibility with older embedded audit views; the owner route
-// uses the normalized read-only audit workspace.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function AuditLogPanel() {
-  const [records, setRecords] = useState<AuditRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-
-  async function load() {
-    setLoading(true);
-    try {
-      const payload = await fetch("/api/v1/admin/audit").then((response) =>
-        readJson<{ data: AuditRecord[] }>(response),
-      );
-      setRecords(payload.data ?? []);
-      setError("");
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Audit history could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
-
-  const visible = records.filter((record) =>
-    `${record.action} ${record.targetType} ${record.targetId} ${record.actorName ?? ""} ${record.actorEmail ?? ""}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
-
-  return (
-    <section className="control-panel">
-      <PanelHeader
-        icon={<FileText size={18} />}
-        kicker="Accountability"
-        title="Audit log"
-        description="Immutable operational history for administrator and publishing changes. Request IDs make support investigations traceable."
-        actions={
-          <label className="control-search">
-            <MagnifyingGlass size={17} />
-            <span className="sr-only">Search audit log</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search action, actor, or target"
-            />
-          </label>
-        }
-      />
-      {error ? <PanelMessage kind="error">{error}</PanelMessage> : null}
-      {loading ? (
-        <LoadingPanel />
-      ) : visible.length ? (
-        <div className="audit-list">
-          {visible.map((record) => (
-            <article key={record.id}>
-              <span>
-                <Check size={15} />
-              </span>
-              <div>
-                <strong>{humanize(record.action)}</strong>
-                <small>
-                  {record.actorName ?? "System"} · {record.actorEmail ?? "no email"}
-                </small>
-              </div>
-              <div>
-                <strong>{record.targetType}</strong>
-                <small>{record.targetId}</small>
-              </div>
-              <time>{formatDate(record.createdAt)}</time>
-              <code title={record.requestId}>{record.requestId.slice(0, 12)}</code>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <EmptyPanel
-          title="No audit records match"
-          body="Change the search or perform a managed administrator action."
-        />
-      )}
-    </section>
   );
 }
 

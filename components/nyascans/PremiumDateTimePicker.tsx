@@ -59,14 +59,6 @@ export function PremiumDateTimePicker({
   const [menu, setMenu] = useState<"month" | "year" | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      setDraft(parsePickerDate(value));
-      const date = parsePickerDate(value);
-      setViewMonth(new Date(date.getFullYear(), date.getMonth(), 1));
-    }
-  }, [open, value]);
-
-  useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
@@ -85,7 +77,6 @@ export function PremiumDateTimePicker({
     };
   }, [open]);
 
-  const selected = value ? parsePickerDate(value) : null;
   const hour = ((draft.getHours() + 11) % 12) + 1;
   const minute = draft.getMinutes();
   const period: "AM" | "PM" = draft.getHours() >= 12 ? "PM" : "AM";
@@ -96,7 +87,7 @@ export function PremiumDateTimePicker({
   }
 
   function updateTime(nextHour: number, nextMinute: number, nextPeriod: "AM" | "PM") {
-    let next = setHours12(draft, nextHour, nextPeriod);
+    const next = setHours12(draft, nextHour, nextPeriod);
     next.setMinutes(clamp(nextMinute, 0, 59), 0, 0);
     setDraft(next);
   }
@@ -132,7 +123,14 @@ export function PremiumDateTimePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!open) {
+            const next = parsePickerDate(value);
+            setDraft(next);
+            setViewMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+          }
+          setOpen((current) => !current);
+        }}
       >
         <span className="premium-picker-trigger-label">{label}</span>
         <span className="premium-picker-trigger-content">

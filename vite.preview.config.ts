@@ -1,6 +1,6 @@
 import baseConfig from "./vite.config";
 
-export default async () => {
+const previewConfig = async () => {
   const base = typeof baseConfig === "function" ? await baseConfig({ command: "serve", mode: "development", isSsrBuild: false }) : baseConfig;
   return {
     ...base,
@@ -10,3 +10,5 @@ export default async () => {
     },
   };
 };
+
+export default previewConfig;

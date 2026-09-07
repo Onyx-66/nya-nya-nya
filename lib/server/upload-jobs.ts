@@ -4,7 +4,6 @@ import { canAny } from "@/lib/permissions.mjs";
 import {
   normalizeUploadPath,
   UPLOAD_LIMITS,
-  type SupportedUploadMethod,
 } from "@/lib/uploads";
 import {
   auditStatement,
@@ -1067,15 +1066,4 @@ export function privatePageObjectKey(
   const safeJob = encodeURIComponent(jobId);
   const safeItem = encodeURIComponent(itemId);
   return `private/chapter-pages/${safeActor}/${safeJob}/${safeItem}/${fileId}`;
-}
-
-export function assertSupportedMethod(value: string): SupportedUploadMethod {
-  if (value !== "DIRECT_IMAGES" && value !== "DIRECT_FOLDER") {
-    throw new ApiError(
-      422,
-      "UPLOAD_METHOD_UNAVAILABLE",
-      "This upload method is not supported by the current deployment.",
-    );
-  }
-  return value;
 }

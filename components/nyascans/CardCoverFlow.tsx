@@ -54,10 +54,6 @@ export function CardCoverFlow<T>({
     return () => window.clearInterval(timer);
   }, [activeIndex, autoAdvanceMs, count, paused, setIndex]);
 
-  useEffect(() => {
-    if (count && activeIndex >= count) setIndex(0);
-  }, [activeIndex, count, setIndex]);
-
   const visibleItems = useMemo(
     () => items
       .map((item, index) => ({ item, index, offset: circularOffset(index, activeIndex, count) }))
