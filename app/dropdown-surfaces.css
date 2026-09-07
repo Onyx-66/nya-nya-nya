@@ -1,0 +1,57 @@
+/* Shared dropdown content must stay readable outside the admin-only shell too. */
+.admin-combobox { position: relative; min-width: 0; width: 100%; }
+.admin-combobox > input { width: 100%; min-width: 0; box-sizing: border-box; }
+:is(.unified-single-select, .admin-combobox):focus-within { z-index: 1400; }
+body :is(.unified-single-select-menu, .admin-combobox-list, .premium-picker-menu)[role="listbox"] {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: .2rem;
+  position: absolute;
+  z-index: 1400;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: min(18rem, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+  max-height: min(22.5rem, 60dvh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: .45rem;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  color: var(--text);
+  background: var(--surface-strong, var(--surface));
+  box-shadow: 0 .75rem 2rem rgb(0 0 0 / 24%);
+}
+body :is(.unified-single-select-menu, .admin-combobox-list, .premium-picker-menu)[role="listbox"] > [role="option"] {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100% !important;
+  min-width: 0;
+  min-height: 44px;
+  height: auto;
+  box-sizing: border-box;
+  padding: .65rem .75rem;
+  gap: .25rem;
+  border: 1px solid transparent;
+  border-radius: .5rem;
+  font: inherit;
+  font-size: .875rem !important;
+  line-height: 1.45;
+  color: var(--text);
+  background: transparent;
+  text-align: start;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+body .unified-single-select-menu[role="listbox"] > [role="option"] { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+body :is(.unified-single-select-menu, .admin-combobox-list, .premium-picker-menu)[role="listbox"] > [role="option"] :is(span, strong, small) { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+body .admin-combobox-list[role="listbox"] small { color: var(--muted); font-size: .8125rem; }
+body :is(.unified-single-select-menu, .admin-combobox-list, .premium-picker-menu)[role="listbox"] > [role="option"]:is(:hover, :focus-visible, .is-active, [aria-selected="true"]) { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
+body .language-select-panel .admin-combobox-list[role="listbox"] { position: static; width: 100%; min-width: 0; max-width: none; max-height: min(16rem, 40dvh); border: 0; padding: 0; box-shadow: none; }
+.language-select-panel { box-sizing: border-box; overflow-y: auto; }
+.language-select-panel .language-select-option { display: flex; gap: .65rem; align-items: center; }
+.language-select-option .language-flag { flex: 0 0 auto; }
+body .unified-single-select-trigger { min-width: 0; }
+body .unified-single-select-trigger > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }

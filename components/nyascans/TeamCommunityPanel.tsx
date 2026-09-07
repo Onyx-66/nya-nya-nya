@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
@@ -19,12 +20,8 @@ type TeamRecord = {
 };
 type TeamPayload = { teams: TeamRecord[]; invitations: TeamRecord[] };
 
-type TeamCreateDraft = { name: string; description: string; links: TeamLink[]; proofUrl: string; statement: string };
-const emptyCreate: TeamCreateDraft = { name: "", description: "", links: [{ label: "Website", url: "", linkType: "WEBSITE" }], proofUrl: "", statement: "" };
-
 export function TeamCommunityPanel() {
   const [data, setData] = useState<TeamPayload>({ teams: [], invitations: [] });
-  const [create, setCreate] = useState(emptyCreate);
   const [drafts, setDrafts] = useState<Record<string, { description: string; links: TeamLink[] }>>({});
   const [invite, setInvite] = useState<Record<string, string>>({});
   const [claimStatement, setClaimStatement] = useState<Record<string, string>>({});
@@ -35,13 +32,12 @@ export function TeamCommunityPanel() {
   const loadSequence = useRef(0);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const dirty = useMemo(() => {
-    const creating = Boolean(create.name || create.description || create.proofUrl || create.statement || create.links.some((link) => link.url));
     const editing = data.teams.some((team) => {
       const draft = drafts[team.id];
       return Boolean(draft && (draft.description !== team.description || JSON.stringify(draft.links) !== JSON.stringify(team.links.map(({ label, url, linkType }) => ({ label, url, linkType })))));
     });
-    return creating || editing || Object.values(invite).some(Boolean) || Object.values(claimStatement).some(Boolean) || Object.values(titleRequest).some((entry) => Boolean(entry.title || entry.reason));
-  }, [claimStatement, create, data.teams, drafts, invite, titleRequest]);
+    return editing || Object.values(invite).some(Boolean) || Object.values(claimStatement).some(Boolean) || Object.values(titleRequest).some((entry) => Boolean(entry.title || entry.reason));
+  }, [claimStatement, data.teams, drafts, invite, titleRequest]);
   useUnsavedChanges(dirty, "community team drafts");
 
   const applyData = useCallback((next: TeamPayload) => {
@@ -97,20 +93,10 @@ export function TeamCommunityPanel() {
 
   return (
     <section className="team-community-workspace">
-      <header className="team-community-heading"><div><p className="eyebrow">Community publishing</p><h1>My teams</h1><p>Create a team, prove ownership of a public link, invite collaborators, and manage approved details. Team titles are permanent unless an administrator approves a formal request.</p></div><ShieldCheck size={42} weight="duotone" /></header>
+      <header className="team-community-heading"><div><p className="eyebrow">Community publishing</p><h1>My teams</h1><p>Manage your teams, invitations, and approved details. To start a team, send a request from Create Team.</p></div><ShieldCheck size={42} weight="duotone" /></header>
       {message ? <div className={`admin-notice ${message.kind === "error" ? "is-warning" : "is-success"}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}</div> : null}
       {data.invitations.length ? <section className="team-invitation-list"><h2>Pending invitations</h2>{data.invitations.map((team) => <article key={team.id}><div><strong>{team.name}</strong><span>Invited as {team.membershipRole?.toLowerCase()}</span></div><button type="button" onClick={() => void mutate({ action: "DECLINE", teamId: team.id }, "Invitation declined.")}><X /> Decline</button><button className="button button-primary" type="button" onClick={() => void mutate({ action: "ACCEPT", teamId: team.id }, "Invitation accepted.")}><Check /> Accept</button></article>)}</section> : null}
-      <details className="team-create-forum" open={!data.teams.length}>
-        <summary><Plus /> Create a community team</summary>
-        <div><p>Verification method: an administrator opens the public proof link and validates your statement before ownership and publishing rights become active.</p>
-          <label><span>Permanent team title</span><input value={create.name} maxLength={100} onChange={(event) => setCreate((current) => ({ ...current, name: event.target.value }))} /><small>This title cannot be edited after creation without a formal request.</small></label>
-          <label><span>Description</span><textarea rows={5} minLength={20} maxLength={2000} value={create.description} onChange={(event) => setCreate((current) => ({ ...current, description: event.target.value }))} /></label>
-          <div className="team-link-editor"><strong>Public links (at least one)</strong>{create.links.map((link, index) => <div key={`create-link:${index}`}><input aria-label="Link label" value={link.label} onChange={(event) => setCreate((current) => ({ ...current, links: current.links.map((entry, entryIndex) => entryIndex === index ? { ...entry, label: event.target.value } : entry) }))} /><input aria-label="HTTPS link" type="url" placeholder="https://…" value={link.url} onChange={(event) => setCreate((current) => ({ ...current, links: current.links.map((entry, entryIndex) => entryIndex === index ? { ...entry, url: event.target.value } : entry), proofUrl: current.proofUrl || event.target.value }))} />{create.links.length > 1 ? <button type="button" onClick={() => setCreate((current) => ({ ...current, links: current.links.filter((_, entryIndex) => entryIndex !== index) }))}><X /></button> : null}</div>)}<button className="button button-secondary" type="button" disabled={create.links.length >= 10} onClick={() => setCreate((current) => ({ ...current, links: [...current.links, { label: "Social", url: "", linkType: "SOCIAL" }] }))}><Plus /> Add link</button></div>
-          <label><span>Ownership proof link</span><UnifiedSingleSelect value={create.proofUrl} onChange={(event) => setCreate((current) => ({ ...current, proofUrl: event.target.value }))}><option value="">Select a completed link</option>{create.links.filter((link) => link.url).map((link) => <option key={link.url} value={link.url}>{link.label} · {link.url}</option>)}</UnifiedSingleSelect></label>
-          <label><span>Verification statement</span><textarea rows={4} minLength={20} maxLength={1000} placeholder="Explain where the administrator can confirm your ownership or control of this link." value={create.statement} onChange={(event) => setCreate((current) => ({ ...current, statement: event.target.value }))} /></label>
-          <button className="button button-primary" type="button" disabled={Boolean(busy) || create.name.trim().length < 2 || create.description.trim().length < 20 || !create.proofUrl || create.statement.trim().length < 20} onClick={() => void mutate({ action: "CREATE", ...create }, "Team submitted for ownership verification.").then((saved) => { if (saved) setCreate(emptyCreate); })}>{busy === "CREATE" ? <DotsRing /> : <ShieldCheck />} Submit team for verification</button>
-        </div>
-      </details>
+      <Link className="button button-primary" href="/dashboard/upload-center/create-team"><Plus size={18} /> Create a new team</Link>
       {loading ? <div className="settings-loading"><DotsRing /> Loading your teams…</div> : null}
       <div className="team-management-list">{data.teams.map((team) => {
         const draft = drafts[team.id] ?? { description: team.description, links: team.links };

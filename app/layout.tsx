@@ -19,6 +19,7 @@ import { SystemNotificationProvider } from "@/components/nyascans/SystemNotifica
 import "./globals.css";
 import "./admin.css";
 import "./theme-surfaces.css";
+import "./dropdown-surfaces.css";
 
 const cachedThemeVariableNames = [
   ...themeTokenKeys.map(cssVariableForToken),

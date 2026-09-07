@@ -1,4 +1,5 @@
 "use client";
+import { useDropdownSurface } from "../useDropdownSurface";
 import {
   CheckCircle,
   Clock,
@@ -225,10 +226,13 @@ export function AdminCombobox({
   renderOptionLabel?: (option: AdminComboboxOption) => ReactNode;
 }) {
   const listboxId = useId();
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.value === value) ?? null;
   const [draftQuery, setDraftQuery] = useState<string | null>(null);
   const query = draftQuery ?? selected?.label ?? "";
   const [open, setOpen] = useState(false);
+  useDropdownSurface(open, anchorRef, listRef);
   const [activeIndex, setActiveIndex] = useState(0);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("en-US");
@@ -247,6 +251,10 @@ export function AdminCombobox({
     [emptyLabel, filtered],
   );
 
+  useEffect(() => {
+    if (open) document.getElementById(`${listboxId}-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex, listboxId]);
+
   function choose(option: AdminComboboxOption | null) {
     onChange(option?.value ?? "");
     setDraftQuery(null);
@@ -257,6 +265,7 @@ export function AdminCombobox({
   return (
     <div
       className="admin-combobox"
+      ref={anchorRef}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           setDraftQuery(null);
@@ -320,7 +329,7 @@ export function AdminCombobox({
         }}
       />
       {open ? (
-        <div className="admin-combobox-list" id={listboxId} role="listbox">
+        <div className="admin-combobox-list" ref={listRef} id={listboxId} role="listbox">
           {displayedOptions.length ? (
             displayedOptions.map((option, index) => (
               <button

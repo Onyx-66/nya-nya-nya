@@ -4,7 +4,9 @@ import {
   CaretRight,
   Check,
 } from "@/components/nyascans/heroicons";
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+
+import { useDropdownSurface } from "./useDropdownSurface";
 
 export const MONTH_NAMES = [
   "January",
@@ -118,6 +120,12 @@ export function MonthYearNavigator({
   const year = viewMonth.getFullYear();
   const years = useMemo(() => Array.from({ length: 101 }, (_, index) => year - 50 + index), [year]);
   const [monthFilter, setMonthFilter] = useState("");
+  const monthAnchor = useRef<HTMLDivElement>(null);
+  const monthList = useRef<HTMLDivElement>(null);
+  const yearAnchor = useRef<HTMLDivElement>(null);
+  const yearList = useRef<HTMLDivElement>(null);
+  useDropdownSurface(menu === "month", monthAnchor, monthList);
+  useDropdownSurface(menu === "year", yearAnchor, yearList);
 
   return (
     <div className={`premium-picker-month-nav ${className}`.trim()}>
@@ -125,14 +133,14 @@ export function MonthYearNavigator({
         <CaretLeft size={17} aria-hidden="true" />
       </button>
       <div className="premium-picker-month-selects">
-        <div className="premium-picker-menu-anchor">
+        <div className="premium-picker-menu-anchor" ref={monthAnchor}>
           <button type="button" className="premium-picker-select-button" aria-haspopup="listbox" aria-expanded={menu === "month"} onClick={() => setMenu((current) => current === "month" ? null : "month")}>
             <span>{MONTH_NAMES[viewMonth.getMonth()]}</span><CaretDown size={14} aria-hidden="true" />
           </button>
           {menu === "month" ? (
-            <div className="premium-picker-menu" role="listbox" aria-label="Select month">
+            <div className="premium-picker-menu" ref={monthList} role="listbox" aria-label="Select month">
               <input aria-label="Filter months" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} placeholder="Find month" />
-              {MONTH_NAMES.filter((month) => month.toLowerCase().includes(monthFilter.toLowerCase())).map((month, index) => (
+              {MONTH_NAMES.map((month, index) => ({ month, index })).filter(({ month }) => month.toLowerCase().includes(monthFilter.toLowerCase())).map(({ month, index }) => (
                 <button key={month} type="button" role="option" aria-selected={index === viewMonth.getMonth()} onClick={() => { setViewMonth(new Date(year, index, 1)); setMenu(null); setMonthFilter(""); }}>
                   <span>{month}</span>{index === viewMonth.getMonth() ? <Check size={15} aria-hidden="true" /> : null}
                 </button>
@@ -140,12 +148,12 @@ export function MonthYearNavigator({
             </div>
           ) : null}
         </div>
-        <div className="premium-picker-menu-anchor">
+        <div className="premium-picker-menu-anchor" ref={yearAnchor}>
           <button type="button" className="premium-picker-select-button premium-picker-year-button" aria-haspopup="listbox" aria-expanded={menu === "year"} onClick={() => setMenu((current) => current === "year" ? null : "year")}>
             <span>{year}</span><CaretDown size={14} aria-hidden="true" />
           </button>
           {menu === "year" ? (
-            <div className="premium-picker-menu premium-picker-year-menu" role="listbox" aria-label="Select year">
+            <div className="premium-picker-menu premium-picker-year-menu" ref={yearList} role="listbox" aria-label="Select year">
               {years.map((optionYear) => (
                 <button key={optionYear} type="button" role="option" aria-selected={optionYear === year} onClick={() => { setViewMonth(new Date(optionYear, viewMonth.getMonth(), 1)); setMenu(null); }}>
                   <span>{optionYear}</span>{optionYear === year ? <Check size={15} aria-hidden="true" /> : null}

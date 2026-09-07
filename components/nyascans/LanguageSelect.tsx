@@ -1,4 +1,5 @@
 "use client";
+import { useDropdownSurface } from "./useDropdownSurface";
 
 import { AdminCombobox } from "@/components/nyascans/admin/AdminPageScaffold";
 import { LanguageFlag } from "@/components/nyascans/LanguageFlag";
@@ -18,7 +19,12 @@ function option(code: string) {
   return { value: code, label: name, description: code.toUpperCase() };
 }
 
-const options = languages.map(option).sort((a, b) => a.label.localeCompare(b.label));
+const preferredLanguages = ["en", "ko", "ja", "zh"];
+const options = [
+  ...preferredLanguages.map(option),
+  ...languages.filter((code) => !preferredLanguages.includes(code)).map(option)
+    .sort((a, b) => a.label.localeCompare(b.label)),
+];
 
 export function LanguageSelect({ value, onChange, ariaLabel = "Language", disabled = false }: {
   value: string;
@@ -29,6 +35,8 @@ export function LanguageSelect({ value, onChange, ariaLabel = "Language", disabl
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDropdownSurface(open, root, panelRef);
   const panelId = useId();
   const normalized = normalizeLanguageCode(value);
   // Keep existing regional language values selectable when editing older records.
@@ -69,7 +77,7 @@ export function LanguageSelect({ value, onChange, ariaLabel = "Language", disabl
         <CaretDown size={16} aria-hidden="true" />
       </button>
       {open && !disabled ? (
-        <div className="language-select-panel" id={panelId}>
+        <div className="language-select-panel" id={panelId} ref={panelRef}>
           <AdminCombobox value={normalized} options={choices}
             onChange={(next) => {
               onChange(next);

@@ -1,4 +1,5 @@
 "use client";
+import { useDropdownSurface } from "./useDropdownSurface";
 import { CaretDown, CheckCircle } from "@/components/nyascans/heroicons";
 import {
   Children,
@@ -121,6 +122,7 @@ export function UnifiedSingleSelect({
   const generatedId = useId();
   const selectId = id ?? `nya-single-select-${generatedId.replaceAll(":", "")}`;
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -128,6 +130,7 @@ export function UnifiedSingleSelect({
   const initialValue = String(value ?? defaultValue ?? options[0]?.value ?? "");
   const [uncontrolledValue, setUncontrolledValue] = useState(initialValue);
   const [open, setOpen] = useState(false);
+  useDropdownSurface(open, rootRef, menuRef);
   const selectedValue = String(value ?? uncontrolledValue);
   const selected =
     options.find((option) => option.value === selectedValue) ??
@@ -263,6 +266,7 @@ export function UnifiedSingleSelect({
       {open ? (
         <div
           className="unified-single-select-menu"
+          ref={menuRef}
           id={`${selectId}-listbox`}
           role="listbox"
           aria-label={accessibleLabel}

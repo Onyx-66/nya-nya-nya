@@ -1,4 +1,5 @@
 "use client";
+import { UnifiedSingleSelect } from "@/components/nyascans/UnifiedSingleSelect";
 import { DotsRing } from "@/components/nyascans/DotsRing";
 
 import { CaretDown, Check, Clock, LinkSimple, ShieldCheck, X } from "@/components/nyascans/heroicons";
@@ -40,7 +41,7 @@ function DecisionReasonEditor({ id, decision, mode, value, onModeChange, onValue
   const options = decision === "APPROVE" ? ACCEPT_REASONS : REJECT_REASONS;
   const isOther = mode === "OTHER";
   return <div className="team-decision-reason-editor">
-    <select aria-label={`${decision === "APPROVE" ? "Accept" : "Reject"} reason preset`} value={isOther ? "OTHER" : value} onChange={(event) => {
+    <UnifiedSingleSelect aria-label={`${decision === "APPROVE" ? "Accept" : "Reject"} reason preset`} value={isOther ? "OTHER" : value} onChange={(event) => {
       const next = event.target.value;
       onModeChange(next === "OTHER" ? "OTHER" : "PRESET");
       onValueChange(next === "OTHER" ? "" : next);
@@ -48,7 +49,7 @@ function DecisionReasonEditor({ id, decision, mode, value, onModeChange, onValue
       <option value="">Choose a reason…</option>
       {options.map((option) => <option key={option} value={option}>{option}</option>)}
       <option value="OTHER">Other</option>
-    </select>
+    </UnifiedSingleSelect>
     {isOther ? <textarea id={`decision-reason-${id}`} rows={4} value={value} placeholder="Write your own reason…" onChange={(event) => onValueChange(event.target.value)} /> : null}
   </div>;
 }
