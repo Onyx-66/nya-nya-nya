@@ -1721,6 +1721,9 @@ export function EnhancedDiscussionSection({
             ? "comment-team-effect-motion"
             : "",
           cosmetic ? "comment-cosmetic" : "",
+          reactionPickerId === comment.id
+            ? "is-reaction-picker-open"
+            : "",
         ]
           .filter(Boolean)
           .join(" ")}

@@ -536,7 +536,9 @@ const discussionEditSchema = z.object({
 });
 
 const discussionPinSchema = z.object({
-  commentId: z.string().uuid(),
+  // Historical and seeded comments predate UUID-only identifiers. The D1
+  // column accepts opaque IDs, so pinning must accept every persisted ID too.
+  commentId: z.string().trim().min(1).max(160),
   pinned: z.boolean(),
 });
 
@@ -9758,9 +9760,10 @@ export async function PUT(request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const id = requestId(request);
+  let path = "";
   try {
     const { resource } = await context.params;
-    const path = pathOf(resource);
+    path = pathOf(resource);
     if (path === "workspace/comment-moderation") {
       assertSameOrigin(request);
       const actor = await requireActor();
@@ -10584,12 +10587,20 @@ export async function PATCH(request: Request, context: RouteContext) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      const validationMessage =
+        path === "discussion-comments"
+          ? "Write between 2 and 2,500 characters."
+          : path === "discussion-pin"
+            ? "Choose a valid comment and pin state."
+            : path === "workspace/comment-moderation"
+              ? "Please correct the moderation action."
+              : "Please correct the invalid request values.";
       return errorResponse(
         id,
         new ApiError(
           422,
           "VALIDATION_ERROR",
-          "Write between 2 and 2,500 characters.",
+          validationMessage,
           error.issues.map((issue) => ({
             path: issue.path.join("."),
             message: issue.message,

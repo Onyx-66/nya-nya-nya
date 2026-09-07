@@ -62904,6 +62904,15 @@ input[type="checkbox"]:not([role="switch"]):focus-visible { outline: 2px solid v
 .comment-reaction-picker-wrap { z-index: 30; }
 .enhanced-comments .comment-item, .enhanced-comments .comment-reaction-summary { position: relative; z-index: 1; }
 .enhanced-comments .comment-reaction-picker { z-index: 100; min-width: 14rem; }
+.enhanced-comments .comment-item.is-reaction-picker-open {
+  z-index: 101;
+}
+.enhanced-comments .comment-item.is-reaction-picker-open .comment-content,
+.enhanced-comments .comment-item.is-reaction-picker-open .comment-engagement,
+.enhanced-comments .comment-item.is-reaction-picker-open .comment-reaction-summary,
+.enhanced-comments .comment-item.is-reaction-picker-open .comment-reaction-picker-wrap {
+  z-index: 102;
+}
 @media (max-width: 760px) {
   .series-reviews .review-heading-actions { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-start; overflow-x: auto; }
   .series-reviews .review-heading-actions .review-mode-button { display: none; }
