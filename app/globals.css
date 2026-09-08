@@ -49767,7 +49767,7 @@ body {
   border-color: transparent;
   isolation: isolate;
 }
-.public-teams .team-carousel-card::before {
+.public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3)::before {
   position: absolute;
   z-index: 5;
   inset: 0;
@@ -49782,7 +49782,7 @@ body {
   mask-composite: exclude;
   animation: homepage-blue-orbit 3.2s linear infinite;
 }
-.public-teams .team-carousel-card::after {
+.public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3)::after {
   position: absolute;
   z-index: 0;
   inset: 10% 8%;
@@ -49820,8 +49820,8 @@ body {
   .v481-feature-heading .latest-all-action::after,
   .teams-carousel-controls button::after,
   .v481-pinned-carousel > .v481-pin-card[data-active="true"]::after,
-  .public-teams .team-carousel-card::before,
-  .public-teams .team-carousel-card::after,
+  .public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3)::before,
+  .public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3)::after,
   .hot-week-card.is-top-1::after,
   .hot-week-card.is-top-2::after,
   .hot-week-card.is-top-3::after { animation: none; }
@@ -50420,7 +50420,7 @@ body {
   isolation: isolate;
   background: var(--surface-strong);
 }
-.public-teams .team-carousel-banner::before {
+.public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3) .team-carousel-banner::before {
   position: absolute;
   z-index: 1;
   inset: 0;
@@ -50431,7 +50431,7 @@ body {
   transition: opacity .25s ease, transform .65s cubic-bezier(.22, .8, .25, 1);
   pointer-events: none;
 }
-.public-teams .team-carousel-banner::after {
+.public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3) .team-carousel-banner::after {
   position: absolute;
   z-index: 1;
   inset: 0;
@@ -50470,8 +50470,8 @@ body {
   box-shadow: inset 0 0 0 1px rgb(83 196 255 / 16%), inset 0 -2.5rem 2rem -2rem rgb(83 196 255 / 48%);
 }
 @media (prefers-reduced-motion: reduce) {
-  .public-teams .team-carousel-banner::before,
-  .public-teams .team-carousel-banner::after,
+  .public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3) .team-carousel-banner::before,
+  .public-teams .team-carousel-card:is(.is-ranked-1, .is-ranked-2, .is-ranked-3) .team-carousel-banner::after,
   .public-teams .team-carousel-banner img { transition: none; }
 }
 
