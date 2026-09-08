@@ -51,10 +51,13 @@ export function HomeRailControls({ railRef, label, anchor }: HomeRailControlsPro
       ? null
       : new ResizeObserver(handleScroll);
     resizeObserver?.observe(rail);
+    const contentObserver = new MutationObserver(handleScroll);
+    contentObserver.observe(rail, { childList: true });
     return () => {
       rail.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleScroll);
       resizeObserver?.disconnect();
+      contentObserver.disconnect();
     };
   }, [railRef, syncBoundaries]);
 

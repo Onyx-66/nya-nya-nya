@@ -803,10 +803,13 @@ export function DiscountsSection({
       {loading ? (
         <DiscountLoading />
       ) : (
+        <div className="home-scroll-row home-discounts-carousel">
+        <HomeRailControls railRef={railRef} label="discounts" />
         <div ref={railRef} className={`v481-discount-rail is-${settings.discounts.cardStyle.toLowerCase()}`}>
-          {visibleRecords.map((record) => (
+          {records.map((record) => (
             <DiscountTicket key={record.id} record={record} settings={settings} />
           ))}
+        </div>
         </div>
       )}
     </section>

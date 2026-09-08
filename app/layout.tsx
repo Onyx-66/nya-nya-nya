@@ -23,6 +23,7 @@ import "./dropdown-surfaces.css";
 import "./upload-center.css";
 import "./browse-chapters.css";
 import "./browse-filters.css";
+import "./home-mobile-refinements.css";
 
 const cachedThemeVariableNames = [
   ...themeTokenKeys.map(cssVariableForToken),

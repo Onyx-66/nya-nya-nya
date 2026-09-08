@@ -80,10 +80,11 @@ export function BrowseFilterControls({ values, genres, tags, creators, onChange,
           <button type="button" aria-pressed={values.sortDirection === "desc"} onClick={() => onChange({sortDirection:"desc"})}><ArrowDown size={15} /> Descending</button>
         </div>
       </FilterMenu>
-      <button type="button" className="browse-on-sale" aria-pressed={values.onSale} onClick={() => onChange({onSale:!values.onSale})}><Tag size={19} /><span>On Sale</span></button>
+      {mobile && children ? <div className="browse-filter-extra">{children}</div> : null}
+      <button type="button" className="browse-on-sale" aria-pressed={values.onSale} onClick={() => onChange({onSale:!values.onSale})}><Tag size={19} /><span>Discount</span></button>
       <button type="button" className="browse-hide-bookmarks" aria-pressed={values.hideFollowed} onClick={onHideBookmarks}><Heart size={19} /><span>Hide bookmarks</span><span className="browse-switch" aria-hidden="true"><i /></span></button>
       <button type="button" className="browse-clear-button" disabled={!canClear} onClick={onClear}><X size={18} /><span>Clear filters</span></button>
     </div>
-    {children ? <div className="browse-filter-extra">{children}</div> : null}
+    {!mobile && children ? <div className="browse-filter-extra">{children}</div> : null}
   </div>;
 }
