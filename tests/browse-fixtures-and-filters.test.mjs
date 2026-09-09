@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { z } from 'zod';
 const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const compile = (p) => ts.transpileModule(read(p), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
-const modules = new Map([['zod',{z}],['../fixtures/mangadex-series.json',JSON.parse(read('lib/fixtures/mangadex-series.json'))]]);
+const modules = new Map([['zod',{z}],['../fixtures/mangadex-refresh-series.json',JSON.parse(read('lib/fixtures/mangadex-refresh-series.json'))]]);
 function load(p, name) { const exports={}; new Function('exports','require',compile(p))(exports,(id)=>{if(!modules.has(id)) throw new Error(id);return modules.get(id);});modules.set(name,exports);return exports; }
 load('lib/commercial-settings.ts','../commercial-settings');
 load('lib/server/public-content-visibility.ts','./public-content-visibility');
@@ -21,7 +21,7 @@ test('preview fixtures are additive, repeatable, relationally valid, and cover t
  seed(db);
  const count=(table)=>db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
  const counts=Object.fromEntries(['series','chapters','chapter_pages','reviews','discussion_comments','analytics_events','tags','homepage_sliders','content_discounts','site_announcements'].map(t=>[t,count(t)]));
- assert.equal(db.prepare("SELECT COUNT(*) AS n FROM series WHERE id LIKE 'pv4921-%'").get().n,19);
+ assert.equal(db.prepare("SELECT COUNT(*) AS n FROM series WHERE id LIKE 'pv4924-%'").get().n,20);
  assert.ok(counts.chapters>1000);assert.ok(counts.tags>10);assert.ok(counts.reviews>=57);assert.ok(counts.analytics_events>2000);
  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM team_memberships WHERE user_id='real-user'").get().n,3);
  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
