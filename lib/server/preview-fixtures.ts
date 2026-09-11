@@ -61,7 +61,7 @@ export function previewFixtureStatements(db: D1Database, adminEmails: string[], 
         chapters, sid, `CH-PV4924-${index}`, sid, team, manager, paid ? 1 : 0, chapters, paid ? 1 : 0, chapters, chapters, fixture.cover, sid);
       for (let page = 0; page < 3; page++) add("INSERT OR IGNORE INTO chapter_pages (id,chapter_id,page_index,object_key,width,height,sha256,processing_status) SELECT id || ?,id,?,?,900,1350,?,'READY' FROM chapters WHERE series_id=?", `-p${page}`, page, `preview/49.22.25/page-${page + 1}.svg`, pageHashes[page], sid);
     }
-    if (index < 5) {
+    if (index < 3) {
       add("INSERT OR IGNORE INTO homepage_sliders (id,series_id,title,category_label,short_description,destination_url,image_key,is_active,sort_order,created_by_user_id) SELECT ?,?,?,'PREVIEW',?,?,?,CASE WHEN (SELECT COUNT(*) FROM homepage_sliders WHERE is_active=1)<9 THEN 1 ELSE 0 END,?,?", `${sid}-slider`, sid, fixture.title, "MangaDex reference · refreshed preview chapters", `/title/${slug}`, fixture.cover, index + 100, manager);
       add("INSERT OR IGNORE INTO home_pinned_series (id,series_id,display_order,is_featured,created_by_user_id) VALUES (?,?,?,1,?)", `${sid}-pin`, sid, index + 100, manager);
       add("INSERT OR IGNORE INTO editor_picks (id,series_id,category_label,short_description,sort_order,is_published) VALUES (?,?,'Preview',?, ?,1)", `${sid}-pick`, sid, "Sample editorial pick for testing.", index + 100);
